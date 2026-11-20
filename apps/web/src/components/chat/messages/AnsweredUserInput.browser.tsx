@@ -67,7 +67,7 @@ it("starts collapsed and expands with every question, option description and ans
   await expect.element(screen.getByText("Which mode?")).not.toBeVisible();
 });
 
-it("omits the duplicate generic heading and copies the complete exchange below the divider", async () => {
+it("omits the duplicate generic heading and copies the complete exchange from the collapsed header", async () => {
   mocks.copy.mockClear();
   const screen = await render(
     <>
@@ -98,16 +98,16 @@ it("omits the duplicate generic heading and copies the complete exchange below t
   const copy = screen.getByRole("button", { name: "Copy message" });
   const copyActions = copy.element().parentElement!;
   await screen.getByRole("button", { name: "Outside question" }).hover();
-  await expect.poll(() => getComputedStyle(copyActions).opacity).toBe("0");
+  await expect.poll(() => getComputedStyle(copyActions).opacity).toBe("1");
   await heading.hover();
   await expect.poll(() => getComputedStyle(copyActions).opacity).toBe("1");
   await screen.getByRole("button", { name: "Outside question" }).hover();
-  await expect.poll(() => getComputedStyle(copyActions).opacity).toBe("0");
+  await expect.poll(() => getComputedStyle(copyActions).opacity).toBe("1");
   (copy.element() as HTMLButtonElement).focus();
   await expect.poll(() => getComputedStyle(copyActions).opacity).toBe("1");
   const details = heading.element().closest("details")!;
   expect(details.contains(copy.element())).toBe(false);
-  expect(copy.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+  expect(copy.element().getBoundingClientRect().top).toBeLessThan(
     details.getBoundingClientRect().bottom,
   );
   await copy.click();

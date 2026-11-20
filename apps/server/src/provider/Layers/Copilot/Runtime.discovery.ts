@@ -9,7 +9,7 @@ import {
   readManagedCopilotRuntime,
 } from "@bigbud/shared/copilotRuntime.paths";
 import { resolveCopilotRuntimeRelease } from "./Runtime.release.ts";
-import { sdkCopilotExecutable } from "./Runtime.executable.ts";
+import { packagedCopilotVersion, sdkCopilotExecutable } from "./Runtime.executable.ts";
 import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
 
 const probes = new Map<string, { stamp: string; until: number; value: Promise<string | null> }>();
@@ -32,7 +32,8 @@ function probeVersion(path: string, stamp: string, sdk: boolean): Promise<string
 }
 
 let musl: boolean | undefined;
-export function localCopilotRelease() {
+/** Linux without a glibc runtime version in the process report is treated as musl. */
+export function isMuslHost(): boolean {
   if (musl === undefined) {
     const report =
       process.platform === "linux"
@@ -40,10 +41,14 @@ export function localCopilotRelease() {
         : undefined;
     musl = process.platform === "linux" && !report?.header?.glibcVersionRuntime;
   }
+  return musl;
+}
+
+export function localCopilotRelease() {
   return resolveCopilotRuntimeRelease({
     platform: process.platform,
     arch: process.arch,
-    isMusl: musl,
+    isMusl: isMuslHost(),
   });
 }
 
@@ -77,8 +82,16 @@ export async function managedCopilotInstallations(
   return installed;
 }
 
-/** Auth-free discovery. No downloads, cache materialization, provider enabling, or session creation. */
-export async function discoverCopilotRuntime(binaryPath: string, root: string) {
+/**
+ * Auth-free discovery. No downloads, cache materialization, provider enabling, or session creation.
+ * Executables run only when `probe` is set and no package manifest names the version; a disabled
+ * provider passes `probe: false` so status polling never launches (or self-extracts) a CLI.
+ */
+export async function discoverCopilotRuntime(
+  binaryPath: string,
+  root: string,
+  options: { readonly probe: boolean } = { probe: true },
+) {
   let invocation: ReturnType<typeof resolveCopilotRuntimeInvocation>;
   try {
     invocation = resolveCopilotRuntimeInvocation(binaryPath, {
@@ -116,7 +129,10 @@ export async function discoverCopilotRuntime(binaryPath: string, root: string) {
     const version =
       source === "managed"
         ? (readManagedCopilotRuntime(root)?.version ?? null)
-        : await probeVersion(path, `${file.mtimeMs}:${file.size}`, source === "sdk");
+        : (packagedCopilotVersion(path) ??
+          (options.probe
+            ? await probeVersion(path, `${file.mtimeMs}:${file.size}`, source === "sdk")
+            : null));
     return {
       available: true,
       source,

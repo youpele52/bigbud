@@ -7,66 +7,6 @@ pub(super) struct PtySession {
 }
 
 impl AgentSession {
-    pub fn prepare_pty_create(
-        &mut self,
-        request: v1::PtyCreateRequest,
-    ) -> Result<(v1::Frame, Option<pty::PtyJob>), SessionError> {
-        if !self.ready {
-            return Err(SessionError::HelloRequired);
-        }
-        if !self.is_accepting_work() {
-            return Err(SessionError::Restarting);
-        }
-        if request.pty_id.is_empty() {
-            return Err(SessionError::Pty("PTY ID is required".to_owned()));
-        }
-        self.prune_pty_sessions();
-        if let Some(existing) = self.pty_sessions.get(&request.pty_id) {
-            if existing.request_digest != request.request_digest {
-                return Err(SessionError::OperationIdConflict);
-            }
-            return Ok((
-                pty_create_response_frame(&request, true, existing.handle.pid as u64, "", ""),
-                None,
-            ));
-        }
-        if self.pty_sessions.len() >= MAX_PTY_SESSIONS {
-            return Err(SessionError::ResourceLimit(
-                "PTY session limit reached".to_owned(),
-            ));
-        }
-        let workspace = self.workspace(&request.workspace_handle)?;
-        let cwd = workspace
-            .resolve_directory(&request.cwd)
-            .map_err(|error| SessionError::Pty(error.to_string()))?;
-        let environment = process_environment_from_entries(&request.environment)?;
-        let cols = request.cols.clamp(1, 500) as u16;
-        let rows = request.rows.clamp(1, 500) as u16;
-        let job = pty::PtyHandle::spawn(
-            request.pty_id.clone(),
-            &cwd,
-            &request.shell,
-            &request.args,
-            cols,
-            rows,
-            &environment,
-        )
-        .map_err(|error| SessionError::Pty(error.to_string()))?;
-        let pid = job.handle.pid as u64;
-        self.pty_sessions.insert(
-            request.pty_id.clone(),
-            PtySession {
-                handle: Arc::clone(&job.handle),
-                request_digest: request.request_digest.clone(),
-                expires_at: None,
-            },
-        );
-        Ok((
-            pty_create_response_frame(&request, true, pid, "", ""),
-            Some(job),
-        ))
-    }
-
     pub fn handle_pty_attach(
         &mut self,
         request: v1::PtyAttachRequest,
@@ -84,6 +24,7 @@ impl AgentSession {
             &request.request_id,
             &request.pty_id,
             &snapshot,
+            handle.launch_outcome(),
             replay_gap,
         )];
         responses.extend(
@@ -147,7 +88,7 @@ impl AgentSession {
             .ok_or_else(|| SessionError::Pty("PTY is unknown or expired".to_owned()))
     }
 
-    fn prune_pty_sessions(&mut self) {
+    pub(super) fn prune_pty_sessions(&mut self) {
         let now = Instant::now();
         self.pty_sessions.retain(|_, session| {
             !session.handle.child_reaped()

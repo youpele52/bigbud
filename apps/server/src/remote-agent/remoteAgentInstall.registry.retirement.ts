@@ -3,6 +3,7 @@ import type {
   RemoteAgentRetirementReservation,
 } from "./remoteAgentInstall.registry.ts";
 import { parseRemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
+import { remoteAgentBuildIsReferenced } from "./remoteAgentInstall.registry.references.ts";
 
 function changed(
   state: RemoteAgentRegistry,
@@ -74,6 +75,11 @@ export function reserveRemoteAgentRetirement(
     readonly withdrawPredecessor?: boolean;
     /** Reserve a predecessor while liveness is fenced; withdraw only after it is safe. */
     readonly allowPredecessorReservation?: boolean;
+    /**
+     * Accept a `ready` launch because the caller will request an idle-only supervisor shutdown
+     * and prove the exit before withdrawal. Uncertain launches still block the reservation.
+     */
+    readonly allowLiveLaunch?: boolean;
   },
 ): RemoteAgentRegistry {
   const build = state.builds.find((entry) => entry.id === input.buildId);
@@ -96,14 +102,10 @@ export function reserveRemoteAgentRetirement(
     if (prior.phase !== "failed") {
       if (prior.controllerId && input.controllerId && prior.controllerId !== input.controllerId)
         throw new Error("Retirement reservation belongs to another controller.");
-    } else if (input.controllerId && prior.controllerId !== input.controllerId) {
-      return changed(state, {
-        retirementReservations: state.retirementReservations.map((entry) =>
-          entry.id === input.id ? { ...entry, controllerId: input.controllerId } : entry,
-        ),
-      });
+      return state;
     }
-    return state;
+    // Retrying a failed attempt falls through to the same reference checks as a new
+    // reservation, then replaces the entry so the earlier failure cannot survive the retry.
   }
   if (
     state.retirementReservations.some(
@@ -111,19 +113,28 @@ export function reserveRemoteAgentRetirement(
     )
   )
     throw new Error("Managed runtime retirement is already reserved.");
+  // A published stage of a build that is no longer pending is acknowledged publication history,
+  // not live staging. The reservation consumes it atomically, so a concurrent re-stage must create
+  // a fresh `reserved` stage, which still blocks retirement below and in later safety rechecks.
+  const stages = state.stages.filter(
+    (stage) =>
+      !(
+        stage.buildId === input.buildId &&
+        stage.phase === "published" &&
+        state.pending !== input.buildId
+      ),
+  );
   if (
-    state.pins.some((pin) => pin.buildId === input.buildId) ||
-    state.stages.some((stage) => stage.buildId === input.buildId && stage.phase !== "cancelled") ||
-    state.launches.some(
-      (launch) => launch.buildId === input.buildId && launch.phase !== "proven-dead",
-    ) ||
-    state.admissions.some((admission) => admission.buildId === input.buildId)
+    remoteAgentBuildIsReferenced({ ...state, stages }, input.buildId, {
+      allowReadyLaunch: input.allowLiveLaunch === true,
+    })
   )
     throw new Error("Managed runtime still has durable references.");
   return changed(state, {
+    stages,
     predecessor: input.withdrawPredecessor ? null : state.predecessor,
     retirementReservations: [
-      ...state.retirementReservations,
+      ...state.retirementReservations.filter((entry) => entry.id !== input.id),
       {
         id: input.id,
         buildId: input.buildId,
@@ -175,6 +186,10 @@ export function tombstoneRemoteAgentRetirement(
   if (!prior || prior.phase !== "exited") throw new Error("Managed runtime exit is not verified.");
   const build = state.builds.find((entry) => entry.id === prior.buildId);
   if (!build || build.binary !== "present") throw new Error("Retirement binary is unavailable.");
+  // Recheck references in the same write that commits to deletion: a re-stage, launch,
+  // admission or pin that raced the earlier safety checks must win over retirement.
+  if (remoteAgentBuildIsReferenced(state, prior.buildId, { retirementId: prior.id }))
+    throw new Error("Managed runtime gained a reference before deletion.");
   return changed(state, {
     builds: state.builds.map((entry) =>
       entry.id === prior.buildId ? { ...entry, binary: "deleting" as const } : entry,
@@ -196,9 +211,22 @@ export function confirmRemoteAgentRetirementDeletion(
   if (!build) throw new Error("Retirement deletion build is missing.");
   if (build.runtime.generation !== prior.generation)
     throw new Error("Retirement deletion identity changed.");
-  if (build.binary === "absent") return state;
-  if (build.binary !== "deleting") throw new Error("Retirement deletion is not in progress.");
+  // Withdrawal's synthetic capacity claim ends with confirmed deletion. The tombstone retains
+  // retirement replay evidence; leaving this row reserved would pin a later re-staged build.
+  const updates = state.updates.filter(
+    (entry) =>
+      !(
+        entry.requestId === id &&
+        entry.buildId === prior.buildId &&
+        entry.phase === "reserved" &&
+        entry.outcome === "capacity"
+      ),
+  );
+  if (build.binary === "absent" && updates.length === state.updates.length) return state;
+  if (build.binary !== "deleting" && build.binary !== "absent")
+    throw new Error("Retirement deletion is not in progress.");
   return changed(state, {
+    updates,
     builds: state.builds.map((entry) =>
       entry.id === prior.buildId ? { ...entry, binary: "absent" as const } : entry,
     ),

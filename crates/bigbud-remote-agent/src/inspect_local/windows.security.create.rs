@@ -11,7 +11,7 @@ use windows_sys::Win32::{
     },
 };
 
-pub(super) struct PrivateDescriptor(pub PSECURITY_DESCRIPTOR);
+pub(crate) struct PrivateDescriptor(pub(crate) PSECURITY_DESCRIPTOR);
 impl Drop for PrivateDescriptor {
     fn drop(&mut self) {
         // SAFETY: the conversion API allocated this descriptor with LocalAlloc.
@@ -23,6 +23,14 @@ impl Drop for PrivateDescriptor {
 
 /// Apply a protected current-user/SYSTEM/Administrators DACL at creation, never repair an existing ACL.
 pub(super) fn descriptor(directory: bool) -> io::Result<PrivateDescriptor> {
+    descriptor_policy(directory, false)
+}
+
+pub(super) fn pipe_descriptor() -> io::Result<PrivateDescriptor> {
+    descriptor_policy(false, true)
+}
+
+fn descriptor_policy(directory: bool, owner_only: bool) -> io::Result<PrivateDescriptor> {
     let user = security::current_user()?;
     let mut raw = ptr::null_mut();
     // SAFETY: owned valid user SID and a valid output pointer.
@@ -46,8 +54,11 @@ pub(super) fn descriptor(directory: bool) -> io::Result<PrivateDescriptor> {
     }
     let sid = String::from_utf16(&sid).map_err(io::Error::other)?;
     let inherit = if directory { "OICI" } else { "" };
-    let text =
-        format!("O:{sid}D:P(A;{inherit};FA;;;{sid})(A;{inherit};FA;;;SY)(A;{inherit};FA;;;BA)\0");
+    let text = if owner_only {
+        format!("O:{sid}D:P(A;;GA;;;{sid})\0")
+    } else {
+        format!("O:{sid}D:P(A;{inherit};FA;;;{sid})(A;{inherit};FA;;;SY)(A;{inherit};FA;;;BA)\0")
+    };
     let text: Vec<u16> = text.encode_utf16().collect();
     let mut descriptor = ptr::null_mut();
     // SAFETY: fixed grammar plus OS-generated SID, NUL-terminated UTF16, valid output pointer.

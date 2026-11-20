@@ -17,11 +17,16 @@ import {
 } from "./orchestration.provider";
 import {
   ElevatorSummary,
+  OrchestrationLatestTurn,
+  OrchestrationTurnControlOperation,
   OrchestrationLatestTurnState,
   OrchestrationSessionStatus,
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
+import { ThreadRecovery } from "./orchestration.recovery";
+import { ThreadNotificationSafety } from "./orchestration.notificationSafety";
 import { ThreadOrganizationField } from "./orchestration.organization";
+import { TerminalFinishedItem } from "../workspace/terminal.activity";
 import { SIDEBAR_THREAD_SORT_ORDERS } from "../constants/settings.constant";
 
 export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 1;
@@ -67,6 +72,10 @@ export const ThreadSummary = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
+  /** Last Enter or finished command in any of the thread's terminals (60 s coalesced). */
+  latestTerminalActivityAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  /** Finished terminal work that needs the user, one item per pane. */
+  terminalFinished: Schema.optional(Schema.Array(TerminalFinishedItem)),
   pinnedAt: Schema.NullOr(IsoDateTime),
   organization: ThreadOrganizationField,
   sessionStatus: Schema.NullOr(OrchestrationSessionStatus),
@@ -75,6 +84,12 @@ export const ThreadSummary = Schema.Struct({
   /** Owned native descendants may outlive the parent turn (OrchestrationSession.retainedFamily). */
   retainedFamily: Schema.optional(Schema.Boolean),
   latestTurnState: Schema.NullOr(OrchestrationLatestTurnState),
+  latestTurn: Schema.optional(Schema.NullOr(OrchestrationLatestTurn)),
+  notificationSafety: Schema.optional(ThreadNotificationSafety),
+  recovery: Schema.optional(Schema.NullOr(ThreadRecovery)),
+  pendingTurnControlOperation: Schema.optional(Schema.NullOr(OrchestrationTurnControlOperation)),
+  sessionReason: Schema.optional(Schema.NullOr(Schema.String)),
+  sessionEpoch: Schema.optional(NonNegativeInt),
   isWatching: Schema.Boolean,
   isWatched: Schema.Boolean,
   isDelegated: Schema.Boolean,

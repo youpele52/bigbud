@@ -16,6 +16,7 @@ import {
 import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
+import { GitPanelNotRepository } from "./GitPanelNotRepository";
 import { GitPanelSyncControl } from "./GitPanelSyncControl";
 import { StatusBanner } from "../common/StatusBanner";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
@@ -133,23 +134,13 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   }
 
   if (!isGitRepo || !gitStatus) {
-    return (
-      <div className="space-y-2 p-4 text-sm text-muted-foreground">
-        <p>
-          No Git repository at <span className="break-all font-light">&quot;{cwd}&quot;</span>.
-        </p>
-        <p>
-          Git uses the project workspace root, not the terminal&apos;s current directory. Edit the
-          remote workspace and set its workspace root to the repository directory.
-        </p>
-      </div>
-    );
+    return <GitPanelNotRepository />;
   }
 
   const branchLabel = gitStatus.branch ?? "Detached HEAD";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--app-shell-pane-fill)]">
       <div className={cn("border-b border-border/60 px-3 py-2", isElectron && "drag-region")}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">

@@ -38,6 +38,8 @@ export async function closeTerminalConfirmed(input: {
   api: NativeApi;
   threadId: ThreadId;
   terminalId: string;
+  /** Fallback only; the pane's own launch target is authoritative. */
+  executionTargetId?: string | undefined;
   onPending?: () => void;
   onConfirmed: () => void;
 }) {
@@ -62,10 +64,14 @@ export async function closeTerminalConfirmed(input: {
               expectedGeneration: generation,
             });
         }
+        // The target lets the server prove an unbound pane has no surviving owned process.
+        const executionTargetId =
+          readTerminalLaunch(threadId, terminalId)?.executionTargetId ?? input.executionTargetId;
         await api.terminal.close!({
           threadId,
           terminalId,
           deleteHistory: true,
+          ...(executionTargetId ? { executionTargetId } : {}),
           ...(operation.expectedGeneration
             ? { expectedGeneration: operation.expectedGeneration }
             : { onlyIfNotRunning: true }),
@@ -96,6 +102,15 @@ export async function closeTerminalConfirmed(input: {
     }
     updateTerminalLifecycle(threadId, terminalId, operation, {
       phase: "error",
+      canDismiss:
+        typeof failure === "object" &&
+        failure !== null &&
+        "reason" in failure &&
+        failure.reason === "directShellUnconfirmed" &&
+        "threadId" in failure &&
+        failure.threadId === threadId &&
+        "terminalId" in failure &&
+        failure.terminalId === terminalId,
       error:
         failure instanceof Error
           ? failure.message

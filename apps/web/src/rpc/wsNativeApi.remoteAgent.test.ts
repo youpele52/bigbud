@@ -14,6 +14,10 @@ describe("wsNativeApi — remote-agent status", () => {
       pendingVersion: "0.2.207",
       predecessorVersion: null,
       reason: null,
+      currentTargetTriple: "x86_64-unknown-linux-gnu",
+      currentBuildDigestShort: "aaaaaaaaaaaa",
+      pendingTargetTriple: "x86_64-unknown-linux-musl",
+      pendingBuildDigestShort: "bbbbbbbbbbbb",
     };
     rpcClientMock.server.getRemoteAgentUpdateStatus.mockResolvedValue(status);
     const { createWsNativeApi } = await import("./wsNativeApi");
@@ -28,5 +32,21 @@ describe("wsNativeApi — remote-agent status", () => {
       executionTargetId: "ssh:test",
       reconnectRequestId: "reconnect-1",
     });
+  });
+
+  it("forwards Remove agent with the Direct SSH switch and returns blockers as results", async () => {
+    const blocked = {
+      outcome: "blocked" as const,
+      blockers: [{ kind: "terminal" as const, label: "Terminal in /srv" }],
+    };
+    rpcClientMock.server.removeRemoteAgent.mockResolvedValue(blocked);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const input = {
+      executionTargetId: "ssh:host=box&transport=agent" as never,
+      switchWorkspacesToDirectSsh: true,
+    };
+    await expect(createWsNativeApi().server.removeRemoteAgent(input)).resolves.toEqual(blocked);
+    expect(rpcClientMock.server.removeRemoteAgent).toHaveBeenCalledWith(input);
   });
 });

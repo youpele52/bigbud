@@ -25,7 +25,8 @@ export function organizationRuntimeQuietSql(sql: SqlClient.SqlClient) {
 export function organizationAttentionSql(sql: SqlClient.SqlClient) {
   return sql`EXISTS (SELECT 1 FROM projection_pending_approvals a WHERE a.thread_id = t.thread_id AND a.status = 'pending')
     OR EXISTS (SELECT 1 FROM projection_pending_user_inputs u WHERE u.thread_id = t.thread_id AND u.status = 'pending')
-    OR EXISTS (SELECT 1 FROM model_choice_unresolved m WHERE m.thread_id = t.thread_id)`;
+    OR EXISTS (SELECT 1 FROM model_choice_unresolved m WHERE m.thread_id = t.thread_id)
+    OR EXISTS (SELECT 1 FROM terminal_finished_attention f WHERE f.thread_id = t.thread_id)`;
 }
 export function organizationKnownBusySql(sql: SqlClient.SqlClient) {
   return sql`s.status IN ('starting', 'running') OR turn.state = 'running'

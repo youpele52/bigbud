@@ -14,6 +14,9 @@ import {
 } from "../orchestration/Services/OrchestrationEngine.ts";
 import { currentThreadOrganization } from "../orchestration/threadOrganization.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
+import type { ThreadCoordinationDeps } from "./ThreadCoordinationConfirmation.ts";
+import type { ThreadCoordinationRefusal } from "./ThreadCoordinationConfirmation.result.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import { resolveThreadToolParticipants } from "./ThreadOrchestrationTools.participants.ts";
 import { stableThreadToolId } from "./ThreadOrchestrationTools.origins.ts";
 
@@ -25,9 +28,16 @@ export interface ThreadOrganizationToolResult {
   readonly commandId: CommandId;
 }
 
+/** A move or snooze outcome, or a cross-project confirmation refusal with no side effects. */
+export type ThreadOrganizationToolOutcome =
+  | ThreadOrganizationToolResult
+  | ThreadCoordinationRefusal;
+
 type OrganizationToolInput = {
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
+  /** Cross-project confirmation handles; absent means cross-project changes are refused. */
+  readonly coordination?: ThreadCoordinationDeps | undefined;
   /** Authenticated caller; never replaced by the requested target. */
   readonly threadId: ThreadId;
   readonly targetThreadId?: ThreadId;
@@ -55,12 +65,12 @@ const organizationFromEvents = (
 const applyOrganizationCommand = Effect.fn("applyThreadOrganizationToolCommand")(function* (
   input: OrganizationToolInput,
   command: OrganizationCommand,
-) {
+): Effect.fn.Return<ThreadOrganizationToolOutcome, Error> {
   if (input.targetThreadId !== undefined && !input.targetThreadId.trim()) {
     return yield* Effect.fail(new Error("Target thread ID cannot be empty."));
   }
   const targetThreadId = input.targetThreadId ?? input.threadId;
-  const { targetThread } = yield* resolveThreadToolParticipants({
+  const { callerThread, targetThread } = yield* resolveThreadToolParticipants({
     ...input,
     callerThreadId: input.threadId,
     threadId: targetThreadId,
@@ -84,6 +94,14 @@ const applyOrganizationCommand = Effect.fn("applyThreadOrganizationToolCommand")
   if (committed) {
     return { threadId: targetThreadId, organization: committed, changed: false, commandId };
   }
+  const access = yield* requireThreadCoordinationAccess({
+    ...input,
+    mode: "write",
+    callerThread,
+    targetThread,
+    targetProjectId: targetThread.projectId,
+  });
+  if (access.kind !== "allowed") return access.result;
 
   const dispatched = yield* input.orchestrationEngine
     .dispatch({

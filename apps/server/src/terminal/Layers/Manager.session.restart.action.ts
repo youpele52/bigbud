@@ -6,10 +6,24 @@ import * as Option from "effect/Option";
 import { increment, terminalRestartsTotal } from "../../observability/Metrics";
 import { makeResolveTerminalFolder } from "./Manager.cwd";
 import { defaultTerminalDropPathMode, normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
-import { createTerminalSessionState, resetSessionRuntimeState } from "./Manager.session.state";
+import { createTerminalSessionState } from "./Manager.session.state";
+import { prepareTerminalLaunchHistory } from "./Manager.session.history";
+import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
+import {
+  assertDirectShellLaunchAvailable,
+  preflightDirectShellLaunch,
+} from "./Manager.shell.direct";
 import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS, type TerminalSessionState } from "./Manager.types";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types";
 import { assertTerminalGeneration } from "./Manager.session.generation";
+import {
+  assertTerminalShellReattach,
+  makeResolveTerminalShellProfile,
+  terminalShellSelectionForNewProcess,
+} from "./Manager.shell.profile";
+import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { resolveOwnedTerminalRecoverOnly } from "./OwnedPtyRuntime.owner.ts";
+import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 
 export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShape["restart"] {
   const resolveFolder = makeResolveTerminalFolder(
@@ -17,6 +31,11 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
     undefined,
     undefined,
     ctx.resolveRuntimePathIdentity,
+  );
+  const resolveShellProfile = makeResolveTerminalShellProfile(
+    ctx.resolveShellProfile,
+    ctx.preflightRemoteShellProfile,
+    ctx.directShellOwners,
   );
   return (request) => {
     let reserved: TerminalSessionState | undefined;
@@ -40,6 +59,9 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
               request.rows,
               Object.entries(request.env ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
               request.expectedGeneration,
+              request.shellSelection?.kind === "profile"
+                ? ["profile", request.shellSelection.profileId]
+                : (request.shellSelection?.kind ?? null),
             ]),
           )
           .digest("hex");
@@ -71,16 +93,75 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
               "The previous terminal session is no longer available; no replacement was started.",
           });
         }
-        yield* increment(terminalRestartsTotal, { scope: "thread" });
-        // Resolve the target before terminating a working session.
-        const folder = yield* resolveFolder({
+        const recoverOnly = yield* resolveOwnedTerminalRecoverOnly({
+          runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
           threadId: request.threadId,
           terminalId,
-          executionTargetId,
-          cwd: request.cwd,
-          worktreePath: request.worktreePath,
-          env: request.env,
+          existing,
+          historyExists: ctx.historyExists,
         });
+        // Only this preflight block may prove a refusal left the pane untouched.
+        // Never annotate the stop/spawn path: its failures may have mutated ownership.
+        const { shellProfileLaunch, folder } = yield* Effect.gen(function* () {
+          yield* assertDirectShellLaunchAvailable(ctx.directShellOwners, {
+            threadId: request.threadId,
+            terminalId,
+            executionTargetId,
+            recoverPrepared: true,
+          });
+          const folder = yield* resolveFolder({
+            threadId: request.threadId,
+            terminalId,
+            executionTargetId,
+            cwd: request.cwd,
+            worktreePath: request.worktreePath,
+            env: request.env,
+          });
+          const shellProfileLaunch = recoverOnly
+            ? null
+            : yield* resolveShellProfile({
+                threadId: request.threadId,
+                terminalId,
+                executionTargetId,
+                wslIdentity: folder.wslIdentity,
+                selection: yield* terminalShellSelectionForNewProcess({
+                  threadId: request.threadId,
+                  terminalId,
+                  executionTargetId,
+                  selection: request.shellSelection,
+                  existing: Option.getOrUndefined(existing),
+                }),
+              });
+          yield* preflightDirectShellLaunch(ctx.directShellOwners, {
+            threadId: request.threadId,
+            terminalId,
+            executionTargetId,
+            cwd: folder.cwd,
+            wslIdentity: folder.wslIdentity,
+            launch: shellProfileLaunch,
+          });
+          yield* resolveTerminalRemoteShellIntent({
+            threadId: request.threadId,
+            terminalId,
+            executionTargetId,
+            cwd: folder.cwd,
+            launch: shellProfileLaunch,
+            recoverOnly,
+          });
+          return { shellProfileLaunch, folder };
+        }).pipe(
+          Effect.mapError(
+            (error) =>
+              new TerminalExecutionTargetError({
+                threadId: request.threadId,
+                terminalId,
+                executionTargetId,
+                reason: "restartNotStarted",
+                detail: error.message,
+              }),
+          ),
+        );
+        yield* increment(terminalRestartsTotal, { scope: "thread" });
         const input = {
           ...request,
           cwd: folder.cwd,
@@ -103,10 +184,8 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
           });
           reserved = session;
           session.lifecyclePending = true;
-          session.remoteOwnerRecoveryRequired = yield* ctx.historyExists(
-            input.threadId,
-            terminalId,
-          );
+          session.remoteOwnerRecoveryRequired = recoverOnly;
+          if (recoverOnly) session.history = yield* ctx.readHistory(input.threadId, terminalId);
           const created = session;
           yield* ctx.modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
@@ -136,16 +215,7 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
           cwd: input.cwd,
           worktreePath: session.worktreePath,
         });
-        // Retain only the existing bounded transcript while attempting the replacement.
-        const previous = {
-          history: session.history,
-          historyTruncated: session.historyTruncated,
-          historyUnavailable: session.historyUnavailable,
-          historyBytes: session.historyBytes,
-          historyNewlines: session.historyNewlines,
-          historyTail: session.historyTail,
-        };
-        resetSessionRuntimeState(session);
+        const restoreFailedHistory = prepareTerminalLaunchHistory(session, recoverOnly);
         yield* ctx
           .startSession(
             session,
@@ -153,6 +223,7 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
               threadId: input.threadId,
               terminalId,
               executionTargetId,
+              shellProfileLaunch,
               cwd: input.cwd,
               ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
               cols,
@@ -163,10 +234,21 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
           )
           .pipe(
             Effect.onError(() =>
-              ctx.releaseWorktreeLease({ threadId: input.threadId, terminalId }),
+              releaseTerminalLeaseAfterLaunchFailure(ctx, {
+                threadId: input.threadId,
+                terminalId,
+                executionTargetId,
+              }),
             ),
+            Effect.ensuring(Effect.sync(restoreFailedHistory)),
           );
-        if (session.status !== "running") Object.assign(session, previous);
+        if (recoverOnly && session.process)
+          yield* assertTerminalShellReattach(
+            session,
+            executionTargetId,
+            request.shellSelection,
+            ctx,
+          );
         yield* ctx.persistHistory(input.threadId, terminalId, session.history);
         if (session.pid !== null) {
           yield* ctx.markWorktreeLeaseStarted({

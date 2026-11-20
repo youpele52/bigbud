@@ -9,7 +9,7 @@ export interface SidebarThreadActionsInput {
   projectCwdById: Map<ProjectId, string | null>;
   appSettings: ReturnType<typeof useSettings>;
   /** Navigates to a thread route and clears multi-selection. */
-  navigateToThreadRoute: (threadId: ThreadId) => void;
+  navigateToThreadRoute: (threadId: ThreadId) => void | Promise<boolean>;
   /** Called when a thread rename starts — cancels any in-progress project rename. */
   cancelProjectRename: () => void;
 }

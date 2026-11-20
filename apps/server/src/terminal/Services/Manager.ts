@@ -1,3 +1,9 @@
+import type {
+  TerminalRemoteInventoryInput,
+  TerminalRemoteInventory,
+  TerminalRemoteAttachInput,
+  TerminalRemoteDetachInput,
+} from "@bigbud/contracts/workspace/terminal.remote.ts";
 /**
  * TerminalManager - Terminal session orchestration service interface.
  *
@@ -30,12 +36,21 @@ import {
 } from "@bigbud/contracts";
 import { PtyProcess } from "./PTY";
 import { Effect, ServiceMap } from "effect";
+import type {
+  TerminalShellProfileInventory,
+  TerminalShellProfilesInput,
+} from "@bigbud/contracts/workspace/terminal.shellProfiles.ts";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
 import type {
   TerminalRecoveryInput,
   TerminalRecoveryResult,
 } from "@bigbud/contracts/workspace/terminal.recovery.ts";
 import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalPasteStageError,
+  TerminalPasteStageInput,
+  TerminalPasteStageResult,
+} from "@bigbud/contracts/workspace/terminal.paste.ts";
 
 export {
   TerminalCwdError,
@@ -96,6 +111,17 @@ export interface TerminalIdleWork {
 }
 
 export interface TerminalManagerShape {
+  readonly remoteInventory?: (
+    input: TerminalRemoteInventoryInput,
+  ) => Effect.Effect<TerminalRemoteInventory, TerminalError>;
+  readonly remoteAttach?: (
+    input: TerminalRemoteAttachInput,
+  ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
+  readonly remoteDetach?: (input: TerminalRemoteDetachInput) => Effect.Effect<void, TerminalError>;
+  readonly remoteStop?: (input: TerminalRemoteAttachInput) => Effect.Effect<void, TerminalError>;
+  readonly listShellProfiles: (
+    input: TerminalShellProfilesInput,
+  ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;
   /** Server-owned sampled work facts; a shell alone is not work. */
   readonly getThreadIdleWork?: (threadId: string) => Effect.Effect<TerminalIdleWork>;
   /** Cached owner facts only; no OS/global process rescan. */
@@ -127,7 +153,10 @@ export interface TerminalManagerShape {
   /**
    * Write input bytes to a terminal session.
    */
-  readonly write: (input: TerminalWriteInput) => Effect.Effect<void, TerminalError>;
+  readonly write: (
+    input: TerminalWriteInput,
+    options?: { readonly origin?: "client" | "internal" },
+  ) => Effect.Effect<void, TerminalError>;
 
   /**
    * Resize the PTY backing a terminal session.
@@ -165,14 +194,19 @@ export interface TerminalManagerShape {
     options?: TerminalSubscribeOptions,
   ) => Effect.Effect<() => void>;
 
+  /** Stage a pasted/dropped file on the session's own machine (never a client-chosen one). */
+  readonly stagePasteFile?: (
+    input: TerminalPasteStageInput,
+  ) => Effect.Effect<TerminalPasteStageResult, TerminalPasteStageError>;
+
+  /** Search the output terminals retain (newest lines first); scan on demand, no index. */
+  readonly search?: (input: TerminalSearchInput) => Effect.Effect<TerminalSearchResult>;
+
   /**
    * Hold or release a terminal's PTY output for one delivery subscriber (producer flow control).
    * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
    * by delivery overflow instead.
    */
-  /** Search the output terminals retain (newest lines first); scan on demand, no index. */
-  readonly search?: (input: TerminalSearchInput) => Effect.Effect<TerminalSearchResult>;
-
   readonly setOutputHold?: (input: {
     readonly threadId: string;
     readonly terminalId: string;

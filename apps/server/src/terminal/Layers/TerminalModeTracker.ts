@@ -28,6 +28,11 @@ export class TerminalModeTracker {
   private focus = false;
   private bracketedPaste = false;
   private colorSchemeUpdates = false;
+  /**
+   * kitty paste-event mode (`?5522`). Not an xterm mode: the renderer's clipboard protocol keeps
+   * it per process generation and ignores RIS/DECSTR, so resets leave it as the program set it.
+   */
+  private pasteEvents = false;
   private alternateScreen = false;
   private cursorStyle = 0;
 
@@ -55,6 +60,7 @@ export class TerminalModeTracker {
     else if (mode === 1006 || mode === 1016) this.encoding = on ? mode : 0;
     else if (mode === 2004) this.bracketedPaste = on;
     else if (mode === 2031) this.colorSchemeUpdates = on;
+    else if (mode === 5522) this.pasteEvents = on;
     else if (mode === 47 || mode === 1047 || mode === 1049) this.alternateScreen = on;
   }
 
@@ -88,6 +94,7 @@ export class TerminalModeTracker {
       mode(1004, this.focus) +
       mode(2004, this.bracketedPaste) +
       mode(2031, this.colorSchemeUpdates) +
+      mode(5522, this.pasteEvents) +
       `\x1b[${this.cursorStyle} q`;
     // Re-open a sequence split by the snapshot cut, so its live tail is not printed as text.
     const state = this.scanner.state;

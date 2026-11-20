@@ -1,4 +1,5 @@
 import { Effect, Exit, ManagedRuntime, Scope } from "effect";
+import { localWsTransportScope, type WsTransportScope } from "./wsTransport.scope";
 import type { RpcClient } from "effect/unstable/rpc";
 
 import {
@@ -21,8 +22,9 @@ export function createWsTransportSession(
   url: string | undefined,
   lifecycle: WsProtocolLifecycleHandlers,
   controls?: WsConnectionControls,
+  scope: WsTransportScope = localWsTransportScope,
 ): TransportSession {
-  const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(url, lifecycle, controls));
+  const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(url, lifecycle, controls, scope));
   const clientScope = Effect.runSync(Scope.make());
   const readinessController = new AbortController();
   // The protocol gates each socket attempt on desktop readiness. Keep client

@@ -1,3 +1,5 @@
+import { encodePasteStagingFrame } from "./remoteAgentProtocol.codec.pasteStaging.ts";
+import { encodeSearchFrame } from "./remoteAgentProtocol.codec.search.ts";
 import {
   type RemoteAgentContentMatch,
   type RemoteAgentContentSearchRequest,
@@ -153,6 +155,7 @@ function encodeWriteFileRequest(value: RemoteAgentWriteFileRequest): Uint8Array 
   writer.fieldString(5, value.path);
   writer.fieldBytes(6, value.bytes);
   writer.fieldString(7, value.expectedSha256);
+  writer.fieldBool(8, value.createOnly);
   return writer.finish();
 }
 
@@ -171,7 +174,8 @@ function encodeWriteFileResponse(value: RemoteAgentWriteFileResponse): Uint8Arra
 export function encodeWorkspaceFrame(
   frame: RemoteAgentFrame,
 ): { readonly field: number; readonly value: Uint8Array } | undefined {
-  const watchFrame = encodeWorkspaceWatchFrame(frame);
+  const watchFrame =
+    encodeWorkspaceWatchFrame(frame) ?? encodePasteStagingFrame(frame) ?? encodeSearchFrame(frame);
   if (watchFrame) return watchFrame;
   switch (frame.type) {
     case "workspaceOpenRequest":

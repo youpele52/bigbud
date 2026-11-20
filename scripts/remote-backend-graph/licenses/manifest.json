@@ -1,0 +1,522 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Upstream licence files for remote backend graph packages that ship without one. Each file is fetched verbatim from the named source and verified by SHA-256 when a graph is built. This is an inventory, not a legal review.",
+  "packages": [
+    {
+      "name": "@aws-sdk/credential-provider-http",
+      "version": "3.972.86",
+      "declaredRepository": "git+https://github.com/aws/aws-sdk-js-v3.git (directory packages-internal/credential-provider-http)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/aws/aws-sdk-js-v3/dee2abd898e7d1c69dd5ca5d74ecdce92e47d19d/LICENSE",
+          "repository": "https://github.com/aws/aws-sdk-js-v3",
+          "ref": "commit 'Publish v3.1166.0'",
+          "commit": "dee2abd898e7d1c69dd5ca5d74ecdce92e47d19d",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "No version tag exists for this package; at this publish commit packages-internal/credential-provider-http/package.json is @aws-sdk/credential-provider-http 3.972.86. Repository root licence; the package directory has none.",
+          "sha256": "edea91454b811f127fbdea3d86f378f6719bd372ed440abf82b232f6fca06c3d"
+        }
+      ]
+    },
+    {
+      "name": "@aws-sdk/credential-provider-login",
+      "version": "3.972.92",
+      "declaredRepository": "git+https://github.com/aws/aws-sdk-js-v3.git (directory packages-internal/credential-provider-login)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/aws/aws-sdk-js-v3/5b4a724f2ac4006ea5a98c2fed6c629f6845b9bd/LICENSE",
+          "repository": "https://github.com/aws/aws-sdk-js-v3",
+          "ref": "commit 'Publish v3.1167.0'",
+          "commit": "5b4a724f2ac4006ea5a98c2fed6c629f6845b9bd",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "No version tag exists for this package; at this publish commit packages-internal/credential-provider-login/package.json is @aws-sdk/credential-provider-login 3.972.92. Repository root licence; the package directory has none.",
+          "sha256": "edea91454b811f127fbdea3d86f378f6719bd372ed440abf82b232f6fca06c3d"
+        }
+      ]
+    },
+    {
+      "name": "@aws-sdk/nested-clients",
+      "version": "3.998.3",
+      "declaredRepository": "git+https://github.com/aws/aws-sdk-js-v3.git (directory packages-internal/nested-clients)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/aws/aws-sdk-js-v3/dee2abd898e7d1c69dd5ca5d74ecdce92e47d19d/LICENSE",
+          "repository": "https://github.com/aws/aws-sdk-js-v3",
+          "ref": "commit 'Publish v3.1166.0'",
+          "commit": "dee2abd898e7d1c69dd5ca5d74ecdce92e47d19d",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "No version tag exists for this package; at this publish commit packages-internal/nested-clients/package.json is @aws-sdk/nested-clients 3.998.3. Repository root licence; the package directory has none.",
+          "sha256": "edea91454b811f127fbdea3d86f378f6719bd372ed440abf82b232f6fca06c3d"
+        }
+      ]
+    },
+    {
+      "name": "@earendil-works/pi-agent-core",
+      "version": "1.4.0",
+      "declaredRepository": "git+https://github.com/earendil-works/pi.git (directory packages/agent)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/4a080252f06caf63a525d7873c5d94d3c23887e0/LICENSE",
+          "repository": "https://github.com/earendil-works/pi",
+          "ref": "v1.4.0",
+          "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/agent has none.",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+        }
+      ]
+    },
+    {
+      "name": "@earendil-works/pi-ai",
+      "version": "1.4.0",
+      "declaredRepository": "git+https://github.com/earendil-works/pi.git (directory packages/ai)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/4a080252f06caf63a525d7873c5d94d3c23887e0/LICENSE",
+          "repository": "https://github.com/earendil-works/pi",
+          "ref": "v1.4.0",
+          "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/ai has none.",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+        }
+      ]
+    },
+    {
+      "name": "@earendil-works/pi-codemode",
+      "version": "1.4.0",
+      "declaredRepository": "git+https://github.com/earendil-works/pi.git (directory packages/codemode)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/4a080252f06caf63a525d7873c5d94d3c23887e0/LICENSE",
+          "repository": "https://github.com/earendil-works/pi",
+          "ref": "v1.4.0",
+          "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/codemode has none.",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+        }
+      ]
+    },
+    {
+      "name": "@earendil-works/pi-coding-agent",
+      "version": "1.4.0",
+      "declaredRepository": "git+https://github.com/earendil-works/pi.git (directory packages/coding-agent)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/4a080252f06caf63a525d7873c5d94d3c23887e0/LICENSE",
+          "repository": "https://github.com/earendil-works/pi",
+          "ref": "v1.4.0",
+          "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/coding-agent has none.",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+        }
+      ]
+    },
+    {
+      "name": "@earendil-works/pi-telemetry",
+      "version": "1.4.0",
+      "declaredRepository": "git+https://github.com/earendil-works/pi.git (directory packages/telemetry)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/4a080252f06caf63a525d7873c5d94d3c23887e0/LICENSE",
+          "repository": "https://github.com/earendil-works/pi",
+          "ref": "v1.4.0",
+          "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/telemetry has none.",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+        }
+      ]
+    },
+    {
+      "name": "@earendil-works/pi-tui",
+      "version": "1.4.0",
+      "declaredRepository": "git+https://github.com/earendil-works/pi.git (directory packages/tui)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/earendil-works/pi/4a080252f06caf63a525d7873c5d94d3c23887e0/LICENSE",
+          "repository": "https://github.com/earendil-works/pi",
+          "ref": "v1.4.0",
+          "commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/tui has none.",
+          "sha256": "0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48"
+        }
+      ]
+    },
+    {
+      "name": "@github/copilot-sdk",
+      "version": "1.0.28",
+      "declaredRepository": "git+https://github.com/github/copilot-agent-runtime.git (directory src/sdk/nodejs)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/github/copilot-sdk/fa108e71ee3025663e0dac20f2a071055d3a6b14/LICENSE",
+          "repository": "https://github.com/github/copilot-sdk",
+          "ref": "v1.0.28",
+          "commit": "fa108e71ee3025663e0dac20f2a071055d3a6b14",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "The declared repository github/copilot-agent-runtime is not publicly accessible. This file is the root licence of the public github/copilot-sdk repository at tag v1.0.28, whose nodejs/package.json is @github/copilot-sdk (copilotCliVersion 1.0.105).",
+          "sha256": "2510b446bc1f0cf9702453075d20cd88631e20e5642658edb7325d9c1eb534f7"
+        },
+        {
+          "file": "GitHub-Copilot-CLI-LICENSE.md",
+          "sourceUrl": "https://registry.npmjs.org/@github/copilot/-/copilot-1.0.105.tgz",
+          "repository": null,
+          "ref": "@github/copilot@1.0.105",
+          "commit": null,
+          "path": "package/LICENSE.md",
+          "retrieved": "2026-11-18",
+          "covers": "the @github/copilot-sdk package",
+          "note": "Included by user decision (handoff decision 1, option a): the GitHub Copilot CLI licence, shipped for the Copilot SDK and runtime packages. The package itself declares MIT and ships no licence file.",
+          "sha256": "b9680937e10425bf19862908856c16ed274e6b81a1368bd62be7a757eab21628"
+        }
+      ]
+    },
+    {
+      "name": "@github/copilot-sdk-linux-arm64",
+      "version": "1.0.28",
+      "declaredRepository": "git+https://github.com/github/copilot-agent-runtime.git (directory src/sdk/nodejs)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "GitHub-Copilot-CLI-LICENSE.md",
+          "sourceUrl": "https://registry.npmjs.org/@github/copilot/-/copilot-1.0.105.tgz",
+          "repository": null,
+          "ref": "@github/copilot@1.0.105",
+          "commit": null,
+          "path": "package/LICENSE.md",
+          "retrieved": "2026-11-18",
+          "covers": "the package, including prebuilds/linux-*/runtime.node and copilot-runtime",
+          "note": "Included by user decision (handoff decision 1, option a): the GitHub Copilot CLI licence, shipped for the Copilot SDK and runtime packages. The package itself declares MIT and ships no licence file.",
+          "sha256": "b9680937e10425bf19862908856c16ed274e6b81a1368bd62be7a757eab21628"
+        },
+        {
+          "file": "ripgrep-COPYING",
+          "sourceUrl": "https://raw.githubusercontent.com/BurntSushi/ripgrep/3a612f88b805e14aef45bfa43e25a54abc6297fc/COPYING",
+          "repository": "https://github.com/BurntSushi/ripgrep",
+          "ref": "15.0.0",
+          "commit": "3a612f88b805e14aef45bfa43e25a54abc6297fc",
+          "path": "COPYING",
+          "retrieved": "2026-11-18",
+          "covers": "ripgrep/bin/linux-*/rg (ripgrep 15.0.0: the x64 binary reports revision 3a612f88b8; both binaries' crate versions match the 15.0.0 Cargo.lock)",
+          "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+        },
+        {
+          "file": "ripgrep-LICENSE-MIT",
+          "sourceUrl": "https://raw.githubusercontent.com/BurntSushi/ripgrep/3a612f88b805e14aef45bfa43e25a54abc6297fc/LICENSE-MIT",
+          "repository": "https://github.com/BurntSushi/ripgrep",
+          "ref": "15.0.0",
+          "commit": "3a612f88b805e14aef45bfa43e25a54abc6297fc",
+          "path": "LICENSE-MIT",
+          "retrieved": "2026-11-18",
+          "covers": "ripgrep/bin/linux-*/rg (ripgrep 15.0.0: the x64 binary reports revision 3a612f88b8; both binaries' crate versions match the 15.0.0 Cargo.lock)",
+          "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+        },
+        {
+          "file": "ripgrep-UNLICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/BurntSushi/ripgrep/3a612f88b805e14aef45bfa43e25a54abc6297fc/UNLICENSE",
+          "repository": "https://github.com/BurntSushi/ripgrep",
+          "ref": "15.0.0",
+          "commit": "3a612f88b805e14aef45bfa43e25a54abc6297fc",
+          "path": "UNLICENSE",
+          "retrieved": "2026-11-18",
+          "covers": "ripgrep/bin/linux-*/rg (ripgrep 15.0.0: the x64 binary reports revision 3a612f88b8; both binaries' crate versions match the 15.0.0 Cargo.lock)",
+          "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+        },
+        {
+          "file": "pcre2-LICENCE.md",
+          "sourceUrl": "https://raw.githubusercontent.com/PCRE2Project/pcre2/b2bd4254b379b9d7dc9a3dda060a7e27009ccdff/LICENCE.md",
+          "repository": "https://github.com/PCRE2Project/pcre2",
+          "ref": "pcre2-10.46",
+          "commit": "b2bd4254b379b9d7dc9a3dda060a7e27009ccdff",
+          "path": "LICENCE.md",
+          "retrieved": "2026-11-18",
+          "covers": "PCRE2 10.46, statically linked into rg (its --pcre2-version reports 10.46 2025-08-27)",
+          "sha256": "9cf7ac6976099a1d856826d3ef1b093bd6b84489dc6100628ac79e740cf9885a"
+        },
+        {
+          "file": "tgrep-LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/microsoft/tgrep/0ef484c5b3bf9390520cfd3b97c8950a628f45f8/LICENSE",
+          "repository": "https://github.com/microsoft/tgrep",
+          "ref": "v1.2.5",
+          "commit": "0ef484c5b3bf9390520cfd3b97c8950a628f45f8",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "covers": "tgrep/bin/linux-*/tgrep",
+          "note": "The binary embeds no version string. It is identified as microsoft/tgrep by its crate names (tgrep-cli, tgrep-core) and strings ('Trigram-indexed grep', 'tgrep/content-id/v1'); v1.2.5 is the last tag before the runtime package was published. LICENSE has not changed since the repository's initial commit, so it is byte-identical at every tag.",
+          "sha256": "5baa259ffd1a975780869d7d2925212224c92206cefb96fb2bf0b146650e5029"
+        }
+      ],
+      "note": "The declared repository github/copilot-agent-runtime is not publicly accessible. Third-party Rust crates linked into rg and tgrep are not covered by these files."
+    },
+    {
+      "name": "@github/copilot-sdk-linux-x64",
+      "version": "1.0.28",
+      "declaredRepository": "git+https://github.com/github/copilot-agent-runtime.git (directory src/sdk/nodejs)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "GitHub-Copilot-CLI-LICENSE.md",
+          "sourceUrl": "https://registry.npmjs.org/@github/copilot/-/copilot-1.0.105.tgz",
+          "repository": null,
+          "ref": "@github/copilot@1.0.105",
+          "commit": null,
+          "path": "package/LICENSE.md",
+          "retrieved": "2026-11-18",
+          "covers": "the package, including prebuilds/linux-*/runtime.node and copilot-runtime",
+          "note": "Included by user decision (handoff decision 1, option a): the GitHub Copilot CLI licence, shipped for the Copilot SDK and runtime packages. The package itself declares MIT and ships no licence file.",
+          "sha256": "b9680937e10425bf19862908856c16ed274e6b81a1368bd62be7a757eab21628"
+        },
+        {
+          "file": "ripgrep-COPYING",
+          "sourceUrl": "https://raw.githubusercontent.com/BurntSushi/ripgrep/3a612f88b805e14aef45bfa43e25a54abc6297fc/COPYING",
+          "repository": "https://github.com/BurntSushi/ripgrep",
+          "ref": "15.0.0",
+          "commit": "3a612f88b805e14aef45bfa43e25a54abc6297fc",
+          "path": "COPYING",
+          "retrieved": "2026-11-18",
+          "covers": "ripgrep/bin/linux-*/rg (ripgrep 15.0.0: the x64 binary reports revision 3a612f88b8; both binaries' crate versions match the 15.0.0 Cargo.lock)",
+          "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+        },
+        {
+          "file": "ripgrep-LICENSE-MIT",
+          "sourceUrl": "https://raw.githubusercontent.com/BurntSushi/ripgrep/3a612f88b805e14aef45bfa43e25a54abc6297fc/LICENSE-MIT",
+          "repository": "https://github.com/BurntSushi/ripgrep",
+          "ref": "15.0.0",
+          "commit": "3a612f88b805e14aef45bfa43e25a54abc6297fc",
+          "path": "LICENSE-MIT",
+          "retrieved": "2026-11-18",
+          "covers": "ripgrep/bin/linux-*/rg (ripgrep 15.0.0: the x64 binary reports revision 3a612f88b8; both binaries' crate versions match the 15.0.0 Cargo.lock)",
+          "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+        },
+        {
+          "file": "ripgrep-UNLICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/BurntSushi/ripgrep/3a612f88b805e14aef45bfa43e25a54abc6297fc/UNLICENSE",
+          "repository": "https://github.com/BurntSushi/ripgrep",
+          "ref": "15.0.0",
+          "commit": "3a612f88b805e14aef45bfa43e25a54abc6297fc",
+          "path": "UNLICENSE",
+          "retrieved": "2026-11-18",
+          "covers": "ripgrep/bin/linux-*/rg (ripgrep 15.0.0: the x64 binary reports revision 3a612f88b8; both binaries' crate versions match the 15.0.0 Cargo.lock)",
+          "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+        },
+        {
+          "file": "pcre2-LICENCE.md",
+          "sourceUrl": "https://raw.githubusercontent.com/PCRE2Project/pcre2/b2bd4254b379b9d7dc9a3dda060a7e27009ccdff/LICENCE.md",
+          "repository": "https://github.com/PCRE2Project/pcre2",
+          "ref": "pcre2-10.46",
+          "commit": "b2bd4254b379b9d7dc9a3dda060a7e27009ccdff",
+          "path": "LICENCE.md",
+          "retrieved": "2026-11-18",
+          "covers": "PCRE2 10.46, statically linked into rg (its --pcre2-version reports 10.46 2025-08-27)",
+          "sha256": "9cf7ac6976099a1d856826d3ef1b093bd6b84489dc6100628ac79e740cf9885a"
+        },
+        {
+          "file": "tgrep-LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/microsoft/tgrep/0ef484c5b3bf9390520cfd3b97c8950a628f45f8/LICENSE",
+          "repository": "https://github.com/microsoft/tgrep",
+          "ref": "v1.2.5",
+          "commit": "0ef484c5b3bf9390520cfd3b97c8950a628f45f8",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "covers": "tgrep/bin/linux-*/tgrep",
+          "note": "The binary embeds no version string. It is identified as microsoft/tgrep by its crate names (tgrep-cli, tgrep-core) and strings ('Trigram-indexed grep', 'tgrep/content-id/v1'); v1.2.5 is the last tag before the runtime package was published. LICENSE has not changed since the repository's initial commit, so it is byte-identical at every tag.",
+          "sha256": "5baa259ffd1a975780869d7d2925212224c92206cefb96fb2bf0b146650e5029"
+        }
+      ],
+      "note": "The declared repository github/copilot-agent-runtime is not publicly accessible. Third-party Rust crates linked into rg and tgrep are not covered by these files."
+    },
+    {
+      "name": "@koromix/koffi-linux-arm64",
+      "version": "3.2.1",
+      "declaredRepository": "git+https://github.com/Koromix/koffi.git",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE.txt",
+          "sourceUrl": "https://raw.githubusercontent.com/Koromix/koffi/59865a5afe1bed8e8c8b118da2f3746bf452d677/LICENSE.txt",
+          "repository": "https://github.com/Koromix/koffi",
+          "ref": "closest commit",
+          "commit": "59865a5afe1bed8e8c8b118da2f3746bf452d677",
+          "path": "LICENSE.txt",
+          "retrieved": "2026-11-18",
+          "note": "Koromix/koffi has no version tags; this is the last commit before @koromix/koffi-linux-*@3.2.1 was published (2026-09-04T07:35Z). LICENSE.txt is unchanged since 2023-07-19.",
+          "sha256": "54abb741a2ba1a7fa89e98d2d3199575e548c8708885eeadab0f5bb83ad22e0e"
+        }
+      ]
+    },
+    {
+      "name": "@koromix/koffi-linux-x64",
+      "version": "3.2.1",
+      "declaredRepository": "git+https://github.com/Koromix/koffi.git",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE.txt",
+          "sourceUrl": "https://raw.githubusercontent.com/Koromix/koffi/59865a5afe1bed8e8c8b118da2f3746bf452d677/LICENSE.txt",
+          "repository": "https://github.com/Koromix/koffi",
+          "ref": "closest commit",
+          "commit": "59865a5afe1bed8e8c8b118da2f3746bf452d677",
+          "path": "LICENSE.txt",
+          "retrieved": "2026-11-18",
+          "note": "Koromix/koffi has no version tags; this is the last commit before @koromix/koffi-linux-*@3.2.1 was published (2026-09-04T07:35Z). LICENSE.txt is unchanged since 2023-07-19.",
+          "sha256": "54abb741a2ba1a7fa89e98d2d3199575e548c8708885eeadab0f5bb83ad22e0e"
+        }
+      ]
+    },
+    {
+      "name": "@opencode-ai/sdk",
+      "version": "1.17.13",
+      "declaredRepository": null,
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/anomalyco/opencode/10c894bdeef3618f5666fb506ef7f9491bb964d8/LICENSE",
+          "repository": "https://github.com/anomalyco/opencode",
+          "ref": "v1.17.13",
+          "commit": "10c894bdeef3618f5666fb506ef7f9491bb964d8",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/sdk/js has none.",
+          "sha256": "625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b"
+        }
+      ],
+      "note": "The package has no repository field; its homepage field is https://github.com/anomalyco/opencode#readme, and packages/sdk/js/package.json at tag v1.17.13 is @opencode-ai/sdk 1.17.13."
+    },
+    {
+      "name": "@opencode/client",
+      "version": "2.1.4",
+      "declaredRepository": "git+https://github.com/anomalyco/opencode.git (directory packages/client)",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/anomalyco/opencode/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/LICENSE",
+          "repository": "https://github.com/anomalyco/opencode",
+          "ref": "v2.1.4",
+          "commit": "68bc26b7da1990ce10ffecfbc1e09eb13aa5d824",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Repository root licence; packages/client has none.",
+          "sha256": "625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/addon-serialize",
+      "version": "0.15.0-beta.301",
+      "declaredRepository": "git+https://github.com/xtermjs/xterm.js.git#master",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/xtermjs/xterm.js/c58ea3637f3968e0e6e79cd92cf9aace7ef89ee2/LICENSE",
+          "repository": "https://github.com/xtermjs/xterm.js",
+          "ref": "gitHead",
+          "commit": "c58ea3637f3968e0e6e79cd92cf9aace7ef89ee2",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Commit is the package's npm gitHead; repository root licence (addons/addon-serialize/ has none).",
+          "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
+        }
+      ]
+    },
+    {
+      "name": "@xterm/headless",
+      "version": "6.1.0-beta.304",
+      "declaredRepository": "git+https://github.com/xtermjs/xterm.js.git",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/xtermjs/xterm.js/5f141a31389fa67c028fc9fb886ed8fd1aea63d3/LICENSE",
+          "repository": "https://github.com/xtermjs/xterm.js",
+          "ref": "gitHead",
+          "commit": "5f141a31389fa67c028fc9fb886ed8fd1aea63d3",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Commit is the package's npm gitHead; repository root licence (headless/ has none).",
+          "sha256": "b569f629d00f2626a8100df2a1798210535621e42164dfd426a6fe5aac7b0ccd"
+        }
+      ]
+    },
+    {
+      "name": "data-uri-to-buffer",
+      "version": "4.0.1",
+      "declaredRepository": "git://github.com/TooTallNate/node-data-uri-to-buffer.git",
+      "status": "no-license-file-upstream",
+      "checked": {
+        "repository": "https://github.com/TooTallNate/node-data-uri-to-buffer",
+        "ref": "gitHead",
+        "commit": "85cd8c854aefbf1bb636789d80364cfac8ea1583",
+        "retrieved": "2026-11-18"
+      },
+      "note": "No licence file in the repository at the package's gitHead. Its README.md has a 'License' section with MIT text; that README is not a licence file and is not vendored."
+    },
+    {
+      "name": "proxy-agent-negotiate",
+      "version": "1.1.0",
+      "declaredRepository": "git+https://github.com/TooTallNate/proxy-agents.git (directory packages/negotiate)",
+      "status": "no-license-file-upstream",
+      "checked": {
+        "repository": "https://github.com/TooTallNate/proxy-agents",
+        "ref": "proxy-agent-negotiate@1.1.0",
+        "commit": "b7e5f7ccce1a3ac5b339cc4c587974e8989cbc16",
+        "retrieved": "2026-11-18"
+      },
+      "note": "No licence file in the repository root or packages/negotiate at the release tag."
+    },
+    {
+      "name": "standardwebhooks",
+      "version": "1.3.0",
+      "declaredRepository": "git+https://github.com/standard-webhooks/standard-webhooks.git",
+      "status": "vendored",
+      "files": [
+        {
+          "file": "LICENSE",
+          "sourceUrl": "https://raw.githubusercontent.com/standard-webhooks/standard-webhooks/daee8284cfe9d4e435ec16e3e68a8f30084d6aaf/LICENSE",
+          "repository": "https://github.com/standard-webhooks/standard-webhooks",
+          "ref": "gitHead",
+          "commit": "daee8284cfe9d4e435ec16e3e68a8f30084d6aaf",
+          "path": "LICENSE",
+          "retrieved": "2026-11-18",
+          "note": "Commit is the package's npm gitHead; repository root licence (libraries/javascript has none).",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    }
+  ]
+}

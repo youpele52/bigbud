@@ -191,7 +191,7 @@ export function CompactChatShell({
     [bridge, threadId, workspaceRoot],
   );
 
-  if (preparing) {
+  if (preparing && !threadSyncError && !projectLoadError) {
     return <BigbudLoader />;
   }
 
@@ -264,7 +264,7 @@ export function CompactChatShell({
           }
         />
       ) : null}
-      {projectLoadError ? null : (
+      {preparing || projectLoadError ? null : (
         <ThreadComposerSurface
           threadId={threadId}
           onThreadMaterialized={synchronizeMaterializedThread}

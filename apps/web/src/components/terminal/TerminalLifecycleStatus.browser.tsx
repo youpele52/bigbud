@@ -112,3 +112,31 @@ it("shows Stopping and Starting for restart and routes retry to restart", async 
   await screen.getByRole("button", { name: "Retry restart" }).click();
   expect(retryRestart).toHaveBeenCalledOnce();
 });
+
+it("offers honest view dismissal instead of retry for an unconfirmed direct close", async () => {
+  const operation = beginTerminalLifecycle("thread", "default", "close")!;
+  updateTerminalLifecycle("thread", "default", operation, {
+    phase: "error",
+    canDismiss: true,
+    error: "Remote termination cannot be verified.",
+  });
+  const retryClose = vi.fn();
+  const screen = await render(
+    <TerminalLifecycleStatus
+      threadId="thread"
+      terminalId="default"
+      retryClose={retryClose}
+      retryRestart={vi.fn()}
+    />,
+  );
+  await expect
+    .element(
+      screen.getByText("The remote process may still be running. Dismiss only hides this pane."),
+    )
+    .toBeVisible();
+  await expect.element(screen.getByRole("button", { name: "Retry close" })).not.toBeInTheDocument();
+  await screen.getByRole("button", { name: "Dismiss pane" }).click();
+  await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+  expect(retryClose).not.toHaveBeenCalled();
+  await screen.unmount();
+});

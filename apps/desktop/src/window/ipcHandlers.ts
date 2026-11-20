@@ -3,7 +3,6 @@ import { BrowserWindow, clipboard, dialog, nativeTheme, shell } from "electron";
 import { authorizedHandle, authorizedOn, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as path from "node:path";
 import type {
   DesktopTailscaleRemoteAccessStatus,
   DesktopTheme,
@@ -22,9 +21,12 @@ import {
   registerComputerUseIpcHandlers,
   type ComputerUseIpcHandlerDeps,
 } from "./ipcHandlers.computerUse";
-import { applyWindowMaterial, getSafeWindowMaterial } from "./windowManager";
+import { applyWindowMaterial, getWindowMaterialState } from "./windowManager.material";
+import { getSafeWindowMaterial, isWindowMaterialRequestId } from "./windowMaterial.logic";
+import { desktopIpcChannels } from "../main.channels";
 import { registerCertificateChallengeHandlers } from "./ipcHandlers.certificateChallenge";
 import { registerContextMenuIpcHandler } from "./ipcHandlers.contextMenu";
+import { probeFileAccess } from "./ipcHandlers.fileAccess";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -58,6 +60,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL: string;
   readonly ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
   readonly DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
+  readonly TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
   readonly NOTIFICATIONS_IS_SUPPORTED_CHANNEL: string;
   readonly NOTIFICATIONS_SHOW_CHANNEL: string;
   readonly COPY_TO_CLIPBOARD_CHANNEL: string;
@@ -78,6 +81,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  readonly takeOverTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly getIsQuitting: () => boolean;
   readonly getUpdateState: () => DesktopUpdateState;
   readonly getBackendStartupState: () => DesktopBackendStartupState;
@@ -110,6 +114,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
     ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
+    TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
@@ -166,6 +171,10 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     deps.disableTailscaleRemoteAccess(),
   );
 
+  authorizedHandle(TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, () =>
+    deps.takeOverTailscaleRemoteAccess(),
+  );
+
   authorizedHandle(PICK_FOLDER_CHANNEL, BROAD_RENDERER_ROLES, async (event) => {
     const owner = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
     const result = owner
@@ -200,20 +209,26 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   authorizedHandle(
     SET_WINDOW_MATERIAL_CHANNEL,
     BROAD_RENDERER_ROLES,
-    async (event, rawWindowMaterial: unknown) => {
+    async (event, rawWindowMaterial: unknown, requestId: unknown) => {
       const windowMaterial = getSafeWindowMaterial(rawWindowMaterial);
       if (!windowMaterial) {
         return;
       }
+      if (requestId !== undefined && !isWindowMaterialRequestId(requestId)) return;
 
       const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
       if (!window) {
         return;
       }
 
-      applyWindowMaterial(window, windowMaterial);
+      applyWindowMaterial(window, windowMaterial, requestId);
     },
   );
+
+  authorizedHandle(desktopIpcChannels.getWindowMaterialState, BROAD_RENDERER_ROLES, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window ? getWindowMaterialState(window) : null;
+  });
 
   registerContextMenuIpcHandler(CONTEXT_MENU_CHANNEL, deps.getMainWindow);
 
@@ -307,37 +322,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     },
   );
 
-  authorizedHandle(
-    REQUEST_FILE_ACCESS_CHANNEL,
-    BROAD_RENDERER_ROLES,
-    async (_event, level: unknown) => {
-      const home = os.homedir();
-      const folders =
-        level === "unrestricted"
-          ? ["/", "/Users", home]
-          : level === "common-folders"
-            ? ["Desktop", "Documents", "Downloads", "Music", "Pictures"].map((f) =>
-                path.join(home, f),
-              )
-            : [];
-
-      const granted: string[] = [];
-      const denied: string[] = [];
-
-      for (const folder of folders) {
-        try {
-          fs.accessSync(folder, fs.constants.R_OK);
-          granted.push(folder);
-        } catch {
-          denied.push(folder);
-        }
-      }
-
-      return {
-        success: granted.length > 0,
-        granted,
-        denied,
-      };
-    },
+  authorizedHandle(REQUEST_FILE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, (_event, level: unknown) =>
+    probeFileAccess(level, {
+      home: os.homedir(),
+      platform: process.platform,
+      readFolder: (folder) => fs.promises.readdir(folder, { withFileTypes: true }),
+    }),
   );
 }

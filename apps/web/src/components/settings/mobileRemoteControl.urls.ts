@@ -26,6 +26,15 @@ export function shouldPreferLiveBackendBaseUrl(stored: string, live: string): bo
     if (isTailnetHostname(storedUrl.hostname) && liveLocal) {
       return true;
     }
+    // Each channel serves on its own port; a stored tailnet origin from another
+    // port (for example stable's 443 kept by beta) would pair against the wrong app.
+    if (
+      isTailnetHostname(storedUrl.hostname) &&
+      isTailnetHostname(liveUrl.hostname) &&
+      storedUrl.origin !== liveUrl.origin
+    ) {
+      return true;
+    }
     return false;
   } catch {
     return false;

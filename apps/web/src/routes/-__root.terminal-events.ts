@@ -1,5 +1,6 @@
 import type { NativeApi, TerminalEvent } from "@bigbud/contracts";
 import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type { TerminalWorkActivity } from "@bigbud/contracts/workspace/terminal.activity.ts";
 
 /** Keep batching ordered across subscription inventories, including same-tick resubscriptions. */
 export function subscribeGlobalTerminalState(input: {
@@ -7,6 +8,8 @@ export function subscribeGlobalTerminalState(input: {
   isArchived: (threadId: string) => boolean;
   applyEvents: (events: ReadonlyArray<TerminalEvent>) => void;
   reconcileInventory: (inventory: TerminalSessionInventory) => void;
+  /** Terminal recency and finished work; applied in arrival order, never batched. */
+  applyWork?: (item: TerminalWorkActivity) => void;
 }): () => void {
   const pending: TerminalEvent[] = [];
   let disposed = false;
@@ -31,6 +34,13 @@ export function subscribeGlobalTerminalState(input: {
         flush();
         input.reconcileInventory(inventory);
       },
+      ...(input.applyWork
+        ? {
+            onWork: (item: TerminalWorkActivity) => {
+              if (!disposed) input.applyWork?.(item);
+            },
+          }
+        : {}),
     },
   );
   return () => {

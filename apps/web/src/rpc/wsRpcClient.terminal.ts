@@ -5,6 +5,17 @@ import type { WsRpcClient } from "./wsRpcClient.types";
 
 export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["terminal"] {
   return {
+    remoteInventory: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteInventory](input)),
+    remoteAttach: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteAttach](input)),
+    remoteDetach: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteDetach](input)),
+    remoteStop: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteStop](input)),
+
+    shellProfiles: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalShellProfiles](input)),
     wslDistributions: () =>
       transport.request((client) => client[WS_METHODS.terminalWslDistributions]({})),
     snapshot: (input) => transport.request((client) => client[WS_METHODS.terminalSnapshot](input)),
@@ -23,9 +34,11 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
           client[WS_METHODS.subscribeTerminalEvents]({
             outputScope: "legacyDetection",
             ...(options?.onInventory ? { includeInventory: true } : {}),
+            ...(options?.onWork ? { includeWork: true } : {}),
           }),
         (item) => {
           if (item.type === "inventory") options?.onInventory?.(item);
+          else if (item.type === "workActivity") options?.onWork?.(item);
           else listener(item);
         },
         options,
@@ -39,5 +52,8 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
     ackOutput: (input) =>
       transport.request((client) => client[WS_METHODS.terminalOutputAck](input)),
     search: (input) => transport.request((client) => client[WS_METHODS.terminalSearch](input)),
+    view: (input) => transport.request((client) => client[WS_METHODS.terminalView](input)),
+    stagePasteFile: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalStagePasteFile](input)),
   };
 }

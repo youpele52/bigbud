@@ -1,24 +1,29 @@
+import { ACTIVITY_BLOCK_GAP_PX } from "../constants/activityLayout";
 import { deriveDisplayedUserMessageState } from "../lib/terminalContext";
 import { buildInlineTerminalContextText } from "./chat/common/userMessageTerminalContexts";
 
 const ASSISTANT_CHARS_PER_LINE_FALLBACK = 72;
 const USER_CHARS_PER_LINE_FALLBACK = 56;
-const USER_LINE_HEIGHT_PX = 22;
+// text-sm leading-relaxed: 14px × 1.625 (also used by assistant markdown).
+const USER_LINE_HEIGHT_PX = 22.75;
 const ASSISTANT_LINE_HEIGHT_PX = 22.75;
 // Assistant rows render as markdown content plus a compact timestamp meta line.
 // The DOM baseline is much smaller than the user bubble chrome, so model it
 // separately instead of reusing the old shared constant.
 const ASSISTANT_BASE_HEIGHT_PX = 41;
-const USER_BASE_HEIGHT_PX = 96;
+// Bubble py-3 + border (26), footer (up to 28), gap-1 (4), outer pb-4 (16).
+const USER_BASE_HEIGHT_PX = 26 + 28 + 4 + ACTIVITY_BLOCK_GAP_PX;
 const ATTACHMENTS_PER_ROW = 2;
 // Attachment thumbnails render with `max-h-[220px]` plus ~8px row gap.
 const USER_ATTACHMENT_ROW_HEIGHT_PX = 228;
 const USER_READ_DOCUMENT_SUMMARY_HEIGHT_PX = 84;
 const USER_DELEGATED_PROVENANCE_SUMMARY_HEIGHT_PX = 24;
 const USER_BUBBLE_WIDTH_RATIO = 0.8;
-const USER_BUBBLE_HORIZONTAL_PADDING_PX = 32;
+// px-4 plus the bubble's two 1px borders.
+const USER_BUBBLE_HORIZONTAL_PADDING_PX = 34;
 const ASSISTANT_MESSAGE_HORIZONTAL_PADDING_PX = 8;
-const USER_MONO_AVG_CHAR_WIDTH_PX = 7.6;
+// UserMessageBody inherits proportional DM Sans, not the code/log monospace font.
+const USER_AVG_CHAR_WIDTH_PX = 7.2;
 const ASSISTANT_AVG_CHAR_WIDTH_PX = 7.2;
 const MIN_USER_CHARS_PER_LINE = 4;
 const MIN_ASSISTANT_CHARS_PER_LINE = 20;
@@ -60,7 +65,7 @@ function estimateCharsPerLineForUser(timelineWidthPx: number | null): number {
   if (!isFinitePositiveNumber(timelineWidthPx)) return USER_CHARS_PER_LINE_FALLBACK;
   const bubbleWidthPx = timelineWidthPx * USER_BUBBLE_WIDTH_RATIO;
   const textWidthPx = Math.max(bubbleWidthPx - USER_BUBBLE_HORIZONTAL_PADDING_PX, 0);
-  return Math.max(MIN_USER_CHARS_PER_LINE, Math.floor(textWidthPx / USER_MONO_AVG_CHAR_WIDTH_PX));
+  return Math.max(MIN_USER_CHARS_PER_LINE, Math.floor(textWidthPx / USER_AVG_CHAR_WIDTH_PX));
 }
 
 function estimateCharsPerLineForAssistant(timelineWidthPx: number | null): number {

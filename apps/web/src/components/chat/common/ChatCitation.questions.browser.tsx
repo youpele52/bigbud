@@ -205,11 +205,12 @@ it("keeps an option snapshot anchored across answering and reopens virtualized c
 
 it("accepts selections across prompt paragraphs but excludes hints, footer, answers and controls", async () => {
   const screen = await render(<CitationBrowserHarness messages={[]} pendingUserInputs={[input]} />);
-  const scope = document.querySelector<HTMLElement>("[data-chat-cite-scope]")!;
+  // The provider root spans the timeline and the composer panel, as in ChatView.
+  const scope = document.body;
   for (const element of [
     page.getByText("Optional — leave blank to skip", { exact: false }).element(),
-    page.getByText("Input required").element(),
-    page.getByText("Type your answer below and press send to continue.").element(),
+    page.getByText("Needs you").element(),
+    page.getByText("Add context in the message box, or just send your selection.").element(),
   ]) {
     expect(
       readChatCitationSelection(selectChatText(element as HTMLElement, 0, 5), scope),
@@ -251,15 +252,22 @@ it("accepts selections across prompt paragraphs but excludes hints, footer, answ
 });
 
 it("rejects selections spanning two questions in the same request", async () => {
+  // The pending panel shows one question at a time; answered history shows all of them at once.
   const screen = await render(
     <CitationBrowserHarness
       messages={[]}
-      pendingUserInputs={[
-        { ...input, questions: [...input.questions, { ...input.questions[0]!, id: "second" }] },
+      answeredUserInputs={[
+        {
+          ...input,
+          questions: [...input.questions, { ...input.questions[0]!, id: "second" }],
+          answers: { theme: "Dark", second: "Light" },
+          answeredAt: "2026-03-17T19:12:30.000Z",
+        },
       ]}
     />,
   );
   try {
+    await page.getByRole("group").getByText("Question", { exact: true }).click();
     const prompts = document.querySelectorAll('[data-chat-cite-region="question"]');
     const range = document.createRange();
     range.setStart(prompts[0]!.firstChild!, 0);

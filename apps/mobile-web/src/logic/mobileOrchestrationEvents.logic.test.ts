@@ -1,13 +1,12 @@
+import { makeThread } from "./mobileOrchestrationEvents.test.helpers";
 import {
   CommandId,
   EventId,
   MessageId,
-  ProjectId,
   ThreadId,
   TurnId,
   type OrchestrationEvent,
   type OrchestrationReadModel,
-  type OrchestrationThread,
 } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -17,39 +16,8 @@ import {
 } from "./mobileOrchestrationEvents.logic";
 
 const threadId = ThreadId.makeUnsafe("thread-1");
-const projectId = ProjectId.makeUnsafe("project-1");
 const turnId = TurnId.makeUnsafe("turn-1");
 const messageId = MessageId.makeUnsafe("message-1");
-
-function makeThread(overrides: Partial<OrchestrationThread> = {}): OrchestrationThread {
-  return {
-    id: threadId,
-    projectId,
-    title: "Thread",
-    purpose: "standard",
-    elevatorSummary: "Thread",
-    elevatorSummaryMessageCount: 0,
-    modelSelection: { provider: "codex", model: "gpt-5.4" },
-    runtimeMode: "full-access",
-    interactionMode: "default",
-    branch: "main",
-    worktreePath: null,
-    latestTurn: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-    archivedAt: null,
-    pinnedAt: null,
-    deletingAt: null,
-    deletedAt: null,
-    messages: [],
-    proposedPlans: [],
-    activities: [],
-    checkpoints: [],
-    session: null,
-    watchingThreads: [],
-    ...overrides,
-  };
-}
 
 function makeMessageSentEvent(
   text: string,
@@ -227,7 +195,7 @@ describe("mobileOrchestrationEvents.logic", () => {
     expect(next?.messages[0]?.streaming).toBe(false);
   });
 
-  it("normalizes stale running session updates back to ready once the assistant message completed", () => {
+  it("keeps a running session after final assistant text without native settlement", () => {
     const thread = applyOrchestrationEventToThread(
       makeThread(),
       makeMessageSentEvent("Done", false),
@@ -259,7 +227,8 @@ describe("mobileOrchestrationEvents.logic", () => {
       },
     });
 
-    expect(next?.session?.status).toBe("ready");
-    expect(next?.session?.activeTurnId).toBeNull();
+    expect(next?.session?.status).toBe("running");
+    expect(next?.session?.activeTurnId).toBe(turnId);
+    expect(next?.latestTurn?.completedAt).toBeNull();
   });
 });

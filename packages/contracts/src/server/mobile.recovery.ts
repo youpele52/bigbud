@@ -34,6 +34,8 @@ export const MobileRecoverySelectedThread = Schema.Union([
   Schema.Struct({
     status: Schema.Literal("present"),
     thread: OrchestrationThread,
+    /** Set when the baseline omits older messages to stay within its size bounds. */
+    hasOlderHistory: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({ status: Schema.Literal("missing") }),
   Schema.Struct({ status: Schema.Literal("deleted") }),
@@ -140,6 +142,7 @@ export class MobileRecoveryBaselineError extends Schema.TaggedErrorClass<MobileR
   "MobileRecoveryBaselineError",
   {
     message: TrimmedNonEmptyString,
+    retryable: Schema.optional(Schema.Boolean),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

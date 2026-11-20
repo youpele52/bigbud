@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { StringDecoder } from "node:string_decoder";
 
 import {
   buildPiRpcInvocation,
@@ -21,6 +20,7 @@ import {
   isRemoteWorkspaceTarget,
 } from "../../../workspace-target/workspaceTarget.ts";
 import { describePiExit } from "./RpcProcess.errors.ts";
+import { createPiStdoutReader } from "./RpcProcess.stdout.ts";
 import { createPiRpcProcessLifecycle, type PiRpcProcessLifecycle } from "./RpcProcess.lifecycle.ts";
 import { isPiRpcResponse } from "./RpcProcess.message.ts";
 import { migrateBundledPiConfig } from "./ConfigMigration.ts";
@@ -179,8 +179,6 @@ export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<
     }
 
     const listeners = new Set<(message: PiRpcStdoutMessage) => void>();
-    const decoder = new StringDecoder("utf8");
-    let stdoutBuffer = "";
     let stderrTail = "";
     let exitPromise: Promise<void> | undefined;
     let cleanedUp = false;
@@ -232,13 +230,15 @@ export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<
       }
     };
 
-    const flushStdout = () => {
-      stdoutBuffer += decoder.end();
-      if (stdoutBuffer.length > 0) {
-        handleLine(stdoutBuffer);
-        stdoutBuffer = "";
-      }
-    };
+    // F-B5: a record longer than the limit is a protocol error that ends the session.
+    const stdoutReader = createPiStdoutReader({
+      onLine: handleLine,
+      onOverflow: (error) => {
+        lifecycle.fail(error);
+        killProcessTree(child, "SIGKILL");
+      },
+    });
+    const flushStdout = stdoutReader.flush;
 
     lifecycle = createPiRpcProcessLifecycle({
       child,
@@ -255,20 +255,7 @@ export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<
       flushStdout,
     });
 
-    child.stdout.on("data", (chunk: Buffer | string) => {
-      stdoutBuffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
-
-      while (true) {
-        const newlineIndex = stdoutBuffer.indexOf("\n");
-        if (newlineIndex === -1) {
-          break;
-        }
-
-        const line = stdoutBuffer.slice(0, newlineIndex);
-        stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
-        handleLine(line);
-      }
-    });
+    child.stdout.on("data", stdoutReader.push);
 
     child.stdout.on("end", () => {
       flushStdout();

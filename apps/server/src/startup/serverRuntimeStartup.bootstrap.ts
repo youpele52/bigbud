@@ -13,10 +13,16 @@ import {
 import { Effect, Option, Path, Schema } from "effect";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine";
+import { ProjectionProjectRepository } from "../persistence/Services/ProjectionProjects.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
 import { ServerConfig } from "./config";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../ws/serverSettings";
+
+/** The one command that creates the built-in Chats project. */
+export const BUILT_IN_CHATS_PROJECT_COMMAND_ID = CommandId.makeUnsafe(
+  "server:bootstrap:built-in-chats-project",
+);
 
 /**
  * Resolve the default model selection for a newly bootstrapped project.
@@ -44,23 +50,21 @@ export const autoBootstrapWelcome = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const projectionReadModelQuery = yield* ProjectionSnapshotQuery;
   const orchestrationEngine = yield* OrchestrationEngineService;
+  const projectRepository = yield* ProjectionProjectRepository;
   const path = yield* Path.Path;
 
   let bootstrapProjectId: ProjectId | undefined;
   let bootstrapThreadId: ThreadId | undefined;
 
-  const chatsProject = yield* orchestrationEngine
-    .getReadModel()
-    .pipe(
-      Effect.map((readModel) =>
-        readModel.projects.find((project) => project.id === BUILT_IN_CHATS_PROJECT_ID),
-      ),
-    );
-  if (!chatsProject) {
+  // The persisted projection, not the engine's startup read model: that model is windowed to
+  // projects with an operational thread, so an idle Chats project is absent from it (O-6).
+  const chatsProject = yield* projectRepository.getById({ projectId: BUILT_IN_CHATS_PROJECT_ID });
+  if (Option.isNone(chatsProject)) {
     const createdAt = new Date(0).toISOString();
     yield* orchestrationEngine.dispatch({
       type: "project.create",
-      commandId: CommandId.makeUnsafe(crypto.randomUUID()),
+      // Fixed id and payload: a repeated dispatch replays its receipt instead of appending.
+      commandId: BUILT_IN_CHATS_PROJECT_COMMAND_ID,
       projectId: BUILT_IN_CHATS_PROJECT_ID,
       title: BUILT_IN_CHATS_PROJECT_TITLE,
       workspaceRoot: null,

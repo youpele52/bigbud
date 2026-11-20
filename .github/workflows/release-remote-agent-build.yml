@@ -1,0 +1,186 @@
+name: Build remote agent release artifacts
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      retention_days:
+        description: "Artifact retention in days for the release payload (0 keeps the repository default; dry runs pass 3)"
+        required: false
+        type: number
+        default: 0
+
+permissions:
+  contents: read
+
+jobs:
+  remote_agent_build:
+    name: Build remote agent ${{ matrix.label }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # glibc builds ship for one transition release (D4); musl builds are static.
+          - label: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+            strip: strip
+          - label: Linux arm64
+            target: aarch64-unknown-linux-gnu
+            strip: aarch64-linux-gnu-strip
+          - label: Linux x86_64 static
+            target: x86_64-unknown-linux-musl
+            strip: strip
+          - label: Linux arm64 static
+            target: aarch64-unknown-linux-musl
+            strip: aarch64-linux-gnu-strip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.target }}
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(protobuf-compiler)
+          if [[ "${{ matrix.target }}" == aarch64-* ]]; then
+            packages+=(gcc-aarch64-linux-gnu)
+          fi
+          sudo apt-get update
+          sudo apt-get install --yes "${packages[@]}"
+
+      - name: Build remote agent
+        shell: bash
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: ${{ inputs.version }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          # Rust's musl targets link their self-contained C runtime; gcc only drives the linker.
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --locked --release --package bigbud-remote-agent --target "${{ matrix.target }}"
+
+      - name: Test static remote agent under musl
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        shell: bash
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: ${{ inputs.version }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+        run: cargo test --locked --package bigbud-remote-agent --target "${{ matrix.target }}"
+
+      - name: Set up QEMU for arm64 execution checks
+        if: startsWith(matrix.target, 'aarch64-')
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
+
+      - name: Prepare remote agent release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ inputs.version }}'
+          target='${{ matrix.target }}'
+          asset_name="bigbud-remote-agent-${version}-${target}"
+          mkdir -p release-publish
+          cp "target/${target}/release/bigbud-remote-agent" "release-publish/${asset_name}"
+          '${{ matrix.strip }}' "release-publish/${asset_name}"
+          chmod 755 "release-publish/${asset_name}"
+          (cd release-publish && sha256sum "${asset_name}" > "${asset_name}.sha256")
+
+      # Unsigned sidecars next to the binary: the linked crates' licence files (including the
+      # project LICENSE) and their inventory. The signed manifests list only the binary.
+      - name: Generate remote agent third-party notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_name="bigbud-remote-agent-${{ inputs.version }}-${{ matrix.target }}"
+          bun run licenses:rust --target "${{ matrix.target }}" \
+            --output "release-publish/${asset_name}.licenses.json" \
+            --notices-output "release-publish/${asset_name}.THIRD_PARTY_NOTICES"
+
+      - name: Verify packaged identity and Linux compatibility
+        shell: bash
+        env:
+          AGENT_VERSION: ${{ inputs.version }}
+          AGENT_BUILD_DIGEST: ${{ github.sha }}
+          AGENT_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          asset_name="bigbud-remote-agent-${AGENT_VERSION}-${AGENT_TARGET}"
+          binary="$PWD/release-publish/$asset_name"
+          mkdir -p release-checks
+          (cd release-publish && sha256sum --check "${asset_name}.sha256")
+          readelf --program-headers "$binary" > release-checks/program-headers.txt
+          readelf --dynamic "$binary" > release-checks/dynamic.txt
+          images=(ubuntu:22.04)
+          if [[ "$AGENT_TARGET" == *-musl ]]; then
+            if grep -q 'INTERP' release-checks/program-headers.txt || grep -q '(NEEDED)' release-checks/dynamic.txt; then
+              echo "::error::Static release asset requires a dynamic loader or shared library"; exit 1
+            fi
+            images=(alpine:3.20 debian:11 rockylinux:8)
+          fi
+          platform=linux/amd64
+          execution=native-x64
+          if [[ "$AGENT_TARGET" == aarch64-* ]]; then
+            platform=linux/arm64
+            execution=qemu-arm64
+          fi
+          printf '%s %s %s\n' "$AGENT_TARGET" "$platform" "$execution" > release-checks/provenance.txt
+          git rev-parse HEAD >> release-checks/provenance.txt
+          test "$(git rev-parse HEAD)" = "$AGENT_BUILD_DIGEST"
+          cp "release-publish/${asset_name}.sha256" release-checks/
+          for image in "${images[@]}"; do
+            check="release-checks/${image//[:\/]/_}.check.txt"
+            docker run --rm --network none --read-only --platform "$platform" \
+              -v "$binary:/opt/agent:ro" "$image" /opt/agent --check > "$check"
+            docker image inspect --format '{{.Id}} {{.Architecture}}' "$image" >> release-checks/provenance.txt
+            python3 - "$check" <<'PY'
+          import os, pathlib, re, sys
+          protocol = pathlib.Path('crates/bigbud-protocol/src/lib.rs').read_text()
+          versions = [re.findall(r'pub const PROTOCOL_' + name + r': u32 = (\d+);', protocol)
+                      for name in ('MAJOR', 'MINOR')]
+          if any(len(values) != 1 for values in versions):
+              raise SystemExit('Cannot determine the release protocol identity')
+          expected = ['bigbud-remote-agent', os.environ['AGENT_VERSION'],
+                      versions[0][0], versions[1][0], os.environ['AGENT_BUILD_DIGEST'],
+                      'linux', os.environ['AGENT_TARGET'].split('-')[0]]
+          if pathlib.Path(sys.argv[1]).read_text().splitlines() != ['\t'.join(expected)]:
+              raise SystemExit('Packaged remote-agent identity does not match the release')
+          PY
+          done
+          (cd release-publish && sha256sum --check "${asset_name}.sha256")
+
+      - name: Upload remote agent verification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: remote-check-${{ matrix.target }}
+          path: release-checks/*
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}
+
+      - name: Upload remote agent artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: remote-agent-${{ matrix.target }}
+          path: release-publish/*
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}

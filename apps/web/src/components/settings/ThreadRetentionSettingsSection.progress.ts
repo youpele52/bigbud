@@ -5,6 +5,7 @@ import type {
 } from "@bigbud/contracts/core/settings.threadRetention";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { backendScopedLocalStorage } from "../../lib/backendScopedStorage";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
 import {
@@ -18,9 +19,19 @@ const HEARTBEAT_MS = 5 * 60_000;
 const toastIds = new Map<string, ReturnType<typeof toastManager.add>>();
 const lastToast = new Map<string, { at: number; signature: string }>();
 
+/**
+ * One ongoing condition per run: once dismissed, the shared toast policy keeps
+ * progress re-adds quiet for its cool-down (unless severity escalates) while
+ * still showing the run's settled outcome. Keyed per run so a newly started
+ * cleanup is never hidden by an earlier run's dismissal.
+ */
+export function retentionToastData(runId: string) {
+  return { conditionKey: `thread-retention-progress:${runId}` };
+}
+
 function storedRunId(): string | null {
   try {
-    return window.localStorage.getItem(STORAGE_KEY);
+    return backendScopedLocalStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
@@ -28,8 +39,8 @@ function storedRunId(): string | null {
 
 function storeRunId(runId: string | null): void {
   try {
-    if (runId) window.localStorage.setItem(STORAGE_KEY, runId);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    if (runId) backendScopedLocalStorage.setItem(STORAGE_KEY, runId);
+    else backendScopedLocalStorage.removeItem(STORAGE_KEY);
   } catch {
     /* Browser storage may be unavailable. */
   }
@@ -94,7 +105,7 @@ export function retentionToast(run: ServerThreadRetentionRun) {
 }
 
 export function publishRunToast(run: ServerThreadRetentionRun, force = false): void {
-  const payload = retentionToast(run);
+  const payload = { ...retentionToast(run), data: retentionToastData(run.runId) };
   const signature = `${run.status}:${run.completedCount}:${run.skippedCount}:${run.failedCount}:${
     run.completedResourceCount ?? 0
   }:${run.retainedResourceCount ?? 0}:${run.blockedResourceCount ?? 0}:${run.uncertainCount ?? 0}:${
@@ -118,6 +129,7 @@ export function publishReconnectToast(runId: string): void {
     type: "loading" as const,
     title: "Cleanup: reconnecting for progress…",
     timeout: 0,
+    data: retentionToastData(runId),
   };
   const toastId = toastIds.get(runId);
   if (toastId === undefined) toastIds.set(runId, toastManager.add(payload));

@@ -1,11 +1,14 @@
 import type { NativeApi } from "@bigbud/contracts";
 
+import { isBoundBackendWindow, readBoundNativeApi } from "./backendScope.state";
 import { __resetWsNativeApiForTests, createWsNativeApi } from "./wsNativeApi";
 
 let cachedApi: NativeApi | undefined;
 
 export function readNativeApi(): NativeApi | undefined {
   if (typeof window === "undefined") return undefined;
+  // A bound window only ever sees its owned API; undefined while binding or after refusal.
+  if (isBoundBackendWindow()) return readBoundNativeApi();
   if (cachedApi) return cachedApi;
 
   if (window.nativeApi) {

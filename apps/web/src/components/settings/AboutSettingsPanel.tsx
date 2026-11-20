@@ -4,6 +4,7 @@ import { normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
 import { SettingsPageContainer } from "./settingsLayout";
 import { AboutSettingsSection } from "./AboutSettingsSection";
 import { AboutConnectionDiagnosticsSection } from "./AboutConnectionDiagnosticsSection";
+import { RemoteBackendUpdateSection } from "../remote-backend/RemoteBackendUpdateSection";
 
 function AboutProductHeader() {
   const { query } = useSettingsSearch();
@@ -24,6 +25,7 @@ export function AboutSettingsPanel() {
     <SettingsPageContainer>
       <AboutProductHeader />
       <AboutSettingsSection />
+      <RemoteBackendUpdateSection />
       <AboutConnectionDiagnosticsSection />
     </SettingsPageContainer>
   );

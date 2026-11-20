@@ -30,19 +30,34 @@ impl AgentSession {
                     ("diagnostic", 1),
                     ("workspace.files", 1),
                     ("workspace.search", 1),
+                    ("workspace.search-stream", 1),
+                    ("os-index.search", 1),
                     ("workspace.write", 1),
+                    ("workspace.write-create-only", 1),
                     ("workspace.watch", 1),
                     ("process.run", 1),
                     ("process.attach", 1),
                     ("terminal.pty", 1),
+                    ("terminal.pty-inventory", 1),
+                    ("terminal.pty-input-reconcile", 1),
+                    ("terminal.shell-profiles", 1),
+                    ("terminal.paste-staging", 1),
                     ("supervisor.shutdown", 1),
                     ("supervisor.restart", 1),
+                    ("service.lease", 1),
                 ]
                 .into_iter()
+                .filter(|(name, _)| {
+                    (*name != "terminal.pty-input-reconcile" || cfg!(unix))
+                        && (*name != "terminal.paste-staging" || self.has_paste_staging())
+                        && (*name != "os-index.search" || self.has_os_index())
+                        && (*name != "service.lease" || self.has_managed_service_account())
+                })
                 .map(|(name, major)| v1::Capability {
                     name: name.to_owned(),
                     major,
-                    minor: 0,
+                    // 1.2 adds computed guard-v2 bindings and post-request refresh.
+                    minor: if name == "service.lease" { 2 } else { 0 },
                 })
                 .collect(),
                 max_frame_bytes: bigbud_protocol::DEFAULT_MAX_FRAME_BYTES as u64,

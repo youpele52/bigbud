@@ -1,6 +1,7 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 
+import { withTerminalWork } from "./helpers.terminalWork.store";
 import {
   buildSidebarThreadSummary,
   mapProject,
@@ -19,6 +20,7 @@ import { removeDeletedDelegatedChildren } from "./events.store.delegations";
 import { mapCreatedProjectThread } from "./events.store.projects.threadCreated";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
+import { promoteProjectToCatalog } from "./helpers.projectDependencies.store";
 import type { Project } from "../../models/types";
 import { getDeletedThreadIds } from "../../logic/orchestration/thread-deletion.logic";
 
@@ -111,6 +113,7 @@ export function applyProjectEvent(
       return {
         ...state,
         projects,
+        projectDependencyOnlyIds: promoteProjectToCatalog(state, event.payload.projectId),
         latestProjectEventSequenceById: recordProjectEventSequence(
           state,
           event.payload.projectId,
@@ -259,8 +262,8 @@ export function applyProjectEvent(
       if (nextThread.purpose === "side-chat") {
         return { ...state, projects, threads };
       }
-      const nextSummary = buildSidebarThreadSummary(nextThread);
       const previousSummary = state.sidebarThreadsById[nextThread.id];
+      const nextSummary = withTerminalWork(buildSidebarThreadSummary(nextThread), previousSummary);
       const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
         ? state.sidebarThreadsById
         : {

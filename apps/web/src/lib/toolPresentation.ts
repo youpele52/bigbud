@@ -1,5 +1,6 @@
 const TOOL_LABELS: Readonly<Record<string, string>> = {
   rename_thread: "renamer",
+  set_elevator_summary: "summary writer",
   move_thread: "thread mover",
   snooze_thread: "thread snoozer",
   create_thread: "thread creator",
@@ -13,6 +14,8 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   list_available_models: "model lister",
   get_system_resources: "system resource reader",
   configure_system_resource_rules: "resource monitoring settings",
+  remote_agent_status: "remote agent status",
+  remote_agent_install: "remote agent installer",
   search_capabilities: "capability finder",
   read_capability_guide: "capability guide reader",
   render_html: "html renderer",

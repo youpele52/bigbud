@@ -1,3 +1,9 @@
+import {
+  useTitleMetadataFixture,
+  waitForMetadata as waitFor,
+  readTitleJobs,
+  readTitleAttempts,
+} from "./ProviderCommandReactor.title.test.helpers.ts";
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, EventId, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
@@ -5,14 +11,17 @@ import {
   createHarness,
   asMessageId,
   registerProviderCommandReactorTestCleanup,
-  waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
-import { recordTitleStage } from "./ProviderCommandReactorSessionOps.title.state.ts";
+import {
+  readTitleStage,
+  recordTitleStage,
+} from "./ProviderCommandReactorSessionOps.title.state.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import { recordThreadTextGenerationStatus } from "../../git/Layers/InternalTextGeneration.status.ts";
 
 describe("staged title startup recovery", () => {
   registerProviderCommandReactorTestCleanup();
+  useTitleMetadataFixture();
   it("does not lose verified success persisted before a deferred initial title's handler could run", async () => {
     const harness = await createHarness({ startReactor: false });
     const threadId = ThreadId.makeUnsafe("thread-1"),
@@ -65,13 +74,13 @@ describe("staged title startup recovery", () => {
         "Recovered deferred title",
     );
     expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
-    expect(harness.generateThreadTitle.mock.calls[0]?.[0].successfulModelSelection).toEqual({
+    expect(harness.generateThreadTitle.mock.calls[0]?.[0].metadataAttempt?.selection).toEqual({
       provider: "codex",
       model: "verified-model",
     });
     expect(harness.sendTurn).not.toHaveBeenCalled();
   });
-  it("recovers a definitively failed stage with legacy false uncertainty through real startup projections", async () => {
+  it("retains historical failed-stage evidence without authorizing automatic paid replay", async () => {
     const harness = await createHarness({
       startReactor: false,
       serverSettingsOverrides: {
@@ -111,21 +120,39 @@ describe("staged title startup recovery", () => {
     await Effect.runPromise(
       recordThreadTextGenerationStatus(harness.engine, threadId, "title", "uncertain"),
     );
+    const legacy = (await Effect.runPromise(harness.engine.getReadModel())).threads.find(
+      (item) => item.id === threadId,
+    )!;
+    const originalRecords = legacy.activities.filter((item) =>
+      item.kind.startsWith("text-generation."),
+    );
+    expect(readTitleStage(legacy, 1)?.state).toBe("failed");
     harness.generateThreadTitle.mockReturnValue(
-      Effect.succeed({ title: "Recovered legacy title state" }),
+      Effect.succeed({ title: "Must not authorize another charge" }),
     );
     await harness.startReactor();
-    await waitFor(
-      async () =>
-        (await Effect.runPromise(harness.engine.getReadModel())).threads.find(
-          (item) => item.id === threadId,
-        )?.title === "Recovered legacy title state",
+    await waitFor(async () =>
+      (await readTitleJobs(harness)).some((job) => job.state === "waiting-model"),
     );
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    const attempts = await readTitleAttempts(harness);
+    expect(attempts).toEqual([{ stage: "primary", state: "unavailable", ordinal: 1 }]);
+    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
     expect(harness.sendTurn).not.toHaveBeenCalled();
+    expect(harness.startSession).not.toHaveBeenCalled();
     await harness.startReactor();
     await harness.drain();
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    const after = (await Effect.runPromise(harness.engine.getReadModel())).threads.find(
+      (item) => item.id === threadId,
+    )!;
+    expect(after.title).toBe(legacy.title);
+    expect(
+      after.activities.filter((item) =>
+        originalRecords.some((original) => original.id === item.id),
+      ),
+    ).toEqual(originalRecords);
+    expect(readTitleStage(after, 1)?.state).toBe("failed");
+    expect(await readTitleAttempts(harness)).toEqual(attempts);
+    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
   });
 
   it("retains a durable ambiguous stage without paying for a later stage or replaying chat", async () => {
@@ -174,6 +201,8 @@ describe("staged title startup recovery", () => {
     expect(harness.generateThreadTitle).not.toHaveBeenCalled();
     expect(harness.sendTurn).not.toHaveBeenCalled();
     expect(harness.startSession).not.toHaveBeenCalled();
+    expect(await readTitleAttempts(harness)).toEqual([]);
+    expect(await readTitleJobs(harness)).toEqual([]);
     await harness.startReactor();
     await harness.drain();
     expect(harness.generateThreadTitle).not.toHaveBeenCalled();

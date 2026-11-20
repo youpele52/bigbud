@@ -8,6 +8,7 @@ import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import { SidebarBrandLink } from "./SidebarHeader";
 import { SidebarDownloads } from "./SidebarDownloads";
+import { SidebarRemoteBackends } from "./SidebarRemoteBackends";
 
 /**
  * The sidebar footer: the update notice, then Settings and Help. Desktop builds with a stage
@@ -22,6 +23,7 @@ export function SidebarFooterBar() {
   return (
     <SidebarFooter className="p-2">
       <SidebarDownloads />
+      <SidebarRemoteBackends />
       <div
         className={
           showBrand

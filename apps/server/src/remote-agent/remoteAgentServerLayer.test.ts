@@ -148,6 +148,7 @@ describe("configured remote agent server layer", () => {
     });
     await expect(services.installer.install("ssh:example")).resolves.toEqual({
       version: artifact.version,
+      buildId: `${artifact.version}:${artifact.sha256}:${artifact.targetTriple}`,
     });
     expect(resolveInstallSourceLoader).toHaveBeenCalledOnce();
     expect(metadataFetch).toHaveBeenCalledOnce();
@@ -298,6 +299,7 @@ describe("remote agent installer", () => {
 
     await expect(installer.install("ssh:example")).resolves.toEqual({
       version: artifact.version,
+      buildId: `${artifact.version}:${artifact.sha256}:${artifact.targetTriple}`,
     });
     expect(closed).not.toHaveBeenCalled();
     await pool.get("ssh:example");

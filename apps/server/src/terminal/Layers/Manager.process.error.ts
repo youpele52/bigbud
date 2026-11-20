@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { RemoteAgentPtyError } from "../../remote-agent/remoteAgentPtyClient.types";
 
 import type { PtyProcess } from "../Services/PTY";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
@@ -13,11 +14,20 @@ export function observeTerminalProcessError(
   runtimeEpoch: number,
 ): () => void {
   let reported = false;
+  let lastReplayGap: string | undefined;
   const runtimeGeneration = session.runtimeGeneration;
   return (
     process.onError?.((error) => {
-      if (reported) return;
-      reported = true;
+      if (error instanceof RemoteAgentPtyError && error.code === "PTY_REPLAY_GAP") {
+        // Replay loss is a distinct observation, not the lifetime fatal-error
+        // latch. Keep only the last gap; repeated attach replies for the same
+        // retained suffix must not spam the user or hide later loss.
+        if (lastReplayGap === error.message) return;
+        lastReplayGap = error.message;
+      } else {
+        if (reported) return;
+        reported = true;
+      }
       ctx.runFork(
         Effect.gen(function* () {
           const createdAt = yield* ctx.modifyManagerState((state) => {

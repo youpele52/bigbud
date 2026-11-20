@@ -16,6 +16,8 @@ export const FILES_TREE_DEFAULT_WIDTH = 280;
 export const FILES_TREE_SEPARATOR_WIDTH = 3;
 export const FILES_DRAWER_WIDTH_FACTOR = 1 / 3;
 export const FILE_PREVIEW_MIN_WIDTH = 452;
+/** Narrowest preview kept beside a docked tree (~28 monospace columns); below it the tree overlays. */
+export const FILE_PREVIEW_DOCKED_MIN_WIDTH = 240;
 
 export function entryName(entry: ProjectEntry): string {
   const segments = entry.path.split("/");

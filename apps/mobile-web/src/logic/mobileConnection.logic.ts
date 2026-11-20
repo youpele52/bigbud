@@ -25,6 +25,11 @@ export interface MobileConnectionState {
   readonly browserOffline: boolean;
   readonly incidentStartedAt: number | null;
   readonly incidentLevel: MobileIncidentLevel;
+  /**
+   * The host closed the socket because mobile remote control is turned off
+   * there. The pairing stays valid; cleared once a socket opens again.
+   */
+  readonly hostAccessOff: boolean;
 }
 
 export interface MobileConnectionLease {
@@ -45,6 +50,9 @@ export interface MobileConnectionLifecycle {
 
 type MobileConnectionTimer = ReturnType<typeof globalThis.setTimeout>;
 
+/** Largest delay `setTimeout` honours; longer delays fire immediately. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 export interface MobileConnectionScheduler {
   readonly setTimeout: (callback: () => void, delayMs: number) => MobileConnectionTimer;
   readonly clearTimeout: (timerId: MobileConnectionTimer) => void;
@@ -64,6 +72,7 @@ export function initialMobileConnectionState(): MobileConnectionState {
     browserOffline: false,
     incidentStartedAt: null,
     incidentLevel: "none",
+    hostAccessOff: false,
   };
 }
 
@@ -73,6 +82,13 @@ export function isExplicitMobileAuthorizationClose(details: {
 }): boolean {
   if (![1008, 4001, 4401, 4403].includes(details.code)) return false;
   return /auth|forbidden|expired|revoked|unauthori[sz]ed|rejected/i.test(details.reason);
+}
+
+/** Close code the host sends when mobile remote control is turned off there. */
+export const MOBILE_HOST_ACCESS_OFF_CLOSE_CODE = 4503;
+
+export function isMobileHostAccessOffClose(details: { readonly code: number }): boolean {
+  return details.code === MOBILE_HOST_ACCESS_OFF_CLOSE_CODE;
 }
 
 export function scheduleMobileConnectionExpiry(input: {
@@ -89,11 +105,24 @@ export function scheduleMobileConnectionExpiry(input: {
       setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
       clearTimeout: (timerId) => globalThis.clearTimeout(timerId),
     } satisfies MobileConnectionScheduler);
-  const timerId = scheduler.setTimeout(
-    input.onExpired,
-    Math.max(0, expiresAtMs - (input.now ?? Date.now)()),
-  );
-  return () => scheduler.clearTimeout(timerId);
+  const now = input.now ?? Date.now;
+  let timerId: MobileConnectionTimer | null = null;
+  let cancelled = false;
+  // Timers fire immediately when the delay exceeds a signed 32-bit millisecond
+  // count (~24.8 days), so a far-future expiry is approached in bounded steps.
+  const arm = () => {
+    if (cancelled) return;
+    const remainingMs = Math.max(0, expiresAtMs - now());
+    timerId =
+      remainingMs > MAX_TIMER_DELAY_MS
+        ? scheduler.setTimeout(arm, MAX_TIMER_DELAY_MS)
+        : scheduler.setTimeout(input.onExpired, remainingMs);
+  };
+  arm();
+  return () => {
+    cancelled = true;
+    if (timerId !== null) scheduler.clearTimeout(timerId);
+  };
 }
 
 function formatError(message: string): string | null {
@@ -144,14 +173,15 @@ export function createMobileConnectionLifecycle(options?: {
     clearIncidentTimer();
     generation += 1;
     const leaseGeneration = generation;
-    let disposed = false;
+    let disposed = state.authorization === "explicitly-rejected";
     const incidentStartedAt = now();
     let activeIncidentStartedAt: number | null = incidentStartedAt;
     publish({
       ...initialMobileConnectionState(),
       browserOffline,
       generation: leaseGeneration,
-      transport: "connecting",
+      authorization: disposed ? "explicitly-rejected" : "unknown",
+      transport: disposed ? "closed" : "connecting",
       expiresAt,
       incidentStartedAt,
       incidentLevel: "short",
@@ -227,6 +257,7 @@ export function createMobileConnectionLifecycle(options?: {
           lastError: null,
           incidentStartedAt: null,
           incidentLevel: "none",
+          hostAccessOff: false,
         });
         activeIncidentStartedAt = null;
       },
@@ -238,16 +269,23 @@ export function createMobileConnectionLifecycle(options?: {
         });
       },
       onClose: (details) => {
-        startIncident();
+        if (state.transport !== "exhausted") startIncident();
         update({
-          transport: "closed",
+          // Effect can schedule retry on `error` before the same socket's `close` arrives.
+          transport:
+            (state.transport === "retrying" || state.transport === "exhausted") &&
+            !isExplicitMobileAuthorizationClose(details)
+              ? state.transport
+              : "closed",
           authorization: isExplicitMobileAuthorizationClose(details)
             ? "explicitly-rejected"
             : state.authorization,
           lastError: details.reason.trim() || state.lastError,
+          hostAccessOff: isMobileHostAccessOffClose(details) || state.hostAccessOff,
         });
       },
       onExhausted: () => {
+        if (state.authorization === "explicitly-rejected") return;
         clearIncidentTimer();
         update({
           transport: "exhausted",

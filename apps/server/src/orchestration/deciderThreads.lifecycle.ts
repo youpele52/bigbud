@@ -27,6 +27,7 @@ import { noteThreadTitleCommand } from "../orchestration-tools/ThreadTitleLock.t
 import { seedMessageEvent } from "./deciderThreads.lifecycle.seed.ts";
 import { decideThreadPinCommand } from "./deciderThreads.pin.ts";
 import { makeThreadDeletedPayload } from "./deciderThreads.lifecycle.delete.ts";
+import { retentionDeletionMode } from "../deletion/Services/ThreadDeletion.mode.ts";
 
 /** Maximum number of seed messages accepted on `thread.create` to prevent write amplification. */
 const MAX_SEED_MESSAGES = 200;
@@ -181,7 +182,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         type: "thread.deletion-requested",
         payload: {
           threadId: command.threadId,
-          mode: command.selectionMode === "per-thread" ? "single" : "subtree",
+          mode: retentionDeletionMode(command.selectionMode),
           deletingAt: command.createdAt,
         },
       };

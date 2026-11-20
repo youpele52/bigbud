@@ -5,6 +5,12 @@ import type { OrchestrationEngineShape } from "../orchestration/Services/Orchest
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import { renameThreadViaOrchestration } from "./ThreadOrchestrationTools.rename.ts";
 import { isThreadTitleLocked, resetThreadTitleLockForTests } from "./ThreadTitleLock.ts";
+import { isThreadCoordinationRefusal } from "./ThreadCoordinationConfirmation.result.ts";
+import {
+  makeTestCoordination,
+  messageEvent,
+  pushClientAnswer,
+} from "./ThreadCoordinationConfirmation.test.helpers.ts";
 
 const callerId = ThreadId.makeUnsafe("caller");
 const targetId = ThreadId.makeUnsafe("target");
@@ -43,6 +49,10 @@ function harness(
     dispatch,
     getReadModel: () =>
       Effect.succeed({
+        projects: [
+          { id: projectId, title: "Project", deletedAt: null },
+          { id: otherProject, title: "Other project", deletedAt: null },
+        ],
         threads: [
           ...(!options.callerMissing
             ? [thread(callerId, projectId, !!options.callerDeleted, !!options.callerDeleting)]
@@ -105,11 +115,51 @@ it("allows directly delegated cross-project children, not foreign or indirect ta
   });
   resetThreadTitleLockForTests();
   for (const delegatedBy of [undefined, targetId]) {
-    const denied = harness({ foreign: true, delegatedBy });
-    await expect(denied.rename()).rejects.toThrow("not accessible");
-    expect(denied.dispatch).not.toHaveBeenCalled();
+    const refused = harness({ foreign: true, delegatedBy });
+    await expect(refused.rename()).resolves.toMatchObject({ status: "confirmation_required" });
+    expect(refused.dispatch).not.toHaveBeenCalled();
     expect(isThreadTitleLocked(targetId)).toBe(false);
   }
+});
+
+it("renames a foreign target only after the user's confirmation, never locking while refused", async () => {
+  const foreign = harness({ foreign: true });
+  const { coordination, log } = makeTestCoordination();
+  const challenge = await foreign.rename({ coordination });
+  if (!isThreadCoordinationRefusal(challenge) || challenge.status !== "confirmation_required") {
+    throw new Error("expected a confirmation challenge");
+  }
+  expect(challenge).toMatchObject({ targetProjectTitle: "Other project", targetIsRemote: false });
+  expect(foreign.dispatch).not.toHaveBeenCalled();
+  expect(isThreadTitleLocked(targetId)).toBe(false);
+  log.push(
+    messageEvent({
+      threadId: callerId,
+      sequence: log.nextSequence(),
+      text: `allow ${challenge.code}`,
+    }),
+  );
+  await expect(foreign.rename({ coordination })).resolves.toMatchObject({
+    title: "ohno",
+    threadId: targetId,
+  });
+  expect(isThreadTitleLocked(targetId)).toBe(true);
+
+  resetThreadTitleLockForTests();
+  const asked = harness({ foreign: true });
+  const viaCard = makeTestCoordination();
+  const card = await asked.rename({ coordination: viaCard.coordination });
+  if (!isThreadCoordinationRefusal(card) || card.status !== "confirmation_required") {
+    throw new Error("expected a confirmation challenge");
+  }
+  pushClientAnswer(viaCard.log, {
+    callerThreadId: callerId,
+    question: card.question,
+    answer: "Allow",
+  });
+  await expect(asked.rename({ coordination: viaCard.coordination })).resolves.toMatchObject({
+    threadId: targetId,
+  });
 });
 
 it.each([
@@ -139,7 +189,12 @@ it.each([
 });
 
 it("uses stable caller/source/invocation identity, without treating equal titles as evidence", async () => {
-  const { rename, dispatch } = harness();
+  const { rename: renameOrRefuse, dispatch } = harness();
+  const rename = async (args: Parameters<typeof renameOrRefuse>[0]) => {
+    const result = await renameOrRefuse(args);
+    if (isThreadCoordinationRefusal(result)) throw new Error("same-project rename was refused");
+    return result;
+  };
   const args = { invocationId: "tool-call", sourceMessageId: MessageId.makeUnsafe("user-message") };
   const first = await rename(args);
   const retry = await rename(args);

@@ -8,6 +8,7 @@ import { ensureProjectionThreadsElevatorSummaryColumns } from "../Migrations/Pro
 import { ServerConfig } from "../../startup/config.ts";
 import { writeStartupProgress } from "../../startup/startupStatus.ts";
 import { installTestProjectionThreadParentTriggers } from "./Sqlite.testParentThreads.ts";
+import { enableIncrementalAutoVacuumOnFreshDatabase } from "./Sqlite.autoVacuum.ts";
 
 type RuntimeSqliteLayerConfig = {
   readonly filename: string;
@@ -56,6 +57,8 @@ const restrictDatabaseFiles = (dbPath: string) =>
 /** Connection settings, migrations and the persistent schema repairs that follow them. */
 const migrateSchema = Effect.fn("migrateSchema")(function* (options: SqlitePersistenceOptions) {
   const sql = yield* SqlClient.SqlClient;
+  // Before WAL or any table: only an empty file can still choose its auto-vacuum mode.
+  yield* enableIncrementalAutoVacuumOnFreshDatabase();
   yield* sql`PRAGMA journal_mode = WAL;`;
   // In WAL mode NORMAL syncs only at checkpoints, not on every commit. Commits stay atomic and
   // the database cannot corrupt; a power loss or OS crash (not an app crash) can lose the last

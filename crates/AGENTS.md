@@ -4,6 +4,16 @@ These instructions apply to every current and future crate under `crates/`. They
 
 ## Developer Commands
 
+See [Commands](../docs/COMMANDS.md) for the central Bun and just command reference. Common native build wrappers are listed below; the root `justfile` delegates to the existing Bun scripts.
+
+| Task                          | Bun                                | just                            |
+| ----------------------------- | ---------------------------------- | ------------------------------- |
+| Build workspace agent         | `bun run build:workspace-agent`    | `just build-workspace-agent`    |
+| Build desktop supervisor      | `bun run build:desktop-supervisor` | `just build-desktop-supervisor` |
+| Smoke-test desktop supervisor | `bun run smoke:desktop-supervisor` | `just smoke-desktop-supervisor` |
+
+The following are workspace-wide checks and require approval under the root instructions. For task validation, scope checks to affected crates where supported.
+
 ```sh
 cargo fmt --all --check
 cargo clippy --locked --workspace --all-targets -- -D warnings

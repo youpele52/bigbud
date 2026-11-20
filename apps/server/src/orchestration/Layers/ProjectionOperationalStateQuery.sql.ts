@@ -17,13 +17,18 @@ import {
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
 import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
+import { projectionProjectColumnsSql } from "./ProjectionOperationalStateQuery.projectSql.ts";
 
 export const STARTUP_OPERATIONAL_MESSAGE_LIMIT = 50;
 export const STARTUP_OPERATIONAL_ACTIVITY_LIMIT = 100;
 
-export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
-  const operationalThreadPredicate = sql`
-    EXISTS (
+/**
+ * The startup operational predicate over a `projection_threads t` row. The startup window loads
+ * exactly the threads it matches; read-model eviction re-checks it per thread so an evicted thread
+ * is always one a restart would also have left out.
+ */
+export const operationalThreadPredicateSql = (sql: SqlClient.SqlClient) => sql`
+  EXISTS (
       SELECT 1 FROM projection_thread_sessions s
       WHERE s.thread_id = t.thread_id AND (s.status IN ('starting', 'running') OR s.retained_family = 1)
     )
@@ -61,6 +66,9 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
       WHERE r.thread_id = t.thread_id AND r.disposition = 'active' AND r.recovery_status != 'none'
     )
   `;
+
+export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
+  const operationalThreadPredicate = operationalThreadPredicateSql(sql);
 
   const listOperationalThreadRows = SqlSchema.findAll({
     Request: Schema.Void,
@@ -102,14 +110,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     Result: ProjectionProjectDbRowSchema,
     execute: () => sql`
       SELECT
-        p.project_id AS "projectId", p.title,
-        p.provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
-        p.workspace_execution_target_id AS "workspaceExecutionTargetId",
-        p.execution_target_id AS "executionTargetId", p.workspace_root AS "workspaceRoot",
-        p.workspace_kind AS "workspaceKind", p.previous_workspace_root AS "previousWorkspaceRoot",
-        p.default_model_selection_json AS "defaultModelSelection", p.scripts_json AS scripts,
-        p.created_at AS "createdAt", p.updated_at AS "updatedAt",
-        p.deleting_at AS "deletingAt", p.deleted_at AS "deletedAt"
+        ${projectionProjectColumnsSql(sql)}
       FROM projection_projects p
       WHERE EXISTS (
         SELECT 1 FROM projection_threads t WHERE t.project_id = p.project_id
@@ -202,6 +203,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         SELECT
           turns.thread_id AS "threadId",
           turns.turn_id AS "turnId",
+          turns.terminal_outcome AS "terminalOutcome",
           turns.state,
           turns.requested_at AS "requestedAt",
           turns.started_at AS "startedAt",
@@ -222,7 +224,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           )
       )
       SELECT
-        "threadId", "turnId", state, "requestedAt", "startedAt", "completedAt",
+        "threadId", "turnId", "terminalOutcome", state, "requestedAt", "startedAt", "completedAt",
         "assistantMessageId", "sourceProposedPlanThreadId", "sourceProposedPlanId"
       FROM ranked
       WHERE row_number = 1

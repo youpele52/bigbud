@@ -1,4 +1,5 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
 import {
   createRuntime,
@@ -11,9 +12,12 @@ import {
   callerId,
   targetId,
   unrelatedId,
+  otherProjectId,
   projectId,
   withDormantThreads,
 } from "./ThreadOrchestrationTools.restart.fixture.ts";
+import { makeTestCoordination } from "./ThreadCoordinationConfirmation.test.helpers.ts";
+import type { ThreadCoordinationDeps } from "./ThreadCoordinationConfirmation.ts";
 
 it.each(["status", "send"] as const)(
   "%s resolves persisted dormant participants after a real engine restart without prior attachment",
@@ -201,19 +205,31 @@ it.each([false, true])(
             ),
           ).toMatchObject({ delivery: "queued" });
         } else {
-          await expect(runtime.runPromise(getThreadStatusViaOrchestration(args))).rejects.toThrow(
-            "not accessible",
-          );
-          await expect(
+          // Reads are open across projects; writes need a grant, which a restart loses.
+          expect(await runtime.runPromise(getThreadStatusViaOrchestration(args))).toMatchObject({
+            threadId: targetId,
+          });
+          const send = (coordination: ThreadCoordinationDeps, invocationId = "foreign-call") =>
             runtime.runPromise(
               sendThreadMessageViaOrchestration({
                 ...args,
+                coordination,
                 message: "foreign",
                 delivery: "queue",
-                invocationId: "foreign-call",
+                invocationId,
               }),
-            ),
-          ).rejects.toThrow("not accessible");
+            );
+          const lost = makeTestCoordination();
+          expect(await send(lost.coordination)).toMatchObject({ status: "confirmation_required" });
+          const granted = makeTestCoordination();
+          await Effect.runPromise(granted.grants.grant(callerId, otherProjectId));
+          const delivered = await send(granted.coordination);
+          expect(delivered).toMatchObject({ delivery: "queued" });
+          // After the grant is lost again, the committed send replays without confirmation.
+          expect(await send(makeTestCoordination().coordination)).toEqual(delivered);
+          expect(await send(lost.coordination, "next-call")).toMatchObject({
+            status: "confirmation_required",
+          });
         }
       },
     );

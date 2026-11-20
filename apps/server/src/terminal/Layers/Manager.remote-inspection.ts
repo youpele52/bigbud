@@ -61,6 +61,7 @@ export function remoteReadOnlyInvocation(executionTargetId: string, command: str
       "ServerAliveInterval=2",
       "-o",
       "ServerAliveCountMax=1",
+      "--",
       formatSshDestination(target),
       command,
     ],

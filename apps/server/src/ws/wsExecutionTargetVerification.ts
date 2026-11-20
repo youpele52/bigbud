@@ -26,6 +26,14 @@ import {
 } from "../ssh/sshVerification.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import { remoteAgentFailureMessage } from "../remote-agent/remoteAgentFailure.ts";
+import type {
+  RemoteAgentInstallOperations,
+  RemoteAgentStagedBuild,
+} from "../remote-agent/remoteAgentInstall.operation.ts";
+import type {
+  ServerGetRemoteAgentManualInstallInput,
+  ServerGetRemoteAgentManualInstallResult,
+} from "@bigbud/contracts/server/server.remoteAgentInstall";
 
 export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffect")(function* (
   input: ServerVerifyExecutionTargetInput,
@@ -96,10 +104,61 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
   };
 });
 
+/**
+ * The app's Install shares the CLI/agent-tool operation registry: staging is serialized per target
+ * and joins an operation already running there. Activation stays behind the app's explicit
+ * Finish step, which uses the same fresh-admission core (D6).
+ */
+type SharedInstallResult = Omit<RemoteAgentStagedBuild, "version"> & {
+  readonly version?: string;
+  readonly active?: boolean;
+  readonly outcome?:
+    | import("../remote-agent/remoteAgentInstall.operation.ts").RemoteAgentOperationOutcome
+    | null;
+  readonly cleanupDeferred?: boolean;
+  readonly operationMessage?: string;
+};
+
+async function stageThroughSharedOperation(
+  operations: RemoteAgentInstallOperations,
+  executionTargetId: string,
+  signal: AbortSignal,
+  replace = false,
+): Promise<SharedInstallResult> {
+  const started = operations.start({ executionTargetId, replace, stageOnly: !replace });
+  if (replace && started.kind !== "replace")
+    throw new Error("Another install is running. Wait for it to complete before replacing.");
+  let snapshot = operations.get(started.operationId) ?? started;
+  while (snapshot.state !== "completed") {
+    if (signal.aborted) throw new Error("Remote agent staging was cancelled.");
+    const next = await operations.wait(started.operationId, 5_000);
+    if (!next) throw new Error("The remote agent operation is no longer available.");
+    snapshot = next;
+  }
+  // A version is recorded only after staging succeeded. A joined CLI install that later
+  // deferred or failed at activation still staged the bytes, which is all the app asked for.
+  if (snapshot.version || replace) {
+    return {
+      ...operations.stagedBuild(started.operationId),
+      ...(snapshot.version ? { version: snapshot.version } : {}),
+      active: snapshot.outcome === "active",
+      outcome: snapshot.outcome,
+      cleanupDeferred: snapshot.cleanupDeferred,
+      operationMessage: snapshot.message,
+    };
+  }
+  throw new Error(snapshot.message);
+}
+
 export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(function* (
   input: ServerInstallRemoteAgentInput,
-  remoteAgentInstaller?: RemoteAgentInstaller,
+  context: {
+    readonly remoteAgentInstaller?: RemoteAgentInstaller | undefined;
+    readonly remoteAgentInstallOperations?: RemoteAgentInstallOperations | undefined;
+  },
 ): Effect.fn.Return<ServerInstallRemoteAgentResult, ServerInstallRemoteAgentError> {
+  const remoteAgentInstaller = context.remoteAgentInstaller;
+  const operations = context.remoteAgentInstallOperations;
   if (!isRemoteAgentExecutionTarget(input.executionTargetId)) {
     return yield* new ServerInstallRemoteAgentError({
       message:
@@ -111,18 +170,42 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
       message: "Remote agent installation is disabled by the server configuration.",
     });
   }
+  if (input.replace && !operations)
+    return yield* new ServerInstallRemoteAgentError({
+      message: "Shared replacement operations are unavailable.",
+    });
   const result = yield* Effect.tryPromise({
-    try: (signal) => remoteAgentInstaller.install(input.executionTargetId, signal),
+    try: async (signal): Promise<SharedInstallResult> =>
+      operations
+        ? stageThroughSharedOperation(operations, input.executionTargetId, signal, input.replace)
+        : remoteAgentInstaller.install(input.executionTargetId, signal),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
         message: remoteAgentFailureMessage(cause),
         cause,
       }),
   });
+  const source =
+    result.placement === "inbox"
+      ? " from the agent you placed on the remote host"
+      : result.placement === "managed"
+        ? " from the build already on the remote host"
+        : "";
+  const conflict = result.inboxConflict
+    ? " A different file in ~/.bigbud/agent/inbox did not match the signed release and was left untouched."
+    : "";
   return {
     executionTargetId: input.executionTargetId,
     version: result.version,
-    message: `Update ${result.version} staged. It will be used on your next new connection.`,
+    ...(input.replace && result.outcome
+      ? { outcome: result.outcome, cleanupDeferred: result.cleanupDeferred }
+      : {}),
+    message:
+      input.replace && result.operationMessage
+        ? result.operationMessage
+        : result.active
+          ? `Remote agent ${result.version} is already active.${conflict}`
+          : `Update ${result.version} staged${source}. It will be used on your next new connection.${conflict}`,
     ...(result.runtimeSummary ? { runtimeSummary: result.runtimeSummary } : {}),
   };
 });
@@ -160,3 +243,22 @@ export const unlockSshPasswordEffect = Effect.fn("unlockSshPasswordEffect")(func
       }),
   });
 });
+
+export const getRemoteAgentManualInstallEffect = Effect.fn("getRemoteAgentManualInstallEffect")(
+  function* (
+    input: ServerGetRemoteAgentManualInstallInput,
+    remoteAgentInstaller?: RemoteAgentInstaller,
+  ): Effect.fn.Return<ServerGetRemoteAgentManualInstallResult, ServerInstallRemoteAgentError> {
+    const manualInstall = remoteAgentInstaller?.manualInstall;
+    if (!isRemoteAgentExecutionTarget(input.executionTargetId) || !manualInstall) {
+      return yield* new ServerInstallRemoteAgentError({
+        message: "Manual remote agent installation is unavailable for this workspace.",
+      });
+    }
+    return yield* Effect.tryPromise({
+      try: (signal) => manualInstall(input.executionTargetId, signal),
+      catch: (cause) =>
+        new ServerInstallRemoteAgentError({ message: remoteAgentFailureMessage(cause), cause }),
+    });
+  },
+);

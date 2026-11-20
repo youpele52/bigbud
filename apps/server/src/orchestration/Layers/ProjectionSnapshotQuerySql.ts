@@ -215,7 +215,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           checkpoint_status AS "status",
           checkpoint_files_json AS "files",
           assistant_message_id AS "assistantMessageId",
-          completed_at AS "completedAt"
+          COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
         FROM projection_turns
         WHERE checkpoint_turn_count IS NOT NULL
         ORDER BY thread_id ASC, checkpoint_turn_count ASC
@@ -230,6 +230,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           thread_id AS "threadId",
           turn_id AS "turnId",
+          terminal_outcome AS "terminalOutcome",
           state,
           requested_at AS "requestedAt",
           started_at AS "startedAt",
@@ -357,7 +358,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           checkpoint_status AS "status",
           checkpoint_files_json AS "files",
           assistant_message_id AS "assistantMessageId",
-          completed_at AS "completedAt"
+          COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
         FROM projection_turns
         WHERE thread_id = ${threadId}
           AND checkpoint_turn_count IS NOT NULL

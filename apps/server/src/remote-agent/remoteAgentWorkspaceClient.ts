@@ -16,6 +16,11 @@ import type { RemoteAgentWorkspaceWatchEvent } from "./remoteAgentProtocol.ts";
 import type { RemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
 import type { ProjectWriteFileDisposition } from "@bigbud/contracts/workspace/project.ts";
 
+/** Agents with this capability honour `createOnly` as an exclusive create; older ones drop it. */
+export const REMOTE_AGENT_CREATE_ONLY_WRITE_CAPABILITY = "workspace.write-create-only";
+/** Agent error code for a create-only write whose target already exists (left untouched). */
+export const REMOTE_AGENT_ALREADY_EXISTS = "ALREADY_EXISTS";
+
 export class RemoteAgentWorkspaceError extends Error {
   readonly _tag = "RemoteAgentWorkspaceError";
 
@@ -148,6 +153,7 @@ export class RemoteAgentWorkspaceClient {
       readonly requestDigest: Uint8Array;
       readonly bytes: Uint8Array;
       readonly expectedSha256?: string;
+      readonly createOnly?: boolean;
       readonly requestId?: string;
     },
     beforeRequest?: () => Promise<() => void>,
@@ -177,7 +183,12 @@ export class RemoteAgentWorkspaceClient {
       response = (await this.connection.request(
         {
           type: "writeFileRequest",
-          value: { ...input, requestId, expectedSha256: input.expectedSha256 ?? "" },
+          value: {
+            ...input,
+            requestId,
+            expectedSha256: input.expectedSha256 ?? "",
+            createOnly: input.createOnly ?? false,
+          },
         },
         (frame) => frame.type === "writeFileResponse" && frame.value.requestId === requestId,
       )) as { readonly type: "writeFileResponse"; readonly value: RemoteAgentWriteFileResponse };

@@ -1,6 +1,5 @@
 import type { SessionInboxUser } from "@opencode/client";
 import type { ProviderTurnAdmission } from "@bigbud/contracts/orchestration/providerTurnAdmission.ts";
-import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from "@bigbud/contracts/orchestration/orchestration.provider";
 import { Effect } from "effect";
 
 import type { OpencodeV2Client } from "./Client.ts";
@@ -9,7 +8,7 @@ import { V2AdmissionUnconfirmed } from "./Admission.ts";
 
 /** This development transport explicitly does not execute models or tools. */
 export function makeNoExecutionAdmissionTransport(client: OpencodeV2Client, text: string) {
-  const validText = text.trim().length > 0 && text.length <= PROVIDER_SEND_TURN_MAX_INPUT_CHARS;
+  const validText = text.trim().length > 0;
   const correlated = (row: ProviderTurnAdmission, native: SessionInboxUser) =>
     native.type === "user" &&
     native.id === row.nativeAdmissionId &&

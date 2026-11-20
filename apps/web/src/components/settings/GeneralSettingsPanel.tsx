@@ -4,7 +4,7 @@ import { LearningProjectsSettingsSection } from "./LearningProjectsSettingsSecti
 import { ThreadRetentionSettingsSection } from "./ThreadRetentionSettingsSection";
 import { InyosiraIdleSettingsSection } from "./InyosiraIdleSettingsSection";
 import { BrowserSettingsSection } from "./BrowserSettingsSection";
-import { TerminalSettingsSection } from "./TerminalSettingsSection";
+import { CommandLineToolSettingsSection } from "./CommandLineToolSettingsSection";
 
 export function GeneralSettingsPanel() {
   return (
@@ -13,7 +13,7 @@ export function GeneralSettingsPanel() {
       <ThreadRetentionSettingsSection />
       <InyosiraIdleSettingsSection />
       <BrowserSettingsSection />
-      <TerminalSettingsSection />
+      <CommandLineToolSettingsSection />
       <LearningProjectsSettingsSection />
     </SettingsPageContainer>
   );

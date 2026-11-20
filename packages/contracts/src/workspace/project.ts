@@ -1,3 +1,4 @@
+import { FilesystemPath } from "./filesystemPath";
 import { Schema } from "effect";
 import { ExecutionTargetId, PositiveInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 
@@ -7,7 +8,7 @@ const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 
 export const ProjectSearchEntriesInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
+  cwd: FilesystemPath,
   query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_SEARCH_ENTRIES_MAX_LIMIT)),
 });
@@ -16,15 +17,20 @@ export type ProjectSearchEntriesInput = typeof ProjectSearchEntriesInput.Type;
 const ProjectEntryKind = Schema.Literals(["file", "directory"]);
 
 export const ProjectEntry = Schema.Struct({
-  path: TrimmedNonEmptyString,
+  path: FilesystemPath,
   kind: ProjectEntryKind,
-  parentPath: Schema.optional(TrimmedNonEmptyString),
+  parentPath: Schema.optional(FilesystemPath),
 });
 export type ProjectEntry = typeof ProjectEntry.Type;
+
+/** `agent-update-available`: a managed remote agent without streaming search (legacy walker). */
+export const ProjectSearchEntriesNotice = Schema.Literals(["agent-update-available"]);
+export type ProjectSearchEntriesNotice = typeof ProjectSearchEntriesNotice.Type;
 
 export const ProjectSearchEntriesResult = Schema.Struct({
   entries: Schema.Array(ProjectEntry),
   truncated: Schema.Boolean,
+  notice: Schema.optional(ProjectSearchEntriesNotice),
 });
 export type ProjectSearchEntriesResult = typeof ProjectSearchEntriesResult.Type;
 
@@ -38,23 +44,34 @@ export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSe
 
 export const ProjectSearchFileContentsInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
+  cwd: FilesystemPath,
   query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_SEARCH_FILE_CONTENTS_MAX_LIMIT)),
 });
 export type ProjectSearchFileContentsInput = typeof ProjectSearchFileContentsInput.Type;
 
 export const ProjectFileContentMatch = Schema.Struct({
-  path: TrimmedNonEmptyString,
+  path: FilesystemPath,
   line: PositiveInt,
   column: Schema.optional(PositiveInt),
   lineText: Schema.String,
 });
 export type ProjectFileContentMatch = typeof ProjectFileContentMatch.Type;
 
+/**
+ * Why a content search ran on a slower legacy path: `agent-update-available` for a managed agent
+ * without streaming search, `use-managed-agent` for a direct-SSH host searched with `rg`.
+ */
+export const ProjectSearchFileContentsNotice = Schema.Literals([
+  "agent-update-available",
+  "use-managed-agent",
+]);
+export type ProjectSearchFileContentsNotice = typeof ProjectSearchFileContentsNotice.Type;
+
 export const ProjectSearchFileContentsResult = Schema.Struct({
   matches: Schema.Array(ProjectFileContentMatch),
   truncated: Schema.Boolean,
+  notice: Schema.optional(ProjectSearchFileContentsNotice),
 });
 export type ProjectSearchFileContentsResult = typeof ProjectSearchFileContentsResult.Type;
 
@@ -68,8 +85,8 @@ export class ProjectSearchFileContentsError extends Schema.TaggedErrorClass<Proj
 
 export const ProjectListDirectoryInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
-  relativePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+  cwd: FilesystemPath,
+  relativePath: Schema.optional(FilesystemPath.check(Schema.isMaxLength(4096))),
 });
 export type ProjectListDirectoryInput = typeof ProjectListDirectoryInput.Type;
 
@@ -88,8 +105,8 @@ export class ProjectListDirectoryError extends Schema.TaggedErrorClass<ProjectLi
 
 export const ProjectDirectoryWatchInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
-  relativePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+  cwd: FilesystemPath,
+  relativePath: Schema.optional(FilesystemPath.check(Schema.isMaxLength(4096))),
 });
 export type ProjectDirectoryWatchInput = typeof ProjectDirectoryWatchInput.Type;
 
@@ -167,13 +184,13 @@ export class ProjectDirectoryWatchError extends Schema.TaggedErrorClass<ProjectD
 
 export const ProjectReadFilePreviewInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
-  relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  cwd: FilesystemPath,
+  relativePath: FilesystemPath.check(Schema.isMaxLength(4096)),
 });
 export type ProjectReadFilePreviewInput = typeof ProjectReadFilePreviewInput.Type;
 
 export const ProjectReadFilePreviewResult = Schema.Struct({
-  relativePath: TrimmedNonEmptyString,
+  relativePath: FilesystemPath,
   contents: Schema.String,
   sizeBytes: Schema.Number,
   truncated: Schema.Boolean,
@@ -194,16 +211,18 @@ export const ProjectWriteFileInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
   /** Stable caller identity for this write; ambiguous operations must not be replayed. */
   operationId: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(128))),
-  cwd: TrimmedNonEmptyString,
-  relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
+  cwd: FilesystemPath,
+  relativePath: FilesystemPath.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,
   /** SHA-256 of the version the caller read before editing, when known. */
   expectedSha256: Schema.optional(Schema.String),
+  /** Create the file exclusively; fails with `alreadyExists` instead of overwriting. */
+  createOnly: Schema.optional(Schema.Boolean),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
 export const ProjectWriteFileResult = Schema.Struct({
-  relativePath: TrimmedNonEmptyString,
+  relativePath: FilesystemPath,
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
@@ -220,6 +239,8 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
   {
     message: TrimmedNonEmptyString,
     conflict: Schema.optional(Schema.Boolean),
+    /** A create-only write found the file already present and left it untouched. */
+    alreadyExists: Schema.optional(Schema.Boolean),
     writeDisposition: Schema.optional(ProjectWriteFileDisposition),
     cause: Schema.optional(Schema.Defect),
   },

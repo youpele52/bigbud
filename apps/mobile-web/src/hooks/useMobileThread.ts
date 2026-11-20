@@ -1,3 +1,4 @@
+import { mobileSessionStateScope } from "../lib/mobileSessionAuthority";
 import type { OrchestrationThread, ThreadId } from "@bigbud/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -13,7 +14,7 @@ function formatQueryError(error: unknown): string {
 
 export function useMobileThread(session: { sessionId: string } | null, threadId: ThreadId) {
   const { client, recovery } = useMobileRpcClient();
-  const sessionId = session?.sessionId;
+  const sessionId = session ? mobileSessionStateScope(session, "query") : undefined;
 
   const threadQuery = useQuery<OrchestrationThread>({
     enabled: false,
@@ -28,11 +29,6 @@ export function useMobileThread(session: { sessionId: string } | null, threadId:
   useEffect(() => {
     if (!client || !sessionId || !recovery) return;
     void recovery.selectThread(threadId).catch(() => undefined);
-    return () => {
-      if (recovery.getState().selectedThreadId === threadId) {
-        void recovery.refresh(null).catch(() => undefined);
-      }
-    };
   }, [client, recovery, sessionId, threadId]);
 
   return {

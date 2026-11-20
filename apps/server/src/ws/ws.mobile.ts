@@ -22,6 +22,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { readBoundedMobileSnapshot, readBoundedMobileThread } from "./ws.mobile.bounded.ts";
+import { rejectWithoutMobileGatewayCredential } from "../mobile/mobileGatewayCredential";
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import {
@@ -32,7 +33,11 @@ import {
 import { makeMobileRecoveryFrameStream } from "./wsMobileRecovery.ts";
 import { makeWsRpcContext } from "./wsRpcContext";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
-import { makeMobileRecoveryOutcomeHandler } from "./ws.mobile.recovery.ts";
+import {
+  makeMobileRecoveryOutcomeHandler,
+  validateMobileRequestSession,
+} from "./ws.mobile.recovery.ts";
+import { serveUntilMobileSessionEnds } from "./ws.mobile.sessionEnd.ts";
 
 const ALLOWED_MOBILE_COMMAND_TYPES = new Set([
   "thread.turn.start",
@@ -93,14 +98,18 @@ const makeMobileWsRpcLayer = (
                 selectedThread: baseline.selectedThread,
               };
             }).pipe(
-              Effect.mapError((cause) =>
-                Schema.is(MobileRecoveryBaselineError)(cause)
-                  ? cause
+              Effect.mapError((cause) => {
+                if (Schema.is(MobileRecoveryBaselineError)(cause)) return cause;
+                // A persistence failure may carry a user-facing baseline error
+                // (e.g. "too large for mobile"); pass that message to the phone.
+                const inner = (cause as { readonly cause?: unknown }).cause;
+                return Schema.is(MobileRecoveryBaselineError)(inner)
+                  ? inner
                   : new MobileRecoveryBaselineError({
                       message: "Failed to load mobile recovery baseline",
                       cause,
-                    }),
-              ),
+                    });
+              }),
             ),
             { "rpc.aggregate": "mobile-orchestration" },
           ),
@@ -150,14 +159,37 @@ const makeMobileWsRpcLayer = (
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.dispatchCommand,
             Effect.gen(function* () {
-              const normalizedCommand = yield* context.normalizeDispatchCommand(
-                command as ClientOrchestrationCommand,
-              );
-              if (!ALLOWED_MOBILE_COMMAND_TYPES.has(normalizedCommand.type)) {
+              // A revoked or expired session dispatches nothing, even in the
+              // moment before its socket close lands.
+              const session = yield* validateMobileRequestSession(context, request);
+              if (session === null) {
                 return yield* new OrchestrationDispatchCommandError({
-                  message: `Command ${normalizedCommand.type} is not available on mobile.`,
+                  message: "Mobile session is no longer authorized",
+                  code: "unauthorized",
                 });
               }
+              // RPC decoding already validated this command. Authorize before
+              // normalization, which can hydrate host paths and persist uploads.
+              const clientCommand = command as ClientOrchestrationCommand;
+              if (!ALLOWED_MOBILE_COMMAND_TYPES.has(clientCommand.type)) {
+                return yield* new OrchestrationDispatchCommandError({
+                  message: `Command ${clientCommand.type} is not available on mobile.`,
+                  code: "unauthorized",
+                });
+              }
+              if (
+                session.scope !== "thread-control" &&
+                !(
+                  session.scope === "approve-only" &&
+                  clientCommand.type === "thread.approval.respond"
+                )
+              ) {
+                return yield* new OrchestrationDispatchCommandError({
+                  message: `Command ${clientCommand.type} is not permitted by this mobile session scope.`,
+                  code: "unauthorized",
+                });
+              }
+              const normalizedCommand = yield* context.normalizeDispatchCommand(clientCommand);
               return yield* context.dispatchNormalizedCommand(normalizedCommand, "mobile");
             }).pipe(
               Effect.mapError((cause) =>
@@ -278,6 +310,10 @@ export const makeMobileWebsocketRpcRouteLayer = (withBootstrapCommandLock: Boots
         "GET",
         "/mobile-ws",
         Effect.gen(function* () {
+          const gatewayRejection = yield* rejectWithoutMobileGatewayCredential;
+          if (Option.isSome(gatewayRejection)) {
+            return gatewayRejection.value;
+          }
           const request = yield* HttpServerRequest.HttpServerRequest;
           const url = HttpServerRequest.toURL(request);
           if (Option.isNone(url)) {
@@ -303,7 +339,12 @@ export const makeMobileWebsocketRpcRouteLayer = (withBootstrapCommandLock: Boots
               "rpc.system": "effect-rpc",
             },
           }).pipe(Effect.provide(mobileWsRpcRuntimeLayer));
-          return yield* rpcWebSocketHttpEffect;
+          return yield* serveUntilMobileSessionEnds(
+            rpcWebSocketHttpEffect,
+            request,
+            mobileRemoteControl,
+            session,
+          );
         }),
       ),
     ),

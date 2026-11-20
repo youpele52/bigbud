@@ -1,3 +1,4 @@
+import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentRegistryStore } from "./remoteAgentInstall.registry.store.ts";
 import { hasRemoteAgentPathControls } from "./remoteAgentRuntime.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
@@ -9,7 +10,8 @@ import {
 
 export interface RemoteAgentControl {
   readonly root: string;
-  run: (command: string) => Promise<string>;
+  /** Runs one control script; `timeoutMs` (default 30 s) bounds the SSH command. */
+  run: (command: string, options?: { readonly timeoutMs?: number }) => Promise<string>;
   readonly registry: ReturnType<typeof makeRemoteAgentRegistryStore>;
   readonly inventory?: () => Promise<RemoteAgentInventory>;
 }
@@ -19,12 +21,12 @@ export async function openRemoteAgentControl(
   executionTargetId: string,
   execute: (input: RunSshCommandInput) => Promise<unknown> = runSshCommand,
 ): Promise<RemoteAgentControl> {
-  const run = async (command: string) => {
-    const result = await execute({
+  const run = async (command: string, options?: { readonly timeoutMs?: number }) => {
+    const result = await runRemoteAgentDiagnosedCommand(execute, "control", {
       executionTargetId,
       command: "sh",
       args: ["-lc", command],
-      timeoutMs: 30_000,
+      timeoutMs: options?.timeoutMs ?? 30_000,
       maxBufferBytes: 2 * 1024 * 1024,
       outputMode: "error",
     });

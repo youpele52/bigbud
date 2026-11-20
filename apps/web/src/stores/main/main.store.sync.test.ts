@@ -215,7 +215,7 @@ describe("store read model sync", () => {
     expect(next.projects.map((project) => project.id)).toEqual([project1, project2, project3]);
   });
 
-  it("preserves richer hydrated fields while reconciling a bounded summary", () => {
+  it("preserves transcript fields while accepting authoritative bounded runtime state", () => {
     const threadId = ThreadId.makeUnsafe("hydrated-thread");
     const turnId = "turn-completed" as never;
     const latestTurn = {
@@ -263,6 +263,7 @@ describe("store read model sync", () => {
       providerName: "codex",
       activeTurnId: null,
       latestTurnState: "completed",
+      latestTurn,
       isWatching: false,
       isWatched: false,
       isDelegated: false,
@@ -288,7 +289,7 @@ describe("store read model sync", () => {
     expect(next.threads[0]).toMatchObject({
       title: "Updated summary title",
       latestTurn,
-      session,
+      session: expect.objectContaining({ status: "ready", orchestrationStatus: "ready" }),
       error: "Keep the hydrated error",
       elevatorSummaryMessageCount: 7,
     });
@@ -300,7 +301,7 @@ describe("store read model sync", () => {
     });
   });
 
-  it("reconciles compact chat completion from authoritative thread detail", () => {
+  it("reconciles compact assistant text without treating message detail as native completion", () => {
     const threadId = ThreadId.makeUnsafe("compact-thread");
     const turnId = TurnId.makeUnsafe("compact-turn");
     const assistantMessageId = MessageId.makeUnsafe("compact-assistant-message");
@@ -384,11 +385,11 @@ describe("store read model sync", () => {
     ]);
     expect(next.threads[0]?.latestTurn).toMatchObject({
       turnId,
-      state: "completed",
-      completedAt: "2026-08-16T10:00:05.000Z",
+      state: "running",
+      completedAt: null,
       assistantMessageId,
     });
-    // Detail carries no session: a completed message is not turn end, the session-set event is.
+    // A completed message is not native turn end.
     expect(
       isSessionActivelyRunningTurn(
         next.threads[0]?.latestTurn ?? null,

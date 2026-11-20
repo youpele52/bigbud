@@ -25,6 +25,16 @@ const closures = {
     "Orchestration.implementation.v4.ts",
     "Orchestration.plugin.specs.v4.ts",
   ],
+  v5: [
+    ...common,
+    "Orchestration.implementation.v1.ts",
+    "Orchestration.implementation.types.v3.ts",
+    "Orchestration.implementation.v3.ts",
+    "Orchestration.plugin.specs.v4.ts",
+    "Orchestration.implementation.types.v5.ts",
+    "Orchestration.implementation.v5.ts",
+    "Orchestration.plugin.specs.v5.ts",
+  ],
 } as const;
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const schemaDigest = sha(await readFile(path.join(root, "Orchestration.plugin.specs.ts"), "utf8"));
@@ -38,19 +48,32 @@ const descriptor = {
 const entries: Record<string, unknown> = {};
 for (const [version, modules] of Object.entries(closures)) {
   const versionDescriptor =
-    version === "v3" || version === "v4"
+    version === "v5"
       ? {
           ...descriptor,
-          bootstrapAbi: "bigbud.thread.bootstrap.v4",
-          canonicalRequestAbi: "bigbud.thread.canonical.v2",
+          bootstrapAbi: "bigbud.thread.bootstrap.v5",
+          canonicalRequestAbi: "bigbud.thread.canonical.v3",
           schemaDigest: sha(
             JSON.stringify([
               schemaDigest,
               sha(await readFile(path.join(root, "Orchestration.plugin.specs.v4.ts"), "utf8")),
+              sha(await readFile(path.join(root, "Orchestration.plugin.specs.v5.ts"), "utf8")),
             ]),
           ),
         }
-      : descriptor;
+      : version === "v3" || version === "v4"
+        ? {
+            ...descriptor,
+            bootstrapAbi: "bigbud.thread.bootstrap.v4",
+            canonicalRequestAbi: "bigbud.thread.canonical.v2",
+            schemaDigest: sha(
+              JSON.stringify([
+                schemaDigest,
+                sha(await readFile(path.join(root, "Orchestration.plugin.specs.v4.ts"), "utf8")),
+              ]),
+            ),
+          }
+        : descriptor;
   const sources = await Promise.all(
     [...modules].toSorted().map(async (name) => {
       const content = await readFile(path.join(root, name), "utf8");

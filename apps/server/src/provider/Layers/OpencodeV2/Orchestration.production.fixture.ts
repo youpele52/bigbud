@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { resolveV2RemoteLocation } from "./Application.remoteLocation.ts";
 import { realpath, mkdir } from "node:fs/promises";
@@ -48,9 +49,10 @@ export async function withV2ProductionThreadTools(
   mode: "full-access" | "approval-required" = "full-access",
   runtimeCheckedVersion?: string,
   remoteWorkspace = false,
+  exportArtifact?: typeof exportV2ThreadArtifact,
 ) {
   await withV2RuntimeFixture(async ({ runtime: baseline, http, directory, events }) => {
-    const app = await makeV2ThreadPluginFixture();
+    const app = await makeV2ThreadPluginFixture(exportArtifact ? { exportArtifact } : {});
     const configRoot = path.join(app.root, "owned-native-global");
     await mkdir(configRoot, { mode: 0o700 });
     http.client.config.get = async () => [{ type: "directory", path: configRoot }];
@@ -66,6 +68,8 @@ export async function withV2ProductionThreadTools(
         verifyV2ThreadTools(artifact, client, cwd, signal, undefined, eligibility, configRoot),
       eligibility,
       configRoot,
+      undefined,
+      exportArtifact ? async () => app.artifact : undefined,
     );
     const host = makeV2ThreadPluginHost(app.bind("unrelated-bootstrap", await realpath(directory)));
     if (runtimeCheckedVersion) host.context.app.version = runtimeCheckedVersion;

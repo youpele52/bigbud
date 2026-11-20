@@ -55,9 +55,8 @@ export interface SidebarProjectAddActionsOutput {
   adoptRemoteWorkspaceConnectionSource: SidebarRemoteWorkspaceAddActionsOutput["adoptRemoteWorkspaceConnectionSource"];
   submitRemoteWorkspaceDialog: SidebarRemoteWorkspaceAddActionsOutput["submitRemoteWorkspaceDialog"];
   requestRemoteWorkspaceUnlock: SidebarRemoteWorkspaceAddActionsOutput["requestRemoteWorkspaceUnlock"];
-  remoteAgentInstallRequest: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentInstallRequest"];
-  declineRemoteAgentInstall: SidebarRemoteWorkspaceAddActionsOutput["declineRemoteAgentInstall"];
-  completeRemoteAgentInstall: SidebarRemoteWorkspaceAddActionsOutput["completeRemoteAgentInstall"];
+  remoteAgentInstallProgress: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentInstallProgress"];
+  remoteAgentManualInstallTarget: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentManualInstallTarget"];
   isRemoteWorkspaceUnlockDialogOpen: SidebarRemoteWorkspaceAddActionsOutput["isRemoteWorkspaceUnlockDialogOpen"];
   remoteWorkspaceUnlockMode: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceUnlockMode"];
   remoteWorkspaceUnlockKeyPath: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceUnlockKeyPath"];

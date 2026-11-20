@@ -11,6 +11,20 @@ vi.mock("../ssh/sshCommand.ts", () => ({
 }));
 afterEach(() => vi.restoreAllMocks());
 
+it("unknown owned shell cannot implicitly donate its selection to a restart", async () => {
+  const f = await makeRemoteRestartFixture();
+  try {
+    const before = [...f.requests];
+    await expect(f.runtime.runPromise(f.manager.restart(f.input))).rejects.toThrow(
+      "Choose a shell explicitly",
+    );
+    expect(f.requests).toEqual(before);
+    expect((await f.runtime.runPromise(f.manager.snapshot(f.input))).pid).toBe(f.opened.pid);
+  } finally {
+    await f.dispose();
+  }
+});
+
 it("explicit restart waits for remote exit AND committed owner release before creating a fresh resource", async () => {
   const f = await makeRemoteRestartFixture();
   try {
@@ -22,7 +36,9 @@ it("explicit restart waits for remote exit AND committed owner release before cr
         }),
       ),
     );
-    const restart = f.runtime.runPromise(f.manager.restart(f.input));
+    const restart = f.runtime.runPromise(
+      f.manager.restart({ ...f.input, shellSelection: { kind: "legacy-auto" } }),
+    );
     await vi.waitFor(() =>
       expect(f.requests.some((frame) => frame.type === "ptyCloseRequest")).toBe(true),
     );
@@ -53,9 +69,13 @@ it.each(["timeout", "persist-failure"] as const)(
   async (kind) => {
     const f = await makeRemoteRestartFixture();
     try {
-      const restart = f.runtime.runPromise(f.manager.restart(f.input));
-      const failed = expect(restart).rejects.toThrow(
-        kind === "timeout" ? "timed out" : "owner persistence failed",
+      const restart = f.runtime.runPromise(
+        f.manager.restart({ ...f.input, shellSelection: { kind: "legacy-auto" } }),
+      );
+      // Observe rejection immediately, then assert only after the protocol sequence is complete.
+      const outcome = restart.then(
+        () => ({ error: undefined }),
+        (error: unknown) => ({ error }),
       );
       await vi.waitFor(() =>
         expect(f.requests.some((frame) => frame.type === "ptyCloseRequest")).toBe(true),
@@ -65,7 +85,11 @@ it.each(["timeout", "persist-failure"] as const)(
         await vi.waitFor(() => expect(f.isPersisting()).toBe(true));
         f.rejectPersist(new Error("owner persistence failed"));
       }
-      await failed;
+      expect((await outcome).error).toMatchObject({
+        message: expect.stringContaining(
+          kind === "timeout" ? "timed out" : "owner persistence failed",
+        ),
+      });
       if (kind === "timeout") {
         // A late exit must not remove the failed restart fence while owner persistence is pending.
         f.exit();
@@ -74,13 +98,17 @@ it.each(["timeout", "persist-failure"] as const)(
       expect(f.requests.filter((frame) => frame.type === "ptyCreateRequest")).toHaveLength(1);
       expect(f.requests.filter((frame) => frame.type === "ptyAttachRequest")).toHaveLength(1);
       if (kind === "persist-failure") {
-        await expect(f.runtime.runPromise(f.manager.restart(f.input))).rejects.toThrow(
-          "owner persistence failed",
-        );
+        await expect(
+          f.runtime.runPromise(
+            f.manager.restart({ ...f.input, shellSelection: { kind: "legacy-auto" } }),
+          ),
+        ).rejects.toThrow("owner persistence failed");
         expect(f.requests.filter((frame) => frame.type === "ptyCreateRequest")).toHaveLength(1);
         expect(f.requests.filter((frame) => frame.type === "ptyAttachRequest")).toHaveLength(1);
       } else {
-        const retry = f.runtime.runPromise(f.manager.restart(f.input));
+        const retry = f.runtime.runPromise(
+          f.manager.restart({ ...f.input, shellSelection: { kind: "legacy-auto" } }),
+        );
         await vi.waitFor(() =>
           expect(f.requests.filter((frame) => frame.type === "ptyCreateRequest")).toHaveLength(1),
         );

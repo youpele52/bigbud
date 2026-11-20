@@ -23,7 +23,7 @@ import {
 import { restartFixtureBinding } from "./remoteAgentOwners.restart.binding.ts";
 import * as SshProcess from "../ssh/sshProcess.ts";
 
-export async function makeRemoteRestartFixture() {
+export async function makeRemoteRestartFixture(options: { withholdControlAcks?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "bigbud-explicit-restart-"));
   const binding = restartFixtureBinding("g1");
   vi.spyOn(remoteAgentAdmission, "resolveBinding").mockResolvedValue(binding);
@@ -85,6 +85,7 @@ export async function makeRemoteRestartFixture() {
       return update(...args);
     },
   };
+  let pendingControls = 0;
   const requests: RemoteAgentFrame[] = [];
   const listeners = new Set<(frame: RemoteAgentFrame) => void>();
   const pids = new Map<string, number>();
@@ -115,7 +116,7 @@ export async function makeRemoteRestartFixture() {
         },
         onFailure: () => () => undefined,
         close: () => undefined,
-        request: async (frame: RemoteAgentFrame) => {
+        request: async (frame: RemoteAgentFrame, _matches: unknown, signal?: AbortSignal) => {
           requests.push(frame);
           if (frame.type === "workspaceOpenRequest")
             return { type: "workspaceOpenResponse", value: { errorCode: "" } };
@@ -127,8 +128,30 @@ export async function makeRemoteRestartFixture() {
           if (frame.type === "ptyAttachRequest")
             return {
               type: "ptyAttachResponse",
-              value: { pid: pids.get(frame.value.ptyId), replayGap: false },
+              value: {
+                requestId: frame.value.requestId,
+                ptyId: frame.value.ptyId,
+                pid: pids.get(frame.value.ptyId),
+                replayGap: false,
+              },
             };
+          if (
+            options.withholdControlAcks &&
+            (frame.type === "ptyCloseRequest" || frame.type === "ptySignalRequest")
+          )
+            return new Promise<never>((_, reject) => {
+              pendingControls++;
+              signal?.addEventListener(
+                "abort",
+                () => {
+                  pendingControls--;
+                  reject(new Error("Control observation cancelled"));
+                },
+                { once: true },
+              );
+            });
+          if (frame.type === "ptySignalRequest")
+            return { type: "ptySignalResponse", value: { accepted: true } };
           if (frame.type === "ptyCloseRequest")
             return { type: "ptyCloseResponse", value: { accepted: true } };
           return { type: "ptyInputResponse", value: { accepted: true } };
@@ -173,6 +196,7 @@ export async function makeRemoteRestartFixture() {
     resource,
     store,
     isPersisting: () => persisting,
+    pendingControls: () => pendingControls,
     releasePersist,
     rejectPersist,
     exit: () => {

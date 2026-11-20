@@ -16,31 +16,18 @@ describe("buildOpencodeAllowedTools", () => {
     });
   });
 
-  it("prefers bigbud remote tools over native local workspace tools", () => {
+  it("enables only this thread's orchestration tools", () => {
     expect(
       buildOpencodeAllowedTools({
         toolIds: [
-          "read",
           "bash",
-          "bigbud_remote_workspace_read",
-          "bigbud_remote_workspace_bash",
           "bigbud_orchestration_other_computer_use",
           "bigbud_orchestration_thread_1_computer_use",
         ],
         serverName: "bigbud_orchestration_thread_1",
-        remoteWorkspaceServerName: "bigbud_remote_workspace",
       }),
     ).toEqual({
-      read: false,
-      bash: false,
-      bigbud_remote_workspace_read: true,
-      bigbud_remote_workspace_write: true,
-      bigbud_remote_workspace_edit: true,
-      bigbud_remote_workspace_bash: true,
-      bigbud_remote_workspace_grep: true,
-      bigbud_remote_workspace_glob: true,
-      bigbud_remote_workspace_list: true,
-      bigbud_remote_workspace_apply_patch: true,
+      bash: true,
       bigbud_orchestration_other_computer_use: false,
       bigbud_orchestration_thread_1_computer_use: true,
     });

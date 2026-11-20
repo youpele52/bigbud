@@ -31,3 +31,11 @@ mod security;
 #[path = "windows.security.create.rs"]
 mod security_create;
 pub use protocol::run_stdio;
+
+#[cfg(windows)]
+#[path = "windows.control.rs"]
+pub(crate) mod control;
+
+#[cfg(windows)]
+#[path = "windows.control.lease.rs"]
+mod control_lease;

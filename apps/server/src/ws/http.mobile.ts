@@ -6,6 +6,7 @@ import {
 import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
+import { rejectWithoutMobileGatewayCredential } from "../mobile/mobileGatewayCredential";
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl";
 import { makeCorsMiddleware } from "./http.cors";
 
@@ -32,6 +33,10 @@ export const mobilePairingRouteLayer = HttpRouter.add(
   "GET",
   `${PAIRING_PREFIX}*`,
   Effect.gen(function* () {
+    const gatewayRejection = yield* rejectWithoutMobileGatewayCredential;
+    if (Option.isSome(gatewayRejection)) {
+      return gatewayRejection.value;
+    }
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = HttpServerRequest.toURL(request);
     if (Option.isNone(url)) {
@@ -64,6 +69,10 @@ export const mobilePairingExchangeRouteLayer = HttpRouter.add(
   "POST",
   `${PAIRING_PREFIX}*`,
   Effect.gen(function* () {
+    const gatewayRejection = yield* rejectWithoutMobileGatewayCredential;
+    if (Option.isSome(gatewayRejection)) {
+      return gatewayRejection.value;
+    }
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = HttpServerRequest.toURL(request);
     if (Option.isNone(url)) {

@@ -1,15 +1,12 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import { Effect } from "effect";
-import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 
 import { increment, terminalSessionsTotal } from "../../observability/Metrics";
-import { PtySpawnError, type PtyProcess } from "../Services/PTY";
+import { type PtyProcess } from "../Services/PTY";
 import {
   createTerminalSpawnEnv,
   defaultTerminalDropPathMode,
-  formatShellCandidate,
-  isRetryableShellSpawnError,
   resolveShellCandidates,
 } from "./Manager.shell";
 import { createRemoteShellPidReader } from "./Manager.remote-identity.ts";
@@ -28,7 +25,10 @@ import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { confirmTerminalProcessStopped } from "./Manager.process.stop";
 import { TerminalDeviceQueries } from "./TerminalDeviceQueries";
 import { observeTerminalProcessError } from "./Manager.process.error";
-import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
+import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
+import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
+import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
 import { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 import { startRecoveryModel, feedRecoveryModel } from "./Manager.recovery";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
@@ -37,100 +37,29 @@ export {
   startProcessPollingWith,
 } from "./Manager.process-drain.poll.ts";
 
-// ---------------------------------------------------------------------------
-// trySpawnWith
-// ---------------------------------------------------------------------------
+import { trySpawnWith } from "./Manager.process.spawn";
+export { trySpawnWith } from "./Manager.process.spawn";
 
-export function trySpawnWith(
+/** OSC 133 shell integration env for local POSIX panes only (remote shells are untouched). */
+function withLocalShellIntegration(
   ctx: ProcessLifecycleContext,
   session: TerminalSessionState,
-  shellCandidates: ReadonlyArray<{
-    shell: string;
-    label?: string;
-    args?: string[];
-    dropPathMode: TerminalSessionState["dropPathMode"];
-  }>,
-  spawnEnv: NodeJS.ProcessEnv,
-  index = 0,
-  lastError: PtySpawnError | null = null,
-): Effect.Effect<
-  { process: PtyProcess; shellLabel: string; dropPathMode: TerminalSessionState["dropPathMode"] },
-  PtySpawnError
-> {
-  return Effect.gen(function* () {
-    if (index >= shellCandidates.length) {
-      const detail = lastError?.message ?? "Failed to spawn PTY process";
-      const tried =
-        shellCandidates.length > 0
-          ? ` Tried shells: ${shellCandidates.map((c) => formatShellCandidate(c)).join(", ")}.`
-          : "";
-      return yield* new PtySpawnError({
-        adapter: "terminal-manager",
-        message: `${detail}.${tried}`.trim(),
-        ...(lastError ? { cause: lastError } : {}),
-      });
-    }
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  if (!ctx.shellIntegrationEnv || process.platform === "win32") return env;
+  if (!isLocalExecutionTarget(session.executionTargetId)) return env;
+  const extra = ctx.shellIntegrationEnv(env);
+  return extra ? { ...env, ...extra } : env;
+}
 
-    const candidate = shellCandidates[index];
-    if (!candidate) {
-      return yield* (
-        lastError ??
-          new PtySpawnError({
-            adapter: "terminal-manager",
-            message: "No shell candidate available for PTY spawn.",
-          })
-      );
-    }
-
-    const attempt = yield* Effect.result(
-      // Suspended so an adapter that throws before returning an Effect is caught too.
-      Effect.suspend(() =>
-        ctx.ptyAdapter.spawn({
-          ownerKey: JSON.stringify([session.threadId, session.terminalId]),
-          recoverOnly: session.remoteOwnerRecoveryRequired === true,
-          shell: candidate.shell,
-          ...(candidate.args ? { args: candidate.args } : {}),
-          cwd: isLocalExecutionTarget(session.executionTargetId) ? session.cwd : homedir(),
-          cols: session.cols,
-          rows: session.rows,
-          env: spawnEnv,
-          executionTargetId: session.executionTargetId,
-          ...(isLocalExecutionTarget(session.executionTargetId) ||
-          isWslTerminalTargetId(session.executionTargetId)
-            ? {}
-            : { remoteCwd: session.cwd }),
-        }),
-      ).pipe(
-        // A throwing adapter must still reach the fallback chain and the session error state.
-        Effect.catchDefect((defect) =>
-          Effect.fail(
-            new PtySpawnError({
-              adapter: "terminal-manager",
-              message: `PTY adapter failed unexpectedly: ${
-                defect instanceof Error ? defect.message : String(defect)
-              }`,
-              cause: defect,
-            }),
-          ),
-        ),
-      ),
-    );
-
-    if (attempt._tag === "Success") {
-      return {
-        process: attempt.success,
-        shellLabel: formatShellCandidate(candidate),
-        dropPathMode: candidate.dropPathMode,
-      };
-    }
-
-    const spawnError = attempt.failure;
-    if (!isRetryableShellSpawnError(spawnError)) {
-      return yield* spawnError;
-    }
-
-    return yield* trySpawnWith(ctx, session, shellCandidates, spawnEnv, index + 1, spawnError);
-  });
+export function cleanupFailedTerminalObserver(
+  process: PtyProcess | null,
+  kill: (process: PtyProcess) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  if (!process) return Effect.void;
+  if (process.detach)
+    return Effect.sync(() => process.detach?.()).pipe(Effect.ignoreCause({ log: true }));
+  return kill(process);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +121,14 @@ export function startSessionWith(
   eventType: "started" | "restarted",
 ): Effect.Effect<void, TerminalExecutionTargetError> {
   return Effect.gen(function* () {
+    const remoteLaunch = yield* resolveTerminalRemoteShellIntent({
+      threadId: session.threadId,
+      terminalId: session.terminalId,
+      executionTargetId: session.executionTargetId,
+      cwd: input.cwd,
+      launch: input.shellProfileLaunch,
+      recoverOnly: session.remoteOwnerRecoveryRequired === true,
+    });
     yield* stopProcess(session);
     yield* Effect.annotateCurrentSpan({
       "terminal.thread_id": session.threadId,
@@ -201,6 +138,7 @@ export function startSessionWith(
     });
 
     yield* ctx.modifyManagerState((state) => {
+      if (eventType === "restarted") session.expectedRemoteResourceId = undefined;
       session.status = "starting";
       session.cwd = input.cwd;
       session.worktreePath = input.worktreePath ?? null;
@@ -233,15 +171,29 @@ export function startSessionWith(
       increment(terminalSessionsTotal, { lifecycle: eventType }).pipe(
         Effect.andThen(
           Effect.gen(function* () {
-            const shellCandidates = isLocalExecutionTarget(session.executionTargetId)
-              ? resolveShellCandidates(ctx.shellResolver)
-              : isWslTerminalTargetId(session.executionTargetId)
-                ? [buildWslTerminalShellCandidate(session)]
-                : [buildRemoteTerminalShellCandidate(session)];
-            const terminalEnv = withInteractiveTerminalIdentity(
-              createTerminalSpawnEnv(
-                process.env,
-                isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+            const shellCandidates = remoteLaunch
+              ? [
+                  {
+                    ...buildRemoteTerminalShellCandidate(session),
+                    shellLaunch: remoteLaunch,
+                    dropPathMode: input.shellProfileLaunch!.dropPathMode,
+                  },
+                ]
+              : input.shellProfileLaunch
+                ? [{ ...input.shellProfileLaunch, args: [...input.shellProfileLaunch.args] }]
+                : isLocalExecutionTarget(session.executionTargetId)
+                  ? resolveShellCandidates(ctx.shellResolver)
+                  : isWslTerminalTargetId(session.executionTargetId)
+                    ? [buildWslTerminalShellCandidate(session)]
+                    : [buildRemoteTerminalShellCandidate(session)];
+            const terminalEnv = withLocalShellIntegration(
+              ctx,
+              session,
+              withInteractiveTerminalIdentity(
+                createTerminalSpawnEnv(
+                  process.env,
+                  isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+                ),
               ),
             );
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
@@ -282,6 +234,8 @@ export function startSessionWith(
                 return;
               }
               const visible = readRemotePid(data);
+              const work = ctx.workSignals?.output(session, visible);
+              if (work) ctx.runFork(work);
               const output = queries ? queries.receive(visible) : visible;
               feedRecoveryModel(session, output);
               if (output) ctx.runFork(ctx.queuePtyOutput(session, processPid, output));
@@ -317,6 +271,8 @@ export function startSessionWith(
             });
 
             yield* ctx.modifyManagerState((state) => {
+              session.shellLaunchIdentity = spawnResult.identity;
+              session.shellUnconfirmedLaunch = ptyProcess?.shellUnconfirmedLaunch;
               session.process = ptyProcess;
               session.remoteOwnerRecoveryRequired = false;
               session.pid = processPid;
@@ -353,12 +309,19 @@ export function startSessionWith(
     {
       const error = startResult.failure;
       session.recoveryModel?.dispose("launch-failed");
-      if (ptyProcess) {
-        yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
-      }
+      yield* cleanupFailedTerminalObserver(ptyProcess, (process) =>
+        startKillEscalation(process, session.threadId, session.terminalId),
+      );
 
+      // Only a durable owner that may still be live fences the pane; a launch that was
+      // rolled back or never dispatched leaves nothing to recover, so Retry starts fresh.
+      const ownedRuntime = resolveOwnedPtyRuntime(ctx.ptyAdapter, session.executionTargetId);
+      const ownerMayBeRetained = ownedRuntime
+        ? yield* ownedTerminalMayBeRetained(ownedRuntime, session.threadId, session.terminalId)
+        : session.remoteOwnerRecoveryRequired === true;
       yield* ctx.modifyManagerState((state) => {
         session.status = "error";
+        session.remoteOwnerRecoveryRequired = ownerMayBeRetained;
         session.pid = null;
         session.process = null;
         session.unsubscribeData = null;

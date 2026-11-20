@@ -6,7 +6,7 @@ import {
   type PendingUserInputDraftAnswer,
   setPendingUserInputCustomAnswer,
   togglePendingUserInputOptionSelection,
-} from "~/logic/user-input";
+} from "@bigbud/shared/pendingUserInput";
 import type { derivePendingUserInputs } from "../lib/mobileModels";
 
 type PendingUserInput = ReturnType<typeof derivePendingUserInputs>[number];

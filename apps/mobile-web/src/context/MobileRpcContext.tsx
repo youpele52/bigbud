@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
 
 import { useMobileOrchestrationSync } from "../hooks/useMobileOrchestrationSync";
 import { useMobileConnection } from "../lib/mobileConnection";
@@ -9,6 +9,11 @@ import {
 } from "../logic/mobileConnection.logic";
 import { initialMobileRecoveryState } from "../logic/mobileRecovery.types";
 import { useMobileSessionState } from "./MobileSessionContext";
+import {
+  allowsMobileCredentialOrigin,
+  currentMobileDeploymentPolicy,
+} from "../logic/mobileDeploymentPolicy";
+import { useMobileHosts } from "./MobileHostsContext";
 
 interface MobileRpcState {
   readonly client: ReturnType<typeof useMobileConnection>["client"];
@@ -30,13 +35,36 @@ const MobileRpcContext = createContext<MobileRpcState>({
 
 export function MobileRpcProvider({ children }: { children: ReactNode }) {
   const { session } = useMobileSessionState();
+  const hosts = useMobileHosts();
   const recoveryRef = useRef<ReturnType<typeof useMobileOrchestrationSync>["controller"]>(null);
-  const wsUrl = useMemo(() => (session ? resolveMobileWebsocketUrl(session) : null), [session]);
-  const { client, connection, restart } = useMobileConnection(session, wsUrl, {
+  const deployment = currentMobileDeploymentPolicy();
+  const credentialAllowed =
+    !!session && allowsMobileCredentialOrigin(deployment, session.backendBaseUrl);
+  const wsUrl = useMemo(
+    () => (session && credentialAllowed ? resolveMobileWebsocketUrl(session) : null),
+    [session, credentialAllowed],
+  );
+  const {
+    client,
+    connection,
+    restart: restartConnection,
+  } = useMobileConnection(session, wsUrl, {
+    ...(hosts?.hosts.selected && hosts.admission.session === session
+      ? { beforeConnect: hosts.admission.beforeConnect }
+      : {}),
     onClose: () => recoveryRef.current?.transportClosed(),
     onOpen: () => recoveryRef.current?.transportOpened(),
+    onResumeOpen: () => recoveryRef.current?.resumed(),
   });
-  const { controller: recovery, recoveryState } = useMobileOrchestrationSync(session, client);
+  const {
+    controller: recovery,
+    recoveryState,
+    clearBaselineRejection,
+  } = useMobileOrchestrationSync(session, client);
+  const restart = useCallback(() => {
+    clearBaselineRejection();
+    restartConnection();
+  }, [clearBaselineRejection, restartConnection]);
   recoveryRef.current = recovery;
 
   const value = useMemo<MobileRpcState>(

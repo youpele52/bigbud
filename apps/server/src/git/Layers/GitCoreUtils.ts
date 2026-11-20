@@ -264,6 +264,32 @@ export function isMissingGitCwdError(error: GitCommandError): boolean {
   );
 }
 
+/**
+ * Exit code git uses for `die()`, including a failed repository discovery.
+ */
+const GIT_FATAL_EXIT_CODE = 128;
+
+/**
+ * Git's repository-discovery failure: "not a git repository (or any of the parent directories)"
+ * or "not a git repository (or any parent up to mount point …)". A `.git` file pointing at a
+ * missing gitdir reports "not a git repository: <path>" instead and stays a real failure.
+ */
+const GIT_REPOSITORY_DISCOVERY_FAILURE =
+  /not a git repository \(or any (of the parent|parent up to)/i;
+
+/**
+ * Classifies a completed git invocation (local or remote-agent executed) that failed only
+ * because `cwd` is outside any repository, so callers can report a normal non-repository state.
+ */
+export function isNotGitRepositoryResult(result: {
+  readonly code: number | null;
+  readonly stderr: string;
+}): boolean {
+  return (
+    result.code === GIT_FATAL_EXIT_CODE && GIT_REPOSITORY_DISCOVERY_FAILURE.test(result.stderr)
+  );
+}
+
 export function createGitCommandError(
   operation: string,
   cwd: string,

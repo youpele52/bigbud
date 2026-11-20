@@ -20,18 +20,20 @@ import { DesktopBackendStartupCoordinator } from "../components/DesktopBackendSt
 import { readNativeApi } from "../rpc/nativeApi";
 import { PendingApprovalCoordinator } from "../notifications/pendingApprovalCoordinator";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
+import { TerminalFinishedNotifications } from "../notifications/terminalFinished";
 import { useStore } from "../stores/main";
 import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
-import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
+import { WelcomeTourDialog } from "../components/welcome-tour/WelcomeTourDialog";
 import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/ComputerUseStartupRepairCoordinator";
 import { DatabaseCompactionCoordinator } from "../components/settings/DatabaseCompactionCoordinator";
 import { GamesWorkToastCoordinator } from "../components/games/GamesWorkToastCoordinator";
 import { ProviderRecoveryToastCoordinator } from "../components/ProviderRecoveryToastCoordinator";
+import { MetadataWarningToastCoordinator } from "../components/MetadataWarningToastCoordinator";
 import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
-import { shouldShowFileAccessPrompt } from "./-__root.permissionPrompts";
+import { useFirstLaunchWelcomeTour } from "../components/welcome-tour/WelcomeTourDialog.firstLaunch";
 import {
   CompactChatShell,
   MascotShell,
@@ -79,23 +81,14 @@ export function RootRouteView() {
   const settings = useSettings();
   useWindowMaterial();
   const serverConfig = useServerConfig();
-  const [showFileAccessDialog, setShowFileAccessDialog] = useState(false);
   const hasLoadedServerConfig = serverConfig !== null;
 
-  useEffect(() => {
-    if (
-      shouldShowFileAccessPrompt({
-        bootstrapComplete,
-        hasLoadedServerConfig,
-        hasSeenFileAccessPrompt: settings.hasSeenFileAccessPrompt,
-      })
-    ) {
-      const timer = setTimeout(() => {
-        setShowFileAccessDialog(true);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [bootstrapComplete, hasLoadedServerConfig, settings.hasSeenFileAccessPrompt]);
+  useFirstLaunchWelcomeTour({
+    bootstrapComplete,
+    hasLoadedServerConfig,
+    hasSeenFileAccessPrompt: settings.hasSeenFileAccessPrompt,
+    hasSeenWelcomeTour: settings.hasSeenWelcomeTour,
+  });
 
   useEffect(() => {
     const animationFrameId = window.requestAnimationFrame(() => {
@@ -132,8 +125,10 @@ export function RootRouteView() {
         <DesktopBackendStartupCoordinator />
         <GamesWorkToastCoordinator />
         <ProviderRecoveryToastCoordinator />
+        <MetadataWarningToastCoordinator />
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
+        <TerminalFinishedNotifications />
         <WebSocketConnectionSurface>
           <>
             <div className="relative h-screen overflow-hidden">
@@ -152,10 +147,7 @@ export function RootRouteView() {
               ) : null}
             </div>
 
-            <FileAccessPermissionDialog
-              open={showFileAccessDialog}
-              onOpenChange={setShowFileAccessDialog}
-            />
+            <WelcomeTourDialog />
             {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
             {hasLoadedServerConfig ? <DatabaseCompactionCoordinator /> : null}
           </>
@@ -173,6 +165,7 @@ function CompactChatRoot() {
       <AnchoredToastProvider>
         <ServerStateBootstrap />
         <ChatFocusShortcutCoordinator />
+        <MetadataWarningToastCoordinator />
         <DraftOwnershipCoordinator
           repairOnStartup={DRAFT_OWNERSHIP_REPAIR_BY_RENDERER.compact}
           scope="compact"

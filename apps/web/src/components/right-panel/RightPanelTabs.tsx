@@ -178,7 +178,12 @@ export function RightPanelTabs({
   };
 
   return (
-    <div className={cn(contentPanelHeaderClassName("bg-card/95 px-3 sm:px-3"), "overflow-hidden")}>
+    <div
+      className={cn(
+        contentPanelHeaderClassName("bg-[var(--app-shell-panel-header-background)] px-3 sm:px-3"),
+        "overflow-hidden",
+      )}
+    >
       <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-webkit-app-region:no-drag] [&::-webkit-scrollbar]:hidden">
         {openTabs.map((tabId, index) => {
           const kind = getRightPanelTabKind(tabId);
@@ -195,7 +200,7 @@ export function RightPanelTabs({
                 "group relative grid h-9 w-[145px] max-w-[145px] shrink-0 grid-cols-[24px_minmax(0,1fr)_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm [-webkit-app-region:no-drag]",
                 index > 0 && "-ml-px",
                 isActive
-                  ? "-mb-px border-border bg-background text-foreground"
+                  ? "-mb-px border-border bg-[var(--app-shell-pane-fill)] text-foreground"
                   : "cursor-pointer border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-accent/30 hover:text-foreground",
                 draggedTabId === tabId && "opacity-55",
               )}

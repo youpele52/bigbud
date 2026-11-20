@@ -13,24 +13,22 @@ import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { deriveWorkGroupPresentation } from "./MessagesTimeline.workGroup.logic";
 import { workEntryDetailBlocks } from "./MessagesTimeline.workEntry.logic";
 
-// Heights measured in Chromium at the default 14px root size (see
-// MessagesTimeline.accordion.browser.tsx). Every row adds the `pb-4` row gap.
-const ROW_GAP_PX = 16;
+import {
+  ACTIVITY_BLOCK_GAP_PX as ROW_GAP_PX,
+  ACTIVITY_PANEL_PADDING_PX as SECTION_ACCORDION_PANEL_PADDING_PX,
+} from "~/constants/activityLayout";
+
+// Font-dependent heights are checked in Chromium with a 16px root / 14px body.
+// Every row adds the shared outer gap.
 // Collapsed `section` accordion: py-2 summary around the cap-trimmed header, pb-2 + border.
 const SECTION_ACCORDION_COLLAPSED_PX = 36;
-// Open `section` panel padding (pt-3 + pb-2).
-const SECTION_ACCORDION_PANEL_PADDING_PX = 20;
-// `py-0.5` wrapper around thinking and question rows.
-const INSET_ROW_PADDING_PX = 4;
-// Hover action row (`mt-1`/`gap-1` + an xs button) under answered questions and lone entries.
-const OUTSIDE_ACTIONS_PX = 28;
 // One work entry: `py-1` around a `leading-5` line; entries are `space-y-0.5` apart.
 const WORK_ENTRY_PX = 28;
 const WORK_ENTRY_GAP_PX = 2;
 // In-entry hover actions (`mt-1.5` + xs button) when actions are not hoisted outside.
 const WORK_ENTRY_INLINE_ACTIONS_PX = 30;
 // Collapsed compact "Details" disclosure under a work entry heading.
-const WORK_ENTRY_DETAILS_COLLAPSED_PX = 15;
+const WORK_ENTRY_DETAILS_COLLAPSED_PX = 21;
 // Open details: compact panel padding plus the bordered `<pre>` chrome, capped at max-h-64.
 const WORK_ENTRY_DETAILS_PANEL_PX = 24;
 const WORK_ENTRY_DETAILS_LINE_PX = 18;
@@ -38,8 +36,8 @@ const WORK_ENTRY_DETAILS_CHARS_PER_LINE = 96;
 const WORK_ENTRY_DETAILS_MAX_PRE_PX = 256;
 // A finished subagent row with its one-line summary.
 const SUBAGENT_ROW_PX = 28;
-// Changed files: `mt-2` above the section accordion, then one root tree row per node.
-const CHANGED_FILES_MARGIN_PX = 8;
+// Changed files share the standalone process boundary after the message footer.
+const CHANGED_FILES_MARGIN_PX = ROW_GAP_PX;
 const CHANGED_FILES_TREE_ROW_PX = 25;
 const SUBAGENTS_VISIBLE_WHEN_COLLAPSED = 1;
 // Thinking markdown uses the same text-xs / leading-5 rhythm as work entries and subagents.
@@ -74,7 +72,6 @@ export function estimateMessagesTimelineRowHeight(
     case "thinking":
       return (
         ROW_GAP_PX +
-        INSET_ROW_PADDING_PX +
         SECTION_ACCORDION_COLLAPSED_PX +
         (accordionOpen
           ? SECTION_ACCORDION_PANEL_PADDING_PX + estimateThinkingBodyHeight(row, input)
@@ -92,9 +89,7 @@ export function estimateMessagesTimelineRowHeight(
       if (!row.answers) return estimateUserInputQuestionRowHeight(row.pendingUserInput);
       return (
         ROW_GAP_PX +
-        INSET_ROW_PADDING_PX +
         SECTION_ACCORDION_COLLAPSED_PX +
-        OUTSIDE_ACTIONS_PX +
         (accordionOpen
           ? SECTION_ACCORDION_PANEL_PADDING_PX +
             estimateAnsweredQuestionsHeight(row.pendingUserInput)
@@ -126,9 +121,8 @@ function estimateWorkRowHeight(
 ): number {
   const isExpanded = input.expandedWorkGroups?.[row.id] ?? false;
   const presentation = deriveWorkGroupPresentation(row, isExpanded);
-  const outsideActions = presentation.showSingleEntryActionsOutside ? OUTSIDE_ACTIONS_PX : 0;
   if (!accordionOpen) {
-    return ROW_GAP_PX + SECTION_ACCORDION_COLLAPSED_PX + outsideActions;
+    return ROW_GAP_PX + SECTION_ACCORDION_COLLAPSED_PX;
   }
 
   let entries = Math.max(0, presentation.visibleEntries.length - 1) * WORK_ENTRY_GAP_PX;
@@ -143,7 +137,7 @@ function estimateWorkRowHeight(
     }
   }
   const chrome = SECTION_ACCORDION_COLLAPSED_PX + SECTION_ACCORDION_PANEL_PADDING_PX;
-  return ROW_GAP_PX + chrome + entries + outsideActions;
+  return ROW_GAP_PX + chrome + entries;
 }
 
 function estimateWorkEntryDetailsPanelHeight(blocks: ReadonlyArray<string>): number {

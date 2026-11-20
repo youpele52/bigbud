@@ -63,6 +63,21 @@ export interface ProviderSessionDirectoryShape {
   readonly upsert: (
     binding: ProviderRuntimeBinding,
   ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
+  /**
+   * Runs `use` while holding the directory's write lock and hands it an `upsert` that does not
+   * take the lock again (call it only inside `use`). The lock order is: write lock, then SQL.
+   * A caller that writes a binding inside its own SQL transaction must take the lock here,
+   * before the transaction opens. Plain `upsert` inside a transaction waits for the lock while
+   * holding the only SQL connection, and a concurrent `upsert` holds the lock while it waits for
+   * SQL: the backend wedges (D-1).
+   */
+  readonly withWriteLock?: <A, E, R>(
+    use: (
+      upsert: (
+        binding: ProviderRuntimeBinding,
+      ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>,
+    ) => Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, R>;
 
   readonly getProvider: (
     threadId: ThreadId,

@@ -1,5 +1,5 @@
 import { V2SharedServiceError } from "./SharedService.errors.ts";
-import { Service } from "@opencode/client/service";
+import { opencodeV2Sdk } from "./Client.sdk.ts";
 import { makeV2Client } from "./Client.ts";
 import {
   readV2SharedRegistration,
@@ -52,7 +52,7 @@ export async function borrowV2SharedService(expected: V2SharedConnection): Promi
   };
   const client = makeV2Client({
     endpoint: registration.endpoint.url,
-    headers: Service.headers(registration.endpoint),
+    headers: opencodeV2Sdk().Service.headers(registration.endpoint),
     beforeRequest: validate,
     afterResponse: validate,
     signal: controller.signal,

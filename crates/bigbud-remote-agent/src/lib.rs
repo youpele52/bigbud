@@ -1,7 +1,10 @@
 pub mod operations;
+pub mod os_index;
+pub mod paste_staging;
 pub mod process;
 pub mod pty;
 pub mod resource_cleanup;
+pub mod search;
 pub mod state;
 pub mod supervisor;
 pub mod workspace;
@@ -9,9 +12,15 @@ pub mod workspace;
 mod session;
 
 pub use session::{
-    AgentSession, PreparedProcess, PreparedPtyControl, PreparedWorkspaceWatch, ProcessJob,
-    SessionError, is_pty_control, protocol_error_frame, workspace_watch_event_frame,
+    AgentSession, PreparedOsIndexSearch, PreparedProcess, PreparedPtyControl, PreparedSearch,
+    PreparedWorkspaceWatch, ProcessJob, SessionError, is_pty_control, protocol_error_frame,
+    workspace_watch_event_frame,
 };
 pub mod identity;
 pub mod inspect_local;
 mod spawn_gate;
+
+pub mod backend_service;
+pub mod local_control;
+
+pub mod service_lease;

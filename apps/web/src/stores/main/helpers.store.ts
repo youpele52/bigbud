@@ -1,5 +1,6 @@
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
 import { buildSidebarThreadSummary, sidebarThreadSummariesEqual } from "./mappers.store";
+import { withTerminalWork } from "./helpers.terminalWork.store";
 import { syncDelegatedChildSummaries } from "./helpers.delegatedChildren.store";
 import { type AppState } from "./main.store";
 import {
@@ -143,30 +144,7 @@ export function compareActivities(
   return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id);
 }
 
-export function buildLatestTurn(params: {
-  previous: Thread["latestTurn"];
-  turnId: NonNullable<Thread["latestTurn"]>["turnId"];
-  state: NonNullable<Thread["latestTurn"]>["state"];
-  requestedAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  assistantMessageId: NonNullable<Thread["latestTurn"]>["assistantMessageId"];
-  sourceProposedPlan?: Thread["pendingSourceProposedPlan"];
-}): NonNullable<Thread["latestTurn"]> {
-  const resolvedPlan =
-    params.previous?.turnId === params.turnId
-      ? params.previous.sourceProposedPlan
-      : params.sourceProposedPlan;
-  return {
-    turnId: params.turnId,
-    state: params.state,
-    requestedAt: params.requestedAt,
-    startedAt: params.startedAt,
-    completedAt: params.completedAt,
-    assistantMessageId: params.assistantMessageId,
-    ...(resolvedPlan ? { sourceProposedPlan: resolvedPlan } : {}),
-  };
-}
+export { buildLatestTurn } from "./helpers.latestTurn.store";
 
 export function rebindTurnDiffSummariesForAssistantMessage(
   turnDiffSummaries: ReadonlyArray<Thread["turnDiffSummaries"][number]>,
@@ -310,7 +288,7 @@ export function updateThreadState(
       ? derivedSummary.latestUserMessageAt
       : latestTimestamp(previousSummary?.latestUserMessageAt, derivedSummary.latestUserMessageAt);
   const nextSummary = {
-    ...derivedSummary,
+    ...withTerminalWork(derivedSummary, previousSummary),
     latestUserMessageAt,
     hasPendingUserInput:
       derivedSummary.hasPendingUserInput ||
@@ -384,16 +362,18 @@ export function applyThreadReverted(
     latestTurn:
       latestCheckpoint === null
         ? null
-        : {
-            turnId: latestCheckpoint.turnId,
-            state: checkpointStatusToLatestTurnState(
-              (latestCheckpoint.status ?? "ready") as "ready" | "missing" | "error",
-            ),
-            requestedAt: latestCheckpoint.completedAt,
-            startedAt: latestCheckpoint.completedAt,
-            completedAt: latestCheckpoint.completedAt,
-            assistantMessageId: latestCheckpoint.assistantMessageId ?? null,
-          },
+        : thread.latestTurn?.turnId === latestCheckpoint.turnId
+          ? thread.latestTurn
+          : {
+              turnId: latestCheckpoint.turnId,
+              state: checkpointStatusToLatestTurnState(
+                (latestCheckpoint.status ?? "ready") as "ready" | "missing" | "error",
+              ),
+              requestedAt: latestCheckpoint.completedAt,
+              startedAt: latestCheckpoint.completedAt,
+              completedAt: latestCheckpoint.completedAt,
+              assistantMessageId: latestCheckpoint.assistantMessageId ?? null,
+            },
     updatedAt: payload.occurredAt,
   };
 }

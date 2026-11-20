@@ -28,6 +28,7 @@ export function isStaleRunningSessionUpdate(input: {
   readonly latestTurn: {
     readonly turnId: string;
     readonly completedAt: string | null;
+    readonly terminalOutcome?: string | undefined;
   } | null;
   readonly hasNonStreamingAssistantMessageForTurn: boolean;
 }): boolean {
@@ -40,5 +41,5 @@ export function isStaleRunningSessionUpdate(input: {
   if (isOngoingAgentWorkSessionReason(input.incomingReason)) {
     return false;
   }
-  return input.latestTurn.completedAt !== null || input.hasNonStreamingAssistantMessageForTurn;
+  return input.latestTurn.terminalOutcome !== undefined;
 }

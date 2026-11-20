@@ -1,3 +1,4 @@
+import { forgetMigratedLegacyMobileDrafts } from "./mobileComposerDraft.migration";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -23,8 +24,11 @@ export { makeMobileComposerDraftIdentity } from "./mobileComposerDraft";
 export function clearMobileDraftThreads(input: {
   readonly backendBaseUrl: string;
   readonly sessionId: string;
+  readonly authorityId?: string | null;
 }): boolean {
-  return forgetMobileComposerDraftsForSession(input);
+  const current = forgetMobileComposerDraftsForSession(input);
+  const legacy = forgetMigratedLegacyMobileDrafts(input);
+  return current && legacy;
 }
 export function createMobileDraftThread(
   projectId: ProjectId,

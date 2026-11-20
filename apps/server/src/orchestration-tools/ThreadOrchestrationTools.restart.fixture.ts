@@ -21,7 +21,12 @@ import {
   ProjectionCatalogQuery,
   type ProjectionCatalogQueryShape,
 } from "../orchestration/Services/ProjectionCatalogQuery.ts";
+import { OrchestrationEventStoreLive } from "../persistence/Layers/OrchestrationEventStore.ts";
 import { makeSqlitePersistenceLive } from "../persistence/Layers/Sqlite.ts";
+import {
+  OrchestrationEventStore,
+  type OrchestrationEventStoreShape,
+} from "../persistence/Services/OrchestrationEventStore.ts";
 import { ThreadDelegationRepositoryLive } from "../persistence/Layers/ThreadDelegations.ts";
 import {
   ThreadDelegationRepository,
@@ -52,6 +57,8 @@ export async function withDormantThreads(
     services: ReturnType<typeof makeServices>;
     repository: ThreadDelegationRepositoryShape;
     catalog: ProjectionCatalogQueryShape;
+    /** A second reader over the same database, for confirmation-proof reads. */
+    eventStore: OrchestrationEventStoreShape;
     dbPath: string;
   }) => Promise<void>,
 ) {
@@ -60,6 +67,7 @@ export async function withDormantThreads(
     try {
       const repository = await services.runPromise(Effect.service(ThreadDelegationRepository));
       const catalog = await services.runPromise(Effect.service(ProjectionCatalogQuery));
+      const eventStore = await services.runPromise(Effect.service(OrchestrationEventStore));
       const first = createRuntime(dbPath);
       try {
         const engine = await engineFor(first);
@@ -155,7 +163,7 @@ export async function withDormantThreads(
         expect(
           (await runtime.runPromise(engine.getReadModel())).threads.map((t) => t.id),
         ).not.toContain(callerId);
-        await run({ engine, runtime, services, repository, catalog, dbPath });
+        await run({ engine, runtime, services, repository, catalog, eventStore, dbPath });
       } finally {
         await runtime.dispose();
       }
@@ -167,7 +175,11 @@ export async function withDormantThreads(
 
 function makeServices(dbPath: string) {
   return ManagedRuntime.make(
-    Layer.mergeAll(ProjectionCatalogQueryLive, ThreadDelegationRepositoryLive).pipe(
+    Layer.mergeAll(
+      ProjectionCatalogQueryLive,
+      ThreadDelegationRepositoryLive,
+      OrchestrationEventStoreLive,
+    ).pipe(
       Layer.provideMerge(makeSqlitePersistenceLive(dbPath)),
       Layer.provide(NodeServices.layer),
     ),

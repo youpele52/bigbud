@@ -2,6 +2,13 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
+  ServerGetRemoteAgentManualInstallInput,
+  ServerGetRemoteAgentManualInstallResult,
+  ServerRemoveRemoteAgentInput,
+  ServerRemoveRemoteAgentResult,
+} from "./server.remoteAgentInstall";
+import {
+  ServerInstallRemoteAgentError,
   ServerGetRemoteAgentUpdateStatusError,
   ServerGetRemoteAgentUpdateStatusInput,
   ServerRemoteAgentUpdateStatus,
@@ -67,3 +74,19 @@ export const WsServerListDisconnectedExecutionTargetsRpc = Rpc.make(
     error: ServerRemoteConnectionError,
   },
 );
+
+export const WsServerGetRemoteAgentManualInstallRpc = Rpc.make(
+  WS_METHODS.serverGetRemoteAgentManualInstall,
+  {
+    payload: ServerGetRemoteAgentManualInstallInput,
+    success: ServerGetRemoteAgentManualInstallResult,
+    error: ServerInstallRemoteAgentError,
+  },
+);
+
+/** Blocked and failed removals are results, so the app can list blockers without parsing errors. */
+export const WsServerRemoveRemoteAgentRpc = Rpc.make(WS_METHODS.serverRemoveRemoteAgent, {
+  payload: ServerRemoveRemoteAgentInput,
+  success: ServerRemoveRemoteAgentResult,
+  error: ServerInstallRemoteAgentError,
+});

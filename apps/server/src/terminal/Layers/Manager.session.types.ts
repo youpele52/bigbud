@@ -1,7 +1,9 @@
+import type { TerminalWorkSignals } from "./Manager.workSignals.ts";
 import { type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contracts";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
+import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
 
 import {
   type TerminalCwdError,
@@ -14,9 +16,17 @@ import {
   type TerminalSessionState,
   type TerminalStartInput,
   type RuntimePathIdentity,
+  type TerminalManagerOptions,
 } from "./Manager.types";
 
 export interface SessionApiContext {
+  resolveOwnedRuntime?: ((target: string) => OwnedPtyRuntime | undefined) | undefined;
+  getLocalShellDefault?: TerminalManagerOptions["getLocalShellDefault"];
+  listLocalShellProfiles?: TerminalManagerOptions["listLocalShellProfiles"];
+  directShellOwners?: TerminalManagerOptions["directShellOwners"];
+  resolveShellProfile?: TerminalManagerOptions["resolveShellProfile"];
+  preflightRemoteShellProfile?: TerminalManagerOptions["preflightRemoteShellProfile"];
+  listShellProfiles?: TerminalManagerOptions["listShellProfiles"];
   publishEvent: (event: TerminalEvent) => Effect.Effect<void>;
   modifyManagerState: <A>(
     f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],
@@ -68,6 +78,7 @@ export interface SessionApiContext {
   }) => Effect.Effect<void>;
   releaseWorktreeLease: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
   terminalEventListeners: Set<(event: TerminalEvent) => Effect.Effect<void>>;
+  workSignals?: TerminalWorkSignals | undefined;
 }
 
 export type { TerminalManagerShape };

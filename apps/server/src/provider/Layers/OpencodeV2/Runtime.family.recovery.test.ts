@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { withV2OwnedFamily } from "./Runtime.family.fixture.ts";
+import { settleV2BackgroundRepair, withV2OwnedFamily } from "./Runtime.family.fixture.ts";
 import { V2OwnedFamily } from "./Subagents.ownership.ts";
 import { stopV2OwnedDescendants } from "./Runtime.family.stop.ts";
 import { pendingV2FamilyInteractions } from "./Runtime.family.interactions.ts";
@@ -12,7 +12,8 @@ it("idle root polling repairs child cards/requests without inventing root turn l
       { id: "per_idle", sessionID: "ses_owned_idle", action: "read", resources: ["offline.txt"] },
     ]);
     const prompts = http.calls.filter((call) => call.pathname.endsWith("/prompt")).length;
-    owner.repairQueued = false;
+    // Launch leaves a repair in flight; let it finish rather than forcing a parallel second one.
+    await settleV2BackgroundRepair(owner);
     expect(shouldPollV2Runtime(owner)).toBe(true);
     await runtime.reconcile(owner);
     expect(

@@ -2,12 +2,21 @@ import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import type { RemoteAgentWorkspaceClient } from "../../remote-agent/remoteAgentWorkspaceClient.ts";
+import {
+  REMOTE_AGENT_CREATE_ONLY_WRITE_CAPABILITY,
+  RemoteAgentWorkspaceError,
+  type RemoteAgentWorkspaceClient,
+} from "../../remote-agent/remoteAgentWorkspaceClient.ts";
 import { RemoteAgentConnectionError } from "../../remote-agent/remoteAgentConnection.ts";
+import {
+  WORKSPACE_FILE_ALREADY_EXISTS,
+  WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
+} from "../../workspace/Services/WorkspaceFileSystem.ts";
 import { makeRemoteWorkspaceRuntime } from "./WorkspaceRuntime.remote.ts";
 
 function fakeClient(): RemoteAgentWorkspaceClient {
   return {
+    connection: { supportsCapability: () => false },
     openWorkspace: async () => ({
       requestId: "open",
       workspaceHandle: "workspace",
@@ -93,6 +102,7 @@ describe("remote workspace runtime adapter", () => {
       }),
     );
     expect(matches.matches[0]?.lineText).toBe("remote contents");
+    expect(matches.notice).toBe("agent-update-available");
   });
 
   it("does not accept local targets through the remote adapter", async () => {
@@ -175,5 +185,68 @@ describe("remote workspace runtime adapter", () => {
 
     expect(operationIds).toHaveLength(2);
     expect(operationIds[0]).not.toBe(operationIds[1]);
+  });
+
+  const createOnlyInput = {
+    executionTargetId: "ssh:example",
+    cwd: "/remote/project",
+    relativePath: "settings.json",
+    contents: "{}",
+    createOnly: true,
+  } as const;
+
+  function createOnlyClient(capabilities: ReadonlyArray<string>, errorCode = "") {
+    const client = fakeClient();
+    const requests: Array<Parameters<RemoteAgentWorkspaceClient["writeFile"]>[0]> = [];
+    Object.assign(client, {
+      connection: { supportsCapability: (name: string) => capabilities.includes(name) },
+    });
+    client.writeFile = async (input) => {
+      requests.push(input);
+      if (errorCode) throw new RemoteAgentWorkspaceError(errorCode, "exists", "terminal");
+      return fakeClient().writeFile(input);
+    };
+    return { client, requests };
+  }
+
+  it("refuses create-only writes for agents without exclusive create, before dispatch", async () => {
+    const { client, requests } = createOnlyClient(["workspace.write"]);
+    const runtime = makeRemoteWorkspaceRuntime({ resolve: async () => client });
+    const error = await Effect.runPromise(Effect.flip(runtime.files.writeFile(createOnlyInput)));
+
+    expect(error).toMatchObject({
+      writeDisposition: "not-dispatched",
+      detail: "Create-only writes need a newer remote agent; update it and retry.",
+    });
+    expect(requests).toHaveLength(0);
+  });
+
+  it("forwards create-only writes to capable agents and maps an existing file", async () => {
+    const capable = createOnlyClient([REMOTE_AGENT_CREATE_ONLY_WRITE_CAPABILITY]);
+    const runtime = makeRemoteWorkspaceRuntime({ resolve: async () => capable.client });
+    await Effect.runPromise(runtime.files.writeFile(createOnlyInput));
+    expect(capable.requests[0]).toMatchObject({ path: "settings.json", createOnly: true });
+
+    const existing = createOnlyClient(
+      [REMOTE_AGENT_CREATE_ONLY_WRITE_CAPABILITY],
+      "ALREADY_EXISTS",
+    );
+    const refused = makeRemoteWorkspaceRuntime({ resolve: async () => existing.client });
+    const error = await Effect.runPromise(Effect.flip(refused.files.writeFile(createOnlyInput)));
+    expect(error).toMatchObject({
+      operation: WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
+      detail: WORKSPACE_FILE_ALREADY_EXISTS,
+      writeDisposition: "terminal",
+    });
+  });
+
+  it("refuses create-only writes that also carry an expected hash", async () => {
+    const { client, requests } = createOnlyClient([REMOTE_AGENT_CREATE_ONLY_WRITE_CAPABILITY]);
+    const runtime = makeRemoteWorkspaceRuntime({ resolve: async () => client });
+    const error = await Effect.runPromise(
+      Effect.flip(runtime.files.writeFile({ ...createOnlyInput, expectedSha256: "a".repeat(64) })),
+    );
+    expect(error).toMatchObject({ writeDisposition: "not-dispatched" });
+    expect(requests).toHaveLength(0);
   });
 });

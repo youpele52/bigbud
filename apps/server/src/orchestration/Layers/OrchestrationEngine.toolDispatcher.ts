@@ -1,6 +1,5 @@
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
 import { publishHtmlRender } from "../../orchestration-tools/HtmlRenderTool.ts";
-import type { OrchestrationReadModel } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Effect, Option } from "effect";
 import type { FileSystem, Path } from "effect";
 
@@ -21,10 +20,13 @@ import {
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
 import { createThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.createThread.ts";
 import { listAvailableModelsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listAvailableModels.ts";
+import { setElevatorSummaryViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.summary.ts";
 import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.rename.ts";
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
+import { remoteAgentToolViaOrchestration } from "../../orchestration-tools/ThreadRemoteAgentTools.ts";
+import { peerToolViaOrchestration } from "../../orchestration-tools/ThreadPeerTools.ts";
 import {
   getSystemResources,
   configureSystemResourceRules,
@@ -35,6 +37,7 @@ import {
 } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import type { ProjectionKanbanRepositoryShape } from "../../persistence/Services/ProjectionKanban.ts";
 import type { ProjectionNoteRepositoryShape } from "../../persistence/Services/ProjectionNotes.ts";
+import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import type { ThreadDelegationRepositoryShape } from "../../persistence/Services/ThreadDelegations.ts";
 import type { ServerConfigShape } from "../../startup/config.ts";
@@ -46,8 +49,17 @@ import {
   moveThreadViaOrchestration,
   snoozeThreadViaOrchestration,
 } from "../../orchestration-tools/ThreadOrchestrationTools.organization.ts";
+import { ThreadCoordinationGrants } from "../../orchestration-tools/Services/ThreadCoordinationGrants.ts";
+import type { ThreadCoordinationDeps } from "../../orchestration-tools/ThreadCoordinationConfirmation.ts";
 
-export function installOrchestrationEngineToolDispatchers(input: {
+/**
+ * Installs the process-wide tool dispatcher. It yields the event store (proof reads) and the
+ * optional single shared `ThreadCoordinationGrants` itself, so the engine layer needs no edit;
+ * without grants every cross-project write is refused (fail closed).
+ */
+export const installOrchestrationEngineToolDispatchers = Effect.fn(
+  "installOrchestrationEngineToolDispatchers",
+)(function* (input: {
   readonly browser: BrowserManagerShape;
   readonly computerUse: ComputerUseShape;
   readonly computerUseActivity: Option.Option<ComputerUseActivityShape>;
@@ -57,43 +69,58 @@ export function installOrchestrationEngineToolDispatchers(input: {
   readonly notes: Option.Option<ProjectionNoteRepositoryShape>;
   readonly path: Path.Path;
   readonly projectionCatalogQuery: Option.Option<ProjectionCatalogQueryShape>;
-  readonly readModel: () => OrchestrationReadModel;
   readonly serverConfig: ServerConfigShape;
   readonly serverSettingsService: ServerSettingsShape;
   readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
   readonly threadWatchRepository: ProjectionThreadWatchRepositoryShape;
   readonly visibleBrowser: VisibleBrowserControlShape;
 }) {
+  const eventStore = yield* OrchestrationEventStore;
+  const grants = yield* Effect.serviceOption(ThreadCoordinationGrants);
+  const coordination: ThreadCoordinationDeps = {
+    grants: Option.getOrUndefined(grants),
+    eventStore,
+  };
   setThreadOrchestrationToolDispatcher({
     renderHtml: (request) => publishHtmlRender({ engine: input.engine, ...request }),
     getSystemResources,
     configureSystemResourceRules,
+    remoteAgent: remoteAgentToolViaOrchestration,
+    peer: peerToolViaOrchestration,
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)
       ? {
           workspace: makeAgentWorkspaceTool({
-            readModel: input.readModel,
+            engine: input.engine,
             notes: input.notes.value,
             kanban: input.kanban.value,
           }),
         }
       : {}),
+    setElevatorSummary: (request) =>
+      setElevatorSummaryViaOrchestration({ ...request, orchestrationEngine: input.engine }),
     rename: (request) =>
       renameThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     move: (request) =>
       moveThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     snooze: (request) =>
       snoozeThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     archive: (request) =>
       archiveThreadViaThreadTools({
@@ -137,6 +164,8 @@ export function installOrchestrationEngineToolDispatchers(input: {
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     computerUse: (request) =>
       Effect.gen(function* () {
@@ -180,7 +209,7 @@ export function installOrchestrationEngineToolDispatchers(input: {
     browser: (request) =>
       executeBrowserAction({
         browser: input.browser,
-        readModel: input.readModel,
+        engine: input.engine,
         threadId: request.threadId,
         action: request.action,
         visibleBrowser: input.visibleBrowser,
@@ -190,6 +219,7 @@ export function installOrchestrationEngineToolDispatchers(input: {
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         projectionThreadWatchRepository: input.threadWatchRepository,
+        coordination,
         callerThreadId: request.callerThreadId,
         sourceMessageId: request.sourceMessageId,
         invocationId: request.invocationId,
@@ -210,11 +240,11 @@ export function installOrchestrationEngineToolDispatchers(input: {
       }),
   });
   setVisibleBrowserControl(input.visibleBrowser);
-  return Effect.addFinalizer(() =>
+  return yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
       setThreadOrchestrationToolDispatcher(null);
       setVisibleBrowserControl(null);
       yield* input.computerUse.dispose;
     }),
   );
-}
+});

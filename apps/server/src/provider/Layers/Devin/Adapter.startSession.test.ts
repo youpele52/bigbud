@@ -17,6 +17,7 @@ const capturedAcpInputs: Array<{
     readonly args?: ReadonlyArray<string>;
   }>;
 }> = [];
+const createdRuntimes: Array<ReturnType<typeof createFakeAcpSessionRuntime>> = [];
 
 vi.mock("../../acp/DevinAcpSupport.ts", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../acp/DevinAcpSupport.ts")>();
@@ -24,7 +25,9 @@ vi.mock("../../acp/DevinAcpSupport.ts", async (importOriginal) => {
     ...original,
     makeDevinAcpRuntime: (input: Parameters<typeof original.makeDevinAcpRuntime>[0]) => {
       capturedAcpInputs.push(input);
-      return Effect.succeed(createFakeAcpSessionRuntime());
+      const runtime = createFakeAcpSessionRuntime();
+      createdRuntimes.push(runtime);
+      return Effect.succeed(runtime);
     },
   };
 });
@@ -61,6 +64,14 @@ describe("DevinAdapter startSession orchestration wiring", () => {
               ["bigbud_orchestration"],
             );
             assert.strictEqual(sessions.get(THREAD_ID)?.sessionEpoch, 0);
+            // Devin only offers ask_user_question to clients advertising form elicitation.
+            assert.deepStrictEqual(acpInput?.clientCapabilities, { elicitation: { form: {} } });
+            assert.deepStrictEqual(
+              vi
+                .mocked(createdRuntimes.at(-1)!.handleExtRequest)
+                .mock.calls.map(([method]) => method),
+              ["elicitation/create"],
+            );
           }),
         ),
         Effect.scoped,

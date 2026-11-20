@@ -3,7 +3,7 @@ import { expect, it, vi } from "vitest";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import * as storage from "./Orchestration.storage.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
-import { withV2OwnedFamily } from "./Runtime.family.fixture.ts";
+import { settleV2BackgroundRepair, withV2OwnedFamily } from "./Runtime.family.fixture.ts";
 import { V2OwnedFamily } from "./Subagents.ownership.ts";
 import { observeV2OwnedFamily } from "./Runtime.family.observe.ts";
 import { shouldPollV2Runtime } from "./Runtime.settlement.ts";
@@ -130,6 +130,12 @@ it("idle child with queued input stays owned; a proven newer wake restores termi
     ]);
     await observeV2OwnedFamily(runtime, owner, () => {});
     expect(owner.family.child(id)!.state).toBe("enrolled");
+    expect(owner.family.live).toBe(true);
+    // Always exercise the background-poller overlap: an in-flight repair suppresses duplicates,
+    // and once it settles the restored live child must keep the owner pollable.
+    runtime.scheduleRepair(owner, false);
+    expect(shouldPollV2Runtime(owner)).toBe(false);
+    await settleV2BackgroundRepair(owner);
     expect(shouldPollV2Runtime(owner)).toBe(true);
     const request = events.find(
       (event) => event.type === "request.opened" && event.requestId?.startsWith("bbv2-child:"),

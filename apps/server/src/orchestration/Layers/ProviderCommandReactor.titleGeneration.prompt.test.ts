@@ -1,3 +1,7 @@
+import {
+  useTitleMetadataFixture,
+  waitForMetadata as waitFor,
+} from "./ProviderCommandReactor.title.test.helpers.ts";
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,11 +10,11 @@ import {
   asMessageId,
   createHarness,
   registerProviderCommandReactorTestCleanup,
-  waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
 
 describe("ProviderCommandReactor title prompt", () => {
   registerProviderCommandReactorTestCleanup();
+  useTitleMetadataFixture();
   afterEach(() => resetThreadTitleLockForTests());
   it("generates a thread title even when the outgoing prompt is reformatted", async () => {
     const harness = await createHarness({

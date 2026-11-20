@@ -1,22 +1,11 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { releasePackageFiles, stampReleasePackageJson } from "./lib/release-package-stamp.ts";
 import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
-
-export const releasePackageFiles = [
-  "apps/server/package.json",
-  "apps/desktop/package.json",
-  "apps/web/package.json",
-  "packages/contracts/package.json",
-] as const;
 
 interface UpdateReleasePackageVersionsOptions {
   readonly rootDir?: string;
-}
-
-interface MutablePackageJson {
-  version?: string;
-  [key: string]: unknown;
 }
 
 export function updateReleasePackageVersions(
@@ -29,18 +18,10 @@ export function updateReleasePackageVersions(
 
   for (const relativePath of releasePackageFiles) {
     const filePath = resolve(rootDir, relativePath);
-    const packageJson = JSON.parse(readFileSync(filePath, "utf8")) as MutablePackageJson;
-    const isServer = relativePath === "apps/server/package.json";
-    if (
-      packageJson.version === release.version &&
-      (!isServer || packageJson.bigbudReleaseTag === release.tag)
-    ) {
-      continue;
-    }
+    const stamped = stampReleasePackageJson(relativePath, readFileSync(filePath, "utf8"), release);
+    if (stamped === null) continue;
 
-    packageJson.version = release.version;
-    if (isServer) packageJson.bigbudReleaseTag = release.tag;
-    writeFileSync(filePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    writeFileSync(filePath, stamped);
     changed = true;
   }
 

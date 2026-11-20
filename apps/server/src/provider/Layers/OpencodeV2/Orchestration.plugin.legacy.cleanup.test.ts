@@ -1,3 +1,4 @@
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { randomBytes, sign } from "node:crypto";
 import { expect, it } from "vitest";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
@@ -102,7 +103,9 @@ it("N accepts exact L cleanup only; legacy tombstones cannot revoke the same-non
         ),
       );
       expect(await host.call("inspect", app.envelope("inspect"))).toEqual(enrolled);
-      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(6);
+      expect(Object.keys((await host.request(owner.nativeSessionId)).tools).toSorted()).toEqual(
+        [...v2ThreadRegistration(app.artifact).tools].toSorted(),
+      );
       expect(app.state.invocations).toHaveLength(0);
       await host.call("detach", app.envelope("detach"));
       await expect(host.request(owner.nativeSessionId)).rejects.toThrow();

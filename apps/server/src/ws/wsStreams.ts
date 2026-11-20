@@ -20,6 +20,7 @@ import {
 } from "../orchestration/thinkingActivity";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { validateServerConfigEvent } from "./wsConfigDiagnostics";
+import { boundThinkingDeltaBacklog } from "./thinkingDeltaBacklog";
 
 export const ORDERED_ORCHESTRATION_PENDING_CAPACITY = 2_000;
 
@@ -242,25 +243,28 @@ export function makeThinkingActivityDeltaStream(input: {
       return Stream.empty;
     }
 
-    return input.providerService.streamEvents.pipe(
-      Stream.flatMap((event) =>
-        event.type === "content.delta" && isThinkingStreamKind(event.payload.streamKind)
-          ? Stream.succeed({
-              type: "delta" as const,
-              threadId: event.threadId,
-              activityId: thinkingActivityIdFromRuntimeEvent({
+    // Bounded per client (F-B1): a slow client drops preview deltas, never the shared PubSub.
+    return boundThinkingDeltaBacklog(
+      input.providerService.streamEvents.pipe(
+        Stream.flatMap((event) =>
+          event.type === "content.delta" && isThinkingStreamKind(event.payload.streamKind)
+            ? Stream.succeed({
+                type: "delta" as const,
                 threadId: event.threadId,
-                turnId: event.turnId,
-                itemId: event.itemId,
+                activityId: thinkingActivityIdFromRuntimeEvent({
+                  threadId: event.threadId,
+                  turnId: event.turnId,
+                  itemId: event.itemId,
+                  streamKind: event.payload.streamKind,
+                }),
+                turnId: event.turnId ?? null,
+                provider: event.provider,
                 streamKind: event.payload.streamKind,
-              }),
-              turnId: event.turnId ?? null,
-              provider: event.provider,
-              streamKind: event.payload.streamKind,
-              delta: event.payload.delta,
-              createdAt: event.createdAt,
-            } satisfies ThinkingActivityDeltaEvent)
-          : Stream.empty,
+                delta: event.payload.delta,
+                createdAt: event.createdAt,
+              } satisfies ThinkingActivityDeltaEvent)
+            : Stream.empty,
+        ),
       ),
     );
   });

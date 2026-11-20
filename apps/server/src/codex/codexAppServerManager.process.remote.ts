@@ -18,6 +18,7 @@ import {
 import { recordEarlySpawnError } from "./codexAppServerManager.process.spawnError.ts";
 import { bindCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
+import { codexQuestionToolConfigArgs } from "./codexQuestionTool.ts";
 
 const SSH_VERSION_CHECK_TIMEOUT_MS = 8_000;
 /** Overall deadline for the async check: readiness probes plus `codex --version` over SSH. */
@@ -135,10 +136,12 @@ export async function assertSupportedRemoteCodexCliVersionAsync(
 
 function spawnRemoteCodexAppServer(
   input: CodexAppServerStartSessionInput,
+  version: string | undefined,
 ): ChildProcessWithoutNullStreams {
   const invocation = buildRemoteCodexSshInvocation(input, [
     "app-server",
     ...(input.configArgs ?? []),
+    ...codexQuestionToolConfigArgs(version),
   ]);
   return recordEarlySpawnError(
     spawn(invocation.command, invocation.args, {
@@ -156,12 +159,12 @@ export async function startRemoteCodexAppServerProcessAsync(
 ): Promise<ChildProcessWithoutNullStreams> {
   const version = await assertSupportedRemoteCodexCliVersionAsync(input);
   signal?.throwIfAborted();
-  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input), version);
+  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input, version), version);
 }
 
 export function startRemoteCodexAppServerProcess(
   input: CodexAppServerStartSessionInput,
 ): ChildProcessWithoutNullStreams {
   const version = assertSupportedRemoteCodexCliVersion(input);
-  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input), version);
+  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input, version), version);
 }

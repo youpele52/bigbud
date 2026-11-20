@@ -4,7 +4,7 @@ import {
   type OrchestrationThread,
 } from "@bigbud/contracts";
 
-import { isStaleRunningSessionUpdate } from "~/stores/main/events.store.threads.runtime.logic";
+import { applyMobileSession, applyMobileSettlement } from "./mobileOrchestrationEvents.runtime";
 import {
   buildThreadMessageLatestTurn,
   compareActivities,
@@ -34,63 +34,10 @@ export function applyOrchestrationEventToThread(
       };
     }
 
-    case "thread.session-set": {
-      if (event.payload.threadId !== thread.id) {
-        return null;
-      }
-      const incomingSession = event.payload.session;
-      const incomingActiveTurnId = incomingSession.activeTurnId ?? null;
-      const hasNonStreamingAssistantMessageForTurn =
-        incomingActiveTurnId !== null &&
-        thread.messages.some(
-          (message) =>
-            message.turnId === incomingActiveTurnId &&
-            message.role === "assistant" &&
-            message.streaming === false,
-        );
-      const isStaleRunningSession = isStaleRunningSessionUpdate({
-        incomingStatus: incomingSession.status,
-        incomingActiveTurnId,
-        incomingReason: incomingSession.reason,
-        latestTurn: thread.latestTurn,
-        hasNonStreamingAssistantMessageForTurn,
-      });
-      const normalizedSession = isStaleRunningSession
-        ? { ...incomingSession, status: "ready" as const, activeTurnId: null, reason: null }
-        : incomingSession;
-      return {
-        ...thread,
-        session: normalizedSession,
-        latestTurn:
-          normalizedSession.status === "running" && incomingActiveTurnId !== null
-            ? {
-                turnId: incomingActiveTurnId,
-                state:
-                  thread.latestTurn?.turnId === incomingActiveTurnId &&
-                  thread.latestTurn.completedAt
-                    ? thread.latestTurn.state
-                    : "running",
-                requestedAt:
-                  thread.latestTurn?.turnId === incomingActiveTurnId
-                    ? thread.latestTurn.requestedAt
-                    : normalizedSession.updatedAt,
-                startedAt:
-                  thread.latestTurn?.turnId === incomingActiveTurnId
-                    ? (thread.latestTurn.startedAt ?? normalizedSession.updatedAt)
-                    : normalizedSession.updatedAt,
-                completedAt:
-                  thread.latestTurn?.turnId === incomingActiveTurnId
-                    ? (thread.latestTurn.completedAt ?? null)
-                    : null,
-                assistantMessageId:
-                  thread.latestTurn?.turnId === incomingActiveTurnId
-                    ? (thread.latestTurn.assistantMessageId ?? null)
-                    : null,
-              }
-            : thread.latestTurn,
-        updatedAt: event.occurredAt,
-      };
-    }
+    case "thread.session-set":
+      return applyMobileSession(thread, event);
+    case "thread.turn-settled":
+      return applyMobileSettlement(thread, event);
 
     case "thread.session-stop-requested": {
       if (event.payload.threadId !== thread.id || thread.session === null) {

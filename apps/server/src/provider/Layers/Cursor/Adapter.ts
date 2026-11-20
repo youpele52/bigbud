@@ -48,6 +48,7 @@ import { makeStartSessionEffect } from "./Adapter.startSession.ts";
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
+import { makeProviderAdapterEventPubSub } from "../../providerEventQueueBounds.ts";
 function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -67,7 +68,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
 
     const sessions = new Map<ThreadId, CursorSessionContext>();
     const threadLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
-    const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
+    const runtimeEventPubSub = yield* makeProviderAdapterEventPubSub<ProviderRuntimeEvent>();
 
     const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
     const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));

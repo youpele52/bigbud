@@ -5,8 +5,8 @@ import { useMemo } from "react";
 
 import { terminalSearchQueryOptions } from "~/lib/terminalSearchQuery";
 import { useTerminalStateStore } from "../../stores/terminal";
-import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
-import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
+import { CommandGroup, CommandItem } from "../ui/command";
+import { SearchPaletteSectionLabel, SearchPaletteSeeMore } from "./SearchPalette.section";
 import { highlightMatch } from "./SearchPalette.logic";
 import {
   toTerminalSearchResults,
@@ -47,6 +47,7 @@ export function useTerminalSearchResults(input: {
 }
 
 interface TerminalSearchResultGroupProps {
+  label?: string;
   query: string;
   results: TerminalSearchResult[];
   visibleResults: TerminalSearchResult[];
@@ -55,6 +56,7 @@ interface TerminalSearchResultGroupProps {
 }
 
 export function TerminalSearchResultGroup({
+  label = "Terminals",
   query,
   results,
   visibleResults,
@@ -65,9 +67,7 @@ export function TerminalSearchResultGroup({
 
   return (
     <CommandGroup className="mt-2">
-      <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
-        Terminals
-      </CommandGroupLabel>
+      <SearchPaletteSectionLabel>{label}</SearchPaletteSectionLabel>
       {visibleResults.map((result) => {
         const highlight = highlightMatch(result.lineText, query.trim());
         return (
@@ -104,16 +104,10 @@ export function TerminalSearchResultGroup({
         );
       })}
       {results.length > visibleResults.length ? (
-        <SidebarMenuSubItem className="w-full px-2 pt-1">
-          <SidebarMenuSubButton
-            render={<button type="button" />}
-            size="sm"
-            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-            onClick={onShowMore}
-          >
-            <span>{`See more (${results.length - visibleResults.length})`}</span>
-          </SidebarMenuSubButton>
-        </SidebarMenuSubItem>
+        <SearchPaletteSeeMore
+          remaining={results.length - visibleResults.length}
+          onClick={onShowMore}
+        />
       ) : null}
     </CommandGroup>
   );

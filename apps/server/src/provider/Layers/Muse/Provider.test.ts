@@ -125,6 +125,88 @@ describe("Muse provider snapshot", () => {
     expect(snapshot.supportedRuntimeModes).toEqual(["auto-accept-edits"]);
   });
 
+  it.each(["darwin", "win32", "linux"] as const)(
+    "reports an empty native catalog as unavailable on %s and recovers on refresh",
+    async (platform) => {
+      let empty = true;
+      let closed = 0;
+      let commands = 0;
+      const factory: MuseHostFactory = async (options) => {
+        const transport = await qualifiedFactory(options);
+        return {
+          ...transport,
+          command: async () => {
+            commands++;
+            throw new Error("Discovery must not mutate native sessions");
+          },
+          request: async (method, params) => {
+            if (method === "model/list") {
+              expect(params).toEqual({});
+              if (empty)
+                return {
+                  providerId: "meta",
+                  profileId: "tbh",
+                  source: "bundledCatalog",
+                  models: [],
+                };
+            }
+            return transport.request(method, params);
+          },
+          close: async () => {
+            closed++;
+          },
+        };
+      };
+      const check = () =>
+        Effect.runPromise(
+          checkMuseProviderStatus({ enabled: true, binaryPath: "muse" }, factory, platform),
+        );
+      const unavailable = await check();
+      expect(unavailable.status).toBe("warning");
+      expect(unavailable.installed).toBe(true);
+      expect(unavailable.version).toBe("1.4.14");
+      expect(unavailable.auth.type).toBe("accountLogin");
+      expect(unavailable.models).toEqual([]);
+      expect(unavailable.modelDiscovery?.status).toBe("unavailable");
+      expect(unavailable.message).toContain("empty model catalog");
+      expect(unavailable.message).toContain("native `muse` CLI");
+      expect(unavailable.supportsAttachments).toBe(false);
+      expect(unavailable.supportsLocalRuntimeRemoteWorkspace).toBe(false);
+      empty = false;
+      const ready = await check();
+      expect(ready.status).toBe("ready");
+      expect(ready.modelDiscovery?.status).toBe("live");
+      expect(ready.message).toBeUndefined();
+      expect(ready.models.map((model) => model.slug)).toEqual(["muse-spark-1.3"]);
+      expect(closed).toBe(2);
+      expect(commands).toBe(0);
+    },
+  );
+
+  it.each([
+    ["loggedOut", "not signed in"],
+    ["envKey", "API key"],
+  ])("preserves %s remediation when the catalog is also empty", async (state, message) => {
+    const factory: MuseHostFactory = async (options) => {
+      const transport = await qualifiedFactory(options);
+      return {
+        ...transport,
+        request: async (method, params) => {
+          if (method === "model/list") return { providerId: "meta", models: [] };
+          if (method === "account/read") return { state, credentialRequired: true };
+          return transport.request(method, params);
+        },
+      };
+    };
+    const snapshot = await Effect.runPromise(
+      checkMuseProviderStatus({ enabled: true, binaryPath: "muse" }, factory, "darwin"),
+    );
+    expect(snapshot.status).toBe("warning");
+    expect(snapshot.message).toContain(message);
+    expect(snapshot.modelDiscovery?.status).toBe("unavailable");
+    expect(snapshot.models).toEqual([]);
+  });
+
   it("does not report ready when the native lane is logged out", async () => {
     const loggedOutFactory: MuseHostFactory = async () => {
       const transport = await qualifiedFactory({ binaryPath: "muse", cwd: process.cwd() });

@@ -6,6 +6,11 @@ import { BrowserAction, ThreadId } from "@bigbud/contracts";
 import { ServerConfig } from "../startup/config.ts";
 import { handleHtmlRenderAction } from "./http.threadTools.htmlRender.ts";
 import {
+  handlePeerAction,
+  handleRemoteAgentAction,
+  handleSystemResourceAction,
+} from "./http.threadTools.systemAndRemote.ts";
+import {
   isThreadOrchestrationToolAuthorized,
   readThreadOrchestrationToolAuthByToken,
 } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
@@ -16,7 +21,7 @@ import {
   type CapabilityGuideSection,
 } from "../capabilities/CapabilityCatalog.operations.ts";
 import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog.dynamic.ts";
-import { ThreadToolRequest, ThreadToolRequestError } from "./http.threadTools.schema.ts";
+import { decodeThreadToolRequest, ThreadToolRequestError } from "./http.threadTools.schema.ts";
 import { handleCreateThreadAction } from "./http.threadTools.createThread.ts";
 import {
   handleGetThreadStatusAction,
@@ -26,6 +31,7 @@ import {
 } from "./http.threadTools.reads.ts";
 import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
+import { handleSetElevatorSummaryAction } from "./http.threadTools.summary.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
 import { handleOrganizationThreadAction } from "./http.threadTools.organization.ts";
 import { enterThreadToolInvocation } from "../orchestration-tools/threadToolInvocationFlights.ts";
@@ -59,9 +65,7 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       }
 
       const body = yield* request.json.pipe(
-        Effect.flatMap((value) =>
-          Schema.decodeEffect(ThreadToolRequest)(value as typeof ThreadToolRequest.Type),
-        ),
+        Effect.flatMap(decodeThreadToolRequest),
         Effect.mapError(
           () =>
             new ThreadToolRequestError({
@@ -108,33 +112,14 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       if (body.action === "render_html")
         return yield* handleHtmlRenderAction({ dispatcher, threadId, body });
 
-      if (body.action === "configure_system_resource_rules") {
-        if (!dispatcher.configureSystemResourceRules)
-          return yield* new ThreadToolRequestError({
-            status: 503,
-            message: "monitor settings unavailable",
-          });
-        const result = yield* dispatcher
-          .configureSystemResourceRules(body.resourceArguments)
-          .pipe(
-            Effect.mapError(
-              (error) => new ThreadToolRequestError({ status: 409, message: error.message }),
-            ),
-          );
-        return yield* HttpServerResponse.json({ ok: true, result });
-      }
-      if (body.action === "get_system_resources") {
-        const result = dispatcher.getSystemResources
-          ? yield* dispatcher
-              .getSystemResources(body.resourceArguments ?? {})
-              .pipe(
-                Effect.catch(() =>
-                  Effect.succeed({ available: false, reason: "desktop monitor unavailable" }),
-                ),
-              )
-          : { available: false, reason: "desktop monitor unavailable" };
-        return yield* HttpServerResponse.json({ ok: true, result });
-      }
+      if (
+        body.action === "configure_system_resource_rules" ||
+        body.action === "get_system_resources"
+      )
+        return yield* handleSystemResourceAction({ dispatcher, body });
+      if (body.action === "remote_agent")
+        return yield* handleRemoteAgentAction({ dispatcher, body });
+      if (body.action === "peer") return yield* handlePeerAction({ dispatcher, threadId, body });
 
       if (body.action === "remote_workspace_process") {
         const result = yield* runRemoteWorkspaceProcess({
@@ -293,6 +278,13 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
           );
         return yield* HttpServerResponse.json({ ok: true, result });
       }
+
+      if (body.action === "set_elevator_summary")
+        return yield* handleSetElevatorSummaryAction({
+          dispatcher,
+          callerThreadId: threadId,
+          body,
+        });
 
       if (body.action === "rename") {
         return yield* handleRenameThreadAction({ dispatcher, callerThreadId: threadId, body });

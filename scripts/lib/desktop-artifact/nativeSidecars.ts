@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { stagePackagedCommandLineLauncher } from "./commandLineLauncher.ts";
 
 import { stagePackagedDesktopSupervisor } from "./desktopSupervisor.ts";
 import { type BuildArch, type BuildPlatform } from "./shared.ts";
@@ -15,5 +16,6 @@ export const stageDesktopNativeSidecars = Effect.fn("stageDesktopNativeSidecars"
   }) {
     yield* stagePackagedWorkspaceAgent(input);
     yield* stagePackagedDesktopSupervisor(input);
+    yield* stagePackagedCommandLineLauncher(input);
   },
 );

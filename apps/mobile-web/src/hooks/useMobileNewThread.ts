@@ -1,3 +1,4 @@
+import { getMobileSessionAuthority } from "../lib/mobileSessionAuthority";
 import { BUILT_IN_CHATS_PROJECT_ID, type ModelSelection, type ProjectId } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
@@ -21,6 +22,7 @@ export function useMobileNewThread() {
           makeMobileComposerDraftIdentity({
             backendBaseUrl: session.backendBaseUrl,
             sessionId: session.sessionId,
+            authorityId: getMobileSessionAuthority(session),
             threadId: draft.threadId,
           }),
           draft,

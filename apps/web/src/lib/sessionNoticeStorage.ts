@@ -1,12 +1,15 @@
 import type { StateStorage } from "zustand/middleware";
 
+import { createBackendScopedStorage } from "./backendScopedStorage";
 import { createMemoryStorage } from "./storage";
 
-/** Storage failures must never prevent a presentation from being dismissed. */
+/** Storage failures must never prevent a presentation from being dismissed. Notices are keyed by
+ * a backend's server run, so durable storage is backend-scoped (legacy keys in the local window). */
 export function createSessionNoticeStorage(): StateStorage {
   const fallback = createMemoryStorage();
   try {
-    const storage = typeof window !== "undefined" ? window.localStorage : null;
+    const storage =
+      typeof window !== "undefined" ? createBackendScopedStorage(window.localStorage) : null;
     return {
       getItem: (key) => {
         try {

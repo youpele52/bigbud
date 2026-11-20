@@ -10,6 +10,7 @@ import {
   OrchestrationProjectionPipeline,
   type OrchestrationProjectionPipelineShape,
 } from "../orchestration/Services/ProjectionPipeline.ts";
+import { ProjectionProjectRepository } from "../persistence/Services/ProjectionProjects.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService.ts";
 import { Open } from "../utils/open.ts";
@@ -80,6 +81,8 @@ export function startupLayer(
             Effect.die("projection getFirstActiveThreadIdByProjectId"),
           getThreadCheckpointContext: () => Effect.die("projection getThreadCheckpointContext"),
         }),
+        // No projected Chats row: the bootstrap dispatches its create through the stub engine.
+        Layer.mock(ProjectionProjectRepository)({ getById: () => Effect.succeed(Option.none()) }),
         Layer.succeed(ProviderRegistry, {
           getProviders: Effect.succeed([]),
           refresh: () => Effect.succeed([]),

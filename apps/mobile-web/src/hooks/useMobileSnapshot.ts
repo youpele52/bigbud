@@ -1,3 +1,4 @@
+import { mobileSessionStateScope } from "../lib/mobileSessionAuthority";
 import type { OrchestrationReadModel } from "@bigbud/contracts";
 import { useQuery } from "@tanstack/react-query";
 
@@ -17,7 +18,10 @@ export function useMobileSnapshot(session: { sessionId: string } | null) {
 
   const snapshotQuery = useQuery<OrchestrationReadModel>({
     enabled: recoveryState.freshness === "legacy",
-    queryKey: ["mobile-snapshot", session?.sessionId ?? "anonymous"],
+    queryKey: [
+      "mobile-snapshot",
+      session ? mobileSessionStateScope(session, "query") : "anonymous",
+    ],
     queryFn: () => client!.getSnapshot(),
     retry: recovery === null ? 1 : false,
     retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 8_000),

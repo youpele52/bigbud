@@ -17,6 +17,8 @@ import {
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
 import { readSidebarThreadSortOrder } from "./-__root.bounded-bootstrap.sort";
+import { withBootstrapAuthority } from "./-__root.bounded-bootstrap.authority";
+import { projectReadGeneration } from "../lib/projectCatalog";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
 const STARTUP_LOCAL_PROJECT_CATALOG_LIMIT = 2;
@@ -44,11 +46,42 @@ export function resolveSelectedThreadIdFromPath(
   return ThreadId.makeUnsafe(decodeURIComponent(pathname.slice(1)));
 }
 
-export async function runBoundedBootstrap(input: {
+interface BootstrapInput {
   api: Api;
   selectedThreadId: ThreadId | null;
   disposed: () => boolean;
-}): Promise<number> {
+  timeoutMs?: number;
+}
+
+export function runBoundedBootstrap(input: BootstrapInput): Promise<number> {
+  return withBootstrapAuthority((signal) => {
+    if (input.disposed()) {
+      return Promise.reject(new Error("Thread loading was superseded. Retry loading."));
+    }
+    const state = useStore.getState();
+    // Only the active snapshot owner may retire pagination and targeted reads.
+    useStore.setState({
+      projectCatalogGenerationByScope: {
+        local: state.projectCatalogGenerationByScope.local + 1,
+        remote: state.projectCatalogGenerationByScope.remote + 1,
+      },
+      // Retired page requests can no longer clear flags in their old generation.
+      projectCatalogLoadingByScope: { local: false, remote: false },
+    });
+    const generation = projectReadGeneration();
+    return runBoundedBootstrapRequest({
+      ...input,
+      signal,
+      disposed: () => signal.aborted || input.disposed() || generation !== projectReadGeneration(),
+    });
+  }, input.timeoutMs ?? 15_000);
+}
+
+async function runBoundedBootstrapRequest(
+  input: BootstrapInput & {
+    signal: AbortSignal;
+  },
+): Promise<number> {
   const sequences: number[] = [];
   let selectedDetail: GetSelectedThreadDetailResult | null = null;
   let selectedDetailError: unknown = null;
@@ -56,6 +89,22 @@ export async function runBoundedBootstrap(input: {
     input.selectedThreadId === null
       ? null
       : threadHydrationEventBuffer.begin(input.selectedThreadId);
+  const failHydration = (error: string) => {
+    if (input.selectedThreadId === null || hydrationToken === null) return;
+    const events = threadHydrationEventBuffer.fail(input.selectedThreadId, hydrationToken);
+    // Losing snapshot authority must not discard live events or strand loading.
+    // Only the current token can release events; a same-thread successor inherits them.
+    if (events !== null) {
+      useStore.getState().setThreadHydration(input.selectedThreadId, {
+        status: "failed",
+        error,
+        retry: { kind: "initial" },
+      });
+      applyReleasedThreadHydrationEvents(events);
+    }
+  };
+  const cancelHydration = () => failHydration("Thread loading timed out. Retry loading.");
+  input.signal.addEventListener("abort", cancelHydration, { once: true });
   const sidebarCatalogPromise = input.api.orchestration.getSidebarThreadCatalog();
   const selectedDetailPromise =
     input.selectedThreadId === null
@@ -131,7 +180,8 @@ export async function runBoundedBootstrap(input: {
       sequences.push(selectedProjectPage.projectionSequence);
     }
 
-    if (!input.disposed()) {
+    if (input.disposed()) throw new Error("Thread loading was superseded. Retry loading.");
+    {
       const store = useStore.getState();
       // A bounded bootstrap is also the baseline reset: other hydrated threads may be stale now.
       store.unloadHydratedThreads(input.selectedThreadId);
@@ -168,18 +218,10 @@ export async function runBoundedBootstrap(input: {
       }
     }
   } catch (error) {
-    if (input.selectedThreadId !== null && hydrationToken !== null) {
-      const events = threadHydrationEventBuffer.fail(input.selectedThreadId, hydrationToken);
-      if (!input.disposed() && events !== null) {
-        useStore.getState().setThreadHydration(input.selectedThreadId, {
-          status: "failed",
-          error: error instanceof Error ? error.message : "Unable to load thread catalog.",
-          retry: { kind: "initial" },
-        });
-        applyReleasedThreadHydrationEvents(events);
-      }
-    }
+    failHydration(error instanceof Error ? error.message : "Unable to load thread catalog.");
     throw error;
+  } finally {
+    input.signal.removeEventListener("abort", cancelHydration);
   }
 
   return Math.min(...sequences);

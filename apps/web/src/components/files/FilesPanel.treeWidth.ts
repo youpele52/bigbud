@@ -5,7 +5,11 @@ import {
   FILES_TREE_MIN_WIDTH,
   FILES_TREE_WIDTH_STORAGE_KEY,
 } from "./FilesPanel.shared";
-import { clampFilesTreeWidth, getFilesTreeWidthBounds } from "./FilesPanel.treeWidth.logic";
+import {
+  canDockFilesTree,
+  clampFilesTreeWidth,
+  getFilesTreeWidthBounds,
+} from "./FilesPanel.treeWidth.logic";
 
 export function useFilesTreeWidth(containerRef: RefObject<HTMLDivElement | null>) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -39,6 +43,7 @@ export function useFilesTreeWidth(containerRef: RefObject<HTMLDivElement | null>
   return {
     renderedTreeWidth: clampFilesTreeWidth(fileTreeWidth, containerWidth),
     treeWidthBounds: getFilesTreeWidthBounds(containerWidth),
+    canDock: canDockFilesTree(containerWidth),
     resizeTreeWidth,
   };
 }

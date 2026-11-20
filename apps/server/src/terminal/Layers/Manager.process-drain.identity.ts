@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 
-import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { terminalPidIsOnBackendHost } from "./OwnedPtyRuntime.identity.ts";
 import { toSessionKey } from "./Manager.shell";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
@@ -27,7 +27,9 @@ export function pollAgentIdentityWith(
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     const localSessions = runningSessions
-      .filter((session) => isLocalExecutionTarget(session.executionTargetId))
+      .filter((session) =>
+        terminalPidIsOnBackendHost(ctx.ptyAdapter, session.executionTargetId, session.process),
+      )
       .map((session) => ({
         threadId: session.threadId,
         terminalId: session.terminalId,

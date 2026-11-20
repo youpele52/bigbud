@@ -29,13 +29,13 @@ export async function initializeOwnershipFromComposer(
 ): Promise<void> {
   const scope = input.scope ?? "main";
   const state = useComposerDraftStore.getState();
-  const ledger = await initializeOwnershipLedger({
+  await initializeOwnershipLedger({
     scope,
     draftsByThreadId: state.draftThreadsByThreadId,
     projectDraftThreadIdByProjectId: state.projectDraftThreadIdByProjectId,
   });
-  applyOwnershipLedgerToComposer(ledger, scope);
-  flushComposerDraftPersistence();
+  // Initialization may have waited behind a newer registration. Publish the latest revision.
+  reconcileComposerFromOwnershipLedger(scope);
 }
 
 export function reconcileComposerFromOwnershipLedger(scope: OwnershipScope = "main"): void {

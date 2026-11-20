@@ -4,6 +4,7 @@ import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { ToastProvider, toastManager } from "./toast";
+import { TOAST_DURATION_MS } from "./toast.policy";
 
 const route = vi.hoisted(() => ({ current: "active" as string | null }));
 vi.mock("@tanstack/react-router", () => ({ useParams: () => route.current }));
@@ -96,6 +97,8 @@ it("does not capture F6 or pause hidden-thread timeout budgets when no visible c
     const closed = vi.fn();
     toastManager.add({
       title: "Hidden timer",
+      // The shared policy raises this to the shortest (success) duration.
+      type: "success",
       timeout: 500,
       onClose: closed,
       data: { threadId: otherThread },
@@ -103,7 +106,9 @@ it("does not capture F6 or pause hidden-thread timeout budgets when no visible c
     await screen.getByRole("button", { name: "Outside" }).click();
     await userEvent.keyboard("{F6}");
     await expect.element(screen.getByRole("button", { name: "Outside" })).toHaveFocus();
-    await expect.poll(() => closed.mock.calls.length).toBe(1);
+    await expect
+      .poll(() => closed.mock.calls.length, { timeout: TOAST_DURATION_MS.success + 3_000 })
+      .toBe(1);
   } finally {
     toastManager.close();
     await screen.unmount();

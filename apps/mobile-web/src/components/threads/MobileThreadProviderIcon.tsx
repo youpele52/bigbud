@@ -1,3 +1,4 @@
+import { useMobileSessionState } from "../../context/MobileSessionContext";
 import { CircleHelpIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { ProviderKind, type OrchestrationThread } from "@bigbud/contracts";
@@ -10,11 +11,12 @@ import { getThreadLastVisitedAt } from "../../lib/mobileThreadVisit";
 import { cn } from "../../lib/cn";
 
 export function MobileThreadProviderIcon({ thread }: { thread: OrchestrationThread }) {
+  const { session } = useMobileSessionState();
   const Icon = Schema.is(ProviderKind)(thread.modelSelection.provider)
     ? PROVIDER_ICON_BY_PROVIDER[thread.modelSelection.provider]
     : CircleHelpIcon;
   const isThreadRunning = thread.session?.status === "running";
-  const lastVisitedAt = getThreadLastVisitedAt(thread.id);
+  const lastVisitedAt = getThreadLastVisitedAt(thread.id, session);
 
   return (
     <Icon

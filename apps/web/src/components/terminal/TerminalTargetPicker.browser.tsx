@@ -4,7 +4,11 @@ import { page } from "vitest/browser";
 import { render, renderHook } from "vitest-browser-react";
 import { ThreadTerminalDrawerToolbar } from "./ThreadTerminalDrawerToolbar";
 import { useTerminalStateStore } from "../../stores/terminal";
-import { recordTerminalLaunch, forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import {
+  bindTerminalLaunch,
+  recordTerminalLaunch,
+  forgetTerminalLaunch,
+} from "../../lib/terminalLaunchBinding";
 import { useThreadTerminalDrawer } from "./useThreadTerminalDrawer";
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +46,11 @@ const props = {
   onCloseTerminal: () => undefined,
 };
 beforeEach(() => {
+  bindTerminalLaunch(threadId, "default", {
+    cwd: "C:\\project",
+    executionTargetId: "local",
+    runtimeEnv: { T3CODE_PROJECT_ROOT: "C:\\project" },
+  });
   mocks.workspace = "local";
   vi.clearAllMocks();
   mocks.distributions.mockResolvedValue({
@@ -53,6 +62,7 @@ beforeEach(() => {
 afterEach(() => {
   useTerminalStateStore.getState().removeTerminalState(threadId);
   forgetTerminalLaunch(threadId, "active");
+  forgetTerminalLaunch(threadId, "default");
 });
 
 it.each(["drawer", "panel"] as const)(

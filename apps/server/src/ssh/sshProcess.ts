@@ -3,7 +3,7 @@ import {
   type ProcessRunOptions,
   type ProcessRunResult,
 } from "../utils/processRunner.ts";
-import { buildSshCommandInvocation } from "./sshCommand.ts";
+import { buildSshCommandInvocation, type BuildSshCommandInput } from "./sshCommand.ts";
 import { assertSshExecutionTargetReadyAsync } from "./sshVerification.ts";
 import { inspectSshHostTrust, inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
 
@@ -14,12 +14,14 @@ export interface RunSshCommandInput {
   readonly command: string;
   readonly args?: ReadonlyArray<string>;
   readonly allocateTty?: boolean;
+  readonly shellMode?: NonNullable<BuildSshCommandInput["shellMode"]>;
   readonly stdin?: string;
   readonly signal?: AbortSignal | undefined;
   readonly allowNonZeroExit?: boolean;
   readonly timeoutMs?: number;
   readonly maxBufferBytes?: number;
   readonly outputMode?: ProcessRunOptions["outputMode"];
+  readonly stderrTailBytes?: ProcessRunOptions["stderrTailBytes"];
   readonly onStdoutChunk?: ProcessRunOptions["onStdoutChunk"];
 }
 
@@ -35,6 +37,7 @@ export async function runSshCommand(input: RunSshCommandInput): Promise<ProcessR
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
     ...(input.maxBufferBytes !== undefined ? { maxBufferBytes: input.maxBufferBytes } : {}),
     ...(input.outputMode !== undefined ? { outputMode: input.outputMode } : {}),
+    ...(input.stderrTailBytes !== undefined ? { stderrTailBytes: input.stderrTailBytes } : {}),
     ...(input.onStdoutChunk ? { onStdoutChunk: input.onStdoutChunk } : {}),
   }).catch((error: unknown) =>
     inspectSshHostTrustOnFailure(input.executionTargetId ?? "local", error),

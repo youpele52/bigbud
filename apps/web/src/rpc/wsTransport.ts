@@ -1,13 +1,12 @@
 import { Duration, Effect, Option, Stream } from "effect";
 
-import { clearAllTrackedRpcRequests } from "./requestLatencyState";
+import { localWsTransportScope, type WsTransportScope } from "./wsTransport.scope";
 import {
   cappedExponentialRetryDelay,
   resolveSubscriptionRetryDelayMs,
   type SubscriptionRetryDelay,
 } from "./wsTransport.retry";
 import { runWsStreamOnSession } from "./wsTransport.stream";
-import { recordWsProtocolRecovery, recordWsReconnectScheduled } from "./wsConnectionState";
 import {
   closeWsTransportSession,
   createWsTransportSession,
@@ -75,6 +74,7 @@ export class WsTransport {
     url?: string,
     lifecycleHandlers?: WsProtocolLifecycleHandlers,
     controls: WsConnectionControls = createWsConnectionControls(),
+    private readonly scope: WsTransportScope = localWsTransportScope,
   ) {
     this.lifecycleHandlers = lifecycleHandlers;
     this.url = url;
@@ -107,9 +107,11 @@ export class WsTransport {
     });
   }
 
+  /** A finite stream; aborting `signal` interrupts it, which interrupts the server fiber too. */
   async requestStream<TValue>(
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
     listener: (value: TValue) => void | Promise<void>,
+    signal?: AbortSignal,
   ): Promise<void> {
     if (this.disposed) {
       throw new Error("Transport disposed");
@@ -125,8 +127,14 @@ export class WsTransport {
         session.clientPromise,
         connect,
         listener,
-        () => !this.disposed && this.activeSessionId !== 0 && session === this.session,
+        () =>
+          !signal?.aborted &&
+          !this.disposed &&
+          this.activeSessionId !== 0 &&
+          session === this.session,
+        this.scope.markWsInboundActivity,
       ),
+      signal ? { signal } : undefined,
     );
   }
 
@@ -177,6 +185,7 @@ export class WsTransport {
             },
             markWsSubscriptionListenerFailure,
             options?.initialApplication,
+            this.scope.markWsInboundActivity,
           );
           cancelCurrentStream = runningStream.cancel;
           try {
@@ -274,7 +283,7 @@ export class WsTransport {
         throw new Error("Transport disposed");
       }
 
-      clearAllTrackedRpcRequests();
+      this.scope.clearAllTrackedRpcRequests();
       const previousSession = this.session;
       this.activeSessionId = 0;
       await this.closeSession(previousSession);
@@ -307,7 +316,11 @@ export class WsTransport {
     this.disposed = true;
     this.disposalController.abort();
     for (const controller of this.subscriptionControllers) controller.abort();
-    await this.closeSession(this.session);
+    try {
+      await this.closeSession(this.session);
+    } finally {
+      this.scope.dispose();
+    }
   }
 
   private closeSession(session: TransportSession) {
@@ -349,6 +362,7 @@ export class WsTransport {
         },
       },
       this.controls,
+      this.scope,
     );
   }
 
@@ -366,8 +380,8 @@ export class WsTransport {
         failuresInWindow,
       });
     }
-    recordWsProtocolRecovery();
-    recordWsReconnectScheduled(delayMs);
+    this.scope.recordProtocolRecovery();
+    this.scope.recordReconnectScheduled(delayMs);
     const previousSession = this.session;
     const operation = (async () => {
       await this.closeSession(previousSession).catch(() => undefined);

@@ -1,6 +1,6 @@
 import { assert, it as effectIt, vi } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "vitest";
+import { expect } from "vitest";
 import { Effect, Fiber, Layer, Stream } from "effect";
 
 import { ThreadId } from "@bigbud/contracts";
@@ -11,39 +11,8 @@ import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 import { FakeClaudeQuery } from "../Claude/Adapter.test.helpers.query.ts";
 import type { ClaudeAdapterLiveOptions } from "../Claude/Adapter.ts";
-import {
-  makeCliProxyAdapterLive,
-  toClaudeSendTurnInput,
-  toClaudeSessionStartInput,
-} from "./Adapter.ts";
-
-describe("CLIProxy Claude input translation", () => {
-  it("translates both provider identities when starting a session", () => {
-    expect(
-      toClaudeSessionStartInput({
-        threadId: "thread-1",
-        provider: "cliProxy",
-        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
-        runtimeMode: "full-access",
-      } as never),
-    ).toMatchObject({
-      provider: "claudeAgent",
-      modelSelection: { provider: "claudeAgent", model: "gpt-5-codex" },
-    });
-  });
-
-  it("translates CLIProxy model selections when sending a turn", () => {
-    expect(
-      toClaudeSendTurnInput({
-        threadId: "thread-1",
-        input: "Hello",
-        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
-      } as never),
-    ).toMatchObject({
-      modelSelection: { provider: "claudeAgent", model: "gpt-5-codex" },
-    });
-  });
-});
+import { makeCliProxyAdapterLive } from "./Adapter.ts";
+import { REMOTE_AGENT_CAPABILITY_TRACKS } from "../../../capabilities/BigbudCapabilityTracks.remoteAgent.ts";
 
 const resolveRuntimeConfig = vi.fn(
   (input: {
@@ -136,6 +105,31 @@ unavailableRemoteLayer("CliProxyAdapterLive remote readiness", (it) => {
 });
 
 adapterLayer("CliProxyAdapterLive", (it) => {
+  it.effect("exposes the advertised remote-agent tools through the Claude bridge", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CliProxyAdapter;
+      const session = yield* adapter.startSession({
+        threadId: "thread-cli-proxy-remote-agent",
+        provider: "cliProxy",
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+      } as never);
+      const options = createQuery.mock.calls.at(-1)?.[0].options;
+      expect(options?.mcpServers).toHaveProperty("bigbud_orchestration");
+      expect(options?.allowedTools).toEqual(
+        expect.arrayContaining([
+          "mcp__bigbud_orchestration__remote_agent_status",
+          "mcp__bigbud_orchestration__remote_agent_install",
+        ]),
+      );
+      for (const track of REMOTE_AGENT_CAPABILITY_TRACKS) {
+        expect(track.availability.join(" ")).toContain("CLI Proxy");
+        expect(track.availability.join(" ")).not.toContain("not CLI Proxy");
+      }
+      yield* adapter.stopSession(session.threadId);
+    }),
+  );
+
   it.effect("exposes the complete remote workspace toolset through Claude", () =>
     Effect.gen(function* () {
       const adapter = yield* CliProxyAdapter;

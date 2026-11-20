@@ -58,9 +58,9 @@ assertContains(
 
 for (const appName of [
   "bigbud.app",
-  "bigbud Beta.app",
-  "bigbud Preview.app",
-  "bigbud Nightly.app",
+  "bigbud beta.app",
+  "bigbud preview.app",
+  "bigbud nightly.app",
 ]) {
   assertContains(sh, appName, `install.sh must allow the ${appName} bundle identity.`);
 }

@@ -132,6 +132,10 @@ fn read_until(
     stream: &mut UnixStream,
     matches: impl Fn(&v1::frame::Payload) -> bool,
 ) -> v1::frame::Payload {
+    // A missing frame must fail the test, not hang CI while the supervisor idles.
+    stream
+        .set_read_timeout(Some(Duration::from_secs(60)))
+        .unwrap();
     loop {
         let payload = read_frame(stream, DEFAULT_MAX_FRAME_BYTES)
             .unwrap()
@@ -260,6 +264,7 @@ fn blocks_takeover_while_a_real_supervisor_owns_an_active_pty() {
             cols: 80,
             rows: 24,
             environment: Vec::new(),
+            profile_launch: false,
         }),
     );
     let _ = read_until(

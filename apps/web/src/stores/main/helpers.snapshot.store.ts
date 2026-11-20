@@ -5,19 +5,33 @@ import { buildSidebarThreadsById, buildThreadIdsByProjectId } from "./helpers.st
 import { deriveProjectActiveThreadCounts } from "./helpers.projectThreadCount.store";
 import type { AppState } from "./main.store";
 import { mapProject, mapThread } from "./mappers.store";
+import { resetProjectCatalogState } from "./helpers.projectEpoch.store";
+import { preserveTerminalWork } from "./helpers.terminalWork.store";
 
 export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
   const mappedProjects = readModel.projects
     .filter((project) => project.deletedAt === null)
     .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
+  const threads = readModel.threads
+    .filter((thread) => thread.deletedAt === null)
+    .map((source) => {
+      const thread = mapThread(source);
+      thread.notificationObservation = {
+        messages: [],
+        baselineSequence: readModel.snapshotSequence,
+      };
+      return thread;
+    });
   const visibleThreads = threads.filter((thread) => thread.purpose !== "side-chat");
   const projects = deriveProjectActiveThreadCounts(mappedProjects, threads);
   return {
-    ...state,
+    ...resetProjectCatalogState(state),
     projects,
     threads,
-    sidebarThreadsById: buildSidebarThreadsById(visibleThreads),
+    sidebarThreadsById: preserveTerminalWork(
+      buildSidebarThreadsById(visibleThreads),
+      state.sidebarThreadsById,
+    ),
     threadIdsByProjectId: buildThreadIdsByProjectId(visibleThreads),
     sidebarRecentThreadIds: visibleThreads
       .filter((thread) => isBuiltInChatsProject(thread.projectId))

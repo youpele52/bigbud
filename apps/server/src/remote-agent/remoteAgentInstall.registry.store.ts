@@ -7,6 +7,11 @@ import {
   buildRemoteAgentRegistryCas,
   buildRemoteAgentRegistryRead,
 } from "./remoteAgentInstall.registry.shell.ts";
+import { assertMobileRegistryTransition } from "./remoteAgentInstall.mobile.invariants.ts";
+import {
+  assertRemoteAgentRemovalFenceTransition,
+  withoutExpiredRemoteAgentRemovalFence,
+} from "./remoteAgentInstall.registry.removalFence.ts";
 
 export interface RemoteAgentRegistryCommand {
   readonly run: (command: string) => Promise<string>;
@@ -15,23 +20,44 @@ export interface RemoteAgentRegistryCommand {
 /** Cross-controller CAS; lost acknowledgements reconcile content before reporting a failed write. */
 export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentRegistryCommand) {
   const read = async () => {
-    const output = (await command.run(buildRemoteAgentRegistryRead(root))).trim();
-    if (output === "missing") return { text: null, state: emptyRemoteAgentRegistry() };
+    let output = (await command.run(buildRemoteAgentRegistryRead(root))).trim();
+    let hostNow: number | undefined;
+    const clock = /^clock=(\d{1,12})\n/.exec(output);
+    if (clock) {
+      hostNow = Number(clock[1]) * 1000;
+      output = output.slice(clock[0].length).trim();
+    }
+    if (output === "missing") return { text: null, state: emptyRemoteAgentRegistry(), hostNow };
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(output)) throw new Error("Invalid registry response.");
     const text = Buffer.from(output, "base64").toString("utf8");
-    return { text, state: parseRemoteAgentRegistry(text) };
+    return { text, state: parseRemoteAgentRegistry(text), hostNow };
   };
   return {
     read: async () => (await read()).state,
     update: async (transition: (state: RemoteAgentRegistry) => RemoteAgentRegistry) => {
       for (let attempt = 0; attempt < 8; attempt++) {
         const before = await read();
-        const next = transition(before.state);
-        if (next === before.state) return next;
-        if (next.revision !== before.state.revision + 1)
-          throw new Error("Invalid registry transition revision.");
+        const beforeCanonical = JSON.stringify(before.state);
+        const beforeRevision = before.state.revision;
+        // Hosts without a clock reply (older shells, fixtures) fall back to this controller.
+        const now = before.hostNow ?? Date.now();
+        const transitioned = transition(before.state);
+        // Any write drops an expired fence, so a crashed removal never strands older apps.
+        const next =
+          transitioned === before.state
+            ? transitioned
+            : withoutExpiredRemoteAgentRemovalFence(transitioned, now);
         const text = JSON.stringify(next);
-        parseRemoteAgentRegistry(text);
+        const canonical = parseRemoteAgentRegistry(text);
+        assertMobileRegistryTransition(beforeCanonical, canonical);
+        // Every controller's stage, launch, admission, slot, restart and update goes through here.
+        assertRemoteAgentRemovalFenceTransition(before.state, canonical, now);
+        if (next === before.state) {
+          if (text !== beforeCanonical) throw new Error("In-place registry transition mutation.");
+          return canonical;
+        }
+        if (canonical.revision !== beforeRevision + 1)
+          throw new Error("Invalid registry transition revision.");
         let result: string;
         try {
           result = (
@@ -45,7 +71,7 @@ export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentR
           if (observed.text === text) return observed.state;
           throw cause;
         }
-        if (result === "committed") return next;
+        if (result === "committed") return canonical;
         if (result !== "conflict")
           throw new Error("Unknown registry publication result; reconcile intent before retry.");
       }

@@ -32,7 +32,10 @@ vi.mock("~/rpc/nativeApi", () => ({
       getSelectedThreadDetail,
     },
   }),
-  readNativeApi: () => ({ orchestration: { getSelectedThreadDetail } }),
+  readNativeApi: () => ({
+    orchestration: { getSelectedThreadDetail },
+    search: { query: async () => undefined },
+  }),
 }));
 
 import { useChatViewContentHandlers } from "../chat/view/chat-view/ChatViewContent.handlers";
@@ -234,6 +237,22 @@ describe("saved-message palette search", () => {
     expect(
       page.getByText("Shorten your query to 160 characters to search saved messages.").query(),
     ).toBeNull();
+  });
+
+  it("searches the current thread from two characters and shows it first", async () => {
+    searchMessages.mockResolvedValueOnce({
+      ...pageResult([]),
+      currentThreadHits: [hit(1)],
+    });
+    await renderPalette({ focusOldMessage: true, query: "ne" });
+
+    await expect.element(page.getByText("In this thread", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("needle result 1")).toBeVisible();
+    expect(searchMessages).toHaveBeenCalledWith({
+      query: "ne",
+      limit: 30,
+      currentThreadId: THREAD_ID,
+    });
   });
 
   it("loads an old selected hit by anchor before focusing it", async () => {

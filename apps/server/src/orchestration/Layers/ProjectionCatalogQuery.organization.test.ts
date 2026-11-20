@@ -6,6 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ProjectionCatalogQuery } from "../Services/ProjectionCatalogQuery.ts";
 import { ProjectionCatalogQueryLive } from "./ProjectionCatalogQuery.ts";
+import { THREAD_RECENCY_SORT_KEY_SQL } from "./ProjectionCatalogQuery.threadPages.ts";
 
 const layer = it.layer(
   ProjectionCatalogQueryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -135,13 +136,11 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
         WHERE t.organization_state = 'later'
           AND t.deleted_at IS NULL AND t.archived_at IS NULL AND t.deleting_at IS NULL
           AND t.purpose = 'standard'
-        ORDER BY COALESCE(t.latest_user_message_at, t.created_at) DESC, t.thread_id DESC
+        ORDER BY ${sql.unsafe(THREAD_RECENCY_SORT_KEY_SQL)} DESC, t.thread_id DESC
         LIMIT 21
       `;
       assert.ok(
-        plan.some((row) =>
-          row.detail.includes("idx_projection_threads_organization_activity_page"),
-        ),
+        plan.some((row) => row.detail.includes("idx_projection_threads_organization_recency_page")),
         JSON.stringify(plan),
       );
       assert.ok(!plan.some((row) => row.detail.includes("TEMP B-TREE")), JSON.stringify(plan));
@@ -153,7 +152,7 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
       `;
       assert.ok(
         countPlan.some((row) =>
-          /idx_projection_threads_(active_organization_state|organization_activity_page)/.test(
+          /idx_projection_threads_(active_organization_state|organization_recency_page)/.test(
             row.detail,
           ),
         ),

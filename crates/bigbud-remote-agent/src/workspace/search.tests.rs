@@ -81,23 +81,26 @@ fn candidate(path: &str, is_directory: bool) -> DirectoryEntry {
 
 #[test]
 fn scoring_matches_existing_exact_prefix_substring_and_fuzzy_priorities() {
+    // Substring classes score `2 * class`, plus one when only a case-insensitive match holds.
     for (path, query, expected) in [
-        ("src/MAIN", "main", 0),
-        ("src/main", "src/main", 1),
-        ("src/main.rs", "main", 2),
-        ("src/main.rs", "src/ma", 3),
+        ("src/MAIN", "MAIN", 0),
+        ("src/MAIN", "main", 1),
+        ("src/main", "Main", 1),
+        ("src/main", "src/main", 2),
+        ("src/main.rs", "main", 4),
+        ("src/main.rs", "src/ma", 6),
         ("src/main.rs", "main.rs/", usize::MAX),
         ("src/main.rs", "main.rs", 0),
-        ("lib/main/file.rs", "main/", 4),
-        ("src/domain.rs", "main", 5),
-        ("lib/domain/file.rs", "main/", 6),
+        ("lib/main/file.rs", "main/", 8),
+        ("src/domain.rs", "main", 10),
+        ("lib/domain/file.rs", "main/", 12),
         ("abxc", "abc", 105),
         ("a/b/c", "abc", 210),
         ("😀abxc", "abc", 111),
     ] {
         let expected = (expected != usize::MAX).then_some(expected);
         assert_eq!(
-            rank::score_entry(&candidate(path, false), query),
+            rank::score_entry(&candidate(path, false), &rank::normalize_query(query)),
             expected,
             "{path}: {query}"
         );
@@ -269,11 +272,10 @@ fn filename_search_skips_links_without_following_them_but_rejects_explicit_link_
         workspace.search_entries_bounded("", "no-match", 1, 3),
         Err(WorkspaceError::SearchLimitExceeded)
     ));
-    // Filename policy must not silently change content search's strict policy.
-    assert!(matches!(
-        workspace.search_content("", "needle", 10),
-        Err(WorkspaceError::SymlinkComponent)
-    ));
+    // Regression: content search used to abort on any link; it now skips links like names do.
+    let found = workspace.search_content("", "needle", 10).unwrap();
+    assert!(!found.is_empty());
+    assert!(found.iter().all(|hit| hit.path == "safe/FILE.txt"));
 }
 
 #[cfg(windows)]
@@ -335,22 +337,24 @@ fn filename_search_skips_unrepresentable_discovered_names() {
 }
 
 #[test]
-fn content_search_remains_case_sensitive_and_excludes_ignored_directories() {
+fn content_search_ignores_case_and_excludes_ignored_directories() {
     let root = Fixture::new();
     root.file("src/main.rs");
     root.file("node_modules/hidden.rs");
     let workspace = root.workspace();
-    let results = workspace.search_content("", "needle", 10).unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(
-        (&*results[0].path, results[0].line, results[0].column),
-        ("src/main.rs", 1, 1)
-    );
-    assert!(
-        workspace
-            .search_content("", "NEEDLE", 10)
-            .unwrap()
-            .is_empty()
-    );
+    // Regression: a lowercase query used to miss `Needle`. Matching is now always
+    // case-insensitive, whatever the query's case (`rg --ignore-case`, no smart case).
+    for query in ["needle", "Needle", "NEEDLE"] {
+        let results = workspace.search_content("", query, 10).unwrap();
+        let found: Vec<_> = results
+            .iter()
+            .map(|hit| (&*hit.path, hit.line, hit.column))
+            .collect();
+        assert_eq!(
+            found,
+            [("src/main.rs", 1, 1), ("src/main.rs", 2, 1)],
+            "{query}"
+        );
+    }
     assert!(workspace.search_names("", "hidden", 10).unwrap().is_empty());
 }

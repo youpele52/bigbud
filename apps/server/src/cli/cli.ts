@@ -1,3 +1,6 @@
+import { mobileCommand } from "./cli.mobile.ts";
+import { peerCommand } from "./cli.peer.ts";
+import { backendCommand } from "./cli.backend.ts";
 import { APP_SERVER_NAME } from "@bigbud/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
@@ -18,6 +21,8 @@ import {
 } from "../persistence/Layers/Sqlite.ts";
 import { PurgeJobRepositoryLive } from "../persistence/Layers/PurgeJobRepository.ts";
 import { holdBackendLockForCli } from "./cli.backendLock.ts";
+import { commandLineCommand } from "./cli.commandLine.ts";
+import { remoteAgentCommand } from "./cli.remoteAgent.ts";
 import { PortSchema, resolveServerConfig } from "./cli.config.ts";
 import { runServer } from "../server";
 import { writeStartupStatus } from "../startup/startupStatus";
@@ -344,6 +349,11 @@ const rootCommand = Command.make("bigbud", commandFlags).pipe(
     canonicalThreadCleanupCommand,
     canonicalEventCompactionCommand,
     legacyOrphanRecoveryCommand,
+    remoteAgentCommand,
+    backendCommand,
+    mobileCommand,
+    peerCommand,
+    commandLineCommand,
   ]),
 );
 

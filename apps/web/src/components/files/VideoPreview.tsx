@@ -92,7 +92,7 @@ export const VideoPreview = memo(function VideoPreview({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--app-shell-pane-fill)]">
       <FilePreviewHeader
         breadcrumb={breadcrumb}
         absolutePath={absolutePath}

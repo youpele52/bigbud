@@ -9,7 +9,8 @@ import { HttpServerRequest } from "effect/unstable/http";
 import { observeRpcEffect } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
 
-function validateMobileRequestSession(
+/** Re-validates the socket's session token for one request (null when no longer authorized). */
+export function validateMobileRequestSession(
   context: WsRpcContext,
   request: HttpServerRequest.HttpServerRequest,
 ) {

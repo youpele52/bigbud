@@ -33,7 +33,7 @@ impl AgentState {
         if root.exists() {
             assert_secure_directory(&root)?;
         } else {
-            fs::create_dir_all(&root).map_err(AgentStateError::Io)?;
+            create_private_directories(&root)?;
             set_private_permissions(&root)?;
         }
         let epoch = format_epoch()?;
@@ -115,7 +115,7 @@ fn format_epoch_at(now: SystemTime) -> Result<String, AgentStateError> {
         .map_err(AgentStateError::ClockBeforeUnixEpoch)
 }
 
-fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
+pub(crate) fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
     let symlink_metadata = fs::symlink_metadata(path).map_err(AgentStateError::Io)?;
     if symlink_metadata.file_type().is_symlink() {
         return Err(AgentStateError::Symlink);
@@ -136,7 +136,22 @@ fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
     Ok(())
 }
 
-fn set_private_permissions(path: &Path) -> Result<(), AgentStateError> {
+/// Creates `path` and any missing ancestors as owner-only directories. Plain `create_dir_all`
+/// follows the process umask, so a `0002` umask (the Debian 13 default for user-private groups)
+/// left a new `~/.bigbud` group-writable, which the backend CLI then refuses. Existing ancestors
+/// are not changed.
+pub(crate) fn create_private_directories(path: &Path) -> Result<(), AgentStateError> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path).map_err(AgentStateError::Io)
+}
+
+pub(crate) fn set_private_permissions(path: &Path) -> Result<(), AgentStateError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -177,6 +192,31 @@ mod tests {
             );
         }
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn creates_missing_ancestors_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let home = std::env::temp_dir().join(format!("bigbud-state-home-{suffix}"));
+        fs::create_dir(&home).unwrap();
+        fs::set_permissions(&home, fs::Permissions::from_mode(0o750)).unwrap();
+        AgentState::open(home.join(".bigbud/agent/state")).unwrap();
+        for created in [".bigbud", ".bigbud/agent", ".bigbud/agent/state"] {
+            let mode = fs::metadata(home.join(created))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o700, "{created} must not inherit the umask");
+        }
+        let existing = fs::metadata(&home).unwrap().permissions().mode() & 0o777;
+        assert_eq!(existing, 0o750, "an existing ancestor keeps its mode");
+        let _ = fs::remove_dir_all(home);
     }
 
     #[cfg(unix)]

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Project } from "../models/types";
 import { useStore } from "../stores/main";
-import { loadProjectForNewThread } from "./useHandleNewThread";
+import { loadProjectById } from "../lib/projectCatalog";
 import { activateNewThreadRoute } from "./useHandleNewThread.activation";
 
 const projectId = ProjectId.makeUnsafe("project-1");
@@ -18,7 +18,7 @@ const project: Project = {
   scripts: [],
 };
 
-describe("loadProjectForNewThread", () => {
+describe("loadProjectById", () => {
   it("loads an omitted project with authoritative execution targets", async () => {
     let loadedProject: Project | undefined;
     const page = {
@@ -49,7 +49,7 @@ describe("loadProjectForNewThread", () => {
     });
 
     await expect(
-      loadProjectForNewThread({
+      loadProjectById({
         api: { orchestration: { getStartupProjectCatalog } } as never,
         projectId,
         getProject: () => loadedProject,
@@ -67,7 +67,7 @@ describe("loadProjectForNewThread", () => {
     const getStartupProjectCatalog = vi.fn();
 
     await expect(
-      loadProjectForNewThread({
+      loadProjectById({
         api: { orchestration: { getStartupProjectCatalog } } as never,
         projectId,
         getProject: () => project,
@@ -104,7 +104,7 @@ describe("loadProjectForNewThread", () => {
     );
 
     await expect(
-      loadProjectForNewThread({
+      loadProjectById({
         api: { orchestration: { getStartupProjectCatalog } } as never,
         projectId,
         getProject: () => loadedProject,

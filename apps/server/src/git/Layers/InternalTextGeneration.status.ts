@@ -1,6 +1,7 @@
 import { CommandId, EventId, type ThreadId, type ModelSelection } from "@bigbud/contracts";
 import { Deferred, Effect } from "effect";
 import type { OrchestrationEngineShape } from "../../orchestration/Services/OrchestrationEngine.ts";
+import { textGenerationStatusPrefix } from "./InternalTextGeneration.statusIdentity.ts";
 
 export type ThreadTextGenerationOperation = "title" | "summary" | "branch" | "promptSuggestion";
 
@@ -66,14 +67,14 @@ export function recordThreadTextGenerationStatusRequired(
   },
 ) {
   const createdAt = new Date().toISOString();
-  const id = crypto.randomUUID();
+  const id = `${textGenerationStatusPrefix(threadId)}${crypto.randomUUID()}`;
   return engine
     .dispatch({
       type: "thread.activity.append",
-      commandId: CommandId.makeUnsafe(`server:text-generation-status:${id}`),
+      commandId: CommandId.makeUnsafe(`server:${id}`),
       threadId,
       activity: {
-        id: EventId.makeUnsafe(`text-generation-status:${id}`),
+        id: EventId.makeUnsafe(id),
         tone: "info",
         kind: `text-generation.${status === "unchanged" ? "completed" : status}`,
         summary:

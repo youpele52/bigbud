@@ -1,16 +1,10 @@
-import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-
-import { CodexModelSelection, TextGenerationError } from "@bigbud/contracts";
+import { Effect, FileSystem, Layer, Path } from "effect";
+import { ChildProcessSpawner } from "effect/unstable/process";
+import { TextGenerationError } from "@bigbud/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/shared/git";
 
 import { ServerConfig } from "../../startup/config.ts";
-import {
-  type ThreadElevatorSummaryGenerationResult,
-  type ThreadTitleGenerationResult,
-  type TextGenerationShape,
-  TextGeneration,
-} from "../Services/TextGeneration.ts";
+import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -20,182 +14,22 @@ import {
 } from "../Prompts.ts";
 import {
   sanitizeElevatorSummary,
-  normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
   sanitizeThreadTitle,
-  toJsonSchemaObject,
 } from "../Utils.ts";
-import {
-  materializeImageAttachments,
-  readStreamAsString,
-  safeUnlink,
-  type CodexTextGenerationOperation,
-  writeTempFile,
-} from "./CodexTextGeneration.helpers.ts";
+import { materializeImageAttachments } from "./CodexTextGeneration.helpers.ts";
 import { makeGeneratePromptSuggestion } from "./TextGeneration.promptSuggestion.ts";
-import { shouldEnableCodexCliFastMode } from "../../provider/Layers/Codex/Provider.cliOptions.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { makeCodexJsonRunner } from "./CodexTextGeneration.runner.ts";
 
-const CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT = "low";
-const CODEX_TIMEOUT_MS = 180_000;
 const makeCodexTextGeneration = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverConfig = yield* Effect.service(ServerConfig);
   const serverSettingsService = yield* Effect.service(ServerSettingsService);
-
-  const runCodexJson = Effect.fn("runCodexJson")(function* <S extends Schema.Top>({
-    operation,
-    cwd,
-    prompt,
-    outputSchemaJson,
-    imagePaths = [],
-    cleanupPaths = [],
-    modelSelection,
-  }: {
-    operation: CodexTextGenerationOperation;
-    cwd: string;
-    prompt: string;
-    outputSchemaJson: S;
-    imagePaths?: ReadonlyArray<string>;
-    cleanupPaths?: ReadonlyArray<string>;
-    modelSelection: CodexModelSelection;
-  }): Effect.fn.Return<S["Type"], TextGenerationError, S["DecodingServices"]> {
-    const schemaPath = yield* writeTempFile(
-      fileSystem,
-      operation,
-      "codex-schema",
-      JSON.stringify(toJsonSchemaObject(outputSchemaJson)),
-    );
-    const outputPath = yield* writeTempFile(fileSystem, operation, "codex-output", "");
-
-    const codexSettings = yield* Effect.map(
-      serverSettingsService.getSettings,
-      (settings) => settings.providers.codex,
-    ).pipe(Effect.catch(() => Effect.undefined));
-
-    const runCodexCommand = Effect.fn("runCodexJson.runCodexCommand")(function* () {
-      const fastMode = shouldEnableCodexCliFastMode({
-        model: modelSelection.model,
-        options: modelSelection.options,
-        customModels: codexSettings?.customModels ?? [],
-      });
-      const reasoningEffort =
-        modelSelection.options?.reasoningEffort ?? CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
-      const command = ChildProcess.make(
-        codexSettings?.binaryPath || "codex",
-        [
-          "exec",
-          "--ephemeral",
-          "--skip-git-repo-check",
-          "-s",
-          "read-only",
-          "--model",
-          modelSelection.model,
-          "--config",
-          `model_reasoning_effort="${reasoningEffort}"`,
-          ...(fastMode ? ["--config", `service_tier="fast"`] : []),
-          "--output-schema",
-          schemaPath,
-          "--output-last-message",
-          outputPath,
-          ...imagePaths.flatMap((imagePath) => ["--image", imagePath]),
-          "-",
-        ],
-        {
-          env: {
-            ...process.env,
-            ...(codexSettings?.homePath ? { CODEX_HOME: codexSettings.homePath } : {}),
-          },
-          cwd,
-          shell: process.platform === "win32",
-          stdin: {
-            stream: Stream.encodeText(Stream.make(prompt)),
-          },
-        },
-      );
-
-      const child = yield* commandSpawner
-        .spawn(command)
-        .pipe(
-          Effect.mapError((cause) =>
-            normalizeCliError("codex", operation, cause, "Failed to spawn Codex CLI process"),
-          ),
-        );
-
-      const [stdout, stderr, exitCode] = yield* Effect.all(
-        [
-          readStreamAsString(operation, child.stdout),
-          readStreamAsString(operation, child.stderr),
-          child.exitCode.pipe(
-            Effect.mapError((cause) =>
-              normalizeCliError("codex", operation, cause, "Failed to read Codex CLI exit code"),
-            ),
-          ),
-        ],
-        { concurrency: "unbounded" },
-      );
-
-      if (exitCode !== 0) {
-        const stderrDetail = stderr.trim();
-        const stdoutDetail = stdout.trim();
-        const detail = stderrDetail.length > 0 ? stderrDetail : stdoutDetail;
-        return yield* new TextGenerationError({
-          operation,
-          detail:
-            detail.length > 0
-              ? `Codex CLI command failed: ${detail}`
-              : `Codex CLI command failed with code ${exitCode}.`,
-        });
-      }
-    });
-
-    const cleanup = Effect.all(
-      [schemaPath, outputPath, ...cleanupPaths].map((filePath) => safeUnlink(fileSystem, filePath)),
-      {
-        concurrency: "unbounded",
-      },
-    ).pipe(Effect.asVoid);
-
-    return yield* Effect.gen(function* () {
-      yield* runCodexCommand().pipe(
-        Effect.scoped,
-        Effect.timeoutOption(CODEX_TIMEOUT_MS),
-        Effect.flatMap(
-          Option.match({
-            onNone: () =>
-              Effect.fail(
-                new TextGenerationError({ operation, detail: "Codex CLI request timed out." }),
-              ),
-            onSome: () => Effect.void,
-          }),
-        ),
-      );
-
-      return yield* fileSystem.readFileString(outputPath).pipe(
-        Effect.mapError(
-          (cause) =>
-            new TextGenerationError({
-              operation,
-              detail: "Failed to read Codex output file.",
-              cause,
-            }),
-        ),
-        Effect.flatMap(Schema.decodeEffect(Schema.fromJsonString(outputSchemaJson))),
-        Effect.catchTag("SchemaError", (cause) =>
-          Effect.fail(
-            new TextGenerationError({
-              operation,
-              detail: "Codex returned invalid structured output.",
-              cause,
-            }),
-          ),
-        ),
-      );
-    }).pipe(Effect.ensuring(cleanup));
-  });
+  const runCodexJson = makeCodexJsonRunner(fileSystem, commandSpawner, serverSettingsService);
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = Effect.fn(
     "CodexTextGeneration.generateCommitMessage",
@@ -207,14 +41,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       includeBranch: input.includeBranch === true,
       ...(input.skillContent !== undefined ? { skillContent: input.skillContent } : {}),
     });
-
-    if (input.modelSelection.provider !== "codex") {
+    if (input.modelSelection.provider !== "codex")
       return yield* new TextGenerationError({
         operation: "generateCommitMessage",
         detail: "Invalid model selection.",
       });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generateCommitMessage",
       cwd: input.cwd,
@@ -222,7 +53,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       outputSchemaJson: outputSchema,
       modelSelection: input.modelSelection,
     });
-
     return {
       subject: sanitizeCommitSubject(generated.subject),
       body: generated.body.trim(),
@@ -231,7 +61,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         : {}),
     };
   });
-
   const generatePrContent: TextGenerationShape["generatePrContent"] = Effect.fn(
     "CodexTextGeneration.generatePrContent",
   )(function* (input) {
@@ -242,14 +71,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       diffSummary: input.diffSummary,
       diffPatch: input.diffPatch,
     });
-
-    if (input.modelSelection.provider !== "codex") {
+    if (input.modelSelection.provider !== "codex")
       return yield* new TextGenerationError({
         operation: "generatePrContent",
         detail: "Invalid model selection.",
       });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generatePrContent",
       cwd: input.cwd,
@@ -257,13 +83,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       outputSchemaJson: outputSchema,
       modelSelection: input.modelSelection,
     });
-
-    return {
-      title: sanitizePrTitle(generated.title),
-      body: generated.body.trim(),
-    };
+    return { title: sanitizePrTitle(generated.title), body: generated.body.trim() };
   });
-
   const generateBranchName: TextGenerationShape["generateBranchName"] = Effect.fn(
     "CodexTextGeneration.generateBranchName",
   )(function* (input) {
@@ -277,14 +98,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       message: input.message,
       attachments: input.attachments,
     });
-
-    if (input.modelSelection.provider !== "codex") {
+    if (input.modelSelection.provider !== "codex")
       return yield* new TextGenerationError({
         operation: "generateBranchName",
         detail: "Invalid model selection.",
       });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generateBranchName",
       cwd: input.cwd,
@@ -293,12 +111,8 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       imagePaths,
       modelSelection: input.modelSelection,
     });
-
-    return {
-      branch: sanitizeBranchFragment(generated.branch),
-    };
+    return { branch: sanitizeBranchFragment(generated.branch) };
   });
-
   const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
     "CodexTextGeneration.generateThreadTitle",
   )(function* (input) {
@@ -312,14 +126,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       message: input.message,
       attachments: input.attachments,
     });
-
-    if (input.modelSelection.provider !== "codex") {
+    if (input.modelSelection.provider !== "codex")
       return yield* new TextGenerationError({
         operation: "generateThreadTitle",
         detail: "Invalid model selection.",
       });
-    }
-
     const generated = yield* runCodexJson({
       operation: "generateThreadTitle",
       cwd: input.cwd,
@@ -327,13 +138,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       outputSchemaJson: outputSchema,
       imagePaths,
       modelSelection: input.modelSelection,
+      ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
     });
-
-    return {
-      title: sanitizeThreadTitle(generated.title),
-    } satisfies ThreadTitleGenerationResult;
+    return { title: sanitizeThreadTitle(generated.title) };
   });
-
   const generateThreadElevatorSummary: TextGenerationShape["generateThreadElevatorSummary"] =
     Effect.fn("CodexTextGeneration.generateThreadElevatorSummary")(function* (input) {
       const { imagePaths } = yield* materializeImageAttachments(
@@ -346,14 +154,11 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         transcript: input.transcript,
         attachments: input.attachments,
       });
-
-      if (input.modelSelection.provider !== "codex") {
+      if (input.modelSelection.provider !== "codex")
         return yield* new TextGenerationError({
           operation: "generateThreadElevatorSummary",
           detail: "Invalid model selection.",
         });
-      }
-
       const generated = yield* runCodexJson({
         operation: "generateThreadElevatorSummary",
         cwd: input.cwd,
@@ -361,13 +166,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         outputSchemaJson: outputSchema,
         imagePaths,
         modelSelection: input.modelSelection,
+        ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
       });
-
-      return {
-        summary: sanitizeElevatorSummary(generated.summary),
-      } satisfies ThreadElevatorSummaryGenerationResult;
+      return { summary: sanitizeElevatorSummary(generated.summary) };
     });
-
   return {
     generateCommitMessage,
     generatePrContent,

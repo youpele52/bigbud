@@ -240,11 +240,14 @@ impl AgentSession {
         let result = if duplicate {
             Ok(request.bytes.len() as u64)
         } else {
-            self.workspace(&request.workspace_handle)?.write_file(
-                &request.path,
-                &request.bytes,
-                (!request.expected_sha256.is_empty()).then_some(request.expected_sha256.as_str()),
-            )
+            let workspace = self.workspace(&request.workspace_handle)?;
+            let expected_sha256 =
+                (!request.expected_sha256.is_empty()).then_some(request.expected_sha256.as_str());
+            match (request.create_only, expected_sha256) {
+                (true, Some(_)) => Err(WorkspaceError::ConditionalCreate),
+                (true, None) => workspace.create_file(&request.path, &request.bytes),
+                (false, expected) => workspace.write_file(&request.path, &request.bytes, expected),
+            }
         };
         if result.is_err() && !duplicate {
             self.accepted_operations.remove(&request.operation_id);

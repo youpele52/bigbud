@@ -120,6 +120,44 @@ function Download-File {
   Invoke-WebRequest @parameters | Out-Null
 }
 
+# Mirrors apps/desktop/installer/addUserPath.ps1 (this script is downloaded standalone, so it
+# cannot reference the repo copy). Adds %USERPROFILE%\.local\bin, where the bigbud command-line
+# launcher lives, to the user's PATH. Idempotent, preserves every existing entry and the
+# REG_EXPAND_SZ type, never touches the machine PATH, and never fails the install.
+function Add-UserPathEntry {
+  try {
+    $userProfile = $env:USERPROFILE
+    if ([string]::IsNullOrWhiteSpace($userProfile)) { return }
+    $binDir = Join-Path $userProfile ".local\bin"
+    $normalize = {
+      param([string]$Value)
+      [Environment]::ExpandEnvironmentVariables($Value.Trim().Trim('"')).TrimEnd("\", "/").ToLowerInvariant()
+    }
+    $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey("Environment")
+    try {
+      $current = [string]$key.GetValue("Path", "", [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+      $target = & $normalize $binDir
+      foreach ($entry in $current.Split(";")) {
+        if ($entry.Trim().Length -gt 0 -and (& $normalize $entry) -eq $target) { return }
+      }
+      $trimmed = $current.TrimEnd(";")
+      $updated = if ($trimmed.Length -eq 0) { $binDir } else { "$trimmed;$binDir" }
+      $key.SetValue("Path", $updated, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+      Add-Type -Namespace Bigbud -Name Native -MemberDefinition @"
+[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint flags, uint timeout, out UIntPtr result);
+"@
+      $result = [UIntPtr]::Zero
+      [void][Bigbud.Native]::SendMessageTimeout([IntPtr]0xffff, 0x1A, [UIntPtr]::Zero, "Environment", 2, 5000, [ref]$result)
+      Write-Info "Added $binDir to your PATH. Open a new terminal to use the bigbud command."
+    } finally {
+      $key.Close()
+    }
+  } catch {
+    Write-Info "Could not update your PATH automatically. Add $env:USERPROFILE\.local\bin to it manually."
+  }
+}
+
 function Install-WindowsRelease {
   $release = Get-LatestRelease
   $asset = Get-PreferredWindowsAsset -Release $release
@@ -141,6 +179,8 @@ function Install-WindowsRelease {
     if ($process.ExitCode -ne 0) {
       throw "Installer exited with code $($process.ExitCode)."
     }
+
+    Add-UserPathEntry
 
     Write-Info "Done."
   } finally {

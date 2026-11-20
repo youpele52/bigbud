@@ -24,6 +24,7 @@ vi.mock("./Runtime.discovery.ts", async (original) => ({
     error: null,
   }),
 }));
+const ENABLED = { binaryPath: "copilot", enabled: true };
 const roots: string[] = [];
 const result = {
   path: "/fixture/copilot",
@@ -45,7 +46,7 @@ async function storage() {
   roots.push(root);
   return root;
 }
-const status = (root: string) => copilotRuntimeRequest({ action: "status" }, "copilot", root);
+const status = (root: string) => copilotRuntimeRequest({ action: "status" }, ENABLED, root);
 async function finished(root: string, phase: string) {
   await vi.waitFor(async () => expect((await status(root)).job?.phase).toBe(phase), {
     timeout: 5_000,
@@ -56,7 +57,7 @@ describe("server-owned Copilot runtime lifecycle", () => {
   it("prompts only once for missing runtimes, never downloads during discovery or dismissal", async () => {
     const root = await storage();
     expect((await status(root)).onboarding).toBe(true);
-    await copilotRuntimeRequest({ action: "acknowledge" }, "copilot", root);
+    await copilotRuntimeRequest({ action: "acknowledge" }, ENABLED, root);
     expect((await status(root)).onboarding).toBe(false);
     expect(control.install).not.toHaveBeenCalled();
   });
@@ -85,10 +86,10 @@ describe("server-owned Copilot runtime lifecycle", () => {
       });
       return result;
     });
-    const initial = await copilotRuntimeRequest({ action: "install" }, "copilot", root);
+    const initial = await copilotRuntimeRequest({ action: "install" }, ENABLED, root);
     const later = await status(root);
     expect(later.job?.id).toBe(initial.job?.id);
-    const conflict = await copilotRuntimeRequest({ action: "update" }, "copilot", root);
+    const conflict = await copilotRuntimeRequest({ action: "update" }, ENABLED, root);
     expect(conflict.error).toContain("already in progress");
     expect(control.install).toHaveBeenCalledTimes(1);
     await vi.waitFor(async () => expect((await status(root)).job?.transferredBytes).toBe(10));
@@ -103,23 +104,23 @@ describe("server-owned Copilot runtime lifecycle", () => {
           signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
         }),
     );
-    const initial = await copilotRuntimeRequest({ action: "install" }, "copilot", root);
+    const initial = await copilotRuntimeRequest({ action: "install" }, ENABLED, root);
     const mismatch = await copilotRuntimeRequest(
       { action: "cancel", jobId: "../external" },
-      "copilot",
+      ENABLED,
       root,
     );
     expect(mismatch.error).toContain("current Copilot download");
-    await copilotRuntimeRequest({ action: "cancel", jobId: initial.job!.id }, "copilot", root);
+    await copilotRuntimeRequest({ action: "cancel", jobId: initial.job!.id }, ENABLED, root);
     await finished(root, "cancelled");
-    const retry = await copilotRuntimeRequest({ action: "install" }, "copilot", root);
+    const retry = await copilotRuntimeRequest({ action: "install" }, ENABLED, root);
     expect(retry.job?.id).not.toBe(initial.job?.id);
     await finished(root, "installed");
   });
   it("records failure and interrupted-owner recovery without automatic retry", async () => {
     const root = await storage();
     control.install.mockRejectedValueOnce(new Error("checksum mismatch"));
-    await copilotRuntimeRequest({ action: "install" }, "copilot", root);
+    await copilotRuntimeRequest({ action: "install" }, ENABLED, root);
     await finished(root, "error");
     expect((await status(root)).job?.error).toBe("checksum mismatch");
     await writeRuntimeState(root, ".job.json", {
@@ -139,7 +140,7 @@ describe("server-owned Copilot runtime lifecycle", () => {
   });
   it("intentional uninstall never re-enables onboarding", async () => {
     const root = await storage();
-    await copilotRuntimeRequest({ action: "uninstall" }, "copilot", root);
+    await copilotRuntimeRequest({ action: "uninstall" }, ENABLED, root);
     await finished(root, "uninstalled");
     expect(await readRuntimeState(root, ".bridge-preserved.json")).toBe(true);
     expect((await status(root)).onboarding).toBe(false);

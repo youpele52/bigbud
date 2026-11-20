@@ -147,36 +147,42 @@ it("keeps verified output despite uncertain cleanup rather than paying for anoth
 });
 
 it.each([false, true])(
-  "lost response/timeout stops title stages 2/3/4 and restart/manual metadata replay (timeout=%s)",
+  "lost response/timeout cannot enter legacy title replay when durable generation is unavailable (timeout=%s)",
   async (timeout) => {
     const f = fixture(timeout),
       title = titleFixture();
-    title.generate.mockImplementation(
-      () => f.generate("generateThreadTitle") as ReturnType<typeof f.service.generateThreadTitle>,
-    );
+    const error = await Effect.runPromise(f.generate("generateThreadTitle").pipe(Effect.flip));
+    expect(error.kind).toBe("uncertain");
+    expect(error.uncertaintyId).toBe([...f.http.sessions.keys()][0]);
+    title.reload();
     await Effect.runPromise(title.run());
-    expect(readTitleStage(title.thread, 1)?.state).toBe("uncertain");
-    expect(readTitleStage(title.thread, 2)).toBeNull();
     for (let index = 1; index <= 4; index++) title.addSuccess(index);
     await Effect.runPromise(title.run());
     await Effect.runPromise(title.run(true));
-    expect(title.generate).toHaveBeenCalledTimes(1);
+    expect(title.generate).not.toHaveBeenCalled();
+    expect(title.dispatch).not.toHaveBeenCalled();
+    expect(readTitleStage(title.thread, 1)).toBeNull();
     expect(f.fallback).not.toHaveBeenCalled();
-    expect(
-      title.thread.activities.find((item) => item.kind === "text-generation.uncertain")?.payload,
-    ).toMatchObject({ uncertaintyId: [...f.http.sessions.keys()][0] });
     expect(f.http.sessions.size).toBe(1);
+    expect(f.http.requests.filter(({ pathname }) => pathname.endsWith("/generate"))).toHaveLength(
+      1,
+    );
     f.finish();
   },
 );
 
-it("a persisted protected title-stage claim survives backend restart without advancing to another paid stage", async () => {
+it("preserves a legacy protected claim without mutating or replaying it when durable generation is unavailable", async () => {
   const title = titleFixture();
   await Effect.runPromise(
     recordTitleStage(title.services, title.thread, 1, "started", undefined, true),
   );
+  title.reload();
+  const protectedClaim = readTitleStage(title.thread, 1);
+  const activities = structuredClone(title.thread.activities);
   await Effect.runPromise(title.run());
   await Effect.runPromise(title.run(true));
   expect(title.generate).not.toHaveBeenCalled();
-  expect(readTitleStage(title.thread, 1)?.state).toBe("uncertain");
+  expect(readTitleStage(title.thread, 1)).toEqual(protectedClaim);
+  expect(protectedClaim?.state).toBe("started");
+  expect(title.thread.activities).toEqual(activities);
 });

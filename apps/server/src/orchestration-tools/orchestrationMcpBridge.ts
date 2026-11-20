@@ -1,3 +1,5 @@
+import { REMOTE_AGENT_TOOL_NAMES } from "./remoteAgentTools.shared.ts";
+import { PEER_TOOL_NAMES } from "./peerTools.shared.ts";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -13,6 +15,7 @@ import {
 import { resolveMcpInvocationStatePath } from "./mcpInvocationStatePath.ts";
 import { ELECTRON_NODE_RUNTIME_ENV, resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "./AgentWorkspaceTools.ts";
+import { writeBigbudTempDirOwner } from "../startup/tempDirSweep.ts";
 
 export interface ThreadOrchestrationBridgeInput {
   readonly stateDir: string;
@@ -97,6 +100,8 @@ export async function createThreadOrchestrationBridge(
     namespace: "orchestration",
   });
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
+  // Lets the startup temp sweep tell a crashed owner from a live one (F-B7).
+  await writeBigbudTempDirOwner(bridgeDir);
   const durableHttpConfig = {
     ...httpConfig,
     providerInvocationStatePath: invocationStatePath,
@@ -158,11 +163,15 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__browser`,
       `mcp__${bridge.serverName}__computer_use`,
       `mcp__${bridge.serverName}__rename_thread`,
+      `mcp__${bridge.serverName}__set_elevator_summary`,
       `mcp__${bridge.serverName}__move_thread`,
       `mcp__${bridge.serverName}__snooze_thread`,
       `mcp__${bridge.serverName}__archive_thread`,
       `mcp__${bridge.serverName}__send_thread_message`,
       `mcp__${bridge.serverName}__get_thread_status`,
+      ...[...REMOTE_AGENT_TOOL_NAMES, ...PEER_TOOL_NAMES].map(
+        (name) => `mcp__${bridge.serverName}__${name}`,
+      ),
       `mcp__${bridge.serverName}__get_system_resources`,
       `mcp__${bridge.serverName}__configure_system_resource_rules`,
       `mcp__${bridge.serverName}__list_threads`,

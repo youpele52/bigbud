@@ -85,6 +85,8 @@ export const BrowserContextMenu = memo(function BrowserContextMenu({
       style={{ left: 0, top: 0 }}
       tabIndex={-1}
       role="menu"
+      // Closes on Escape without preventDefault; keeps that Escape out of the double-Escape stop.
+      data-escape-layer="true"
       onKeyDown={(event) => {
         const enabledItems = itemRefs.current.filter(
           (item): item is HTMLButtonElement => item !== null && !item.disabled,

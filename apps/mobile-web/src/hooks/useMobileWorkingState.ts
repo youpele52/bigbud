@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { randomSpinnerVerb } from "~/utils/copy";
+import { randomSpinnerVerb } from "@bigbud/ui/spinnerVerbs";
 
 export function useMobileWorkingState(isWorking: boolean) {
   const [nowTick, setNowTick] = useState(() => Date.now());

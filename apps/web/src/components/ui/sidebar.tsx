@@ -85,7 +85,7 @@ function Sidebar({
       <SidebarInstanceContext.Provider value={instanceContextValue}>
         <div
           className={cn(
-            "flex h-full w-(--sidebar-width) flex-col bg-[var(--app-shell-sidebar-background)] text-sidebar-foreground backdrop-blur-[var(--app-shell-sidebar-blur)]",
+            "flex h-full w-(--sidebar-width) flex-col bg-[var(--app-shell-side-panel-background)] text-sidebar-foreground",
             className,
           )}
           data-slot="sidebar"
@@ -103,7 +103,7 @@ function Sidebar({
         <Sheet onOpenChange={setOpenMobile} open={openMobile} {...props}>
           <SheetPopup
             className={cn(
-              "w-(--sidebar-width) max-w-none touch-pan-y bg-[var(--app-shell-sidebar-background)] p-0 text-sidebar-foreground backdrop-blur-[var(--app-shell-sidebar-blur)]",
+              "w-(--sidebar-width) max-w-none touch-pan-y bg-[var(--app-shell-side-panel-background)] p-0 text-sidebar-foreground",
               className,
             )}
             data-mobile="true"
@@ -159,14 +159,15 @@ function Sidebar({
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
-              : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
+              : // The container owns the edge border, so it paints the tone beneath it too.
+                "bg-[var(--app-shell-side-panel-background)] group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
             className,
           )}
           data-slot="sidebar-container"
           {...props}
         >
           <div
-            className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-[var(--app-shell-sidebar-background)] transition-opacity duration-[280ms] ease-out backdrop-blur-[var(--app-shell-sidebar-blur)] group-data-[collapsible=offcanvas]:opacity-0 group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [scrollbar-width:thin] [scrollbar-color:hsl(var(--sidebar-border))_transparent]"
+            className="flex h-full w-full flex-col overflow-y-auto overflow-x-hidden transition-opacity duration-[280ms] ease-out group-data-[collapsible=offcanvas]:opacity-0 group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:bg-[var(--app-shell-side-panel-background)] group-data-[variant=inset]:bg-[var(--app-shell-side-panel-background)] group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm/5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [scrollbar-width:thin] [scrollbar-color:hsl(var(--sidebar-border))_transparent]"
             data-sidebar="sidebar"
             data-slot="sidebar-inner"
           >

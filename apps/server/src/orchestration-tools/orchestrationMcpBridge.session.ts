@@ -1,8 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
-import {
-  REMOTE_WORKSPACE_MCP_SERVER_NAME,
-  REMOTE_WORKSPACE_TOOL_NAMES,
-} from "../remote-workspace-bridge/remoteWorkspaceTools.ts";
+import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../remote-workspace-bridge/remoteWorkspaceTools.ts";
 
 import {
   buildAcpOrchestrationBridgeConfig,
@@ -54,40 +51,22 @@ export function buildOpencodeThreadOrchestrationServerName(threadId: string): st
 export function buildOpencodeAllowedTools(input: {
   readonly toolIds: ReadonlyArray<string>;
   readonly serverName: string;
-  readonly remoteWorkspaceServerName?: string;
 }): Record<string, boolean> {
   const currentPrefix = `${sanitizeOpencodeToolSegment(input.serverName)}_`;
-  const defaultRemotePrefix = `${sanitizeOpencodeToolSegment(REMOTE_WORKSPACE_MCP_SERVER_NAME)}_`;
-  const activeRemotePrefix = input.remoteWorkspaceServerName
-    ? `${sanitizeOpencodeToolSegment(input.remoteWorkspaceServerName)}_`
-    : undefined;
+  // Stale bigbud remote workspace tools left on a shared OpenCode server are never enabled.
+  const remoteWorkspacePrefix = `${sanitizeOpencodeToolSegment(REMOTE_WORKSPACE_MCP_SERVER_NAME)}_`;
   const tools: Record<string, boolean> = {};
 
   for (const toolId of input.toolIds) {
-    if (toolId.startsWith(defaultRemotePrefix)) {
-      tools[toolId] = activeRemotePrefix !== undefined && toolId.startsWith(activeRemotePrefix);
+    if (toolId.startsWith(remoteWorkspacePrefix)) {
+      tools[toolId] = false;
       continue;
-    }
-    if (input.remoteWorkspaceServerName) {
-      if (REMOTE_WORKSPACE_TOOL_NAMES.some((name) => name === toolId)) {
-        tools[toolId] = false;
-        continue;
-      }
-      if (activeRemotePrefix && toolId.startsWith(activeRemotePrefix)) {
-        tools[toolId] = true;
-        continue;
-      }
     }
     if (toolId.startsWith(`${ORCHESTRATION_SERVER_NAME_PREFIX}_`)) {
       tools[toolId] = toolId.startsWith(currentPrefix);
       continue;
     }
     tools[toolId] = true;
-  }
-  if (input.remoteWorkspaceServerName) {
-    for (const toolName of REMOTE_WORKSPACE_TOOL_NAMES) {
-      tools[`${sanitizeOpencodeToolSegment(input.remoteWorkspaceServerName)}_${toolName}`] = true;
-    }
   }
 
   return tools;
@@ -149,7 +128,7 @@ export async function registerOpencodeOrchestrationMcpBridge(input: {
   });
 }
 
-export async function registerOpencodeMcpBridge(input: {
+async function registerOpencodeMcpBridge(input: {
   readonly client: OpencodeClient;
   readonly directory?: string;
   readonly bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath"> & {

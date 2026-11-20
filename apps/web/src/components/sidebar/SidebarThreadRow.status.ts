@@ -1,3 +1,5 @@
+import type { TerminalFinishedItem } from "@bigbud/contracts/workspace/terminal.activity.ts";
+import { presentTerminalFinished } from "./Sidebar.terminalFinished.logic";
 import type { GitStatusResult } from "@bigbud/contracts";
 
 import { CHILD_PROVIDER_ICON_CLASS } from "../chat/agents/agentActivity.presentation";
@@ -6,7 +8,7 @@ import type { ThreadStatusPill } from "./Sidebar.logic";
 export type ThreadPr = GitStatusResult["pr"];
 
 export interface TerminalStatusIndicator {
-  label: "Terminal process running";
+  label: string;
   colorClass: string;
   pulse: boolean;
 }
@@ -64,6 +66,22 @@ export function terminalStatusFromRunningIds(
     label: "Terminal process running",
     colorClass: "text-info-foreground",
     pulse: true,
+  };
+}
+
+/**
+ * The row's terminal icon for finished terminal work in Needs you: red when the newest command
+ * failed (non-zero exit), green otherwise. The command is in the tooltip; no exit code is shown.
+ */
+export function terminalStatusFromFinished(
+  items: ReadonlyArray<TerminalFinishedItem> | undefined,
+): TerminalStatusIndicator | null {
+  const finished = presentTerminalFinished(items);
+  if (!finished) return null;
+  return {
+    label: `${finished.failed ? "Terminal command failed" : "Terminal command finished"}: ${finished.command}`,
+    colorClass: finished.failed ? "text-destructive" : "text-success",
+    pulse: false,
   };
 }
 

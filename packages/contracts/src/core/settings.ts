@@ -4,6 +4,7 @@ import {
   DEFAULT_BROWSER_SEARCH_ENGINE,
 } from "../constants/browser.constant";
 import { TerminalInteractionSettingsFields } from "./settings.terminal";
+import { DEFAULT_TERMINAL_SHELL_SETTINGS, TerminalShellSettings } from "./settings.terminalShell";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
@@ -20,6 +21,9 @@ import {
 } from "../constants/settings.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
 import { InyosiraIdleSettingsFields } from "./settings.inyosira";
+import { TerminalActivitySettingsFields } from "./settings.terminalActivity";
+import { TerminalPasteSettingsFields } from "./settings.terminalPaste";
+import { FileAccessPermissionLevel, SearchSettingsFields } from "./settings.search";
 import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
@@ -145,12 +149,11 @@ export const ClientSettingsSchema = Schema.Struct({
   enableSystemTaskCompletionNotifications: Schema.Boolean.pipe(
     Schema.withDecodingDefault(() => true),
   ),
-  fileAccessPermissionLevel: Schema.Literals([
-    "none",
-    "common-folders",
-    "unrestricted",
-  ] as const).pipe(Schema.withDecodingDefault(() => "none")),
+  fileAccessPermissionLevel: FileAccessPermissionLevel.pipe(
+    Schema.withDecodingDefault(() => "none" as const),
+  ),
   hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  hasSeenWelcomeTour: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -263,6 +266,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
+  terminalShells: TerminalShellSettings.pipe(
+    Schema.withDecodingDefault(() => ({ ...DEFAULT_TERMINAL_SHELL_SETTINGS, hostDefaults: {} })),
+  ),
   textGenerationModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(() => null),
   ),
@@ -305,6 +311,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),
   ...InyosiraIdleSettingsFields,
+  ...TerminalActivitySettingsFields,
+  ...TerminalPasteSettingsFields,
+  ...SearchSettingsFields,
 });
 export type ServerSettings = typeof ServerSettings.Type;
 

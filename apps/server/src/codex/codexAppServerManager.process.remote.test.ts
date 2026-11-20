@@ -32,6 +32,7 @@ describe("buildRemoteCodexSshInvocation", () => {
       "22",
       "-i",
       expect.stringContaining(".ssh/open_stack"),
+      "--",
       "root@46.225.127.53",
       expect.stringContaining("'codex' 'app-server'"),
     ]);

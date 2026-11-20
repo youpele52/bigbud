@@ -117,20 +117,16 @@ export class FilesDrawerController {
     this.setMode("open");
   }
 
-  toggle() {
+  /** Keeps the tree open (docked) or turns that off, closing any visible tree. */
+  toggleKeepOpen() {
     if (!this.active) return false;
-    if (this.mode !== "closed") {
+    if (this.mode === "pinned") {
       this.dismiss();
       return false;
     }
-    this.open();
-    return true;
-  }
-
-  togglePin() {
-    if (!this.active) return;
     this.hoverSuppressed = false;
-    this.setMode(this.mode === "pinned" ? "open" : "pinned");
+    this.setMode("pinned");
+    return true;
   }
 
   dismiss() {

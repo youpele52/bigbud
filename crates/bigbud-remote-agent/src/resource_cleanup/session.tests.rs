@@ -246,6 +246,51 @@ fn acknowledged_cancellation_before_the_handler_is_not_reset() {
     remove_root(&root);
 }
 
+#[test]
+fn additive_pty_status_does_not_raise_cleanup_client_minimum() {
+    let _guard = super::super::CANCELLATION_TEST_LOCK
+        .lock()
+        .expect("cancellation lock");
+    for minor in [2, 3, PROTOCOL_MINOR] {
+        let hello = v1::Frame {
+            payload: Some(v1::frame::Payload::ClientHello(v1::ClientHello {
+                protocol_major: PROTOCOL_MAJOR,
+                protocol_minor: minor,
+                client_instance_id: "client".to_owned(),
+                ..Default::default()
+            })),
+        };
+        let mut input = Vec::new();
+        write_frame(&mut input, &hello, DEFAULT_MAX_FRAME_BYTES).expect("encode hello");
+        for concurrent in [false, true] {
+            let mut output = Vec::new();
+            if concurrent {
+                super::concurrent::run(Cursor::new(input.clone()), &mut output)
+                    .expect("concurrent session");
+            } else {
+                run(Cursor::new(input.clone()), &mut output, None).expect("session");
+            }
+            let frame = read_frame(&mut Cursor::new(output), DEFAULT_MAX_FRAME_BYTES)
+                .expect("decode response")
+                .expect("response");
+            if minor >= 3 {
+                let Some(v1::frame::Payload::AgentHello(hello)) = frame.payload else {
+                    panic!("expected compatible cleanup hello");
+                };
+                assert_eq!(hello.protocol_minor, PROTOCOL_MINOR);
+                assert_eq!(hello.capabilities[0].name, "resource.cleanup");
+            } else {
+                assert!(matches!(
+                    frame.payload,
+                    Some(v1::frame::Payload::ProtocolError(error))
+                        if error.code == "UNSUPPORTED_PROTOCOL"
+                ));
+            }
+        }
+    }
+    super::super::reset_cancellation();
+}
+
 fn remove_root(root: &Path) {
     #[cfg(windows)]
     {

@@ -6,6 +6,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { makeEntityPurgeCheckpointSql } from "./EntityPurge.sql.checkpoints.ts";
 import { makeEntityPurgeResourceSql } from "./EntityPurge.sql.resources.ts";
 import { makeCountThreadRuntimes } from "./EntityPurge.sql.activity.ts";
+import { makeDeleteProvenReceipts } from "./EntityPurge.sql.receipts.ts";
 
 const ThreadInput = Schema.Struct({ threadId: ThreadId });
 const ProjectInput = Schema.Struct({ projectId: ProjectId });
@@ -237,36 +238,7 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
       LIMIT 1
     `;
 
-  const deleteProvenReceipts = (input: {
-    readonly entityKind: "project" | "thread";
-    readonly entityId: ProjectId | ThreadId;
-  }) =>
-    (input.entityKind === "thread"
-      ? sql`
-        WITH root AS (
-          SELECT deletion_sequence FROM orchestration_deletion_markers
-          WHERE entity_kind = 'thread' AND entity_id = ${input.entityId}
-        )
-        DELETE FROM orchestration_command_receipts
-        WHERE aggregate_kind = 'thread' AND aggregate_id IN (
-          SELECT entity_id FROM orchestration_deletion_markers
-          WHERE entity_kind = 'thread'
-            AND deletion_sequence = (SELECT deletion_sequence FROM root)
-        )
-      `
-      : sql`
-      DELETE FROM orchestration_command_receipts
-      WHERE aggregate_kind = ${input.entityKind} AND aggregate_id = ${input.entityId}
-        AND EXISTS (
-          SELECT 1 FROM orchestration_deletion_markers AS marker
-          JOIN projection_baselines AS baseline
-            ON baseline.sequence = marker.covered_by_baseline_sequence
-           AND baseline.verification_status = 'verified'
-          WHERE marker.entity_kind = ${input.entityKind} AND marker.entity_id = ${input.entityId}
-            AND orchestration_command_receipts.result_sequence <= marker.covered_by_baseline_sequence
-        )
-    `
-    ).pipe(Effect.asVoid);
+  const deleteProvenReceipts = makeDeleteProvenReceipts(sql);
 
   const deleteProvenThreadCanonical = ({ threadId }: { readonly threadId: ThreadId }) =>
     sql.withTransaction(

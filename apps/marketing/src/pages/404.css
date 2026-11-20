@@ -1,0 +1,75 @@
+.page:has(.not-found-page) {
+  overflow-x: clip;
+}
+
+.not-found-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, var(--marketing-max-width));
+  padding: clamp(4rem, 12vw, 8rem) 1.25rem clamp(4rem, 10vw, 6rem);
+  text-align: center;
+}
+
+.not-found-logo {
+  width: 6rem;
+  height: 6rem;
+  margin-bottom: 1rem;
+  animation: not-found-breathe 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.not-found-code {
+  color: var(--fg-dim);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+}
+
+.not-found-title {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 500;
+}
+
+.not-found-copy {
+  max-width: 28rem;
+  color: var(--fg-muted);
+  font-size: 0.875rem;
+}
+
+.not-found-links {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.not-found-link {
+  color: var(--fg);
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 0.3em;
+}
+
+.not-found-link:hover {
+  text-decoration-color: var(--fg);
+}
+
+@keyframes not-found-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .not-found-logo {
+    animation: none;
+  }
+}

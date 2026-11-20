@@ -4,16 +4,31 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  isRemoteAgentTargetTriple,
   parseRemoteAgentArtifactManifest,
   selectRemoteAgentArtifact,
   verifyRemoteAgentArtifactBytes,
   verifyRemoteAgentArtifactSignature,
   type RemoteAgentTargetTriple,
 } from "@bigbud/shared/remoteAgentArtifact";
+import {
+  assertPinnedReleaseSigningKey,
+  PINNED_RELEASE_TRUST_STORE,
+} from "@bigbud/shared/releaseTrust";
 
 interface AssetSpec {
   readonly targetTriple: RemoteAgentTargetTriple;
   readonly path: string;
+}
+
+function parseReleaseManifest(value: unknown) {
+  const manifest = parseRemoteAgentArtifactManifest(value);
+  // Client compatibility may ignore future targets; a publisher must verify every entry.
+  const { artifacts } = value as { artifacts: unknown[] };
+  if (artifacts.length !== manifest.artifacts.length) {
+    throw new Error("Remote-agent release manifest contains an unsupported target.");
+  }
+  return manifest;
 }
 
 export function verifyRemoteAgentReleaseAssets(input: {
@@ -22,13 +37,23 @@ export function verifyRemoteAgentReleaseAssets(input: {
   readonly signingKeyId: string;
   readonly assets: ReadonlyArray<AssetSpec>;
   readonly installSourceBytes?: Uint8Array;
+  /** Clients' pinned release keys; tests substitute their own fixture pin. */
+  readonly pinnedTrustStore?: Readonly<Record<string, string>>;
 }): void {
-  const manifest = parseRemoteAgentArtifactManifest(
+  const manifest = parseReleaseManifest(
     JSON.parse(new TextDecoder().decode(input.manifestBytes)) as unknown,
   );
+  if (new Set(input.assets.map((asset) => asset.targetTriple)).size !== input.assets.length) {
+    throw new Error("Packaged remote-agent assets contain a duplicate target.");
+  }
   const publicKey = createPublicKey(input.signingKeyPem)
     .export({ type: "spki", format: "pem" })
     .toString();
+  // A release signed with a key shipped clients do not pin would be refused by every client.
+  assertPinnedReleaseSigningKey(
+    { keyId: input.signingKeyId, publicKeyPem: publicKey },
+    input.pinnedTrustStore ?? PINNED_RELEASE_TRUST_STORE,
+  );
   const trustStore = { [input.signingKeyId]: publicKey };
   for (const asset of input.assets) {
     const artifact = selectRemoteAgentArtifact(manifest, asset.targetTriple);
@@ -46,7 +71,7 @@ export function verifyRemoteAgentReleaseAssets(input: {
       manifest?: unknown;
       trustStore?: Record<string, unknown>;
     };
-    const installManifest = parseRemoteAgentArtifactManifest(value.manifest);
+    const installManifest = parseReleaseManifest(value.manifest);
     if (JSON.stringify(installManifest) !== JSON.stringify(manifest)) {
       throw new Error("Install source manifest does not match the published manifest.");
     }
@@ -66,10 +91,7 @@ function argumentValue(name: string): string {
 function parseAssetSpec(value: string): AssetSpec {
   const separator = value.indexOf("=");
   const targetTriple = value.slice(0, separator);
-  if (
-    separator <= 0 ||
-    (targetTriple !== "x86_64-unknown-linux-gnu" && targetTriple !== "aarch64-unknown-linux-gnu")
-  ) {
+  if (separator <= 0 || !isRemoteAgentTargetTriple(targetTriple)) {
     throw new Error(`Invalid --asset value '${value}'.`);
   }
   return { targetTriple, path: value.slice(separator + 1) };

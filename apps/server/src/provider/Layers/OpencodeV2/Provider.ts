@@ -5,8 +5,9 @@ import { buildServerProvider } from "../../providerSnapshot.ts";
 
 /** HTTP lease authentication is never represented as model-provider authentication. */
 export function makeDormantOpencodeV2Provider(): ServerProviderShape {
-  const snapshot = Effect.sync(() =>
-    buildServerProvider({
+  // Matches the dormant registration capabilities: no local runtime against remote workspaces.
+  const snapshot = Effect.sync(() => ({
+    ...buildServerProvider({
       provider: "opencodeV2",
       enabled: false,
       checkedAt: new Date().toISOString(),
@@ -20,7 +21,8 @@ export function makeDormantOpencodeV2Provider(): ServerProviderShape {
           "Development only. Live generation, recovery, MCP isolation, and full platform/remote conformance are not yet verified.",
       },
     }),
-  );
+    supportsLocalRuntimeRemoteWorkspace: false,
+  }));
   return {
     getSnapshot: snapshot,
     refresh: snapshot,

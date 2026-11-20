@@ -147,15 +147,23 @@ export const checkMuseProviderStatus = (
         installed: true,
         version: discovery.version ?? null,
         ...(usageLimits ? { usageLimits } : {}),
-        // Per-platform gate (all supported platforms are enabled today; an
-        // unknown or withdrawn platform reports warning/unavailable). Ready
-        // still requires a verified browser-login lane.
-        status: gate || discovery.authStatus !== "authenticated" ? "warning" : "ready",
+        // A valid but empty native catalog is not usable. Keep discovery
+        // unavailable instead of claiming readiness without selectable models.
+        status:
+          gate || discovery.authStatus !== "authenticated" || discovery.models.length === 0
+            ? "warning"
+            : "ready",
         auth: {
           status: discovery.authStatus,
           ...(discovery.authType ? { type: discovery.authType } : {}),
         },
         models: discovery.models,
+        ...(discovery.models.length === 0
+          ? {
+              message:
+                "Muse returned an empty model catalog. No verified models are available. Check model availability in the native `muse` CLI, then refresh provider status. bigbud will not substitute unverified models.",
+            }
+          : {}),
         ...(gate ? { message: gate } : {}),
         ...(discovery.authStatus === "unauthenticated"
           ? {

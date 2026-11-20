@@ -22,6 +22,10 @@ mod hello;
 mod journal_restore;
 #[path = "operation_handlers.rs"]
 mod operation_handlers;
+#[path = "os_index_search.rs"]
+mod os_index_search;
+#[path = "paste_staging.rs"]
+mod paste_staging;
 #[path = "process_attach.rs"]
 mod process_attach;
 #[path = "process_handlers.rs"]
@@ -30,8 +34,21 @@ mod process_handlers;
 mod protocol_helpers;
 #[path = "pty_controls.rs"]
 mod pty_controls;
+#[path = "pty_create.rs"]
+mod pty_create;
 #[path = "pty_handlers.rs"]
 mod pty_handlers;
+#[path = "pty_input_reconcile.rs"]
+mod pty_input_reconcile;
+#[path = "pty_inventory.rs"]
+mod pty_inventory;
+#[path = "pty_profile.rs"]
+mod pty_profile;
+#[path = "search.rs"]
+mod search;
+#[cfg(unix)]
+#[path = "service_lease.rs"]
+mod service_lease;
 pub use pty_controls::{PreparedPtyControl, is_pty_control};
 use pty_handlers::PtySession;
 #[path = "retirement.rs"]
@@ -48,6 +65,12 @@ mod accepted_operations_tests;
 #[path = "journal_restore.tests.rs"]
 mod journal_restore_tests;
 #[cfg(test)]
+#[path = "os_index_search.tests.rs"]
+mod os_index_search_tests;
+#[cfg(test)]
+#[path = "paste_staging.tests.rs"]
+mod paste_staging_tests;
+#[cfg(test)]
 #[path = "process_attach.tests.rs"]
 mod process_attach_tests;
 #[cfg(test)]
@@ -59,8 +82,12 @@ mod test_helpers;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_write.tests.rs"]
+mod workspace_write_tests;
 
 use journal_restore::restore_process_journal;
+pub use os_index_search::PreparedOsIndexSearch;
 pub use protocol_helpers::protocol_error_frame;
 use protocol_helpers::{
     operation_error, process_attach_response_frame, process_completed_frame, process_environment,
@@ -68,6 +95,7 @@ use protocol_helpers::{
     pty_control_response_frame, pty_create_response_frame, pty_exited_frame, pty_output_frame,
     workspace_error_code,
 };
+pub use search::PreparedSearch;
 
 /// How long a terminal process result (state, exit code, output watermark)
 /// and an accepted-operation identity are kept. Long enough to survive a
@@ -116,6 +144,8 @@ pub enum SessionError {
     UnexpectedMessage,
     #[error("supervisor is stopping and is not accepting new work")]
     Restarting,
+    #[error("managed service lease is unavailable")]
+    ServiceLeaseUnavailable,
 }
 
 pub struct AgentSession {
@@ -126,9 +156,20 @@ pub struct AgentSession {
     process_journal: Option<OperationJournal>,
     process_cancellations: HashMap<String, Arc<AtomicBool>>,
     pty_sessions: HashMap<String, PtySession>,
+    pty_create_failures: HashMap<String, pty_create::PtyCreateFailure>,
     workspace_roots: HashMap<String, WorkspaceRoot>,
     agent_instance_id: String,
     agent_epoch: String,
+    paste_staging: Option<crate::paste_staging::PasteStore>,
+    search_registry: crate::search::SearchRegistry,
+    /// Separate slots so "this computer" never waits behind project searches.
+    os_index_registry: crate::search::SearchRegistry,
+    os_index: bool,
+    /// "This computer" scopes resolved once per (level, home) for the session's lifetime.
+    os_index_scopes:
+        HashMap<(crate::os_index::OsIndexScopeLevel, std::path::PathBuf), Vec<std::path::PathBuf>>,
+    #[cfg(unix)]
+    managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
 
 struct AcceptedOperation {
@@ -202,12 +243,46 @@ impl AgentSession {
             process_journal,
             process_cancellations: HashMap::new(),
             pty_sessions: HashMap::new(),
+            pty_create_failures: HashMap::new(),
             workspace_roots: HashMap::new(),
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,
+            paste_staging: None,
+            search_registry: crate::search::SearchRegistry::default(),
+            os_index_registry: crate::search::SearchRegistry::default(),
+            os_index: false,
+            os_index_scopes: HashMap::new(),
+            #[cfg(unix)]
+            managed_service_lease: None,
         }
     }
 
+    fn has_managed_service_account(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.managed_service_lease.is_some()
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+    fn has_active_service_lease(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.managed_service_lease
+                .as_ref()
+                .is_some_and(|lease| lease.active())
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+    #[cfg(unix)]
+    pub(crate) fn service_lease_for_retirement(&self) -> Option<Arc<crate::service_lease::Bridge>> {
+        self.managed_service_lease.as_ref().map(Arc::clone)
+    }
     pub fn handle(&mut self, frame: v1::Frame) -> Result<v1::Frame, SessionError> {
         match frame.payload {
             Some(v1::frame::Payload::ClientHello(hello)) => self.handle_client_hello(hello),
@@ -216,6 +291,12 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::CancelRequest(request)) if self.ready => {
                 self.handle_cancel_request(request)
+            }
+            Some(v1::frame::Payload::PtyListRequest(request)) if self.ready => {
+                Ok(self.handle_pty_list(request))
+            }
+            Some(v1::frame::Payload::PtyInputReconcileRequest(request)) if self.ready => {
+                Ok(self.handle_pty_input_reconcile(request))
             }
             _ if self.ready && !self.accepting_work => Err(SessionError::Restarting),
             Some(v1::frame::Payload::WorkspaceOpenRequest(request)) if self.ready => {
@@ -232,6 +313,9 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::ContentSearchRequest(request)) if self.ready => {
                 self.handle_content_search(request)
+            }
+            Some(v1::frame::Payload::OsIndexSearchRequest(request)) if self.ready => {
+                Ok(self.refuse_os_index_search(&request))
             }
             Some(v1::frame::Payload::WriteFileRequest(request)) if self.ready => {
                 self.handle_write_file(request)
@@ -259,6 +343,18 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::PtyCloseRequest(request)) if self.ready => {
                 Ok(self.handle_pty_close(request))
+            }
+            Some(v1::frame::Payload::PasteStageBeginRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_begin(request))
+            }
+            Some(v1::frame::Payload::PasteStageChunkRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_chunk(request))
+            }
+            Some(v1::frame::Payload::PasteStageCommitRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_commit(request))
+            }
+            Some(v1::frame::Payload::PasteStageDiscardRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_discard(request))
             }
             _ if !self.ready => Err(SessionError::HelloRequired),
             _ => Err(SessionError::UnexpectedMessage),

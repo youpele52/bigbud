@@ -274,6 +274,38 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
     }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
+  it.effect("routes websocket rpc projects.writeFile createOnly without overwriting", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const workspaceDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ws-project-create-" });
+      yield* fs.writeFileString(path.join(workspaceDir, "existing.json"), "mine");
+
+      yield* buildAppUnderTest();
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const result = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.projectsWriteFile]({
+            cwd: workspaceDir,
+            relativePath: "existing.json",
+            contents: "theirs",
+            createOnly: true,
+          }),
+        ).pipe(Effect.result),
+      );
+
+      assert.equal(result._tag, "Failure");
+      if (result._tag === "Failure" && result.failure._tag === "ProjectWriteFileError") {
+        assert.equal(result.failure.alreadyExists, true);
+        assert.equal(result.failure.message, "Workspace file already exists.");
+      } else {
+        assert.fail("expected a ProjectWriteFileError");
+      }
+      assert.equal(yield* fs.readFileString(path.join(workspaceDir, "existing.json")), "mine");
+    }).pipe(Effect.provide(serverHttpTestLayer)),
+  );
+
   it.effect("routes websocket rpc shell.openInEditor", () =>
     Effect.gen(function* () {
       let openedInput: { cwd: string; editor: EditorId } | null = null;

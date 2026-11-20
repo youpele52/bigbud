@@ -76,29 +76,20 @@ describe("FilesDrawerController", () => {
     expect(changed).toHaveBeenLastCalledWith("closed");
   });
 
-  it("pins across preview boundaries and unpins to explicit-open", () => {
+  it("keeps the tree open across preview boundaries until toggled off", () => {
     const { drawer, changed } = setup();
     drawer.open();
-    drawer.togglePin();
+    expect(drawer.toggleKeepOpen()).toBe(true);
     drawer.setActivity("pointer", false);
     vi.advanceTimersByTime(10_000);
     expect(changed).toHaveBeenLastCalledWith("pinned");
     drawer.setActive(false);
     drawer.setActive(true);
     expect(changed).toHaveBeenLastCalledWith("pinned");
-    drawer.togglePin();
-    expect(changed).toHaveBeenLastCalledWith("open");
-  });
-
-  it("toggles a pinned tree closed, clears its pin, and reopens as an explicit overlay", () => {
-    const { drawer, changed } = setup();
-    expect(drawer.toggle()).toBe(true);
-    drawer.togglePin();
-    expect(changed).toHaveBeenLastCalledWith("pinned");
-    expect(drawer.toggle()).toBe(false);
+    expect(drawer.toggleKeepOpen()).toBe(false);
     expect(changed).toHaveBeenLastCalledWith("closed");
-    expect(drawer.toggle()).toBe(true);
-    expect(changed).toHaveBeenLastCalledWith("open");
+    expect(drawer.toggleKeepOpen()).toBe(true);
+    expect(changed).toHaveBeenLastCalledWith("pinned");
   });
 
   it.each(["edge", "header"] as const)(
@@ -109,17 +100,19 @@ describe("FilesDrawerController", () => {
       enter();
       vi.advanceTimersByTime(FILES_DRAWER_OPEN_DELAY);
       expect(changed).toHaveBeenLastCalledWith("hover");
-      // A toggle click closes even when hover already revealed the tree.
-      drawer.toggle();
+      // A click keeps a peeked tree open; a second click closes it.
+      drawer.toggleKeepOpen();
+      expect(changed).toHaveBeenLastCalledWith("pinned");
+      drawer.toggleKeepOpen();
       expect(changed).toHaveBeenLastCalledWith("closed");
       drawer.setActivity("pointer", false); // drawer disappearance is not trigger exit
       enter();
       vi.advanceTimersByTime(2000);
-      expect(changed).toHaveBeenCalledTimes(2);
+      expect(changed).toHaveBeenCalledTimes(3);
       drawer.observeTriggers(false, false);
       enter();
       vi.advanceTimersByTime(FILES_DRAWER_OPEN_DELAY - 1);
-      expect(changed).toHaveBeenCalledTimes(2);
+      expect(changed).toHaveBeenCalledTimes(3);
       vi.advanceTimersByTime(1);
       expect(changed).toHaveBeenLastCalledWith("hover");
       drawer.dismiss(); // Escape uses the same suppression rule.

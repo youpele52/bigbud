@@ -4,11 +4,129 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 ## What's new?
 
+- **[Work across projects from one chat](#work-across-projects-from-one-chat):** Let an agent message and organize chats in your other projects, including remote ones. Attach a chat and ask, and it just happens.
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
 - **[See how your computer and servers are performing](#resource-warnings-without-watching-the-monitor):** Get warnings when CPU or memory use stays high or disk space runs low on your computer, and view live resource usage on connected Linux servers.
 - **[Start your project your way](#start-a-project-with-just-a-name):** Start with a folder or just a name—bigbud makes room for your ideas and handles the workspace setup.
 - **[Edit files without leaving bigbud](#edit-files-without-leaving-bigbud):** Update code, Markdown, and text files directly in the Files panel, with automatic saving and clear feedback when something needs your attention.
 - **[Move swiftly, browse easily](#lighter-loading-for-larger-chat-histories):** Browse large chat histories with less memory use. Older messages load as you scroll, and long replies expand when you need them.
+
+## v0.4.0 (21 November, 2026)
+
+### Run bigbud on Your Own Linux Server
+
+- **Keep work going after you close your laptop:** Set up bigbud's backend on a Linux server you own, such as a VPS or virtual machine. Chats, providers, and terminals run there, and work that is underway can finish even while your laptop is away.
+- **Open a server in its own window:** **Open remote backend** in the desktop sidebar opens a separate window for each set-up server. Each window keeps its own saved state, and one folder cannot be used by both your laptop and the server at once.
+- **Update the server without losing work:** **Settings → About → Remote backend** shows available updates. Updates wait for running work, and bigbud asks before interrupting anything. If a new version fails to start, the server returns to the previous version automatically.
+- **Install remote agents more safely:** bigbud only accepts remote agent and server builds signed with its own release key. Installing a newer remote agent replaces older builds by default once the new one is running.
+
+### Install and Remove the Remote Agent With Less Effort
+
+- **Use download links that keep working:** `https://bigbud.app/download/beta/remote-agent` always points to the newest beta's install script, and `latest` and release tags work the same way. The command bigbud copies uses these links, and unknown pages on bigbud.app now show a real **Page not found** instead of the homepage.
+- **Install by saving:** Choosing the remote agent in **Edit remote workspace** and saving installs or updates it without an extra dialog, skips a build that is already running, and removes older versions once nothing uses them. Status reads **Running now**, **Downloaded update** and **Backup version**, and tells two builds of the same version apart.
+- **Manage every host from Settings:** **Settings → Remote agents** lists every saved host, connected ones first and disconnected ones greyed out, without connecting just to check. **Remove agent** deletes only `~/.bigbud/agent`, lists anything still running instead of stopping it, and can switch that host's workspaces to Direct SSH.
+
+### Search Everything From One Place
+
+- **Search wider than the current chat:** **Mod+F** searches the current chat, the current project, your saved bigbud conversations, your other projects, this computer, and connected remote hosts. Results are grouped in that order, and more load as you scroll.
+- **Find files on this computer:** **Search this computer** uses Spotlight on macOS, Windows Search on Windows, and the system file index on Linux, which can be up to a day old. Files bigbud cannot show itself open in their usual app. Programs are only shown in their folder, never launched.
+- **Search remote hosts without surprise connections:** **Search connected remote backends** covers hosts that are already connected, including ones with an open remote terminal. bigbud never connects to a host just to search it, and hosts that need a newer remote agent show a quiet notice.
+- **Match regardless of capitals:** Every search ignores letter case, while exact-case matches still rank first. Both search settings start on and follow your **File Access** choice, so **No access** turns off searching this computer.
+
+### Find Files by Name Anywhere
+
+- **Open any file by name:** **Mod+P** finds files by name in the current project, your other projects, this computer, and connected remote hosts. Current-project results appear immediately, without waiting for slower sources.
+- **Get the same ranking everywhere:** Local and remote results use the same fuzzy ranking, so a file ranks the same wherever it lives. More results load as you scroll.
+
+### Work Across Projects From One Chat
+
+- **Ask a chat to help in another project:** Have an agent message, rename, move, or snooze chats in any of your projects, including remote ones, or start a new chat there. Checking another chat's status works anywhere, without a prompt.
+- **Point it at a chat and it just happens:** Attach a chat from another project and ask. The agent acts without an extra question. Chats in the same project, and chats the agent started for you, work as before.
+- **Answer only when it matters:** bigbud asks when an agent wants to change a chat you didn't point it to. Click **Allow** or **Deny**, or just reply yes or no. A yes lets that chat work in that project until bigbud restarts; a no stops only that one change.
+- **Stay in control:** bigbud checks your answer itself, so an agent cannot approve on your behalf, even with full access. The other chat keeps its own access settings and approvals.
+- **Keep messages correctly labeled:** A message from another agent that waits while a chat is busy stays marked as coming from that agent, rather than looking like something you typed.
+
+### Mobile Remote Control on Every Release Channel
+
+- **Use your phone with stable, beta, and development builds:** Each channel uses its own Tailscale Serve port, so several can serve your phone at the same time. Stable keeps its existing address, so current pairing links keep working.
+- **Take over a route another bigbud left behind:** If an older or different bigbud build already uses this channel's address, Settings explains why and offers **Take over** after confirmation. Phones paired with that other build stop reaching it until it is set up again, and routes to other services are never changed.
+- **Stay connected more reliably:** Reconnecting, switching between computers and servers, and revoked sessions are handled more predictably. Each host keeps its own drafts, and messages with an unknown delivery outcome are never sent twice.
+
+### Never Miss Finished Terminal Work
+
+- **Keep terminal-only chats near the top:** Pressing Enter in a chat's terminal counts as activity, so chats used mainly through the terminal no longer sink. The hover card shows **Last terminal activity**.
+- **See when long commands finish:** When a command that ran for at least a minute finishes in a pane you aren't watching, its chat moves to **Needs you**. A terminal icon marks it, red when the command failed and green otherwise, with a toast and desktop notification that follow your notification settings.
+- **Know when terminal agents finish:** **Detect when terminal agents finish** is on by default. bigbud sets this up automatically for Claude Code and Codex in its own terminals, without changing your config files, and offers copyable snippets for OpenCode and herdr.
+
+### Hand Work to Another Host
+
+- **Pair hosts you trust:** **Settings → Peer hosts** pairs this backend with other bigbud servers. Each pairing confirms the host's identity and can be revoked at any time.
+- **Let an agent delegate across hosts:** An agent can start a task on a paired host and follow its progress, even when your laptop is offline. Delegated work never gets more access than the chat that started it, and the status shows when the remote task is waiting for an approval on that host.
+
+### Paste Images and Files Into Terminals
+
+- **Give terminal AI tools your images:** Pasting an image saves it as a private file and pastes its full path, which Codex, Claude Code, OpenCode, and Gemini can read. Copied files paste their real full paths, and text in the clipboard still pastes as text.
+- **Paste into remote terminals too:** Images and files are uploaded automatically to the machine the terminal runs on, with a toast showing the host and size. Dropping files into a remote terminal works the same way.
+- **Keep pasted files in check:** Pasted files are removed when the terminal closes or restarts. The default limit of 20 MB per file can be set between 10 and 200 MB in **Settings → Terminal**.
+
+### Answer Agent Questions Without Leaving the Composer
+
+- **Answer in one place:** Agent questions appear in a panel above the composer, with clickable options, typed context, and **Next** and **Submit** to move through several questions. Attached files follow your answer in a labelled message.
+- **Get clickable questions from more providers:** Codex can ask in **Default** mode, Pi gains an ask tool, and Devin's questions use the same panel. Codex also defaults to a model that ChatGPT sign-ins accept.
+- **Read options more clearly:** Repeated option descriptions are hidden, and single-choice questions no longer promise more than one pick. Your draft from another chat no longer leaks into an arriving question.
+
+### A Friendlier First Launch
+
+- **Get started in one short tour:** First launch offers an optional, skippable tour. Tell bigbud what to call you, see the AI providers it found, and choose file access. You can reopen it from **Settings → About → Show welcome tour**.
+- **Be greeted by name:** Finishing the tour opens a new chat that welcomes you by name.
+- **Answer macOS once:** Your **File Access** choice also covers search, including iCloud Drive and other cloud folders. macOS asks for access when you choose, instead of in the middle of a search.
+
+### A Window That Feels All of a Piece
+
+- **See your desktop through the whole window:** When **Window Material** is translucent, the chat, headers, composer, terminal, right panel, and **Settings** all let your wallpaper show through, not just the sidebar. **Solid** keeps every surface opaque.
+- **Read the layout at a glance:** The sidebar and right panel share one tone, and the chat and terminal sit a shade deeper, in both translucent and solid modes.
+- **Resize with a quiet edge:** Both panel edges show the same thin line when you hover or drag them, and light mode no longer shows a dark line beside the sidebar.
+- **Browse files beside your code:** In **Files**, the file tree sits next to the open file instead of covering it. Hover the **Files** icon or the file's right edge to open it, or click the icon to keep it open until you click again.
+
+### A Terminal That's Easier to Set Up and Arrange
+
+- **Find every terminal option on one page:** **Settings → Terminal** has its own page, grouped by task. Settings are ordered from setup to workspace tools, preferences, and data.
+- **Split the way you work:** **Mod+D** splits the focused terminal to the right and **Mod+Shift+D** splits it down, so you can mix layouts. A compact **Terminal actions** menu offers search, rename, refresh, and new or different shells.
+- **Choose your default shell:** Pick the shell new local terminals use. Saved choices that are no longer available stay visible, and existing terminals keep running unchanged.
+- **Recover an uncertain terminal:** When bigbud can't confirm a remote shell started, you can dismiss its pane or open a fresh terminal in the same place. bigbud warns that the remote process may still be running.
+
+### More Reliable Sessions and Cleanup
+
+- **Run several sessions at once without hangs:** Fixed a backend freeze when several sessions started at the same time. Backend shutdown no longer waits about 20 seconds when clients are still connected.
+- **Delete reliably:** Project deletes no longer time out after their chats are removed, retention deletes no longer stay stuck as deleting, and deletion works on Linux ARM and remote servers.
+- **Send long messages:** The general size limit on messages has been removed, while recovery keeps its own limits.
+- **Use computer use in beta builds:** Computer use starts in beta and other channel builds. Channel names appear in lowercase, such as **bigbud beta**.
+- **Update on slower Windows PCs:** Windows updates no longer fail when the pre-install safety check runs slowly. It allows more time and retries once before giving up.
+
+### More Dependable Providers
+
+- **Recover chat titles automatically:** Title and summary generation retry briefly and survive restarts. If they still fail, an amber notice points you to **Rename**.
+- **See real provider status on remote workspaces:** The model picker explains the actual problem, such as a missing sign-in, instead of claiming a provider doesn't support remote workspaces.
+- **Keep providers available:** Pi recovers from a lock left by an interrupted update, and Muse reports a warning instead of appearing ready with no models.
+
+### Clearer Visual Replies and Browser Pages
+
+- **Open sources from visual replies:** Links in visual replies open when clicked, and agents are guided to use visuals for research, comparisons, and small sets of figures.
+- **Read visuals in any theme:** Visual replies stay readable in light and dark themes, even when an agent picks its own colors.
+- **See web pages as intended:** Pages that don't set a background show the browser's normal light or dark canvas instead of bigbud's panel behind them.
+
+### Notifications You Can Trust
+
+- **Trust task-completion notifications:** **Task completed** appears only after a turn has truly finished with nothing left to do. Agent updates have their own notifications.
+- **Close every notification:** Notifications close reliably in the desktop app and dismiss themselves after a time based on severity. A dismissed warning stays away for five minutes unless it gets worse.
+- **See notifications that match the window:** With a translucent **Window Material**, notifications take on the window tint and keep their severity colour. **Solid** and macOS **Reduce transparency** keep them opaque.
+
+### Small Changes That Remove Friction
+
+- **Stop an agent with Escape:** Press **Esc** twice quickly to stop a running chat, just like clicking **Stop**. A hint appears after the first press, and a single **Esc** keeps its usual meaning.
+- **Return to where you were in Settings:** Settings reopens on the last page and scroll position you left, until bigbud restarts.
+- **Enjoy a calmer timeline:** Activity header actions, such as copy on work logs, appear on hover or keyboard focus. Touch screens keep them visible.
+- **Open non-git folders without errors:** The Git and Diff panels show a quiet message for folders that aren't git repositories.
 
 ## v0.3.3 (8 November, 2026)
 

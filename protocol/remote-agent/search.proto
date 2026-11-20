@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+// Streaming workspace search (capability `workspace.search-stream` 1.0). One request walks every
+// root it carries with the ripgrep-library engine, streams `WorkspaceSearchBatch` frames with
+// monotonic `sequence` numbers, and ends with exactly one `WorkspaceSearchCompleted`. Roots are
+// opened for the operation only (no workspace handle, no close message). `CancelRequest` with
+// the same `operation_id` stops the search; it is never journalled or replayed.
+
+enum WorkspaceSearchMode {
+  WORKSPACE_SEARCH_MODE_UNSPECIFIED = 0;
+  WORKSPACE_SEARCH_MODE_NAMES = 1;
+  WORKSPACE_SEARCH_MODE_CONTENT = 2;
+  WORKSPACE_SEARCH_MODE_BOTH = 3;
+}
+
+enum WorkspaceSearchPriority {
+  WORKSPACE_SEARCH_PRIORITY_UNSPECIFIED = 0;
+  // Interactive local search: normal thread priority.
+  WORKSPACE_SEARCH_PRIORITY_INTERACTIVE = 1;
+  // Remote or background search: lowered CPU and I/O priority.
+  WORKSPACE_SEARCH_PRIORITY_BACKGROUND = 2;
+}
+
+message WorkspaceSearchRoot {
+  // Opaque server label echoed in hits and per-root errors.
+  string root_id = 1;
+  // Absolute workspace root, validated like `WorkspaceOpenRequest.root`.
+  string root = 2;
+  // Optional relative folder inside `root` to search instead of the whole root.
+  string relative_path = 3;
+}
+
+message WorkspaceSearchRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  repeated WorkspaceSearchRoot roots = 3;
+  string query = 4;
+  WorkspaceSearchMode mode = 5;
+  uint32 max_results = 6;
+  uint32 max_results_per_root = 7;
+  // Clamped by the agent to at most 10 000.
+  uint32 deadline_ms = 8;
+  // 0 lets the agent choose; clamped by the agent.
+  uint32 max_threads = 9;
+  WorkspaceSearchPriority priority = 10;
+}
+
+message WorkspaceSearchNameHit {
+  string root_id = 1;
+  // Relative to the root, `/`-separated.
+  string path = 2;
+  bool is_directory = 3;
+  uint64 size_bytes = 4;
+  int64 modified_unix_ms = 5;
+  // Lower is better; only comparable within one root.
+  uint32 score = 6;
+}
+
+message WorkspaceSearchContentHit {
+  string root_id = 1;
+  string path = 2;
+  uint32 line = 3;
+  uint32 column = 4;
+  string excerpt = 5;
+}
+
+message WorkspaceSearchBatch {
+  string request_id = 1;
+  string operation_id = 2;
+  uint64 sequence = 3;
+  repeated WorkspaceSearchNameHit names = 4;
+  repeated WorkspaceSearchContentHit contents = 5;
+}
+
+message WorkspaceSearchRootError {
+  string root_id = 1;
+  string error_code = 2;
+}
+
+message WorkspaceSearchCompleted {
+  string request_id = 1;
+  string operation_id = 2;
+  // `complete`, `limit`, `deadline`, `cancelled` or `error`.
+  string stop_reason = 3;
+  bool truncated = 4;
+  uint64 files_scanned = 5;
+  repeated WorkspaceSearchRootError root_errors = 6;
+  string error_code = 7;
+  string error_message = 8;
+  // Batches sent before this frame; lets the client detect a gap.
+  uint64 batches = 9;
+}
+
+// "This computer" file-name search through the operating system's index (capability
+// `os-index.search` 1.0): Spotlight on macOS. Only the desktop-embedded local agent
+// (`--ephemeral --os-index`) advertises or serves it; every other agent mode refuses it. The agent
+// resolves the folders for `scope_level` under its own home folder, drops excluded paths, and
+// answers with at most one `OsIndexSearchBatch` and exactly one `OsIndexSearchCompleted`.
+// `CancelRequest` with the same `operation_id` stops the query.
+
+enum OsIndexScopeLevel {
+  OS_INDEX_SCOPE_LEVEL_UNSPECIFIED = 0;
+  // Desktop, Documents, Downloads, Music and Pictures.
+  OS_INDEX_SCOPE_LEVEL_COMMON_FOLDERS = 1;
+  // Visible home folders except Library, plus iCloud Drive and CloudStorage.
+  OS_INDEX_SCOPE_LEVEL_UNRESTRICTED = 2;
+}
+
+message OsIndexSearchRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  string query = 3;
+  OsIndexScopeLevel scope_level = 4;
+  // 0 means 50; capped at 200.
+  uint32 max_results = 5;
+  // Clamped by the agent to at most 10 000.
+  uint32 deadline_ms = 6;
+}
+
+message OsIndexSearchHit {
+  // Absolute path.
+  string path = 1;
+  bool is_directory = 2;
+  // Uniform type identifier on macOS; empty when unknown.
+  string content_type = 3;
+  uint64 size_bytes = 4;
+  int64 modified_unix_ms = 5;
+  int64 last_used_unix_ms = 6;
+  // Lower is better.
+  uint32 score = 7;
+}
+
+message OsIndexSearchBatch {
+  string request_id = 1;
+  string operation_id = 2;
+  uint64 sequence = 3;
+  repeated OsIndexSearchHit hits = 4;
+}
+
+message OsIndexSearchCompleted {
+  string request_id = 1;
+  string operation_id = 2;
+  // `complete`, `limit`, `deadline`, `cancelled` or `error`.
+  string stop_reason = 3;
+  bool truncated = 4;
+  // `spotlight`, or empty where no OS index is supported.
+  string source = 5;
+  // `ready` or `unavailable`.
+  string availability = 6;
+  // Rows dropped by the exclusion list.
+  uint64 excluded = 7;
+  string error_code = 8;
+  string error_message = 9;
+  uint64 batches = 10;
+}

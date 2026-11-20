@@ -1,11 +1,12 @@
 import { OPENCODE_RETAINED_HISTORY_ADVISORY_ID } from "@bigbud/shared/opencodeAdvisory";
+import { backendScopedKey, backendScopedLocalStorage } from "../../../lib/backendScopedStorage";
 
 export const RETAINED_HISTORY_DISMISSAL_KEY = `bigbud:provider-advisory:${OPENCODE_RETAINED_HISTORY_ADVISORY_ID}:dismissed`;
 
 /** One store per JS app runtime; reload/new tabs start a new runtime. */
 export function createRetainedHistoryAdvisoryState(
   getStorage: () => Pick<Storage, "getItem" | "setItem"> | undefined = () =>
-    globalThis.window?.localStorage,
+    globalThis.window ? backendScopedLocalStorage : undefined,
 ) {
   let initialized = false;
   let dismissed = false;
@@ -31,7 +32,8 @@ export function createRetainedHistoryAdvisoryState(
   }
 
   function syncFromStorage(event: StorageEvent) {
-    if (event.key !== RETAINED_HISTORY_DISMISSAL_KEY || dismissed || !readDismissed()) return;
+    const key = backendScopedKey(RETAINED_HISTORY_DISMISSAL_KEY);
+    if (key === null || event.key !== key || dismissed || !readDismissed()) return;
     dismissed = true;
     for (const listener of listeners) listener();
   }

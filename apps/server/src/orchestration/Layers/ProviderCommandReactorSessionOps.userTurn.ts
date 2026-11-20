@@ -10,6 +10,7 @@ export const recordSubmittedUserTurn = (
     threadId: ThreadId;
     requestMessageId?: MessageId;
     turnId: TurnId;
+    sessionEpoch: number;
     createdAt: string;
     /** The provider was idle again when acceptance was recorded, so the turn already ended. */
     providerIdle: boolean;
@@ -24,7 +25,7 @@ export const recordSubmittedUserTurn = (
       )
     )
       return;
-    const id = `text-generation-user-turn:${input.threadId}:${input.requestMessageId}:${input.turnId}`;
+    const id = `text-generation-user-turn:${input.threadId}:${input.requestMessageId}:${input.sessionEpoch}:${input.turnId}`;
     yield* services.orchestrationEngine
       .dispatch({
         type: "thread.activity.append",
@@ -37,7 +38,11 @@ export const recordSubmittedUserTurn = (
           tone: "info",
           summary: "User turn submitted",
           turnId: input.turnId,
-          payload: { messageId: input.requestMessageId, providerIdle: input.providerIdle },
+          payload: {
+            messageId: input.requestMessageId,
+            providerIdle: input.providerIdle,
+            sessionEpoch: input.sessionEpoch,
+          },
           createdAt: input.createdAt,
         },
       })

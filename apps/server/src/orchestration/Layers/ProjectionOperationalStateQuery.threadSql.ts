@@ -17,6 +17,7 @@ import {
   ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
+import { projectionProjectColumnsSql } from "./ProjectionOperationalStateQuery.projectSql.ts";
 
 const ThreadRequest = Schema.Struct({ threadId: Schema.String });
 const ThreadWindowRequest = Schema.Struct({ threadId: Schema.String, limit: Schema.Number });
@@ -27,14 +28,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     Result: ProjectionProjectDbRowSchema,
     execute: ({ threadId }) => sql`
       SELECT
-        p.project_id AS "projectId", p.title,
-        p.provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
-        p.workspace_execution_target_id AS "workspaceExecutionTargetId",
-        p.execution_target_id AS "executionTargetId", p.workspace_root AS "workspaceRoot",
-        p.workspace_kind AS "workspaceKind", p.previous_workspace_root AS "previousWorkspaceRoot",
-        p.default_model_selection_json AS "defaultModelSelection", p.scripts_json AS scripts,
-        p.created_at AS "createdAt", p.updated_at AS "updatedAt",
-        p.deleting_at AS "deletingAt", p.deleted_at AS "deletedAt"
+        ${projectionProjectColumnsSql(sql)}
       FROM projection_projects p
       INNER JOIN projection_threads t ON t.project_id = p.project_id
       WHERE t.thread_id = ${threadId}
@@ -209,7 +203,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         thread_id AS "threadId", turn_id AS "turnId",
         checkpoint_turn_count AS "checkpointTurnCount", checkpoint_ref AS "checkpointRef",
         checkpoint_status AS status, checkpoint_files_json AS files,
-        assistant_message_id AS "assistantMessageId", completed_at AS "completedAt"
+        assistant_message_id AS "assistantMessageId", COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
       FROM projection_turns
       WHERE thread_id = ${threadId} AND checkpoint_turn_count IS NOT NULL
       ORDER BY checkpoint_turn_count ASC
@@ -221,6 +215,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     Result: ProjectionLatestTurnDbRowSchema,
     execute: ({ threadId }) => sql`
       SELECT
+        terminal_outcome AS "terminalOutcome",
         turn_id AS "turnId", thread_id AS "threadId", state, requested_at AS "requestedAt",
         started_at AS "startedAt", completed_at AS "completedAt",
         assistant_message_id AS "assistantMessageId",

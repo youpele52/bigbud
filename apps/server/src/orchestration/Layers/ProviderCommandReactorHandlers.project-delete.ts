@@ -4,7 +4,7 @@ import {
   type OrchestrationThread,
   ProjectId,
 } from "@bigbud/contracts";
-import { Duration, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { createHash } from "node:crypto";
 
@@ -18,12 +18,13 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
-import { waitForReadModelCondition, type ReadModelSettleCheck } from "./readModelSettle.ts";
+import { waitForProjectThreadsToSettle } from "./ProviderCommandReactorHandlers.project-delete.settle.ts";
 import { DirectResourceCleanupExecutor } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRepository } from "../../persistence/Services/DirectResourceCleanupRepository.ts";
 import { calculateCommandPayloadDigest, commandPayloadDigestMatches } from "../commandDigest.ts";
 import { executeReadyDirectCleanupPlan } from "../../deletion/Layers/DirectResourceCleanupCoordinator.ts";
 import { makeDirectResourceCleanupExecutor } from "../../deletion/Layers/DirectResourceCleanupExecutor.ts";
+import { describeDeletionFailure } from "../../deletion/Layers/DeletionFailure.detail.ts";
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 import { directCleanupProofDigest } from "../../deletion/Layers/DirectResourceCleanup.proof.ts";
 import {
@@ -45,50 +46,6 @@ interface ProjectDeletionDeps {
   ) => Effect.Effect<ReadonlyArray<OrchestrationThread>>;
 }
 
-const PROJECT_DELETE_TIMEOUT = Duration.seconds(30);
-
-type ProjectThreadSettleResult =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly detail: string };
-
-function isActiveInDeletingSubtree(
-  thread: OrchestrationThread,
-  threadsById: ReadonlyMap<OrchestrationThread["id"], OrchestrationThread>,
-): boolean {
-  let current: OrchestrationThread | undefined = thread;
-  const seen = new Set<OrchestrationThread["id"]>();
-  while (current && !seen.has(current.id)) {
-    seen.add(current.id);
-    if (current.deletedAt !== null) return false;
-    if (current.deletingAt != null) return true;
-    const parentId: OrchestrationThread["id"] | undefined = current.parentThread?.threadId;
-    current = parentId ? threadsById.get(parentId) : undefined;
-  }
-  return false;
-}
-
-export function evaluateProjectThreadSettle(
-  threads: ReadonlyArray<OrchestrationThread>,
-  projectId: ProjectId,
-): ReadModelSettleCheck<ProjectThreadSettleResult> {
-  const activeThreads = threads.filter((thread) => thread.deletedAt === null);
-  if (activeThreads.length === 0) {
-    return { done: true, value: { ok: true } };
-  }
-  const threadsById = new Map(threads.map((thread) => [thread.id, thread]));
-  const stranded = activeThreads.find((thread) => !isActiveInDeletingSubtree(thread, threadsById));
-  if (stranded) {
-    return {
-      done: true,
-      value: {
-        ok: false,
-        detail: `Thread '${stranded.id}' deletion failed while deleting project '${projectId}'.`,
-      },
-    };
-  }
-  return { done: false };
-}
-
 export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
@@ -105,24 +62,6 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const cleanupRepository = Option.isSome(cleanupRepositoryService)
     ? cleanupRepositoryService.value
     : yield* makeDirectResourceCleanupRepository;
-  const waitForProjectThreadsToSettle = Effect.fn("waitForProjectThreadsToSettle")(function* (
-    deps: ProjectDeletionDeps,
-    projectId: ProjectId,
-  ): Effect.fn.Return<ProjectThreadSettleResult> {
-    const evaluate = deps
-      .resolveThreadsByProject(projectId)
-      .pipe(Effect.map((threads) => evaluateProjectThreadSettle(threads, projectId)));
-    return yield* waitForReadModelCondition({
-      check: evaluate,
-      events: orchestrationEngine.streamDomainEvents,
-      timeout: PROJECT_DELETE_TIMEOUT,
-      onTimeout: {
-        ok: false as const,
-        detail: `Timed out waiting for threads in project '${projectId}' to delete.`,
-      },
-    });
-  });
-
   return Effect.fn("processProjectDeletionRequested")(function* (
     deps: ProjectDeletionDeps,
     event: ProjectDeletionRequestedEvent,
@@ -158,8 +97,11 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
       return;
     }
 
-    const result = yield* waitForProjectThreadsToSettle(deps, event.payload.projectId);
-
+    const result = yield* waitForProjectThreadsToSettle({
+      projectId: event.payload.projectId,
+      resolveThreadsByProject: deps.resolveThreadsByProject,
+      events: orchestrationEngine.streamDomainEvents,
+    });
     if (!result.ok) {
       yield* Effect.logWarning("project deletion aborted", {
         projectId: event.payload.projectId,
@@ -171,6 +113,10 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
 
     const preparedExecutorExit = yield* Effect.exit(cleanupExecutor.prepare());
     if (preparedExecutorExit._tag === "Failure") {
+      yield* Effect.logWarning("project deletion aborted: resource cleanup is unavailable", {
+        projectId: event.payload.projectId,
+        detail: describeDeletionFailure(preparedExecutorExit.cause),
+      });
       yield* abortDeletion;
       return;
     }

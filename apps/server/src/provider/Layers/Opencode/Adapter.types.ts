@@ -46,10 +46,8 @@ export interface ActiveOpencodeSession {
   readonly client: OpencodeClient;
   /** Releases the shared server handle acquired from OpencodeServerManager. */
   readonly releaseServer: () => void;
-  /** Cleans up a synthetic remote-workspace bridge when one was created. */
+  /** Disconnects and removes this thread's orchestration MCP bridge. */
   readonly cleanupBridge?: (() => Promise<void>) | undefined;
-  /** Keeps provider tools anchored to the actual remote workspace. */
-  readonly remoteWorkspaceSystemPrompt?: string | undefined;
   readonly opencodeSessionId: string;
   readonly threadId: ThreadId;
   readonly sessionEpoch: number;

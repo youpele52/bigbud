@@ -272,6 +272,7 @@ export async function unlockSshExecutionTargetPassword(input: {
         "-o",
         "PubkeyAuthentication=no",
         ...(target.port ? ["-p", target.port] : []),
+        "--",
         session.destination,
       ],
       {

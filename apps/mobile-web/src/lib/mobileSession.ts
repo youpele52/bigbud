@@ -1,3 +1,5 @@
+import { decodeStoredMobileSession } from "./mobileSession.codec";
+
 export interface StoredMobileSession {
   readonly sessionId: string;
   readonly sessionToken: string;
@@ -13,19 +15,18 @@ export function readMobileSession(): StoredMobileSession | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const raw = window.localStorage.getItem(MOBILE_SESSION_STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
   try {
-    return JSON.parse(raw) as StoredMobileSession;
+    const raw = window.localStorage.getItem(MOBILE_SESSION_STORAGE_KEY);
+    return raw ? decodeStoredMobileSession(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
 }
 
 export function writeMobileSession(session: StoredMobileSession) {
-  window.localStorage.setItem(MOBILE_SESSION_STORAGE_KEY, JSON.stringify(session));
+  const decoded = decodeStoredMobileSession(session);
+  if (!decoded) throw new Error("The mobile authorization is invalid.");
+  window.localStorage.setItem(MOBILE_SESSION_STORAGE_KEY, JSON.stringify(decoded));
 }
 
 export function clearMobileSession() {
@@ -36,7 +37,8 @@ export function clearMobileSession() {
 }
 
 export function isMobileSessionExpired(session: StoredMobileSession): boolean {
-  return Date.parse(session.expiresAt) <= Date.now();
+  const expiry = Date.parse(session.expiresAt);
+  return !Number.isFinite(expiry) || expiry <= Date.now();
 }
 
 export function resolveMobileWebsocketUrl(session: StoredMobileSession): string {

@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "../startup/config.ts";
 /**
  * v2 desktop computer_use through orchestration (selected only when the pinned
  * Driver is 0.38.0). Applies the same thread gates as the legacy path
@@ -19,7 +20,10 @@ import {
 import { Cause, Effect, Exit, Option } from "effect";
 
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import {
   computerUseV2RequestActionName,
   refusedComputerUseV2Result,
@@ -82,7 +86,7 @@ export const computerUseV2ViaOrchestration = Effect.fn("computerUseV2ViaOrchestr
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly computerUseEnabled: boolean;
-    readonly serverMode: "web" | "desktop";
+    readonly serverMode: RuntimeMode;
     readonly threadId: ThreadId;
     readonly request: ComputerUseV2ToolRequest;
     readonly supervised?: SupervisedComputerUsePort;
@@ -99,9 +103,7 @@ export const computerUseV2ViaOrchestration = Effect.fn("computerUseV2ViaOrchestr
       });
     }
     const action = input.request.action;
-    const thread = yield* input.orchestrationEngine
-      .getReadModel()
-      .pipe(Effect.map((model) => model.threads.find((item) => item.id === input.threadId)));
+    const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
     if (!thread) return yield* Effect.fail(new Error(`Thread not found: ${input.threadId}`));
     if (!input.computerUseEnabled) {
       return yield* Effect.fail(

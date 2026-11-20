@@ -1,382 +1,136 @@
 import type { PermissionRequestResult } from "@github/copilot-sdk";
-import {
-  TextGenerationError,
-  type CopilotModelSelection,
-  type OpencodeModelSelection,
-} from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import { TextGenerationError } from "@bigbud/contracts/workspace/git.errors.ts";
+import type { CopilotModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
-
 import type {
+  MetadataTextGenerationAttempt,
   ThreadElevatorSummaryGenerationInput,
   ThreadTitleGenerationInput,
 } from "../Services/TextGeneration.ts";
-import { buildThreadElevatorSummaryPrompt, buildThreadTitlePrompt } from "../Prompts.ts";
+import { buildThreadElevatorSummaryPrompt } from "../Prompts.ts";
 import { sanitizeElevatorSummary, sanitizeThreadTitle } from "../Utils.ts";
 import { createLeasedCopilotClient } from "../../provider/Layers/Copilot/Runtime.client.ts";
 import { buildCopilotThreadTitlePrompt } from "./ProviderNativeThreadTitleGeneration.copilotPrompt.ts";
-import { resolveProviderIDForModel } from "../../provider/Layers/Opencode/Adapter.session.helpers.ts";
 import type { OpencodeServerManagerShape } from "../../provider/Services/Opencode/ServerManager.ts";
-import {
-  extractOpencodeResponseSummary,
-  extractOpencodeResponseTitle,
-  extractTitleFromTextCandidate,
-} from "./ProviderNativeThreadTitleGeneration.opencode.ts";
+import { extractTitleFromTextCandidate } from "./ProviderNativeThreadTitleGeneration.opencode.ts";
 
 export { generatePiThreadTitleNative } from "./ProviderNativeThreadTitleGeneration.pi.ts";
-
-const COPILOT_TIMEOUT_MS = 60_000;
-const OPENCODE_TIMEOUT_MS = 60_000;
-
-type CopilotThreadTitleGenerationInput = Omit<ThreadTitleGenerationInput, "modelSelection"> & {
-  readonly modelSelection: CopilotModelSelection;
-};
-
-type OpencodeThreadTitleGenerationInput = Omit<ThreadTitleGenerationInput, "modelSelection"> & {
-  readonly modelSelection: OpencodeModelSelection;
-};
-
-type OpencodeThreadElevatorSummaryGenerationInput = Omit<
-  ThreadElevatorSummaryGenerationInput,
-  "modelSelection"
-> & {
-  readonly modelSelection: OpencodeModelSelection;
-};
+export {
+  generateOpencodeThreadTitleNative,
+  generateOpencodeThreadElevatorSummaryNative,
+} from "./ProviderNativeThreadTitleGeneration.opencodeRunner.ts";
 
 export interface NativeThreadTitleGenerationDeps {
   readonly serverSettingsService: ServerSettingsShape;
   readonly opencodeServerManager: OpencodeServerManagerShape;
 }
 
-const denyAllPermissions = (): PermissionRequestResult => ({
-  kind: "reject",
+const denyAllPermissions = (): PermissionRequestResult => ({ kind: "reject" });
+/** Auxiliary one-shot generation, not isolated native metadata maintenance. */
+const generateCopilotMetadata = Effect.fn("generateCopilotMetadata")(function* (
+  deps: NativeThreadTitleGenerationDeps,
+  input: {
+    readonly cwd: string;
+    readonly modelSelection: CopilotModelSelection;
+    readonly metadataAttempt?: MetadataTextGenerationAttempt;
+  },
+  field: "title" | "summary",
+  prompt: string,
+) {
+  const operation = field === "title" ? "generateThreadTitle" : "generateThreadElevatorSummary";
+  const failure = () =>
+    new TextGenerationError({
+      operation,
+      detail: "GitHub Copilot metadata generation failed.",
+    });
+  const copilotSettings =
+    input.metadataAttempt?.providerSettings.copilot ??
+    (yield* deps.serverSettingsService.getSettings.pipe(
+      Effect.map((settings) => settings.providers.copilot),
+      Effect.catch(() => Effect.void),
+    ));
+  const response = yield* Effect.acquireUseRelease(
+    Effect.tryPromise({
+      try: () =>
+        createLeasedCopilotClient({
+          binaryPath: copilotSettings?.binaryPath ?? "copilot",
+          workingDirectory: input.cwd,
+        }),
+      catch: failure,
+    }),
+    (client) =>
+      Effect.acquireUseRelease(
+        Effect.tryPromise({
+          try: () =>
+            client.createSession({
+              workingDirectory: input.cwd,
+              model: input.modelSelection.model,
+              ...(input.modelSelection.options?.reasoningEffort
+                ? { reasoningEffort: input.modelSelection.options.reasoningEffort }
+                : {}),
+              availableTools: [],
+              onPermissionRequest: denyAllPermissions,
+              streaming: false,
+              systemMessage: {
+                mode: "replace",
+                content:
+                  field === "title"
+                    ? "You generate concise thread titles. Never use tools. Return only the title text."
+                    : "You generate concise elevator summaries. Never use tools. Return only a JSON object with a summary field.",
+              },
+            }),
+          catch: failure,
+        }),
+        (session) =>
+          Effect.gen(function* () {
+            if (input.metadataAttempt) yield* input.metadataAttempt.beforeDispatch();
+            return yield* Effect.tryPromise({
+              try: () => session.sendAndWait({ prompt, mode: "immediate" }, 60_000),
+              catch: failure,
+            });
+          }),
+        (session) => Effect.promise(() => session.disconnect().catch(() => undefined)),
+      ),
+    (client) => Effect.promise(() => client.stop().catch(() => [])),
+  );
+  return response?.data.content ?? "";
 });
 
 export const generateCopilotThreadTitleNative = (
   deps: NativeThreadTitleGenerationDeps,
-  input: CopilotThreadTitleGenerationInput,
+  input: Omit<ThreadTitleGenerationInput, "modelSelection"> & {
+    readonly modelSelection: CopilotModelSelection;
+  },
 ) =>
-  Effect.gen(function* () {
-    const copilotSettings = yield* deps.serverSettingsService.getSettings.pipe(
-      Effect.map((settings) => settings.providers.copilot),
-      Effect.catch(() => Effect.void),
-    );
-    const prompt = buildCopilotThreadTitlePrompt({
-      message: input.message,
-      attachments: input.attachments,
-    });
+  generateCopilotMetadata(deps, input, "title", buildCopilotThreadTitlePrompt(input)).pipe(
+    Effect.map((text) => ({
+      title: sanitizeThreadTitle(extractTitleFromTextCandidate(text) ?? text),
+    })),
+  );
 
-    const response = yield* Effect.tryPromise({
-      try: async () => {
-        const client = await createLeasedCopilotClient({
-          binaryPath: copilotSettings?.binaryPath ?? "copilot",
-          workingDirectory: input.cwd,
-        });
-        try {
-          const session = await client.createSession({
-            workingDirectory: input.cwd,
-            model: input.modelSelection.model,
-            ...(input.modelSelection.options?.reasoningEffort
-              ? { reasoningEffort: input.modelSelection.options.reasoningEffort }
-              : {}),
-            availableTools: [],
-            onPermissionRequest: denyAllPermissions,
-            streaming: false,
-            systemMessage: {
-              mode: "replace",
-              content:
-                "You generate concise thread titles. Never use tools. Return only the title text.",
-            },
-          });
-
-          try {
-            return await session.sendAndWait({ prompt, mode: "immediate" }, COPILOT_TIMEOUT_MS);
-          } finally {
-            await session.disconnect().catch(() => undefined);
-          }
-        } finally {
-          await client.stop().catch(() => []);
-        }
-      },
-      catch: (cause) =>
-        new TextGenerationError({
-          operation: "generateThreadTitle",
-          detail:
-            cause instanceof Error
-              ? `GitHub Copilot thread title generation failed: ${cause.message}`
-              : "GitHub Copilot thread title generation failed.",
-          cause,
-        }),
-    });
-
-    return {
-      title: sanitizeThreadTitle(
-        extractTitleFromTextCandidate(response?.data.content ?? "") ?? response?.data.content ?? "",
+export const generateCopilotThreadElevatorSummaryNative = (
+  deps: NativeThreadTitleGenerationDeps,
+  input: Omit<ThreadElevatorSummaryGenerationInput, "modelSelection"> & {
+    readonly modelSelection: CopilotModelSelection;
+  },
+) => {
+  const { prompt, outputSchema } = buildThreadElevatorSummaryPrompt(input);
+  return generateCopilotMetadata(deps, input, "summary", prompt).pipe(
+    Effect.flatMap((text) =>
+      Schema.decodeEffect(Schema.fromJsonString(outputSchema))(text).pipe(
+        Effect.mapError(
+          () =>
+            new TextGenerationError({
+              operation: "generateThreadElevatorSummary",
+              detail: "GitHub Copilot returned an invalid elevator summary.",
+              metadataOutcome: "failed",
+            }),
+        ),
       ),
-    };
-  });
-
-export const generateOpencodeThreadTitleNative = (
-  deps: NativeThreadTitleGenerationDeps,
-  input: OpencodeThreadTitleGenerationInput,
-) =>
-  Effect.gen(function* () {
-    const serverHandle = yield* Effect.tryPromise({
-      try: () => deps.opencodeServerManager.acquire({ directory: input.cwd }),
-      catch: (cause) =>
-        new TextGenerationError({
-          operation: "generateThreadTitle",
-          detail:
-            cause instanceof Error
-              ? `OpenCode server startup failed: ${cause.message}`
-              : "OpenCode server startup failed.",
-          cause,
-        }),
-    });
-
-    const client = serverHandle.client;
-    const { prompt } = buildThreadTitlePrompt({
-      message: input.message,
-      attachments: input.attachments,
-    });
-
-    try {
-      const sessionResp = yield* Effect.tryPromise({
-        try: () =>
-          client.session.create({
-            title: "Thread title generation",
-          }),
-        catch: (cause) =>
-          new TextGenerationError({
-            operation: "generateThreadTitle",
-            detail:
-              cause instanceof Error
-                ? `OpenCode session creation failed: ${cause.message}`
-                : "OpenCode session creation failed.",
-            cause,
-          }),
-      });
-
-      if (sessionResp.error || !sessionResp.data) {
-        return yield* new TextGenerationError({
-          operation: "generateThreadTitle",
-          detail: `OpenCode session creation failed: ${String(sessionResp.error)}`,
-        });
-      }
-
-      const sessionID = sessionResp.data.id;
-      const providerID =
-        input.modelSelection.subProviderID ??
-        (yield* Effect.tryPromise({
-          try: () => resolveProviderIDForModel(client, input.modelSelection.model),
-          catch: () => undefined as never,
-        }).pipe(Effect.orElseSucceed(() => undefined)));
-
-      if (!providerID) {
-        return yield* new TextGenerationError({
-          operation: "generateThreadTitle",
-          detail: `Unable to resolve OpenCode provider for model '${input.modelSelection.model}'.`,
-        });
-      }
-
-      const promptResp = yield* Effect.tryPromise({
-        try: () =>
-          client.session.prompt({
-            sessionID,
-            parts: [{ type: "text", text: prompt }],
-            format: {
-              type: "json_schema",
-              schema: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                },
-                required: ["title"],
-              },
-            },
-            model: {
-              providerID,
-              modelID: input.modelSelection.model,
-            },
-            tools: {},
-            noReply: false,
-            system:
-              "You generate concise thread titles. Return only structured output with a title field.",
-          }),
-        catch: (cause) =>
-          new TextGenerationError({
-            operation: "generateThreadTitle",
-            detail:
-              cause instanceof Error
-                ? `OpenCode thread title generation failed: ${cause.message}`
-                : "OpenCode thread title generation failed.",
-            cause,
-          }),
-      }).pipe(
-        Effect.timeoutOption(OPENCODE_TIMEOUT_MS),
-        Effect.flatMap(
-          Option.match({
-            onNone: () =>
-              Effect.fail(
-                new TextGenerationError({
-                  operation: "generateThreadTitle",
-                  detail: "OpenCode thread title generation timed out.",
-                }),
-              ),
-            onSome: (value) => Effect.succeed(value),
-          }),
-        ),
-      );
-
-      if (promptResp.error || !promptResp.data) {
-        return yield* new TextGenerationError({
-          operation: "generateThreadTitle",
-          detail: `OpenCode thread title generation failed: ${String(promptResp.error)}`,
-        });
-      }
-
-      return {
-        title: sanitizeThreadTitle(
-          extractOpencodeResponseTitle({
-            info: promptResp.data.info,
-            parts: promptResp.data.parts,
-          }) ?? "",
-        ),
-      };
-    } finally {
-      serverHandle.release();
-    }
-  });
-
-export const generateOpencodeThreadElevatorSummaryNative = (
-  deps: NativeThreadTitleGenerationDeps,
-  input: OpencodeThreadElevatorSummaryGenerationInput,
-) =>
-  Effect.gen(function* () {
-    const serverHandle = yield* Effect.tryPromise({
-      try: () => deps.opencodeServerManager.acquire({ directory: input.cwd }),
-      catch: (cause) =>
-        new TextGenerationError({
-          operation: "generateThreadElevatorSummary",
-          detail:
-            cause instanceof Error
-              ? `OpenCode server startup failed: ${cause.message}`
-              : "OpenCode server startup failed.",
-          cause,
-        }),
-    });
-
-    const client = serverHandle.client;
-    const { prompt } = buildThreadElevatorSummaryPrompt({
-      transcript: input.transcript,
-      attachments: input.attachments,
-    });
-
-    try {
-      const sessionResp = yield* Effect.tryPromise({
-        try: () =>
-          client.session.create({
-            title: "Thread elevator summary generation",
-          }),
-        catch: (cause) =>
-          new TextGenerationError({
-            operation: "generateThreadElevatorSummary",
-            detail:
-              cause instanceof Error
-                ? `OpenCode session creation failed: ${cause.message}`
-                : "OpenCode session creation failed.",
-            cause,
-          }),
-      });
-
-      if (sessionResp.error || !sessionResp.data) {
-        return yield* new TextGenerationError({
-          operation: "generateThreadElevatorSummary",
-          detail: `OpenCode session creation failed: ${String(sessionResp.error)}`,
-        });
-      }
-
-      const sessionID = sessionResp.data.id;
-      const providerID =
-        input.modelSelection.subProviderID ??
-        (yield* Effect.tryPromise({
-          try: () => resolveProviderIDForModel(client, input.modelSelection.model),
-          catch: () => undefined as never,
-        }).pipe(Effect.orElseSucceed(() => undefined)));
-
-      if (!providerID) {
-        return yield* new TextGenerationError({
-          operation: "generateThreadElevatorSummary",
-          detail: `Unable to resolve OpenCode provider for model '${input.modelSelection.model}'.`,
-        });
-      }
-
-      const promptResp = yield* Effect.tryPromise({
-        try: () =>
-          client.session.prompt({
-            sessionID,
-            parts: [{ type: "text", text: prompt }],
-            format: {
-              type: "json_schema",
-              schema: {
-                type: "object",
-                properties: {
-                  summary: { type: "string" },
-                },
-                required: ["summary"],
-              },
-            },
-            model: {
-              providerID,
-              modelID: input.modelSelection.model,
-            },
-            tools: {},
-            noReply: false,
-            system:
-              "You generate concise thread summaries. Return only structured output with a summary field.",
-          }),
-        catch: (cause) =>
-          new TextGenerationError({
-            operation: "generateThreadElevatorSummary",
-            detail:
-              cause instanceof Error
-                ? `OpenCode thread elevator summary generation failed: ${cause.message}`
-                : "OpenCode thread elevator summary generation failed.",
-            cause,
-          }),
-      }).pipe(
-        Effect.timeoutOption(OPENCODE_TIMEOUT_MS),
-        Effect.flatMap(
-          Option.match({
-            onNone: () =>
-              Effect.fail(
-                new TextGenerationError({
-                  operation: "generateThreadElevatorSummary",
-                  detail: "OpenCode thread elevator summary generation timed out.",
-                }),
-              ),
-            onSome: (value) => Effect.succeed(value),
-          }),
-        ),
-      );
-
-      if (promptResp.error || !promptResp.data) {
-        return yield* new TextGenerationError({
-          operation: "generateThreadElevatorSummary",
-          detail: `OpenCode thread elevator summary generation failed: ${String(promptResp.error)}`,
-        });
-      }
-
-      return {
-        summary: sanitizeElevatorSummary(
-          extractOpencodeResponseSummary({
-            info: promptResp.data.info,
-            parts: promptResp.data.parts,
-          }) ?? "",
-        ),
-      };
-    } finally {
-      serverHandle.release();
-    }
-  });
+    ),
+    Effect.map(({ summary }) => ({ summary: sanitizeElevatorSummary(summary) })),
+  );
+};

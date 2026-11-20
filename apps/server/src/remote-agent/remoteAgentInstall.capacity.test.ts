@@ -64,8 +64,13 @@ function controlFor(builds: ReadonlyArray<RemoteAgentRegistryBuild>): {
       promotionSequence: 2,
     }),
   );
+  // A build with no recorded launch is only retired once its runtime state is proven absent.
   const run = vi.fn(async (command: string) =>
-    command.includes('rm -- "$binary"') ? "deleted" : "dead",
+    command.includes('rm -- "$binary"')
+      ? "deleted"
+      : command.includes("printf absent")
+        ? "absent"
+        : "dead",
   );
   return {
     run,

@@ -47,14 +47,21 @@ fn duplicate_pty_create_reuses_the_existing_process() {
         cols: 80,
         rows: 24,
         environment: Vec::new(),
+        profile_launch: false,
     };
-    let (_, job) = session.prepare_pty_create(request.clone()).unwrap();
+    let (created, job) = session.prepare_pty_create(request.clone()).unwrap();
+    assert!(matches!(
+        created.payload,
+        Some(v1::frame::Payload::PtyCreateResponse(response))
+            if response.launch_status == "unconfirmed"
+    ));
     let job = job.unwrap();
     let (duplicate, duplicate_job) = session.prepare_pty_create(request.clone()).unwrap();
     assert!(duplicate_job.is_none());
     assert!(matches!(
         duplicate.payload,
-        Some(v1::frame::Payload::PtyCreateResponse(response)) if response.pid == job.handle.pid as u64
+        Some(v1::frame::Payload::PtyCreateResponse(response))
+            if response.pid == job.handle.pid as u64 && response.launch_status == "unconfirmed"
     ));
     let mut conflicting = request;
     conflicting.request_digest = vec![2];
@@ -63,6 +70,31 @@ fn duplicate_pty_create_reuses_the_existing_process() {
         Err(SessionError::OperationIdConflict)
     ));
 
+    let attached = session
+        .handle_pty_attach(v1::PtyAttachRequest {
+            request_id: "attach-before-read".to_owned(),
+            pty_id: "pty-1".to_owned(),
+            after_sequence: 0,
+        })
+        .unwrap();
+    assert!(matches!(
+        attached[0].payload,
+        Some(v1::frame::Payload::PtyAttachResponse(ref response))
+            if response.state == "running" && response.launch_status == "unconfirmed"
+    ));
     let _ = pty::read_events(job.reader, &job.handle);
-    let _ = fs::remove_dir_all(root);
+    session.complete_pty("pty-1", Some(0), None).unwrap();
+    let attached = session
+        .handle_pty_attach(v1::PtyAttachRequest {
+            request_id: "attach-exited".to_owned(),
+            pty_id: "pty-1".to_owned(),
+            after_sequence: 0,
+        })
+        .unwrap();
+    assert!(matches!(
+        attached[0].payload,
+        Some(v1::frame::Payload::PtyAttachResponse(ref response))
+            if response.state == "exited" && response.launch_status == "unconfirmed"
+    ));
+    fs::remove_dir_all(root).unwrap();
 }

@@ -24,6 +24,7 @@ import {
   type ThreadElevatorSummaryGenerationResult,
   type ThreadTitleGenerationResult,
   type TextGenerationShape,
+  type MetadataTextGenerationAttempt,
   TextGeneration,
 } from "../Services/TextGeneration.ts";
 import {
@@ -70,6 +71,7 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
     outputSchemaJson,
     modelSelection,
     cursorSettings,
+    metadataAttempt,
   }: {
     operation: CursorTextGenerationOperation;
     cwd: string;
@@ -77,6 +79,7 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
     outputSchemaJson: S;
     modelSelection: CursorModelSelection;
     cursorSettings: CursorSettings;
+    metadataAttempt?: MetadataTextGenerationAttempt;
   }): Effect.fn.Return<S["Type"], TextGenerationError> {
     // The agent lives only inside `withCursorAcpRuntime`: its scope closes (killing the agent's
     // process group) on success, failure, timeout and interruption.
@@ -118,6 +121,7 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
               ),
           });
 
+          if (metadataAttempt) yield* metadataAttempt.beforeDispatch();
           const promptResult = yield* runtime
             .prompt({ prompt: [{ type: "text", text: prompt }] })
             .pipe(
@@ -152,6 +156,12 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
       ),
     );
 
+    if (metadataAttempt && promptResult.stopReason === "cancelled")
+      return yield* new TextGenerationError({
+        operation,
+        detail: "Cursor ACP request was cancelled.",
+        metadataOutcome: "cancelled",
+      });
     if (!rawResult) {
       return yield* new TextGenerationError({
         operation,
@@ -159,6 +169,7 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
           promptResult.stopReason === "cancelled"
             ? "Cursor ACP request was cancelled."
             : "Cursor Agent returned empty output.",
+        ...(metadataAttempt ? { metadataOutcome: "failed" as const } : {}),
       });
     }
 
@@ -171,6 +182,7 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
             operation,
             detail: "Cursor Agent returned invalid structured output.",
             cause,
+            ...(metadataAttempt ? { metadataOutcome: "failed" as const } : {}),
           }),
         ),
       ),
@@ -301,7 +313,8 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
       prompt,
       outputSchemaJson: outputSchema,
       modelSelection: input.modelSelection,
-      cursorSettings: yield* loadCursorSettings,
+      cursorSettings: input.metadataAttempt?.providerSettings.cursor ?? (yield* loadCursorSettings),
+      ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
     });
 
     return {
@@ -329,7 +342,9 @@ const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function*
         prompt,
         outputSchemaJson: outputSchema,
         modelSelection: input.modelSelection,
-        cursorSettings: yield* loadCursorSettings,
+        cursorSettings:
+          input.metadataAttempt?.providerSettings.cursor ?? (yield* loadCursorSettings),
+        ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
       });
 
       return {

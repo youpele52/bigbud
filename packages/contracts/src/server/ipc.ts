@@ -10,10 +10,14 @@ import type {
   DesktopUpdateStatus,
 } from "./ipc.desktop";
 import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
+import type { DesktopCommandLineBridge } from "./ipc.desktopCommandLine";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
+import type { DesktopShellPathBridge } from "./ipc.desktopShellPath";
+import type { DesktopRemoteBackendBridge } from "./ipc.desktopRemoteBackend";
 import type { TerminalRenderingPolicy } from "./ipc.terminal";
+import type { DesktopWindowMaterialState } from "./ipc.windowMaterial";
 
 export type {
   DesktopRuntimeArch,
@@ -25,6 +29,9 @@ export type {
   DesktopUpdateStatus,
 } from "./ipc.desktop";
 export * from "./ipc.desktopComputerUse";
+export type * from "./ipc.desktopCommandLine";
+export type * from "./ipc.desktopRemoteBackend";
+export type * from "./ipc.desktopShellPath";
 export type { NativeApi } from "./ipc.nativeApi";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -40,7 +47,7 @@ export interface ContextMenuItem<T extends string = string> {
 }
 
 export type DesktopTheme = "light" | "dark" | "system";
-export type DesktopWindowRole = "main" | "mascot" | "compact-chat";
+export type DesktopWindowRole = "main" | "mascot" | "compact-chat" | "remote-backend";
 export type FloatingAssistantCaller = "chrome" | "logo" | "matte";
 
 export interface CompactChatLinkHandoff {
@@ -64,20 +71,37 @@ export interface DesktopNotificationInput {
   threadId?: string;
 }
 
+/** A Serve handler on this channel's HTTPS port that this app did not set up. */
+export interface DesktopTailscaleServeConflict {
+  /** Loopback port the existing "/" handler forwards to; null for other handler kinds. */
+  loopbackPort: number | null;
+  /** Set only when local evidence ties the handler to another bigbud backend. */
+  bigbudOwnerLabel: string | null;
+  /** True only for another bigbud backend: the UI may offer an explicit take over. */
+  canTakeOver: boolean;
+}
+
 export interface DesktopTailscaleRemoteAccessStatus {
   installed: boolean;
   running: boolean;
   online: boolean;
   serving: boolean;
+  /** `https://<host>` for port 443, otherwise `https://<host>:<httpsPort>`. */
   remoteBaseUrl: string | null;
+  /** This channel's own Tailscale Serve HTTPS port. */
+  httpsPort: number;
+  conflict: DesktopTailscaleServeConflict | null;
   error: string | null;
 }
 
 export interface DesktopBridge
   extends
+    DesktopCommandLineBridge,
     DesktopComputerUseBridge,
     DesktopCertificateChallengeBridge,
     DesktopScreenshotBridge,
+    DesktopRemoteBackendBridge,
+    DesktopShellPathBridge,
     DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
   /** This window's page zoom factor; 1 is actual size. */
@@ -116,11 +140,15 @@ export interface DesktopBridge
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  /** Replaces only another bigbud's handler on this channel's port, after explicit consent. */
+  takeOverTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
-  setWindowMaterial: (windowMaterial: DesktopWindowMaterial) => Promise<void>;
+  setWindowMaterial: (windowMaterial: DesktopWindowMaterial, requestId?: string) => Promise<void>;
+  getWindowMaterialState?: () => Promise<DesktopWindowMaterialState | null>;
+  onWindowMaterialState?: (listener: (state: DesktopWindowMaterialState) => void) => () => void;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },

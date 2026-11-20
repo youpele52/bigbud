@@ -1,7 +1,8 @@
 import { V2_THREAD_HANDLER_V1 } from "./Orchestration.implementation.v1.ts";
 import { V2_THREAD_HANDLER_V2 } from "./Orchestration.implementation.v2.ts";
 import { V2_IMPLEMENTATION_MANIFEST } from "./Orchestration.implementation.manifest.generated.ts";
-import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v3.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v5.ts";
+import { V2_THREAD_HANDLER_V5 } from "./Orchestration.implementation.v5.ts";
 import { V2_THREAD_HANDLER_V3 } from "./Orchestration.implementation.v3.ts";
 import { V2_THREAD_HANDLER_V4 } from "./Orchestration.implementation.v4.ts";
 
@@ -10,6 +11,7 @@ const implementations = Object.freeze({
   v2: Object.freeze({ ...V2_IMPLEMENTATION_MANIFEST.v2, ...V2_THREAD_HANDLER_V2 }),
   v3: Object.freeze({ ...V2_IMPLEMENTATION_MANIFEST.v3, ...V2_THREAD_HANDLER_V3 }),
   v4: Object.freeze({ ...V2_IMPLEMENTATION_MANIFEST.v4, ...V2_THREAD_HANDLER_V4 }),
+  v5: Object.freeze({ ...V2_IMPLEMENTATION_MANIFEST.v5, ...V2_THREAD_HANDLER_V5 }),
 });
 export type V2ImplementationVersion = keyof typeof implementations;
 
@@ -18,16 +20,13 @@ export function v2ImplementationForBootstrap(
   requested: V2ThreadImplementation,
   bootstrapAbi?: string,
 ): V2ThreadImplementation {
-  return bootstrapAbi &&
-    bootstrapAbi !== "bigbud.thread.bootstrap.v4" &&
-    requested.bootstrapAbi === "bigbud.thread.bootstrap.v4"
-    ? v2ThreadImplementation("v1")
-    : requested;
+  if (!bootstrapAbi || bootstrapAbi === requested.bootstrapAbi) return requested;
+  return v2ThreadImplementation(bootstrapAbi === "bigbud.thread.bootstrap.v4" ? "v3" : "v1");
 }
 
 /** Static release allowlist only: no source checkout, user-selected path or network import at runtime. */
 export function v2ThreadImplementation(
-  version: V2ImplementationVersion = "v3",
+  version: V2ImplementationVersion = "v5",
 ): V2ThreadImplementation {
   if (!Object.hasOwn(implementations, version))
     throw new Error("V2 thread-tool implementation is not release-bundled.");
@@ -39,7 +38,7 @@ export function v2ThreadImplementation(
 
 /** Default selection is for new owners only; references survive retirement until every call physically settles. */
 export class V2ThreadImplementationRegistry {
-  private selected: V2ImplementationVersion = "v3";
+  private selected: V2ImplementationVersion = "v5";
   private readonly entries = new Map<string, { handler: V2ThreadImplementation; refs: number }>();
   constructor(private readonly capacity = 32) {
     if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > 32)

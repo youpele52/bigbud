@@ -24,6 +24,8 @@ import type { WorkspaceRuntimeBackendShape } from "./workspace-runtime/Services/
 
 export interface BuildAppUnderTestOptions {
   readonly config?: Partial<ServerConfigShape>;
+  /** Replaces the local route set, e.g. with the remote client surface. */
+  readonly routes?: typeof import("./server.routes.ts").makeRoutesLayer;
   readonly layers?: {
     readonly keybindings?: Partial<KeybindingsShape>;
     readonly providerRegistry?: Partial<ProviderRegistryShape>;

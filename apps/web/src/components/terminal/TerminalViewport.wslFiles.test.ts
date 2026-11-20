@@ -1,7 +1,8 @@
 import type { NativeApi } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { openTerminalPath } from "./TerminalViewport.links.open";
-import { formatDroppedTerminalPath, rejectWslTerminalFileDrop } from "./TerminalViewport.drop";
+import { rejectWslTerminalFileDrop } from "./TerminalViewport.drop";
+import { formatTerminalPath } from "./TerminalViewport.paths";
 
 describe("explicit WSL file boundaries", () => {
   it("rejects file links before any filesystem, shell or panel API", async () => {
@@ -31,7 +32,7 @@ describe("explicit WSL file boundaries", () => {
     expect(notice).toHaveBeenCalledTimes(1);
   });
   it("legacy shell-only WSL drop formatting stays unchanged", () => {
-    expect(formatDroppedTerminalPath("C:\\dev\\a", "wsl")).toBe("'/mnt/c/dev/a'");
-    expect(formatDroppedTerminalPath("C:\\dev\\a", "cmd")).toBe('"C:\\dev\\a"');
+    expect(formatTerminalPath("C:\\dev\\a", "wsl")).toBe("'/mnt/c/dev/a'");
+    expect(formatTerminalPath("C:\\dev\\a", "cmd")).toBe('"C:\\dev\\a"');
   });
 });

@@ -17,6 +17,7 @@ import {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
+import { TurnTerminalOutcome } from "@bigbud/contracts/orchestration/orchestration.turnSettled.ts";
 import { Option, Schema, ServiceMap } from "effect";
 import { UsageAttribution } from "@bigbud/contracts/orchestration/providerRuntime.usage";
 import type { Effect } from "effect";
@@ -57,10 +58,12 @@ export const ProjectionTurn = Schema.Struct({
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
   sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
   assistantMessageId: Schema.NullOr(MessageId),
+  terminalOutcome: Schema.optional(Schema.NullOr(TurnTerminalOutcome)),
   state: ProjectionTurnState,
   requestedAt: IsoDateTime,
   startedAt: Schema.NullOr(IsoDateTime),
   completedAt: Schema.NullOr(IsoDateTime),
+  checkpointCompletedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   checkpointTurnCount: Schema.NullOr(NonNegativeInt),
   checkpointRef: Schema.NullOr(CheckpointRef),
   checkpointStatus: Schema.NullOr(OrchestrationCheckpointStatus),
@@ -77,10 +80,12 @@ export const ProjectionTurnById = Schema.Struct({
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
   sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
   assistantMessageId: Schema.NullOr(MessageId),
+  terminalOutcome: Schema.optional(Schema.NullOr(TurnTerminalOutcome)),
   state: ProjectionTurnState,
   requestedAt: IsoDateTime,
   startedAt: Schema.NullOr(IsoDateTime),
   completedAt: Schema.NullOr(IsoDateTime),
+  checkpointCompletedAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   checkpointTurnCount: Schema.NullOr(NonNegativeInt),
   checkpointRef: Schema.NullOr(CheckpointRef),
   checkpointStatus: Schema.NullOr(OrchestrationCheckpointStatus),

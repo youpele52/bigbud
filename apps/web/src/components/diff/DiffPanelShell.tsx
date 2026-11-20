@@ -30,7 +30,7 @@ export function DiffPanelShell(props: {
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col overflow-hidden bg-background",
+        "flex min-w-0 flex-col overflow-hidden bg-[var(--app-shell-pane-fill)]",
         props.mode === "inline"
           ? "h-full w-[42vw] min-w-[360px] max-w-[560px] shrink-0 border-l border-border"
           : props.mode === "sheet"

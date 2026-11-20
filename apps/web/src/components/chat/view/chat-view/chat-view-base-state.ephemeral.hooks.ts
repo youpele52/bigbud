@@ -2,7 +2,7 @@ import { type ThreadId } from "@bigbud/contracts";
 import { useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { BACKEND_SCOPED_STORAGE_OPTIONS, useLocalStorage } from "~/hooks/useLocalStorage";
 
 import { type TerminalContextDraft } from "../../../../lib/terminalContext";
 import { type ChatMessage } from "../../../../models/types";
@@ -85,6 +85,7 @@ export function useChatViewBaseEphemeralState(input: {
     LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
     {},
     LastInvokedScriptByProjectSchema,
+    BACKEND_SCOPED_STORAGE_OPTIONS,
   );
   const composerImagesRef = useRef(composerImages);
   const composerFilesRef = useRef(composerFiles);

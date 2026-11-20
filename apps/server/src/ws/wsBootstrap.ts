@@ -31,7 +31,12 @@ import {
   claimBootstrapSubmissionRecipe,
   type BootstrapSubmissionRecipe,
 } from "./wsBootstrap.submissionRecipe.ts";
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationProjectState,
+  ensureOrchestrationWorkspaceProjects,
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import type { BootstrapSubmissionDispatch } from "../orchestration/Layers/OrchestrationEngine.bootstrapIdentity.ts";
 
 export type BootstrapServices = {
@@ -42,6 +47,7 @@ export type BootstrapServices = {
     ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchError>;
     getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
     ensureThreadState?: NonNullable<OrchestrationEngineShape["ensureThreadState"]>;
+    getThread?: NonNullable<OrchestrationEngineShape["getThread"]>;
     getCommandOutcome?: (
       commandId: CommandId,
     ) => Effect.Effect<GetCommandOutcomeResult, OrchestrationCommandReceiptRepositoryError>;
@@ -117,13 +123,30 @@ export function makeDispatchBootstrapThreadCommand(
               )
           : Effect.fail(new Error("Durable command outcome lookup is unavailable"));
 
+      // Idle projects are not in the startup read model; hydrate the referenced one first.
+      const hydrateTargetProject = Effect.gen(function* () {
+        if (targetProjectId !== undefined)
+          yield* ensureOrchestrationProjectState(orchestrationEngine, targetProjectId);
+        else if (targetProjectCwd !== undefined)
+          yield* ensureOrchestrationWorkspaceProjects(orchestrationEngine, targetProjectCwd);
+      });
       const resolveTargetProject = () =>
-        orchestrationEngine.getReadModel().pipe(
-          Effect.map((readModel) => {
-            const readModelThread =
+        hydrateTargetProject.pipe(
+          Effect.andThen(
+            Effect.suspend(() =>
               targetProjectId === undefined && targetProjectCwd === undefined
-                ? (readModel.threads.find((entry) => entry.id === command.threadId) ?? null)
-                : null;
+                ? getOrchestrationThread(orchestrationEngine, command.threadId)
+                : Effect.succeed(undefined),
+            ),
+          ),
+          // A resident thread's project is resident too (installed with it, never evicted).
+          Effect.flatMap((thread) =>
+            orchestrationEngine
+              .getReadModel()
+              .pipe(Effect.map((readModel) => ({ readModel, thread }))),
+          ),
+          Effect.map(({ readModel, thread }) => {
+            const readModelThread = thread ?? null;
             const nextProjectId = targetProjectId ?? readModelThread?.projectId ?? null;
             const project =
               (nextProjectId
@@ -261,9 +284,9 @@ export function makeDispatchBootstrapThreadCommand(
           const metaCommandId = serverCommandId(command.commandId, "bootstrap-thread-meta-update");
           const metaOutcome = yield* getCommandOutcome(metaCommandId);
           if (isAcceptedThreadOutcome(metaOutcome, command.threadId, "metadata child")) {
-            const readModel = yield* orchestrationEngine.getReadModel();
-            const canonicalThread = readModel.threads.find(
-              (thread) => thread.id === command.threadId,
+            const canonicalThread = yield* getOrchestrationThread(
+              orchestrationEngine,
+              command.threadId,
             );
             if (!canonicalThread?.worktreePath) {
               throw new Error(

@@ -36,6 +36,7 @@ const terminalStub = (get: () => TerminalIdleWork): TerminalManagerShape => ({
   getThreadIdleWork: () => Effect.sync(get),
   open: () => Effect.die("unused"),
   snapshot: () => Effect.die("unused"),
+  listShellProfiles: () => Effect.die("unused"),
   write: () => Effect.void,
   resize: () => Effect.void,
   clear: () => Effect.void,

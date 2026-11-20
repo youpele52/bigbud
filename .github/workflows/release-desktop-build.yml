@@ -15,6 +15,11 @@ on:
       update_channel:
         required: true
         type: string
+      retention_days:
+        description: "Artifact retention in days for the release payload (0 keeps the repository default; dry runs pass 3)"
+        required: false
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -23,6 +28,7 @@ jobs:
   build:
     name: Build ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -32,8 +38,10 @@ jobs:
             platform: mac
             target: dmg
             arch: arm64
+          # Cross-built on Apple Silicon (guarded by the Rust target, Rosetta and architecture audit
+          # steps). The native Intel cleanup tests in release.yml stay on macos-15-intel.
           - label: macOS x64
-            runner: macos-15-intel
+            runner: macos-15
             platform: mac
             target: dmg
             arch: x64
@@ -49,18 +57,18 @@ jobs:
             arch: x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
 
@@ -79,8 +87,38 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
 
+      # rust-toolchain.toml uses the minimal profile, which has no x86_64 standard library.
+      - name: Add Rust macOS x64 target
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          if [[ -z "$toolchain" ]]; then
+            echo "::error::Could not read the Rust channel from rust-toolchain.toml"; exit 1
+          fi
+          rustup toolchain install "$toolchain" --profile minimal --target x86_64-apple-darwin
+          if ! rustup target list --installed --toolchain "$toolchain" | grep -qx x86_64-apple-darwin; then
+            echo "::error::x86_64-apple-darwin is not installed for Rust $toolchain"; exit 1
+          fi
+
+      # Packaging runs the x64 helpers (--check, handshakes, smoke tests), so they need Rosetta 2.
+      - name: Ensure Rosetta 2 for x64 smoke tests
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          if ! arch -x86_64 /usr/bin/true; then
+            echo "::error::Rosetta 2 is unavailable, so the x64 helpers cannot be smoke-tested"; exit 1
+          fi
+
       - name: Validate Windows CUA sweep native helper
         if: matrix.platform == 'win'
+        # Seven helper calls, each bounded by the 180s production budget (cold compile + one retry).
+        timeout-minutes: 30
         run: bun run --cwd apps/desktop vitest run src/backend/cuaDriver.windowsSweep.native.test.ts
 
       - name: Align package versions to release version
@@ -118,7 +156,7 @@ jobs:
 
       - name: Import code signing certificates
         if: matrix.platform == 'mac'
-        uses: apple-actions/import-codesign-certs@v2
+        uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2
         with:
           p12-file-base64: ${{ secrets.CSC_LINK }}
           p12-password: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -161,12 +199,16 @@ jobs:
 
       - name: Preserve signed macOS app on notarization failure
         if: failure() && matrix.platform == 'mac'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: notarization-recovery-${{ matrix.arch }}-${{ github.run_attempt }}
           path: notarization-recovery/
           retention-days: 3
           if-no-files-found: ignore
+
+      - name: Audit packaged macOS app architectures
+        if: matrix.platform == 'mac'
+        run: bun run verify:desktop:mac-architecture -- release "${{ matrix.arch }}"
 
       - name: Smoke test packaged workspace watcher
         shell: bash
@@ -223,8 +265,9 @@ jobs:
           "${{ inputs.update_channel }}"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}

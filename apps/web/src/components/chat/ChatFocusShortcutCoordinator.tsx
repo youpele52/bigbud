@@ -1,17 +1,16 @@
 import { useEffect } from "react";
 
-import { focusActiveBrowserLocation, focusContextualChatTarget } from "~/lib/chatFocus";
+import {
+  focusActiveBrowserLocation,
+  focusContextualChatTarget,
+  hasOpenChatModal,
+} from "~/lib/chatFocus";
 import { isTerminalFocused } from "~/lib/terminalFocus";
 import { resolveShortcutCommand } from "~/models/keybindings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { useCommandPaletteStore } from "~/stores/ui";
 
 const FOCUS_BROWSER_LOCATION_ACTION = "focus-browser-location";
-const MODAL_SELECTOR = '[data-slot="dialog-popup"], [data-slot="alert-dialog-popup"]';
-
-function hasOpenModal(): boolean {
-  return document.querySelector(MODAL_SELECTOR) !== null;
-}
 
 export function ChatFocusShortcutCoordinator() {
   const keybindings = useServerKeybindings();
@@ -19,7 +18,7 @@ export function ChatFocusShortcutCoordinator() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || commandPaletteOpen || hasOpenModal()) return;
+      if (event.defaultPrevented || commandPaletteOpen || hasOpenChatModal()) return;
 
       const command = resolveShortcutCommand(event, keybindings, {
         context: { terminalFocus: isTerminalFocused() },
@@ -37,7 +36,7 @@ export function ChatFocusShortcutCoordinator() {
             if (
               action === FOCUS_BROWSER_LOCATION_ACTION &&
               !commandPaletteOpen &&
-              !hasOpenModal()
+              !hasOpenChatModal()
             ) {
               focusActiveBrowserLocation();
             }

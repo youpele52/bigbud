@@ -1,3 +1,21 @@
+import {
+  WsServerListRemoteBackendRelayProfilesRpc,
+  WsServerOpenRemoteBackendRelayRpc,
+  WsServerCloseRemoteBackendRelayRpc,
+} from "./rpc.remoteBackendRelay";
+import { WsServerSetupRemoteBackendRpc } from "./rpc.remoteBackendDeployment";
+import {
+  WsServerCancelRemoteRuntimeUpdateRpc,
+  WsServerConsentRemoteRuntimeUpdateInterruptionRpc,
+  WsServerGetRemoteRuntimeUpdateStatusRpc,
+  WsServerRequestRemoteRuntimeUpdateRpc,
+} from "./rpc.remoteBackendUpdate";
+import {
+  WsTerminalRemoteInventoryRpc,
+  WsTerminalRemoteAttachRpc,
+  WsTerminalRemoteDetachRpc,
+  WsTerminalRemoteStopRpc,
+} from "./rpc.terminalRemote";
 import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
@@ -11,6 +29,7 @@ import {
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
+import { WsTerminalShellProfilesRpc } from "./rpc.terminalShellProfiles";
 import { WsTerminalRecoveryRpc } from "./rpc.terminalRecovery";
 import { WsOrchestrationGetOrganizationThreadSummariesRpc } from "./rpc.organization";
 import {
@@ -26,6 +45,8 @@ import {
   WsSubscribeTerminalSessionRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
+  WsTerminalStagePasteFileRpc,
+  WsTerminalViewRpc,
 } from "./rpc.terminalStream";
 import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
@@ -128,6 +149,8 @@ import {
   WsTerminalWriteRpc,
 } from "./rpc.core";
 import {
+  WsServerGetRemoteAgentManualInstallRpc,
+  WsServerRemoveRemoteAgentRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
@@ -138,6 +161,7 @@ import {
 import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
 import { WsServerSampleSshMonitorRpc, WsServerListConnectedSshMonitorsRpc } from "./rpc.sshMonitor";
 import { WsServerListRemoteFoldersRpc } from "./rpc.remoteFolders";
+import { WsSearchQueryRpc } from "./rpc.search";
 import { WsServerTrustSshHostRpc } from "./rpc.sshHostTrust";
 import {
   WsOrchestrationAcknowledgeDeliveryRpc,
@@ -188,10 +212,32 @@ export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 import { WsCopilotRuntimeRpc } from "./rpc.copilotRuntime";
+import { WsServerPeerPairingRpc } from "./rpc.remotePeer";
+import {
+  WsServerGetProviderProvisioningStatusRpc,
+  WsServerProvisionProviderRpc,
+} from "./rpc.providerProvisioning";
+import {
+  WsServerClaimMetadataWarningsRpc,
+  WsServerAcknowledgeMetadataWarningRpc,
+} from "./rpc.metadataWarnings";
 
 export const WsRpcGroup = RpcGroup.make(
+  WsServerListRemoteBackendRelayProfilesRpc,
+  WsServerOpenRemoteBackendRelayRpc,
+  WsServerCloseRemoteBackendRelayRpc,
+  WsServerSetupRemoteBackendRpc,
+  WsServerRequestRemoteRuntimeUpdateRpc,
+  WsServerGetRemoteRuntimeUpdateStatusRpc,
+  WsServerConsentRemoteRuntimeUpdateInterruptionRpc,
+  WsServerCancelRemoteRuntimeUpdateRpc,
   WsCopilotRuntimeRpc,
+  WsServerPeerPairingRpc,
+  WsServerGetProviderProvisioningStatusRpc,
+  WsServerProvisionProviderRpc,
   WsServerRetryTextGenerationRpc,
+  WsServerClaimMetadataWarningsRpc,
+  WsServerAcknowledgeMetadataWarningRpc,
   WsWorktreeOperationsRpc,
   WsWorktreeRecoverRpc,
   WsWorktreeListRpc,
@@ -211,6 +257,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListConnectedSshMonitorsRpc,
   WsServerListRemoteFoldersRpc,
   WsServerInstallRemoteAgentRpc,
+  WsServerGetRemoteAgentManualInstallRpc,
+  WsServerRemoveRemoteAgentRpc,
   WsServerConnectRemoteAgentRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
@@ -299,11 +347,18 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalSnapshotRpc,
+  WsTerminalRemoteInventoryRpc,
+  WsTerminalRemoteAttachRpc,
+  WsTerminalRemoteDetachRpc,
+  WsTerminalRemoteStopRpc,
   WsTerminalRecoveryRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
+  WsTerminalStagePasteFileRpc,
+  WsTerminalViewRpc,
   WsSubscribeTerminalSessionRpc,
   WsTerminalWslDistributionsRpc,
+  WsTerminalShellProfilesRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,
   WsTerminalRestartRpc,
@@ -320,6 +375,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
+  WsSearchQueryRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
   WsOrchestrationGetOrganizationThreadSummariesRpc,
   WsOrganizationStatusRpc,

@@ -35,6 +35,8 @@ function makeHarness(commandResult = result({})) {
         platform: "win32",
         resolvePowerShell: () => powerShell,
         spawnSync: spawnSync as never,
+        sleep: vi.fn(),
+        warn: vi.fn(),
       },
     });
   return { powerShell, run, spawnSync, targets };
@@ -57,7 +59,7 @@ describe("assertWindowsFilesReplaceable", () => {
     expect(JSON.parse(options.env.BIGBUD_WINDOWS_REPLACEABILITY_PATHS!)).toEqual({
       paths: [harness.targets[0]!.path],
     });
-    expect(options.timeout).toBe(60_000);
+    expect(options.timeout).toBe(90_000);
     expect(options.windowsHide).toBe(true);
   });
 
@@ -90,6 +92,16 @@ describe("assertWindowsFilesReplaceable", () => {
     ],
   ] as const)("fails closed on %s", (_name, commandResult, message) => {
     expect(makeHarness(commandResult).run).toThrow(message);
+  });
+
+  it("retries a timed-out probe once and accepts the retried result", () => {
+    const harness = makeHarness();
+    harness.spawnSync.mockReturnValueOnce(
+      result({ error: Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }), status: null }),
+    );
+
+    expect(harness.run).not.toThrow();
+    expect(harness.spawnSync).toHaveBeenCalledTimes(2);
   });
 
   it("requests replacement access without changing or deleting the target", () => {

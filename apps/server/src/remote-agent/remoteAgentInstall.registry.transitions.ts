@@ -1,3 +1,4 @@
+import { withoutCompletedRetirementClaims } from "./remoteAgentInstall.registry.orphans.ts";
 import {
   REMOTE_AGENT_STAGE_LEASE_MS,
   parseRemoteAgentRegistry,
@@ -28,20 +29,62 @@ export function reserveRemoteAgentStage(
   build: RemoteAgentRegistryBuild,
   controller?: RemoteAgentStageController,
 ): RemoteAgentRegistry {
-  const reconciled = reconcileRemoteAgentStages(state);
-  state = reconciled;
+  state = reconcileRemoteAgentStages(state);
+  const known = state.builds.find((entry) => entry.id === build.id);
+  if (known && !remoteAgentRuntimeEqual(known.runtime, build.runtime))
+    throw new Error("Immutable runtime descriptor conflict.");
+  // Only an in-progress unlink blocks staging. Earlier retirement phases cannot delete bytes a
+  // stage claims: the tombstone write rechecks references and fails on this stage.
+  if (known?.binary === "deleting")
+    throw new Error("Build deletion must reconcile before staging.");
+  // A completed retirement of bytes that are gone is history; drop it in the write that
+  // re-stages them, so it can never fence the new copy (for example after a rollback).
+  const retirementReservations = state.retirementReservations.filter(
+    (entry) =>
+      !(entry.buildId === build.id && entry.phase === "tombstoned" && known?.binary === "absent"),
+  );
+  const updates = withoutCompletedRetirementClaims(state, build.id);
+  const history = {
+    ...(retirementReservations.length === state.retirementReservations.length
+      ? {}
+      : { retirementReservations }),
+    ...(updates === state.updates ? {} : { updates }),
+  };
   const prior = state.stages.find((stage) => stage.id === id);
   if (prior) {
     if (prior.buildId !== build.id) throw new Error("Staging identity conflict.");
-    return state;
+    // Acknowledged or cancelled stage records of an older build are history that retirement may
+    // consume. Re-staging re-opens the record as a live claim so retirement must defer.
+    if (
+      (prior.phase === "published" || prior.phase === "cancelled") &&
+      state.current !== build.id &&
+      state.pending !== build.id
+    ) {
+      return changed(state, {
+        ...history,
+        stages: state.stages.map((entry) =>
+          entry.id === id
+            ? {
+                id: entry.id,
+                buildId: entry.buildId,
+                phase: "reserved" as const,
+                ...(controller
+                  ? {
+                      controllerId: controller.id,
+                      controllerPid: controller.pid,
+                      controllerStartedAt: controller.startedAt,
+                    }
+                  : {}),
+              }
+            : entry,
+        ),
+      });
+    }
+    return Object.keys(history).length > 0 ? changed(state, history) : state;
   }
-  const existing = state.builds.find((entry) => entry.id === build.id);
-  if (existing?.binary === "deleting")
-    throw new Error("Build deletion must reconcile before staging.");
-  if (existing && !remoteAgentRuntimeEqual(existing.runtime, build.runtime)) {
-    throw new Error("Immutable runtime descriptor conflict.");
-  }
+  const existing = known;
   return changed(state, {
+    ...history,
     builds: existing ? state.builds : [...state.builds, build],
     stages: [
       ...state.stages,
@@ -156,13 +199,17 @@ export function publishRemoteAgentStage(
   if (!stage) throw new Error("Staging reservation is unavailable; reconcile before publication.");
   if (stage.phase === "published") return state;
   if (stage.phase === "cancelled") throw new Error("Staging was cancelled.");
+  const build = state.builds.find((entry) => entry.id === stage.buildId);
+  // Never mark bytes present while a retirement is unlinking them.
+  if (build?.binary === "deleting")
+    throw new Error("Build deletion must reconcile before publication.");
   return changed(state, {
     pending: stage.buildId,
     builds: state.builds.map((build) =>
       build.id === stage.buildId ? { ...build, binary: "present" } : build,
     ),
     stages: state.stages.map((entry) =>
-      entry.id === id ? { ...entry, phase: "published" } : entry,
+      entry.id === id ? { ...entry, phase: "published", failure: undefined } : entry,
     ),
     slotReservations: state.slotReservations.map((reservation) =>
       reservation.buildId === stage.buildId &&

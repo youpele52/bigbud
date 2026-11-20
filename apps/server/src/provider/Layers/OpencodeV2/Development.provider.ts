@@ -40,6 +40,11 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   let pending: Promise<ServerProvider> | undefined;
   let closed = false;
   let lastModels: ServerProvider["models"] = [];
+  // Remote V2 workspaces require the shared native service (Application.targets.remote.ts), so
+  // every non-shared snapshot opts out regardless of its health.
+  const remoteWorkspaceSupport = config.process.sharedService
+    ? {}
+    : { supportsLocalRuntimeRemoteWorkspace: false };
   const probe = async (enabled: boolean): Promise<ServerProvider> => {
     const started = performance.now();
     let version: string | undefined;
@@ -162,7 +167,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           },
         }),
         ...(!application ? { developmentOnly: true } : {}),
-        ...(shared ? { supportsLocalRuntimeRemoteWorkspace: false } : {}),
+        ...remoteWorkspaceSupport,
         ...(outdated ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION } : {}),
         ...(agents
           ? {
@@ -225,6 +230,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           },
         }),
         ...(!application ? { developmentOnly: true } : {}),
+        ...remoteWorkspaceSupport,
       };
     }
   };
@@ -247,6 +253,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
       },
     }),
     ...(!application ? { developmentOnly: true } : {}),
+    ...remoteWorkspaceSupport,
   });
   const initiallyEnabled = yield* isEnabled;
   const snapshots = yield* makeProviderSnapshotStore(

@@ -4,6 +4,7 @@ import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import { Effect, Option } from "effect";
 import {
   OrchestrationEngineService,
+  ensureOrchestrationProjectState,
   ensureOrchestrationThreadState,
 } from "./Services/OrchestrationEngine.ts";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
@@ -48,8 +49,7 @@ export const requireClientAttachmentsSupported = Effect.fn("requireClientAttachm
       );
     const bootstrap = command.bootstrap?.createThread;
     if (!bootstrap) return false;
-    const model = yield* engine.value.getReadModel();
-    const project = model.projects.find((candidate) => candidate.id === bootstrap.projectId);
+    const project = yield* ensureOrchestrationProjectState(engine.value, bootstrap.projectId);
     if (!project) return false;
     return isLocalExecutionTargetId(
       resolveProviderSessionExecutionTargets({

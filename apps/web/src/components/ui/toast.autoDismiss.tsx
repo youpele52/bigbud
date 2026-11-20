@@ -1,21 +1,29 @@
 import { useEffect } from "react";
-import { toastManager } from "./toast.manager";
+import { dismissToast, toastManager } from "./toast.manager";
 
 type ToastId = ReturnType<typeof toastManager.add>;
-const threadToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
+// Remaining visible time per toast and phase; a progress toast that turns into
+// its outcome (another `phase`) starts a fresh countdown.
+const threadToastVisibleTimeoutRemainingMs = new Map<
+  ToastId,
+  { phase: string; remainingMs: number }
+>();
 
 export function ToastVisibleAutoDismiss({
   toastId,
   dismissAfterVisibleMs,
+  phase = "",
 }: {
   toastId: ToastId;
   dismissAfterVisibleMs: number | undefined;
+  phase?: string | undefined;
 }) {
   useEffect(() => {
     if (!dismissAfterVisibleMs || dismissAfterVisibleMs <= 0) return;
     if (typeof window === "undefined" || typeof document === "undefined") return;
 
-    let remainingMs = threadToastVisibleTimeoutRemainingMs.get(toastId) ?? dismissAfterVisibleMs;
+    const saved = threadToastVisibleTimeoutRemainingMs.get(toastId);
+    let remainingMs = saved?.phase === phase ? saved.remainingMs : dismissAfterVisibleMs;
     let startedAtMs: number | null = null;
     let timeoutId: number | null = null;
     let closed = false;
@@ -30,7 +38,8 @@ export function ToastVisibleAutoDismiss({
       if (closed) return;
       closed = true;
       threadToastVisibleTimeoutRemainingMs.delete(toastId);
-      toastManager.close(toastId);
+      // Auto-dismissal counts as a dismissal for the shared toast policy.
+      dismissToast(toastId);
     };
 
     const pause = () => {
@@ -38,7 +47,7 @@ export function ToastVisibleAutoDismiss({
       remainingMs = Math.max(0, remainingMs - (Date.now() - startedAtMs));
       startedAtMs = null;
       clearTimer();
-      threadToastVisibleTimeoutRemainingMs.set(toastId, remainingMs);
+      threadToastVisibleTimeoutRemainingMs.set(toastId, { phase, remainingMs });
     };
 
     const start = () => {
@@ -56,28 +65,60 @@ export function ToastVisibleAutoDismiss({
       }, remainingMs);
     };
 
+    // Like Base UI's store timers, pause while the stack is hovered or focused.
+    const viewport = document.querySelector<HTMLElement>('[data-slot="toast-viewport"]');
+    let hovering = viewport?.matches(":hover") ?? false;
+    let focused = viewport?.contains(document.activeElement) ?? false;
+
     const syncTimer = () => {
-      const shouldRun = document.visibilityState === "visible" && document.hasFocus();
+      const shouldRun =
+        document.visibilityState === "visible" && document.hasFocus() && !hovering && !focused;
       if (shouldRun) {
         start();
         return;
       }
       pause();
     };
+    const leaves = (event: Event, related: EventTarget | null) =>
+      !(related instanceof Node && (event.currentTarget as HTMLElement).contains(related));
+    const onMouseOver = () => {
+      hovering = true;
+      syncTimer();
+    };
+    const onMouseOut = (event: MouseEvent) => {
+      if (leaves(event, event.relatedTarget)) hovering = false;
+      syncTimer();
+    };
+    const onFocusIn = () => {
+      focused = true;
+      syncTimer();
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (leaves(event, event.relatedTarget)) focused = false;
+      syncTimer();
+    };
 
     syncTimer();
     document.addEventListener("visibilitychange", syncTimer);
     window.addEventListener("focus", syncTimer);
     window.addEventListener("blur", syncTimer);
+    viewport?.addEventListener("mouseover", onMouseOver);
+    viewport?.addEventListener("mouseout", onMouseOut);
+    viewport?.addEventListener("focusin", onFocusIn);
+    viewport?.addEventListener("focusout", onFocusOut);
 
     return () => {
       document.removeEventListener("visibilitychange", syncTimer);
       window.removeEventListener("focus", syncTimer);
       window.removeEventListener("blur", syncTimer);
+      viewport?.removeEventListener("mouseover", onMouseOver);
+      viewport?.removeEventListener("mouseout", onMouseOut);
+      viewport?.removeEventListener("focusin", onFocusIn);
+      viewport?.removeEventListener("focusout", onFocusOut);
       pause();
       clearTimer();
     };
-  }, [dismissAfterVisibleMs, toastId]);
+  }, [dismissAfterVisibleMs, phase, toastId]);
 
   return null;
 }

@@ -18,25 +18,20 @@ import {
   resolveProviderModelVariant,
   resolveProviderIDForModel,
 } from "./Adapter.session.helpers.ts";
-import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
 import {
   buildOpencodeAllowedTools,
   buildOpencodeThreadOrchestrationServerName,
   composeBridgeCleanups,
+  disconnectOpencodeOrchestrationMcpBridge,
   prepareThreadOrchestrationMcpBridge,
   registerOpencodeOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
-import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
-import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { toMessage } from "./Adapter.stream.ts";
 import { attachOpencodeEventStream } from "./Adapter.session.start.events.ts";
 import { formatManagedServerSdkError } from "../../managedServerProviderDiscovery.ts";
-import {
-  makeOpencodeBridgeCleanup,
-  registerOpencodeRemoteWorkspaceMcp,
-} from "./Adapter.session.remoteWorkspaceMcp.ts";
+import type { OpencodeServerHandle } from "../../Services/Opencode/ServerManager.ts";
 
 export interface StartSessionDeps {
   readonly provider: Extract<ProviderKind, "opencode">;
@@ -142,36 +137,8 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             cause,
           }),
       });
-      const remoteWorkspaceBridge =
-        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
-        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
-          ? yield* Effect.tryPromise({
-              try: () =>
-                createOpencodeRemoteWorkspaceBridge(
-                  executionContext.workspaceTarget,
-                  orchestrationBridge.httpConfig,
-                ),
-              catch: (cause) =>
-                new ProviderAdapterProcessError({
-                  provider: deps.provider as Extract<ProviderKind, "opencode">,
-                  threadId: input.threadId,
-                  detail: toMessage(
-                    cause,
-                    `Failed to prepare ${deps.provider} remote workspace bridge.`,
-                  ),
-                  cause,
-                }),
-            }).pipe(
-              Effect.tapError(() =>
-                Effect.promise(() => orchestrationBridge.cleanup()).pipe(Effect.ignore),
-              ),
-            )
-          : undefined;
-      const serverDirectory = remoteWorkspaceBridge?.cwd ?? input.cwd;
-      const cleanupBridge = composeBridgeCleanups(
-        remoteWorkspaceBridge?.cleanup,
-        orchestrationBridge.cleanup,
-      );
+      const serverDirectory = input.cwd;
+      const cleanupBridge = orchestrationBridge.cleanup;
 
       const serverHandle = yield* Effect.tryPromise({
         try: () =>
@@ -222,22 +189,11 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           }),
         ),
       );
-      if (remoteWorkspaceBridge) {
-        yield* registerOpencodeRemoteWorkspaceMcp({
-          provider: deps.provider,
-          threadId: input.threadId,
-          serverHandle,
-          serverDirectory,
-          bridge: remoteWorkspaceBridge,
-          cleanup: cleanupBridge,
-        });
-      }
       const client = serverHandle.client;
       const cleanupConnectedBridge = makeOpencodeBridgeCleanup({
         serverHandle,
         serverDirectory,
         orchestrationServerName: orchestrationBridge.serverName,
-        remoteWorkspaceServerName: remoteWorkspaceBridge?.serverName,
         cleanup: cleanupBridge,
       });
       const allowedTools = yield* Effect.tryPromise({
@@ -251,9 +207,6 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           return buildOpencodeAllowedTools({
             toolIds: toolIdsResponse.data,
             serverName: orchestrationBridge.serverName,
-            ...(remoteWorkspaceBridge
-              ? { remoteWorkspaceServerName: remoteWorkspaceBridge.serverName }
-              : {}),
           });
         },
         catch: (cause) =>
@@ -325,7 +278,6 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         client,
         releaseServer: () => serverHandle.release(),
         cleanupBridge: cleanupConnectedBridge,
-        remoteWorkspaceSystemPrompt: remoteWorkspaceBridge?.systemPrompt,
         opencodeSessionId,
         threadId: input.threadId,
         sessionEpoch: input.sessionEpoch ?? 0,
@@ -389,4 +341,24 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         updatedAt: createdAt,
       } satisfies ProviderSession;
     });
+}
+
+/** Disconnects this thread's orchestration MCP server, then removes the bridge files and auth. */
+function makeOpencodeBridgeCleanup(input: {
+  readonly serverHandle: OpencodeServerHandle;
+  readonly serverDirectory: string | undefined;
+  readonly orchestrationServerName: string;
+  readonly cleanup: () => Promise<void>;
+}): () => Promise<void> {
+  return composeBridgeCleanups(async () => {
+    try {
+      await disconnectOpencodeOrchestrationMcpBridge({
+        client: input.serverHandle.client,
+        ...(input.serverDirectory ? { directory: input.serverDirectory } : {}),
+        serverName: input.orchestrationServerName,
+      });
+    } catch {
+      // Best effort: bridge cleanup below removes bigbud auth and files.
+    }
+  }, input.cleanup);
 }

@@ -1,5 +1,6 @@
 import { ChevronDownIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { ACTIVITY_LAYOUT } from "~/constants/activityLayout";
 import { cn } from "~/lib/utils";
 
 /** Section headers for work logs, subagents, thinking, and the other activity labels. */
@@ -23,6 +24,8 @@ export interface ActivityAccordionProps extends Omit<ComponentProps<"details">, 
    * `<summary>` (so clicks never toggle it) and only show while the accordion is open.
    */
   readonly actions?: ReactNode;
+  /** Copy and other entry actions available even while collapsed. */
+  readonly persistentActions?: ReactNode;
   readonly summaryClassName?: string;
   readonly panelClassName?: string;
 }
@@ -32,6 +35,10 @@ const HEADER_TEXT_CLASS_NAME = "[text-box-edge:cap_alphabetic] [text-box-trim:tr
 // Header row height: the icon box plus the summary's py-2.
 const ACTIONS_CLASS_NAME =
   "absolute top-0 right-0 flex h-[calc(1cap+4px+1rem)] items-center text-[10px] leading-none";
+// Header actions (copy, "Show N more") stay hidden until the accordion is hovered or an
+// action has keyboard focus; touch screens have no hover, so they keep them visible.
+const ACTIONS_REVEAL_CLASS_NAME =
+  "opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/activity-accordion:opacity-100 [@media(hover:none)]:opacity-100";
 // Hang the icon from the text baseline, 2px below it with 2px spare on each side of the
 // cap height, so both snap to pixels together. A box-centered icon drifts up to 1px
 // against the glyphs when the row lands on a fractional offset.
@@ -43,14 +50,18 @@ const SUMMARY_BASE_CLASS_NAME =
 const VARIANT_CLASS_NAMES = {
   section: {
     details: "border-b border-border/60 pb-2",
-    summary: cn("gap-1.5 py-2 hover:text-foreground", activitySectionLabelTypography),
-    panel: "pb-2 pt-3",
+    summary: cn(
+      "gap-1.5 hover:text-foreground",
+      ACTIVITY_LAYOUT.sectionSummary,
+      activitySectionLabelTypography,
+    ),
+    panel: ACTIVITY_LAYOUT.sectionPanel,
   },
   compact: {
-    details: "",
+    details: ACTIVITY_LAYOUT.compact,
     summary:
       "w-fit gap-1 text-xs leading-none font-normal text-muted-foreground/55 hover:text-muted-foreground/75",
-    panel: "pt-1.5",
+    panel: ACTIVITY_LAYOUT.compactPanel,
   },
 } as const satisfies Record<
   ActivityAccordionVariant,
@@ -68,6 +79,7 @@ export function ActivityAccordion({
   meta,
   variant = "section",
   actions,
+  persistentActions,
   children,
   className,
   summaryClassName,
@@ -75,41 +87,73 @@ export function ActivityAccordion({
   ...detailsProps
 }: ActivityAccordionProps) {
   const variantClassNames = VARIANT_CLASS_NAMES[variant];
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const [actionsWidth, setActionsWidth] = useState(0);
+  const hasActions = actions !== undefined || persistentActions !== undefined;
+  useLayoutEffect(() => {
+    const element = actionsRef.current;
+    if (!element) {
+      setActionsWidth(0);
+      return;
+    }
+    const observer = new ResizeObserver(() =>
+      setActionsWidth(element.getBoundingClientRect().width),
+    );
+    setActionsWidth(element.getBoundingClientRect().width);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasActions]);
   return (
-    <details
-      data-slot="activity-accordion"
-      data-variant={variant}
-      className={cn("relative", variantClassNames.details, className)}
-      {...detailsProps}
-    >
-      <summary className={cn(SUMMARY_BASE_CLASS_NAME, variantClassNames.summary, summaryClassName)}>
-        <span data-slot="activity-accordion-title" className={HEADER_TEXT_CLASS_NAME}>
-          {title}
-        </span>
-        {meta === undefined ? null : (
-          <span data-slot="activity-accordion-meta" className={HEADER_TEXT_CLASS_NAME}>
-            {meta}
+    <div className="group/activity-accordion relative [&:not(:has(>details[open]))>[data-slot=activity-accordion-actions]>[data-open-only]]:hidden">
+      <details
+        data-slot="activity-accordion"
+        data-variant={variant}
+        className={cn("relative", variantClassNames.details, className)}
+        {...detailsProps}
+      >
+        <summary
+          className={cn(SUMMARY_BASE_CLASS_NAME, variantClassNames.summary, summaryClassName)}
+          style={actionsWidth ? { paddingRight: actionsWidth + 8 } : undefined}
+        >
+          <span
+            data-slot="activity-accordion-title"
+            className={cn("min-w-0 [overflow-wrap:anywhere]", HEADER_TEXT_CLASS_NAME)}
+          >
+            {title}
           </span>
-        )}
-        <ChevronDownIcon
-          aria-hidden="true"
-          className={cn(
-            "block shrink-0 -rotate-90 transition-transform [details[open]>summary>&]:rotate-0",
-            HEADER_ICON_CLASS_NAME,
+          {meta === undefined ? null : (
+            <span
+              data-slot="activity-accordion-meta"
+              className={cn("min-w-0 [overflow-wrap:anywhere]", HEADER_TEXT_CLASS_NAME)}
+            >
+              {meta}
+            </span>
           )}
-        />
-      </summary>
-      {actions === undefined ? null : (
-        <div data-slot="activity-accordion-actions" className={ACTIONS_CLASS_NAME}>
-          {actions}
+          <ChevronDownIcon
+            aria-hidden="true"
+            className={cn(
+              "block shrink-0 -rotate-90 transition-transform [details[open]>summary>&]:rotate-0",
+              HEADER_ICON_CLASS_NAME,
+            )}
+          />
+        </summary>
+        <div
+          data-slot="activity-accordion-panel"
+          className={cn(variantClassNames.panel, panelClassName)}
+        >
+          {children}
+        </div>
+      </details>
+      {actions === undefined && persistentActions === undefined ? null : (
+        <div
+          ref={actionsRef}
+          data-slot="activity-accordion-actions"
+          className={cn(ACTIONS_CLASS_NAME, ACTIONS_REVEAL_CLASS_NAME, "gap-2")}
+        >
+          {persistentActions}
+          {actions === undefined ? null : <div data-open-only>{actions}</div>}
         </div>
       )}
-      <div
-        data-slot="activity-accordion-panel"
-        className={cn(variantClassNames.panel, panelClassName)}
-      >
-        {children}
-      </div>
-    </details>
+    </div>
   );
 }

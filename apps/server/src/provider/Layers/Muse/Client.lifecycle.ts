@@ -7,10 +7,12 @@
  * resolution (Client.platform.ts), and MUSE_NO_AUTO_UPDATE=1.
  * One owned child per active thread; never attaches to a user TUI.
  */
-import { spawnMspConnection } from "@muse-code/sdk";
-
+import { makeOptionalSdk } from "../../optionalSdk.ts";
 import type { MuseHostFactory, MuseTransport } from "./Client.ts";
 import { resolveMuseLaunch } from "./Client.platform.ts";
+
+/** Loaded on first host spawn so a graph without the Muse SDK still bootstraps. */
+export const museSdk = makeOptionalSdk("@muse-code/sdk", () => import("@muse-code/sdk"));
 
 export const MUSE_HANDSHAKE_TIMEOUT_MS = 20_000;
 /**
@@ -44,6 +46,8 @@ export const makeSdkMuseHostFactory =
       exitHandler?.(cause);
     };
     const launch = resolveMuseLaunch(options.binaryPath);
+    // An abort while loading is settled by the handshake's own abort path below.
+    const { spawnMspConnection } = await museSdk.load();
     const handshake = spawnMspConnection({
       command: launch.command,
       args: [...launch.args, ...MUSE_SERVE_FLAGS],

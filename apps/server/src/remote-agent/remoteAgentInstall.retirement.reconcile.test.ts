@@ -68,7 +68,9 @@ function controlFor(
   return { control, read: () => state, commands };
 }
 
-function tombstonedState(updatePhase: "promoted" | "installing"): RemoteAgentRegistry {
+function tombstonedState(
+  updatePhase: "promoted" | "installing" | "ready-for-reconnect",
+): RemoteAgentRegistry {
   const obsolete = build(1, "deleting");
   const current = build(2, "present");
   return parseRemoteAgentRegistry(
@@ -79,6 +81,15 @@ function tombstonedState(updatePhase: "promoted" | "installing"): RemoteAgentReg
       current: current.id,
       retirementReservations: [
         { id: "retire-obsolete", buildId: obsolete.id, generation: "g1", phase: "tombstoned" },
+      ],
+      launches: [
+        {
+          id: obsolete.runtime.generation,
+          buildId: obsolete.id,
+          attemptId: "old-attempt",
+          phase: "proven-dead",
+          epoch: "old-epoch",
+        },
       ],
       updates: [{ requestId: "old-update", buildId: obsolete.id, phase: updatePhase }],
       slotReservations: [
@@ -133,4 +144,22 @@ it("does not spend reconciliation budget on an already absent tombstone", async 
   const fixture = controlFor(absent);
   await expect(reconcileRemoteAgentRetirementTombstones(fixture.control)).resolves.toBe(0);
   expect(fixture.commands).toHaveLength(0);
+});
+
+it("reconciles completed install and restart history with the same reference predicate", async () => {
+  const state = tombstonedState("ready-for-reconnect");
+  const fixture = controlFor({
+    ...state,
+    restartReservations: [
+      {
+        id: "completed-restart",
+        buildId: state.builds[0]!.id,
+        generation: "g1",
+        expectedEpoch: "old-epoch",
+        phase: "ready",
+      },
+    ],
+  });
+  await expect(reconcileRemoteAgentRetirementTombstones(fixture.control)).resolves.toBe(1);
+  expect(fixture.read().builds[0]?.binary).toBe("absent");
 });

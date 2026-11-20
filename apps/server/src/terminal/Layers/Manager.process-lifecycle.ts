@@ -1,4 +1,7 @@
+import type { TerminalManagerOptions } from "./Manager.types.ts";
+import type { TerminalWorkSignals } from "./Manager.workSignals.ts";
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
+import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type TerminalAgentDetector } from "./Manager.agentDetection";
@@ -51,6 +54,9 @@ export interface ProcessLifecycleContext {
   subprocessPollIntervalMs: number;
   shellResolver: () => string;
   ptyAdapter: PtyAdapterShape;
+  directShellOwners?: DirectShellLaunchOwnerStore | undefined;
+  workSignals?: TerminalWorkSignals | undefined;
+  shellIntegrationEnv?: TerminalManagerOptions["shellIntegrationEnv"];
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +98,10 @@ export function enqueueProcessEvent(
 export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
   return {
     ...(session.wslIdentity ? { wslIdentity: session.wslIdentity } : {}),
+    ...(session.shellLaunchIdentity ? { shellLaunchIdentity: session.shellLaunchIdentity } : {}),
+    ...(session.shellUnconfirmedLaunch
+      ? { shellUnconfirmedLaunch: session.shellUnconfirmedLaunch }
+      : {}),
     threadId: session.threadId,
     terminalId: session.terminalId,
     executionTargetId: session.executionTargetId,

@@ -174,7 +174,12 @@ fn no_idle_retirement_while_an_operation_is_running() {
         .process_operations
         .complete("operation-1", OperationState::Completed, Some(0), None, now)
         .unwrap();
-    assert!(session.is_idle_for_retirement());
+    // Completion clears this session's retirement blockers. The composite
+    // `is_idle_for_retirement` also reads the process-wide PTY cleanup registry,
+    // which parallel PTY tests in this binary hold for seconds at a time.
+    assert!(!session.process_operations.has_live_operations());
+    assert!(!session.has_active_service_lease());
+    assert!(session.pty_sessions.is_empty());
 }
 
 #[test]

@@ -1,8 +1,9 @@
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
-import { BuildPlatform, commandOutputOptions, runCommand } from "./shared.ts";
+import { BuildArch, BuildPlatform, commandOutputOptions, runCommand } from "./shared.ts";
 import { shellOptionForPlatform } from "./platform.ts";
+import { stagedServerNpmInstallArgs } from "./crossArch.ts";
 import type { CopilotPackagingMode } from "../../../apps/desktop/scripts/copilotRuntimePackaging.cjs";
 
 // Local shims for deprecated transitive dependencies of the staged server
@@ -56,6 +57,7 @@ export const installStagedServerDependencies = Effect.fn("installStagedServerDep
   function* (input: {
     readonly stageServerDir: string;
     readonly platform: typeof BuildPlatform.Type;
+    readonly arch: typeof BuildArch.Type;
     readonly verbose: boolean;
     readonly copilotMode: CopilotPackagingMode;
     readonly copilotTargets: readonly string[];
@@ -71,13 +73,18 @@ export const installStagedServerDependencies = Effect.fn("installStagedServerDep
     // Keep optional dependencies for Pi and other providers. Copilot-only native
     // pruning happens after install, according to the persisted bridge/slim mode.
     // --install-links copies the file: shims into node_modules instead of
-    // symlinking them, for the same electron-builder reason.
+    // symlinking them, for the same electron-builder reason. Cross builds select
+    // the target's optional platform packages (see stagedServerNpmInstallArgs).
     yield* runCommand(
-      ChildProcess.make({
-        cwd: input.stageServerDir,
-        ...commandOutputOptions(input.verbose),
-        shell: shellOptionForPlatform(input.platform),
-      })`npm install --omit=dev --install-links`,
+      ChildProcess.make(
+        "npm",
+        stagedServerNpmInstallArgs({ platform: input.platform, arch: input.arch }),
+        {
+          cwd: input.stageServerDir,
+          ...commandOutputOptions(input.verbose),
+          shell: shellOptionForPlatform(input.platform),
+        },
+      ),
     );
     if (input.copilotMode === "bridge") {
       // Explicit target packages also cover cross-host and universal staging. Never use latest.

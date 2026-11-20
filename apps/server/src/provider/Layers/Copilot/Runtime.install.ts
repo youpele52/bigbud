@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, rm } from "node:fs/promises";
+import { open, rm } from "node:fs/promises";
 import Path from "node:path";
 
 import {
   withCopilotRuntimeLock,
   publishCopilotRuntime,
   recoverCopilotStaging,
+  runtimeDirectory,
 } from "@bigbud/shared/copilotRuntime.storage";
 
 import { extractCopilotRuntime } from "./Runtime.archive.ts";
@@ -21,16 +22,10 @@ import {
 } from "@bigbud/shared/copilotRuntime.paths";
 import type { CopilotRuntimeRelease } from "./Runtime.release.ts";
 
-async function requireDirectory(directory: string): Promise<void> {
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  if (!(await lstat(directory)).isDirectory()) {
-    throw new Error(`Refusing symlinked or non-directory Copilot runtime storage: ${directory}`);
-  }
-}
-
 async function writeDurable(path: string, value: string): Promise<void> {
   const file = await open(path, "wx", 0o600);
   try {
+    await file.chmod(0o600);
     await file.writeFile(value, "utf8");
     await file.sync();
   } finally {
@@ -56,16 +51,16 @@ export async function installCopilotRuntime(input: {
     throw new Error("Invalid Copilot runtime version or target.");
   }
   input.signal?.throwIfAborted();
-  await requireDirectory(root);
+  await runtimeDirectory(root);
   return withCopilotRuntimeLock(
     root,
     async () => {
       input.signal?.throwIfAborted();
       const staging = Path.join(root, ".staging");
-      await requireDirectory(staging);
+      await runtimeDirectory(staging);
       await recoverCopilotStaging(staging);
       const temporary = Path.join(staging, `${process.pid}-${randomUUID()}`);
-      await mkdir(temporary, { mode: 0o700 });
+      await runtimeDirectory(temporary, true);
       try {
         let installed = readManagedCopilotVersion(root, relative);
         let staged: string | undefined;
@@ -88,7 +83,7 @@ export async function installCopilotRuntime(input: {
             totalBytes: input.release.archiveBytes,
           });
           const extracted = Path.join(temporary, "extracted");
-          await mkdir(extracted, { mode: 0o700 });
+          await runtimeDirectory(extracted, true);
           await extractCopilotRuntime({ archive, destination: extracted, release: input.release });
           await writeDurable(
             Path.join(extracted, ".bigbud-owned"),

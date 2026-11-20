@@ -30,6 +30,7 @@ import {
 import { runBoundedBootstrap } from "./-__root.bounded-bootstrap";
 import { reconcileAppliedCanonicalOwnership } from "./-__root.ownership-reconciliation";
 import { createAsyncOperationQueue } from "./-__root.recovery.serial";
+import { adoptDeliveryEpoch } from "./-__root.recovery.epoch";
 import { createPendingDomainEventQueue } from "./-__root.recovery.pending";
 import { reconcileSnapshotDerivedState } from "./-__root.recovery.snapshot";
 import type { OwnershipScope } from "../stores/ownership/ownershipLedger.types";
@@ -62,7 +63,7 @@ interface OrchestrationRecoveryInput {
 }
 
 export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
-  const recovery = createOrchestrationRecoveryCoordinator();
+  let recovery = createOrchestrationRecoveryCoordinator();
   const sidebarCatalogRefresher = createSidebarCatalogRefresher(input.api);
   let replayRetryTracker: ReplayRetryTracker | null = null;
   let needsProviderInvalidation = false;
@@ -312,9 +313,15 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     if (!started) {
       return null;
     }
+    let authorized = true;
     try {
       const projectionSequence = await retryTransportRecoveryOperation(
-        () => runBoundedBootstrap({ api: input.api, selectedThreadId, disposed }),
+        () =>
+          runBoundedBootstrap({
+            api: input.api,
+            selectedThreadId,
+            disposed: () => disposed() || !authorized,
+          }),
         { shouldAbort: disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (!disposed()) {
@@ -341,6 +348,8 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
         });
       }
       if (propagateFailure) throw error;
+    } finally {
+      authorized = false;
     }
     return null;
   };
@@ -355,10 +364,14 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
   const runDeliveryBaselineRecovery = (
     selectedThreadId: ThreadId | null,
     disposed: () => boolean,
+    serverEpoch?: string,
   ) =>
-    recoveryOperationQueue.enqueue(() =>
-      runBoundedRecoveryNow("replay-failed", selectedThreadId, disposed, false, true),
-    );
+    recoveryOperationQueue.enqueue(async () => {
+      if (disposed()) return null;
+      recovery = adoptDeliveryEpoch(recovery, serverEpoch);
+      replayRetryTracker = null;
+      return runBoundedRecoveryNow("replay-failed", selectedThreadId, disposed, false, true);
+    });
 
   return {
     applyEventBatch,
@@ -367,7 +380,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     runReplayRecovery,
     runBoundedRecovery,
     runDeliveryBaselineRecovery,
-    classifyDomainEvent: recovery.classifyDomainEvent.bind(recovery),
+    classifyDomainEvent: (sequence: number) => recovery.classifyDomainEvent(sequence),
     getAppliedSequence: () => recovery.getState().appliedSequence,
     cancel: () => {
       needsProviderInvalidation = false;

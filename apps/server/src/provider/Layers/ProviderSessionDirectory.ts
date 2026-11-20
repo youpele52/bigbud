@@ -89,7 +89,8 @@ const toRuntimeBinding = (
 
 const makeProviderSessionDirectory = Effect.gen(function* () {
   const repository = yield* ProviderSessionRuntimeRepository;
-  // Covers the entire read/merge/write, not just individual repository calls.
+  // Covers the entire read/merge/write, not just individual repository calls. Taken before any
+  // SQL transaction, never inside one (`withWriteLock`): its holders wait for SQL.
   const writes = yield* Semaphore.make(1);
 
   const getBinding = (threadId: ThreadId) =>
@@ -260,6 +261,7 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
     ...makeDirectoryInspection(repository),
     ...makeDirectoryCompaction(repository),
     upsert: (binding) => writes.withPermits(1)(upsert(binding)),
+    withWriteLock: (use) => writes.withPermits(1)(use(upsert)),
     setCodexRewind,
     getProvider,
     getBinding,

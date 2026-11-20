@@ -116,6 +116,7 @@ fn queued_work_deadline_is_measured_from_admission_not_worker_start() {
     };
     let shared = Shared {
         ledger: Mutex::new(Ledger {
+            receipt: reconcile::ReceiptSlot::new().unwrap(),
             records: BTreeMap::from([(
                 1,
                 Record {
@@ -200,6 +201,7 @@ fn final_native_write_is_written_even_if_it_crosses_deadline_and_cancellation() 
         assert!(reserve(&INPUT_BYTES, 1));
         let shared = Shared {
             ledger: Mutex::new(Ledger {
+                receipt: reconcile::ReceiptSlot::new().unwrap(),
                 records: BTreeMap::from([(
                     1,
                     Record {

@@ -314,6 +314,8 @@ export async function withV2RuntimeFixture(
     /** Shutdown must report this still-unconfirmed cleanup instead of releasing it. */
     expectRetainedClose: (message: string) => void;
   }) => Promise<void>,
+  /** Construction-only: the runtime arms its poller in the constructor, so later assignment is inert. */
+  options?: { readonly pollIntervalMs?: number },
 ) {
   let retainedClose: string | undefined;
   const expectRetainedClose = (message: string) => {
@@ -368,7 +370,7 @@ export async function withV2RuntimeFixture(
               validate?.();
               events.push(event);
             },
-            pollIntervalMs: 100,
+            pollIntervalMs: options?.pollIntervalMs ?? 100,
             allowLocalWorkspace: true,
           });
           try {

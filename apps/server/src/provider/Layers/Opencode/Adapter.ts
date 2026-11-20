@@ -10,7 +10,7 @@
  * @module OpencodeAdapterLive
  */
 import { type ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
-import { Effect, Layer, Queue, Stream } from "effect";
+import { Effect, Layer, Stream } from "effect";
 
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager.ts";
 import { ServerConfig } from "../../../startup/config.ts";
@@ -23,6 +23,7 @@ import { makeNextEventId, makeEventStampFactory } from "./Adapter.stream.ts";
 import { makeSessionMethods, type SessionMethodDeps } from "./Adapter.session.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
+import { makeProviderAdapterEventQueue } from "../../providerEventQueueBounds.ts";
 export type { OpencodeAdapterLiveOptions } from "./Adapter.types.ts";
 
 const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
@@ -45,7 +46,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
       : undefined);
 
   const sessions = new Map<ThreadId, ActiveOpencodeSession>();
-  const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
+  const runtimeEventQueue = yield* makeProviderAdapterEventQueue<ProviderRuntimeEvent>();
 
   const nextEventId = makeNextEventId();
   const makeEventStamp = makeEventStampFactory(nextEventId);

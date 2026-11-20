@@ -1,4 +1,4 @@
-import type { OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
+import type { OrchestrationReadModel, ProjectId, ThreadId } from "@bigbud/contracts";
 import { ServiceMap } from "effect";
 import type { Effect, Option } from "effect";
 
@@ -16,6 +16,29 @@ export interface ProjectionOperationalStateQueryShape {
   readonly getFullThreadHistory: (
     threadId: ThreadId,
   ) => Effect.Effect<Option.Option<OrchestrationReadModel>, ProjectionRepositoryError>;
+  /** Reads one project (without threads), deleted or not; none when it was never projected. */
+  readonly getProjectOperationalState: (
+    projectId: ProjectId,
+  ) => Effect.Effect<Option.Option<OrchestrationReadModel>, ProjectionRepositoryError>;
+  /** Ids of a project's threads that are not deleted, in creation order. */
+  readonly listProjectThreadIds: (
+    projectId: ProjectId,
+  ) => Effect.Effect<ReadonlyArray<ThreadId>, ProjectionRepositoryError>;
+  /** Ids of the projects that are not deleted and use this workspace root. */
+  readonly listProjectIdsByWorkspaceRoot: (
+    workspaceRoot: string,
+  ) => Effect.Effect<ReadonlyArray<ProjectId>, ProjectionRepositoryError>;
+  /**
+   * Whether a thread is operational by the startup predicate or holds a runtime/activity lease.
+   * Read-model eviction keeps such a thread; absent means eviction is disabled.
+   */
+  readonly isThreadOperational?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<boolean, ProjectionRepositoryError>;
+  /** The thread and its descendants that are not deleted (for subtree deletion). */
+  readonly listThreadSubtreeIds?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<ThreadId>, ProjectionRepositoryError>;
 }
 
 export class ProjectionOperationalStateQuery extends ServiceMap.Service<

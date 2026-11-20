@@ -1,6 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::panic)]
 use super::{Rig, fixture::*};
-use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR, read_frame, v1};
+use bigbud_protocol::{
+    DEFAULT_MAX_FRAME_BYTES, FrameError, PROTOCOL_MAJOR, PROTOCOL_MINOR, read_frame, v1,
+    write_frame,
+};
 use std::fs;
 use std::io;
 use std::net::Shutdown;
@@ -100,20 +103,34 @@ fn assert_publication_remains_fenced(rig: &Rig) {
     newcomer
         .set_read_timeout(Some(Duration::from_secs(2)))
         .unwrap();
-    write_request(
-        &mut newcomer,
-        v1::frame::Payload::ClientHello(v1::ClientHello {
+    let hello = v1::Frame {
+        payload: Some(v1::frame::Payload::ClientHello(v1::ClientHello {
             protocol_major: PROTOCOL_MAJOR,
             protocol_minor: PROTOCOL_MINOR,
             client_instance_id: "after-seal".into(),
             connection_id: "after-seal".into(),
             server_nonce: "after-seal".into(),
             max_frame_bytes: DEFAULT_MAX_FRAME_BYTES as u64,
-        }),
-    );
-    assert!(
-        read_frame(&mut newcomer, DEFAULT_MAX_FRAME_BYTES)
-            .unwrap()
-            .is_none()
-    );
+        })),
+    };
+    // The sealed supervisor closes newcomers without reading them, so the hello
+    // can race that close (EPIPE, or ECONNRESET on Linux). Only an answer breaches the fence.
+    if let Err(error) = write_frame(&mut newcomer, &hello, DEFAULT_MAX_FRAME_BYTES) {
+        assert!(
+            matches!(&error, FrameError::Write(error) if peer_closed(error)),
+            "{error}"
+        );
+    }
+    match read_frame(&mut newcomer, DEFAULT_MAX_FRAME_BYTES) {
+        Ok(None) => {}
+        Err(FrameError::ReadLength(error)) if peer_closed(&error) => {}
+        other => panic!("fenced newcomer was not closed unanswered: {other:?}"),
+    }
+}
+
+fn peer_closed(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::ConnectionReset | io::ErrorKind::BrokenPipe
+    )
 }

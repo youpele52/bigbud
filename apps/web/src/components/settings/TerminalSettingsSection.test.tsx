@@ -11,21 +11,29 @@ vi.mock("../../hooks/useSettings", () => ({
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 
 describe("terminal settings order", () => {
-  it("keeps everyday options first and advanced options visible at the bottom", () => {
+  it("groups the Terminal page into appearance, shell, scrolling, paste and agent activity", () => {
     const markup = renderToStaticMarkup(<TerminalSettingsSection />);
+    const sectionTitles = [...markup.matchAll(/<h2\b[^>]*>(.*?)<\/h2>/g)].map((match) => match[1]);
     const titles = [...markup.matchAll(/<h3\b[^>]*>(.*?)<\/h3>/g)].map((match) => match[1]);
 
+    expect(sectionTitles).toEqual(["Appearance", "Shell", "Scrolling", "Paste", "Agent activity"]);
     expect(titles).toEqual([
       "Terminal font",
       "Terminal font size",
       "Terminal theme (dark appearance)",
       "Terminal theme (light appearance)",
-      "Terminal scroll speed",
-      "Terminal fast scroll speed",
-      "Full-screen app scroll speed",
       "Terminal ligatures",
       "Terminal inline images",
       "Terminal GPU rendering",
+      "Default shell profile",
+      "Terminal history suggestions",
+      "Terminal scroll speed",
+      "Terminal fast scroll speed",
+      "Full-screen app scroll speed",
+      "Largest pasted file",
+      "Clipboard requests from terminal programs",
+      "Detect when terminal agents finish",
+      "Terminal agent hooks",
     ]);
     expect(markup).not.toContain("<details");
     expect(markup).not.toMatch(/<div\b[^>]*\bhidden=/);

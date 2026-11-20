@@ -1,3 +1,6 @@
+import type { ChatAttachment } from "~/models/types";
+import { IMAGE_ONLY_BOOTSTRAP_PROMPT } from "~/constants/chatPrompt";
+import { applyClaudePromptEffortPrefix } from "@bigbud/shared/model";
 import "../../../index.css";
 import type {
   ServerDiscoveredAgent,
@@ -31,7 +34,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-async function renderSentMessage(text: string) {
+async function renderSentMessage(text: string, attachments: ChatAttachment[] = []) {
   return render(
     <MessagesTimeline
       isWorking={false}
@@ -47,6 +50,7 @@ async function renderSentMessage(text: string) {
             id: MessageId.makeUnsafe("message"),
             role: "user",
             text,
+            attachments,
             createdAt: "2026-10-20T12:00:00Z",
             streaming: false,
           },
@@ -252,3 +256,26 @@ it("opens the babysitter chip in Additional instructions using verified native O
   await page.getByText("babysitter", { exact: true }).click();
   expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith(sourcePath, "/project", "file");
 });
+
+it.each([null, "ultrathink"])(
+  "shows the screenshot without synthetic text (effort: %s)",
+  async (effort) => {
+    const prompt = applyClaudePromptEffortPrefix(IMAGE_ONLY_BOOTSTRAP_PROMPT, effort);
+    await renderSentMessage(prompt, [
+      {
+        type: "image",
+        id: "screenshot",
+        name: "screenshot.png",
+        mimeType: "image/png",
+        sizeBytes: 1,
+        previewUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/X8AAAAASUVORK5CYII=",
+      },
+    ]);
+    await expect.element(page.getByRole("img", { name: "screenshot.png" })).toBeVisible();
+    expect(document.querySelector("[data-user-message-row]")?.textContent).not.toContain(
+      IMAGE_ONLY_BOOTSTRAP_PROMPT,
+    );
+    expect(document.querySelector("[data-chat-cite-content]")).toBeNull();
+  },
+);

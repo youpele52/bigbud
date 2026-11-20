@@ -1,6 +1,12 @@
 import type { CodexSessionContext } from "./codexAppServerManager.types.ts";
 import { classifyCodexStderrLine } from "./codexStderrClassifier.ts";
 import { closeCodexTransport } from "./codexAppServerManager.transport.ts";
+import { killChildTree } from "./codexAppServerManager.utils.ts";
+import {
+  PROVIDER_STDIO_MAX_LINE_BYTES,
+  ProviderStdioLineTooLongError,
+  createLineLengthGuard,
+} from "../provider/providerStdioLineLimit.ts";
 
 export function attachProcessListeners(
   context: CodexSessionContext,
@@ -40,6 +46,17 @@ export function attachProcessListeners(
   };
   context.child.on("error", onError);
   context.child.stdin.on("error", onError);
+
+  // F-B5: `readline` has no line limit; an oversized record ends the session as a protocol error.
+  const stdoutGuard = createLineLengthGuard();
+  const onStdoutData = (chunk: Buffer | string) => {
+    if (!stdoutGuard.observe(chunk)) return;
+    context.child.stdout.off("data", onStdoutData);
+    context.output.close();
+    onError(new ProviderStdioLineTooLongError("Codex app-server", PROVIDER_STDIO_MAX_LINE_BYTES));
+    killChildTree(context.child);
+  };
+  context.child.stdout.on("data", onStdoutData);
 
   context.child.on("exit", (code, signal) => {
     const message = `codex app-server exited (code=${code ?? "null"}, signal=${signal ?? "null"}).`;

@@ -1,4 +1,5 @@
-import { open } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open } from "node:fs/promises";
 
 import type { RemoteAgentArtifact } from "./remoteAgentArtifact.ts";
 import {
@@ -22,9 +23,30 @@ async function readBundledArtifact(
   signal?: AbortSignal,
 ): Promise<Uint8Array> {
   throwIfAborted(signal);
-  const file = await open(path, "r");
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  const nonBlocking = constants.O_NONBLOCK ?? 0;
+  if (process.platform !== "win32" && (!noFollow || !nonBlocking))
+    throw new Error("This platform cannot safely open a bundled artifact.");
+  // Windows lacks these POSIX flags. Keep ordinary files supported, reject observed
+  // links/devices before open, and still require the opened handle and named file below.
+  if (!noFollow || !nonBlocking) {
+    const named = await lstat(path);
+    if (!named.isFile() || named.isSymbolicLink())
+      throw new Error("Bundled artifact must be an ordinary regular file.");
+  }
+  const file = await open(path, constants.O_RDONLY | noFollow | nonBlocking);
   try {
     const metadata = await file.stat();
+    const named = await lstat(path);
+    if (
+      !metadata.isFile() ||
+      !named.isFile() ||
+      named.isSymbolicLink() ||
+      metadata.dev !== named.dev ||
+      metadata.ino !== named.ino
+    )
+      throw new Error("Bundled artifact must be the original regular file.");
+    throwIfAborted(signal);
     if (metadata.size !== sizeBytes) {
       throw new Error("Bundled remote agent length does not match its signed manifest.");
     }
@@ -42,6 +64,21 @@ async function readBundledArtifact(
     if ((await file.read(trailing, 0, 1, offset)).bytesRead !== 0) {
       throw new Error("Bundled remote agent exceeds its signed manifest length.");
     }
+    const after = await file.stat(),
+      finalName = await lstat(path);
+    if (
+      !finalName.isFile() ||
+      finalName.isSymbolicLink() ||
+      metadata.dev !== after.dev ||
+      metadata.ino !== after.ino ||
+      finalName.dev !== after.dev ||
+      finalName.ino !== after.ino ||
+      metadata.size !== after.size ||
+      metadata.mtimeMs !== after.mtimeMs ||
+      metadata.ctimeMs !== after.ctimeMs
+    )
+      throw new Error("Bundled artifact changed while reading.");
+    throwIfAborted(signal);
     return bytes;
   } finally {
     await file.close();

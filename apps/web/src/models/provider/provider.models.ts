@@ -1,6 +1,6 @@
+import { SELECTABLE_PROVIDER_KINDS } from "@bigbud/contracts/constants/provider.constant.ts";
 import {
   DEFAULT_MODEL_BY_PROVIDER,
-  PROVIDER_KINDS,
   type ModelSelection,
   type ModelCapabilities,
   type ProviderKind,
@@ -54,7 +54,7 @@ export function resolveSelectableProvider(
       candidate.provider !== "opencodeV2" && candidate.provider !== "opencode" && candidate.enabled,
   )?.provider;
   if (fromSnapshot) return fromSnapshot;
-  return PROVIDER_KINDS[0];
+  return SELECTABLE_PROVIDER_KINDS[0]!;
 }
 
 /**
@@ -123,7 +123,7 @@ export function getFirstReadyProvider(
 /**
  * Returns a default `ModelSelection` based on the first ready provider.
  * If no provider is ready yet, falls back to the first enabled provider
- * in snapshot order, then to the first entry in PROVIDER_KINDS.
+ * in snapshot order, then to the first entry in SELECTABLE_PROVIDER_KINDS.
  *
  * This is used when creating new projects/threads before the user has
  * made an explicit model choice.
@@ -144,7 +144,7 @@ export function getDefaultModelSelection(providers: ReadonlyArray<ServerProvider
     return buildModelSelection(firstEnabled.provider, model, firstModel?.subProviderID);
   }
   // No providers in snapshot yet — use first PROVIDER_KIND as last resort.
-  const fallbackProvider = PROVIDER_KINDS[0];
+  const fallbackProvider = SELECTABLE_PROVIDER_KINDS[0]!;
   return { provider: fallbackProvider, model: DEFAULT_MODEL_BY_PROVIDER[fallbackProvider] };
 }
 

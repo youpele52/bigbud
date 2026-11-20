@@ -13,10 +13,15 @@ import {
   ThreadDetailPendingUserInput,
 } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 import {
+  OrchestrationLatestTurn,
   OrchestrationProposedPlan,
   OrchestrationTask,
 } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
+import { ThreadNotificationSafety } from "@bigbud/contracts/orchestration/orchestration.notificationSafety.ts";
+import { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
+import { OrchestrationTurnControlOperation } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Schema, Struct } from "effect";
+import { TerminalFinishedItem } from "@bigbud/contracts/workspace/terminal.activity.ts";
 
 import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
@@ -30,10 +35,22 @@ export type ProjectCatalogDbRow = typeof ProjectCatalogDbRow.Type;
 
 export const ProjectThreadCountDbRow = ProjectThreadCount;
 
+/** SQLite json_object emits NULL for an absent command; the contract omits it. */
+const TerminalFinishedDbItem = TerminalFinishedItem.mapFields(
+  Struct.assign({ command: Schema.NullOr(Schema.String) }),
+);
+
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({
+    latestTurn: Schema.NullOr(Schema.fromJsonString(OrchestrationLatestTurn)),
+    notificationSafety: Schema.fromJsonString(ThreadNotificationSafety),
+    recovery: Schema.NullOr(Schema.fromJsonString(ThreadRecovery)),
+    pendingTurnControlOperation: Schema.NullOr(
+      Schema.fromJsonString(OrchestrationTurnControlOperation),
+    ),
     modelSelection: Schema.fromJsonString(HistoricalModelSelection),
     organization: Schema.fromJsonString(ThreadOrganization),
+    terminalFinished: Schema.fromJsonString(Schema.Array(TerminalFinishedDbItem)),
     // projection_thread_sessions.retained_family; NULL when the thread has no session row.
     retainedFamily: Schema.NullOr(Schema.Number),
     isWatching: Schema.Number,
@@ -49,6 +66,18 @@ export function normalizeThreadSummary(row: ThreadSummaryDbRow): ThreadSummaryTy
   return {
     ...row,
     modelSelection: row.modelSelection as ThreadSummaryType["modelSelection"],
+    notificationSafety: {
+      ...row.notificationSafety,
+      overflow:
+        row.notificationSafety.tasks.length >= 100 ||
+        row.notificationSafety.childThreadIds.length >= 100 ||
+        row.notificationSafety.pendingRequestIds.length >= 100 ||
+        row.notificationSafety.queuedPromptIds.length >= 100 ||
+        (row.notificationSafety.pendingFlush?.queuedPromptIds.length ?? 0) >= 100,
+    },
+    terminalFinished: row.terminalFinished.map(({ command, ...item }) =>
+      command ? { ...item, command } : item,
+    ),
     retainedFamily: row.retainedFamily === 1,
     isWatching: row.isWatching === 1,
     isWatched: row.isWatched === 1,

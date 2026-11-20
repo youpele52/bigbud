@@ -1,9 +1,10 @@
+import { win32 } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, describe, expect } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
-import { WorkspacePathsLive } from "./WorkspacePaths.ts";
+import { WorkspacePathsLive, makeWorkspacePaths } from "./WorkspacePaths.ts";
 
 const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(WorkspacePathsLive),
@@ -89,6 +90,71 @@ it.layer(TestLayer)("WorkspacePathsLive", (it) => {
           absolutePath: path.join(cwd, "plans/effect-rpc.md"),
           relativePath: "plans/effect-rpc.md",
         });
+      }),
+    );
+
+    it.effect("preserves whitespace and rejects unsafe paths", () =>
+      Effect.gen(function* () {
+        const paths = yield* WorkspacePaths;
+        const cwd = yield* makeTempDir();
+        for (const relativePath of [" leading/file ", " ", "tab\tname", "line\nbreak"]) {
+          if (process.platform === "win32" && /[ .]$/.test(relativePath)) {
+            const error = yield* paths
+              .resolveRelativePathWithinRoot({ workspaceRoot: cwd, relativePath })
+              .pipe(Effect.flip);
+            expect(error._tag).toBe("WorkspacePathOutsideRootError");
+            continue;
+          }
+          const resolved = yield* paths.resolveRelativePathWithinRoot({
+            workspaceRoot: cwd,
+            relativePath,
+          });
+          expect(resolved.relativePath).toBe(relativePath);
+        }
+        for (const relativePath of ["../escape", "/absolute", "a\0b", "", "."]) {
+          const result = yield* paths
+            .resolveRelativePathWithinRoot({ workspaceRoot: cwd, relativePath })
+            .pipe(Effect.flip);
+          expect(result._tag).toBe("WorkspacePathOutsideRootError");
+        }
+      }),
+    );
+
+    it.effect("resolves remote POSIX paths independently of the host platform", () =>
+      Effect.gen(function* () {
+        const paths = yield* WorkspacePaths;
+        const result = yield* paths.resolveRelativePathWithinRoot({
+          workspaceRoot: "/srv/project ",
+          relativePath: "folder /file ",
+          executionTargetId: "ssh:dev",
+        });
+        expect(result).toEqual({
+          absolutePath: "/srv/project /folder /file ",
+          relativePath: "folder /file ",
+        });
+      }),
+    );
+
+    it.effect("rejects local Win32 aliases while preserving remote POSIX names", () =>
+      Effect.gen(function* () {
+        const hostPath = yield* Path.Path;
+        const paths = yield* makeWorkspacePaths.pipe(
+          Effect.provideService(Path.Path, { ...hostPath, ...win32 }),
+        );
+        const rejected = yield* paths
+          .resolveRelativePathWithinRoot({
+            workspaceRoot: "C:\\workspace",
+            relativePath: "folder /file ",
+          })
+          .pipe(Effect.flip);
+        expect(rejected._tag).toBe("WorkspacePathOutsideRootError");
+        const remote = yield* paths.resolveRelativePathWithinRoot({
+          workspaceRoot: "/srv/workspace ",
+          relativePath: "folder /file ",
+          executionTargetId: "ssh:dev",
+        });
+        expect(remote.relativePath).toBe("folder /file ");
+        expect(remote.absolutePath).toBe("/srv/workspace /folder /file ");
       }),
     );
 

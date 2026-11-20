@@ -8,7 +8,7 @@ import { appendDormantOpencodeV2 } from "../OptionalProviderComposition.ts";
 import { providerWorkloadSupport, resolveProviderWorkload } from "../../providerWorkloadSupport.ts";
 import {
   getProviderRemoteWorkspaceConformance,
-  providerAdvertisesRemoteWorkspaceSupport,
+  resolveSnapshotRemoteWorkspaceSupport,
 } from "../../providerRemoteWorkspaceConformance.ts";
 
 describe("dormant V2 capability and composition boundaries", () => {
@@ -35,7 +35,7 @@ describe("dormant V2 capability and composition boundaries", () => {
       unattendedTextGeneration: true,
       usageAccounting: true,
     });
-    expect(providerAdvertisesRemoteWorkspaceSupport(snapshot)).toBe(false);
+    expect(resolveSnapshotRemoteWorkspaceSupport(snapshot)).toBe(false);
   });
   it("rejects lifecycle mutations and absent identity before any dispatch", async () => {
     const adapter = makeDormantOpencodeV2Adapter();

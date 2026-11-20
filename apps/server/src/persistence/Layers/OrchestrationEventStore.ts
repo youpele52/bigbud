@@ -11,6 +11,7 @@ import {
 } from "../Services/OrchestrationEventStore.ts";
 import { makeCompactVerifiedPrefix } from "./OrchestrationEventStore.compaction.ts";
 import { makeReadByCommandId } from "./OrchestrationEventStore.commandEvents.ts";
+import { makeThreadProofEventQueries } from "./OrchestrationEventStore.threadEvents.ts";
 import { makeThreadIdentityQueries } from "./OrchestrationEventStore.threadIdentity.ts";
 import {
   AppendEventRequestSchema,
@@ -359,6 +360,8 @@ const makeEventStore = Effect.gen(function* () {
 
   const compactVerifiedPrefix = makeCompactVerifiedPrefix(sql);
   const readByCommandId = makeReadByCommandId(sql);
+  const { readThreadMaxSequence, readThreadProofEventsAfter, readThreadRecentUserTurnEvents } =
+    makeThreadProofEventQueries(sql);
   const { findThreadOwnershipEvidence, findThreadProjectId } = makeThreadIdentityQueries(sql);
 
   return {
@@ -367,6 +370,9 @@ const makeEventStore = Effect.gen(function* () {
     readFromSequence,
     readByCommandId,
     readReplay,
+    readThreadMaxSequence,
+    readThreadProofEventsAfter,
+    readThreadRecentUserTurnEvents,
     findThreadOwnershipEvidence,
     findThreadProjectId,
     readAll: () => readFromSequence(0, Number.MAX_SAFE_INTEGER),

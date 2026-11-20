@@ -15,7 +15,11 @@ import {
   getMessagesTimelineRowMeasurementKey,
   resolveFirstUnvirtualizedRowIndex,
 } from "./MessagesTimeline.virtualization";
-import { measureVisibleTimelineElement, useTimelineWidth } from "./MessagesTimeline.measurement";
+import {
+  measureVisibleTimelineElement,
+  resetTimelineMeasurements,
+  useTimelineWidth,
+} from "./MessagesTimeline.measurement";
 import { useTailRowMeasurements } from "./MessagesTimeline.tailMeasurements";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
 import { useTimelineCitationFocus } from "./MessagesTimeline.questionFocus.hook";
@@ -179,11 +183,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     timelineRootRef,
     onSetActivityAccordionOpen,
   });
-  useEffect(() => {
-    if (timelineWidthPx === null) return;
-    rowVirtualizer.measure();
-  }, [rowVirtualizer, timelineWidthPx, virtualMeasurementScopeKey]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
       const viewportHeight = instance.scrollRect?.height ?? 0;
       const scrollOffset = instance.scrollOffset ?? 0;
@@ -199,12 +199,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
     };
   }, [rowVirtualizer]);
+  useLayoutEffect(() => {
+    if (timelineWidthPx === null) return;
+    resetTimelineMeasurements(rowVirtualizer);
+  }, [rowVirtualizer, timelineWidthPx, virtualMeasurementScopeKey]);
   const pendingMeasureFrameRef = useRef<number | null>(null);
   const onTimelineImageLoad = useCallback(() => {
     if (pendingMeasureFrameRef.current !== null) return;
     pendingMeasureFrameRef.current = window.requestAnimationFrame(() => {
       pendingMeasureFrameRef.current = null;
-      rowVirtualizer.measure();
+      resetTimelineMeasurements(rowVirtualizer);
     });
   }, [rowVirtualizer]);
   useEffect(() => {

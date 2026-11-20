@@ -43,7 +43,10 @@ import { ThreadRetentionRepositoryLive } from "../../persistence/Layers/ThreadRe
 import { ThreadDeletion, ThreadDeletionLive } from "../../deletion/Services/ThreadDeletion.ts";
 import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
-import { makeQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
+import { makeThreadResidency, ReadModelResidencyConfig } from "./OrchestrationEngine.residency.ts";
+import { makeReadModelResidencyApi } from "./OrchestrationEngine.residencyApi.ts";
+import { enqueueQueuedPromptRecovery } from "./OrchestrationEngine.lifecycleFlush.ts";
+import { RuntimeMaintenanceGate } from "../../command-admission/RuntimeMaintenanceGate.ts";
 import { makeOrphanedPendingTurnStartCommand } from "../PendingTurnStart.logic.ts";
 import {
   type CommandEnvelope,
@@ -94,11 +97,14 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   let readModel = createEmptyReadModel(new Date().toISOString());
   const commandSemaphore = yield* Semaphore.make(1);
   const serverEpoch = crypto.randomUUID();
+  const residencyConfig = yield* ReadModelResidencyConfig;
+  const residency = makeThreadResidency(residencyConfig.bounds, residencyConfig.nowMs);
   const threadStateHydrator = Option.isSome(operationalQueryOption)
     ? makeThreadStateHydrator({
         query: operationalQueryOption.value,
         eventStore,
         readModel: () => readModel,
+        residency,
         install: ({ threadId, thread, project }) => {
           const threads = thread
             ? [...readModel.threads.filter((candidate) => candidate.id !== threadId), thread]
@@ -107,6 +113,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
             ? [...readModel.projects.filter((candidate) => candidate.id !== project.id), project]
             : readModel.projects;
           readModel = { ...readModel, projects, threads };
+        },
+        evict: (threadIds) => {
+          readModel = {
+            ...readModel,
+            threads: readModel.threads.filter((thread) => !threadIds.has(thread.id)),
+          };
         },
       })
     : null;
@@ -128,7 +140,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     },
   });
 
-  const prepareCommandState = makePrepareCommandState({ threadStateHydrator, sql: workspaceSql });
+  const prepareCommandState = makePrepareCommandState({ threadStateHydrator });
   const deletionFence = makeDeletionFence({
     threadDeletion,
     readModel: () => readModel,
@@ -139,6 +151,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     : readModel;
   rehydrateThreadTitleLocks([]);
   const startupSequence = readModel.snapshotSequence;
+  const maintenance = yield* Effect.serviceOption(RuntimeMaintenanceGate);
+  const maintenanceHeld = () => Option.isSome(maintenance) && maintenance.value.isClosed();
+  const recoverQueuedPrompts = (threadId: ThreadId) =>
+    enqueueQueuedPromptRecovery({
+      admission: commandAdmission,
+      readModel,
+      threadId,
+      worktreeReservations,
+    });
   for (const thread of readModel.threads) {
     // A previous process's turn start is never resumed and may already have reached the
     // provider, so its gate is settled, not resent; the queue then flushes behind it.
@@ -157,27 +178,17 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         "internal",
       );
     }
-    const recoveryCommand = makeQueuedPromptFlushCommand({
-      threadId: thread.id,
-      readModel,
-      createdAt: new Date().toISOString(),
-    });
-    const workspaceAllowed = recoveryCommand
-      ? yield* worktreeReservations.assertAllows(recoveryCommand).pipe(Effect.result)
-      : null;
-    if (recoveryCommand && workspaceAllowed?._tag === "Success") {
-      const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
-      yield* commandAdmission.offer(
-        {
-          command: recoveryCommand,
-          payloadDigest: calculateCommandPayloadDigest(recoveryCommand),
-          result,
-          startedAtMs: Date.now(),
-        },
-        "internal",
-      );
-    }
+    if (!maintenanceHeld()) yield* recoverQueuedPrompts(thread.id);
   }
+  // A restarted runtime on trial holds its queued prompts until admission reopens (WP-4D).
+  if (Option.isSome(maintenance))
+    maintenance.value.onReopen(
+      Effect.suspend(() =>
+        Effect.forEach(readModel.threads, (thread) => recoverQueuedPrompts(thread.id), {
+          discard: true,
+        }),
+      ).pipe(Effect.ignoreCause({ log: true })),
+    );
   const worker = Effect.forever(
     commandAdmission.take.pipe(
       Effect.flatMap((envelope) =>
@@ -285,6 +296,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       }
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
       yield* commandAdmission.offer({
+        ...(options?.metadataCommit ? { metadataCommit: options.metadataCommit } : {}),
         ...(options?.nativeOrganizationOperation
           ? { nativeOrganizationOperation: options.nativeOrganizationOperation }
           : {}),
@@ -323,14 +335,18 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     readReplay,
     openDeliveryLiveCapture: domainEvents.openDeliveryCapture,
     oldestReactorCursor: domainEvents.oldestOpenCursor,
-    ...(threadStateHydrator === null
+    ...(threadStateHydrator === null || Option.isNone(operationalQueryOption)
       ? {}
-      : {
-          ensureThreadState: (threadId: ThreadId, level: "operational" | "history") =>
-            commandSemaphore
-              .withPermits(1)(threadStateHydrator.load(threadId, level))
-              .pipe(Effect.orDie),
-        }),
+      : makeReadModelResidencyApi({
+          hydrator: threadStateHydrator,
+          residency,
+          query: operationalQueryOption.value,
+          commandSemaphore,
+          workspaceSql,
+          threadDeletion,
+          readModel: () => readModel,
+          nowMs: residencyConfig.nowMs,
+        })),
     dispatch,
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
       return domainEvents.streamGeneral();
@@ -347,7 +363,6 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     notes,
     path,
     projectionCatalogQuery,
-    readModel: () => readModel,
     serverConfig,
     serverSettingsService,
     threadDelegationRepository,

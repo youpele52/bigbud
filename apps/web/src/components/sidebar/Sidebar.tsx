@@ -9,7 +9,6 @@ import { SidebarFooterBar } from "./Sidebar.footer";
 import { SidebarNavigation } from "./Sidebar.navigation";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
 import { SidebarProjectEditDialog } from "./SidebarProjectEditDialog";
-import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
 import { useSidebarState } from "./Sidebar.state";
@@ -134,6 +133,8 @@ export default function Sidebar() {
             fieldErrors={s.remoteWorkspaceFieldErrors}
             error={s.remoteWorkspaceError}
             verificationMessage={s.remoteWorkspaceVerificationMessage}
+            agentInstallProgress={s.remoteAgentInstallProgress}
+            manualInstallTarget={s.remoteAgentManualInstallTarget}
             isSubmitting={s.isAddingProject || s.isSavingRemoteWorkspace}
             isVerifying={s.isVerifyingRemoteWorkspace}
             onOpenChange={(open) => {
@@ -150,12 +151,6 @@ export default function Sidebar() {
           />
 
           <SidebarInyosiraSnoozeDialog />
-
-          <SidebarRemoteAgentInstallDialog
-            request={s.remoteAgentInstallRequest}
-            onDecline={s.declineRemoteAgentInstall}
-            onInstalled={s.completeRemoteAgentInstall}
-          />
 
           <SidebarUnlockSshKeyDialog
             open={s.isRemoteWorkspaceUnlockDialogOpen}
@@ -206,64 +201,64 @@ export default function Sidebar() {
               void s.submitRemoteWorkspaceUnlock();
             }}
           />
-
-          <SidebarUnlockSshKeyDialog
-            open={remoteExecutionAccess.isRemoteExecutionAuthDialogOpen}
-            keyPath={remoteExecutionAccess.remoteExecutionAuthPromptLabel}
-            title={
-              remoteExecutionAccess.remoteExecutionAuthMode === "password"
-                ? "Enter SSH password"
-                : "Unlock SSH key"
-            }
-            fieldLabel={
-              remoteExecutionAccess.remoteExecutionAuthMode === "password"
-                ? "SSH password"
-                : "Key passphrase"
-            }
-            placeholder={
-              remoteExecutionAccess.remoteExecutionAuthMode === "password"
-                ? "Enter the SSH password"
-                : "Enter the SSH key passphrase"
-            }
-            submitLabel={
-              remoteExecutionAccess.remoteExecutionAuthMode === "password"
-                ? "Continue"
-                : "Unlock SSH key"
-            }
-            description={
-              remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
-                <>
-                  bigbud needs the SSH password for{" "}
-                  <span className="break-all font-light">
-                    &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
-                  </span>{" "}
-                  before it can access this remote workspace.
-                </>
-              ) : (
-                <>
-                  bigbud needs the passphrase for{" "}
-                  <span className="break-all font-light">
-                    &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
-                  </span>{" "}
-                  before it can access this remote workspace.
-                </>
-              )
-            }
-            secret={remoteExecutionAccess.remoteExecutionAuthSecret}
-            error={remoteExecutionAccess.remoteExecutionAuthError}
-            isSubmitting={remoteExecutionAccess.isAuthenticatingRemoteExecution}
-            onOpenChange={(open) => {
-              if (!open) {
-                remoteExecutionAccess.closeRemoteExecutionAuthDialog();
-              }
-            }}
-            onSecretChange={remoteExecutionAccess.setRemoteExecutionAuthSecret}
-            onSubmit={() => {
-              void remoteExecutionAccess.submitRemoteExecutionAuth();
-            }}
-          />
         </>
       )}
+
+      <SidebarUnlockSshKeyDialog
+        open={remoteExecutionAccess.isRemoteExecutionAuthDialogOpen}
+        keyPath={remoteExecutionAccess.remoteExecutionAuthPromptLabel}
+        title={
+          remoteExecutionAccess.remoteExecutionAuthMode === "password"
+            ? "Enter SSH password"
+            : "Unlock SSH key"
+        }
+        fieldLabel={
+          remoteExecutionAccess.remoteExecutionAuthMode === "password"
+            ? "SSH password"
+            : "Key passphrase"
+        }
+        placeholder={
+          remoteExecutionAccess.remoteExecutionAuthMode === "password"
+            ? "Enter the SSH password"
+            : "Enter the SSH key passphrase"
+        }
+        submitLabel={
+          remoteExecutionAccess.remoteExecutionAuthMode === "password"
+            ? "Continue"
+            : "Unlock SSH key"
+        }
+        description={
+          remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
+            <>
+              bigbud needs the SSH password for{" "}
+              <span className="break-all font-light">
+                &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
+              </span>{" "}
+              before it can access this remote workspace.
+            </>
+          ) : (
+            <>
+              bigbud needs the passphrase for{" "}
+              <span className="break-all font-light">
+                &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
+              </span>{" "}
+              before it can access this remote workspace.
+            </>
+          )
+        }
+        secret={remoteExecutionAccess.remoteExecutionAuthSecret}
+        error={remoteExecutionAccess.remoteExecutionAuthError}
+        isSubmitting={remoteExecutionAccess.isAuthenticatingRemoteExecution}
+        onOpenChange={(open) => {
+          if (!open) {
+            remoteExecutionAccess.closeRemoteExecutionAuthDialog();
+          }
+        }}
+        onSecretChange={remoteExecutionAccess.setRemoteExecutionAuthSecret}
+        onSubmit={() => {
+          void remoteExecutionAccess.submitRemoteExecutionAuth();
+        }}
+      />
     </>
   );
 }

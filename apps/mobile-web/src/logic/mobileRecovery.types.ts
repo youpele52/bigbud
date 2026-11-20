@@ -18,6 +18,8 @@ export interface MobileRecoveryState {
   readonly throughSequence: number | null;
   readonly selectedThreadId: ThreadId | null;
   readonly selectedThreadStatus: MobileSelectedThreadStatus;
+  /** The baseline omitted the selected thread's older messages to stay within its bounds. */
+  readonly selectedThreadHasOlderHistory: boolean;
   readonly lastRefreshedAt: number | null;
   readonly lastSynchronizedAt: number | null;
   readonly reason: string | null;
@@ -33,6 +35,7 @@ export function initialMobileRecoveryState(
     throughSequence: null,
     selectedThreadId: null,
     selectedThreadStatus: "none",
+    selectedThreadHasOlderHistory: false,
     lastSynchronizedAt: null,
     lastRefreshedAt: null,
     reason: null,
@@ -61,8 +64,10 @@ export interface MobileRecoveryController {
   readonly start: () => void;
   readonly transportOpened: () => void;
   readonly transportClosed: () => void;
+  /** The page came back on a still-open socket; recovers again if automatic retries ran out. */
+  readonly resumed: () => void;
   readonly refresh: (selectedThreadId?: ThreadId | null) => Promise<MobileRecoveryBaseline>;
-  readonly selectThread: (threadId: ThreadId) => Promise<MobileRecoveryBaseline>;
+  readonly selectThread: (threadId: ThreadId | null) => Promise<MobileRecoveryBaseline>;
   readonly subscribe: (listener: () => void) => () => void;
   readonly getState: () => MobileRecoveryState;
   readonly dispose: () => void;

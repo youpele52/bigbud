@@ -6,6 +6,12 @@ import { DEFAULT_THREAD_TITLE } from "@bigbud/shared/String";
 import type { MobileHeaderBreadcrumbSegment } from "../../logic/mobileHeader.logic";
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
 import { clearMobileDraftThreads } from "../../lib/mobileDraftThread";
+import { useMobileHosts } from "../../context/MobileHostsContext";
+import {
+  getMobileSessionAuthority,
+  mobileSessionStateScope,
+} from "../../lib/mobileSessionAuthority";
+import { MobileHostSwitcher } from "./MobileHostSwitcher";
 import { clearMobileSession, type StoredMobileSession } from "../../lib/mobileSession";
 import { useMobileRpcClient } from "../../context/MobileRpcContext";
 import { MobileNavigationSheet } from "./MobileNavigationSheet";
@@ -49,6 +55,7 @@ export function MobileAppFrame({
 }: MobileAppFrameProps) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const historyState = useRouterState({ select: (state) => state.location.state });
+  const hostContext = useMobileHosts();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { client, connection, recovery, restart } = useMobileRpcClient();
@@ -82,7 +89,8 @@ export function MobileAppFrame({
   }
 
   function forgetConnection() {
-    const sessionId = session?.sessionId;
+    if (hostContext && !hostContext.forgetSelected()) return;
+    const sessionId = session ? mobileSessionStateScope(session, "query") : undefined;
     setRetainedView(null);
     recovery?.dispose();
     void client?.dispose();
@@ -91,13 +99,14 @@ export function MobileAppFrame({
       queryClient.removeQueries({ queryKey: ["mobile-thread", sessionId] });
       queryClient.removeQueries({ queryKey: ["mobile-diff", sessionId] });
     }
-    if (session) {
+    if (session && !hostContext?.hosts.selected) {
       clearMobileDraftThreads({
         backendBaseUrl: session.backendBaseUrl,
         sessionId: session.sessionId,
+        authorityId: getMobileSessionAuthority(session),
       });
     }
-    clearMobileSession();
+    if (!hostContext) clearMobileSession();
     setSession(null);
     void navigate({ to: "/mobile", replace: true, state: {} });
   }
@@ -116,7 +125,7 @@ export function MobileAppFrame({
         className={
           isThreadView
             ? "mx-auto flex h-full min-h-0 min-w-0 w-full max-w-3xl flex-col overflow-hidden px-4 pt-2"
-            : "mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-8 pt-2"
+            : "mx-auto flex min-h-full max-w-3xl flex-col px-4 pb-8 pt-2"
         }
       >
         {!isPairing ? (
@@ -133,7 +142,20 @@ export function MobileAppFrame({
             showBack={showBack}
             showLogo={showLogo}
             title={conversationTitle}
+            trailing={<MobileHostSwitcher />}
           />
+        ) : null}
+        {hostContext?.hosts.error ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-destructive" role="alert">
+            <span>{hostContext.hosts.error}</span>
+            <button
+              className="min-h-11 rounded-md px-2 text-sm underline"
+              onClick={hostContext.hosts.retryStorage}
+              type="button"
+            >
+              Reload saved hosts
+            </button>
+          </div>
         ) : null}
         <main className={isThreadView ? "min-h-0 min-w-0 flex-1 overflow-hidden" : "flex-1 px-3"}>
           {children}

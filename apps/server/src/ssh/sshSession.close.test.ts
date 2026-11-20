@@ -43,7 +43,7 @@ describe("closeSshPasswordSession", () => {
 
     expect(runSshLocalCommand).toHaveBeenCalledWith(
       "ssh",
-      ["-O", "exit", "-o", `ControlPath=${controlPath}`, "-p", "2222", "root@box"],
+      ["-O", "exit", "-o", `ControlPath=${controlPath}`, "-p", "2222", "--", "root@box"],
       { timeoutMs: expect.any(Number) },
     );
     expect(fs.existsSync(controlPath)).toBe(false);

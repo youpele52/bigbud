@@ -14,11 +14,18 @@ The shared [release-version parser](../../packages/shared/src/releaseChannel.ts)
 
 ## What the workflow does
 
-- Trigger: push tag matching `v*.*.*`, or manual dispatch with an explicit release version.
-- Runs quality gates first: formatting, lint, typecheck, tests, and locked Rust formatting/Clippy/tests.
+- Trigger: push tag matching `v*.*.*`, or manual dispatch with an explicit release version. A manual dispatch is a dry run unless it sets `publish: true` (see [Dry run](#dry-run-build-without-publishing)).
+- `preflight` only resolves and validates the release version (about 1–2 minutes). It does not re-run the test suite.
+- `ci_gate` ("CI passed for release commit") waits for the `CI passed` job of a `ci.yml` run on exactly the released commit. Only `push` and `workflow_dispatch` runs from this repository count; pull request and fork runs never do. It waits up to 70 minutes while CI is still running, waits up to 10 minutes for a CI run to appear, and fails otherwise. It has no secrets and only `actions: read` and `contents: read`.
+- Builds start right after `preflight`, in parallel with the gate and the native cleanup jobs. Only the publish job waits, for the gate, every build, and both native cleanup jobs.
+- Permissions are read-only by default; only the publish job has `contents: write`. Signing secrets reach only the desktop build, the remote backend graph build, and the publish job.
 - Builds five artifacts in parallel:
   - macOS `arm64` DMG
-  - macOS `x64` DMG
+  - macOS `x64` DMG, cross-built on the Apple Silicon `macos-15` runner. The job adds the
+    `x86_64-apple-darwin` Rust target, makes sure Rosetta 2 can run the x64 helpers for the smoke
+    tests, installs the x64 optional npm/Bun packages, and fails unless
+    `bun run verify:desktop:mac-architecture` finds `x86_64` in every Mach-O file of the app. The
+    native Intel resource cleanup tests still run on `macos-15-intel`.
   - Linux `x64` AppImage
   - Linux `x64` .deb
   - Windows `x64` NSIS installer
@@ -26,13 +33,35 @@ The shared [release-version parser](../../packages/shared/src/releaseChannel.ts)
   - Versions with an approved channel suffix after `X.Y.Z` (for example `1.2.3-beta.1`, `1.2.3-preview.1`, or `1.2.3-nightly.20260726`) are published as GitHub prereleases.
   - Stable releases have no suffix; unsupported prerelease channel names fail preflight.
   - Only plain `X.Y.Z` releases are marked as the repository's latest release.
-- Includes only the active channel's Electron auto-update metadata and the corresponding `*.blockmap` assets.
+- Includes only the active channel's Electron auto-update metadata and the corresponding `*.blockmap` assets (macOS zip and Windows installer; DMGs are built as ULFO/lzfse images without a blockmap, because the macOS updater downloads the zip).
 - Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
+
+### Dry run (build without publishing)
+
+A manual dispatch builds, signs, notarizes, and verifies everything, then skips `Publish GitHub Release` unless `publish: true` is passed. Its build artifacts are kept for 3 days only, because they are signed but unpublished in a public repository.
+
+1. Make sure the release workflow on the ref you dispatch has the `publish` input. Without it, an older workflow publishes on every dispatch. Stop if this prints nothing:
+
+   ```sh
+   gh workflow view release.yml --repo youpele52/bigbud --ref <branch> --yaml | grep -n 'publish:'
+   ```
+
+2. Make sure `ci_gate` can pass: the ref's head commit needs a `push` or dispatch `ci.yml` run with a green `CI passed`. For a branch, run `gh workflow run ci.yml --repo youpele52/bigbud --ref <branch>` and wait for it.
+3. Use a version that cannot collide with a real release and that the release channel rules accept: `0.0.0-preview.dryrun.<n>`, for example `0.0.0-preview.dryrun.202611201530`. (`0.0.0-dryrun.<n>` is rejected because the channel must be `beta`, `preview`, or `nightly`.)
+4. Dispatch with the input passed explicitly:
+
+   ```sh
+   gh workflow run release.yml --repo youpele52/bigbud --ref <branch> \
+     -f version=0.0.0-preview.dryrun.<n> -f publish=false
+   ```
+
+5. Expect `Publish GitHub Release` to be skipped and no tag or release to exist (`gh release view v0.0.0-preview.dryrun.<n> --repo youpele52/bigbud` must fail). If anything suggests publish might run, cancel the run.
+
 - Every public macOS build is Developer ID signed, notarized, and stapled. Missing credentials fail the build.
 - Windows artifacts use Authenticode signing when the complete optional certificate configuration is supplied; otherwise they are unsigned with a warning. Linux does not use OS code signing.
 - Builds and publishes signed remote-agent binaries for Linux `x86_64` and `aarch64` alongside the desktop assets.
-- Builds the platform-native `bigbud-remote-agent` on every desktop runner and stages it at `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` for local workspace watching and verified managed-resource cleanup.
-- Smoke-checks each packaged workspace watcher on its native runner, publishes the four target-specific binaries as release artifacts, and requires the complete set before `@bigbud/server` can be published.
+- Builds the target-native `bigbud-remote-agent` for every desktop build (cross-compiled for macOS `x64`) and stages it at `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` for local workspace watching and verified managed-resource cleanup.
+- Smoke-checks each packaged workspace watcher on its build runner (macOS `x64` under Rosetta 2), publishes the four target-specific binaries as release artifacts, and requires the complete set before `@bigbud/server` can be published.
 - Publishes `remote-agent-manifest.json`, `remote-agent-install-source.json`, and one `.sha256` file per remote-agent binary. The install source contains the signed manifest and its public trust key; artifact URLs point to binaries in the same GitHub Release.
 
 Remote-agent release signing uses the Ed25519 key supplied through the required
@@ -40,6 +69,32 @@ Remote-agent release signing uses the Ed25519 key supplied through the required
 secrets. The workflow publishes the corresponding public key in the remote-agent
 install source under that key ID, which lets the installer verify manifest
 signatures and supports key rotation.
+
+Clients pin the release public keys they accept in
+[`packages/shared/src/releaseTrust.ts`](../../packages/shared/src/releaseTrust.ts)
+(currently `release-2026`). When the install source comes from the default GitHub
+release location, the server keeps only downloaded trust entries whose key ID is
+pinned and whose Ed25519 key bytes equal the pinned key, and refuses a manifest
+signed by any other key with an "update bigbud" error. The backend graph trust
+derived from that install source is pinned the same way. Explicit local overrides
+(`BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH` or `BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL`,
+the development graph directory and trusted-keys inputs, and
+`bigbud backend setup --trusted-keys`) keep the operator-chosen trust; downloaded
+content cannot select them.
+
+The release side enforces the same set: `scripts/verify-remote-agent-release-assets.ts`
+fails when the signing key ID or public key is not pinned, and the release-signed
+backend graph job runs `scripts/verify-release-signing-key-pin.ts` before signing.
+
+Rotate the key in this order:
+
+1. Generate the new key and add its key ID and public key to the pinned set in
+   `releaseTrust.ts`, keeping the current key.
+2. Ship an app release with that pinned set, still signed with the current key.
+3. Switch `BIGBUD_REMOTE_AGENT_SIGNING_KEY` and `BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID`
+   to the new key and release. Clients older than step 2 cannot verify these
+   releases and must update.
+4. Remove the old key from the pinned set once no supported client needs it.
 
 ## Release environment and secret reference
 
@@ -110,7 +165,7 @@ Gatekeeper assessment, packaging and release smoke checks must still succeed.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
   - active-channel metadata (`latest*.yml`, `beta*.yml`, `preview*.yml`, or `nightly*.yml`)
-  - `*.blockmap` files (used for differential downloads)
+  - `*.blockmap` files for the macOS `.zip` and Windows `.exe` (used for differential downloads; DMGs have none)
 - Update channels are isolated by installed app identity:
   - Stable reads `latest` metadata and rejects all prereleases.
   - Beta reads `beta` metadata and accepts only Beta versions.
@@ -152,16 +207,17 @@ macOS privacy permissions are associated with the signed bundle identity. Grant 
 
 ## CI vs release builds
 
-- Pushes to `main` run `.github/workflows/ci.yml`.
-- The `quality` job runs formatting, lint, typecheck, tests, the desktop pipeline build, and locked Rust validation/build steps.
+- Pull requests, pushes to `main`, and manual dispatches run `.github/workflows/ci.yml`.
+- CI runs as parallel jobs: format and lint, typecheck, locked Rust validation/build, the desktop pipeline build, package tests, server unit tests, and the server `integration` tests in 8 shards, plus the smoke, Windows CUA sweep, and native cleanup jobs. A shard coverage job proves that every server test file ran exactly once.
+- The always-run `CI passed` job is the single verdict: it fails unless every one of those jobs succeeded (a skipped or cancelled job fails it). The desktop preview builds are not part of it.
 - Browser tests are not part of CI; see [Browser tests](./browser-tests.md).
-- The release workflow has its own `preflight` quality gate before artifact builds.
-- After `quality` passes, `desktop_release_build` builds unsigned, credential-free desktop release-style artifacts on:
+- The release workflow does not re-run these checks. Its `ci_gate` job requires `CI passed` on the exact release commit before publishing, so tag a commit after its `main` CI shows `CI passed`.
+- On `main` pushes, `desktop_release_build` starts immediately (it does not wait for the tests) and builds unsigned, credential-free desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
   - Linux `x64` AppImage + `.deb`
   - Windows `x64`
-- `release_asset_assembly` then merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
+- Once `CI passed` succeeds and every preview build and ARM64 workspace agent is done, `release_asset_assembly` merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
 - Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release. Use these CI artifacts for unsigned smoke testing; never create an unsigned public dry-run release.
 - Public curl-installable assets are published by `.github/workflows/release.yml` for a resolved release version, through a version tag or manual dispatch.
 - CI never imports Apple certificates and receives no production signing or notarization credentials.
@@ -252,12 +308,13 @@ bun run dist:desktop:linux:deb
 
 ## 4) Ongoing release checklist
 
-1. Ensure `main` is green in CI.
+1. Ensure the commit you will tag shows `CI passed` in its `main` CI run. For a commit without a `push` CI run, run `gh workflow run ci.yml --repo youpele52/bigbud --ref <ref>` first.
 2. Bump app version as needed.
 3. Create release tag: `vX.Y.Z`.
 4. Push tag.
 5. Verify workflow steps:
    - preflight passes
+   - `CI passed for release commit` (`ci_gate`) passes
    - all matrix builds pass
    - release job uploads expected files
 6. Smoke test downloaded artifacts.
@@ -270,6 +327,15 @@ bun run dist:desktop:linux:deb
 
 ## 5) Troubleshooting
 
+- `Publish GitHub Release` shows a failed `Publish release` step but the job is green: the
+  action's upload hit a transient GitHub error, and `Verify and repair release assets` re-uploaded
+  what was missing and confirmed every asset. Its step summary lists what it repaired. The job fails
+  only if the release is still missing, a draft, on the wrong channel, or missing assets after three
+  repair rounds; re-run the failed job to repair it again.
+- `ci_gate` fails:
+  - "No CI run for <sha>": run `gh workflow run ci.yml --repo youpele52/bigbud --ref <tag or branch>`, wait for `CI passed`, then use "Re-run failed jobs" on the release run. Successful builds and their artifacts are kept, so only the gate and publish run again.
+  - "No CI run … has a successful 'CI passed' job": fix or re-run CI for that commit, then re-run the release's failed jobs.
+  - "Timed out": CI did not finish within 70 minutes; re-run the failed jobs once CI has passed.
 - macOS signing preflight fails:
   - Check all five Apple secrets are populated and non-empty. Public releases do not fall back to unsigned macOS artifacts.
 - Build fails with signing error:

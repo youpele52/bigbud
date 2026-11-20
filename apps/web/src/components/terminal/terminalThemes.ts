@@ -1,6 +1,10 @@
 import type { ITheme } from "@xterm/xterm";
 import { TERMINAL_THEME_PALETTES, TERMINAL_THEME_SLOTS } from "./terminalThemes.catalog";
 import { terminalThemeFromApp } from "./ThreadTerminalDrawer.logic";
+import {
+  isTranslucentWindowMaterialActive,
+  transparentTerminalBackground,
+} from "./terminalThemes.translucent";
 
 /** Default theme name: the app-derived look bigbud has always used. */
 export const BIGBUD_TERMINAL_THEME = "bigbud";
@@ -52,6 +56,19 @@ export function resolveTerminalThemeHost(mount: HTMLElement): HTMLElement {
   );
 }
 
+function activeCatalogTheme(preference: TerminalThemePreference): ITheme | undefined {
+  const isDark = document.documentElement.classList.contains("dark");
+  return catalog.get(isDark ? preference.terminalThemeDark : preference.terminalThemeLight);
+}
+
+/**
+ * Whether the terminal follows the translucent window material: only with the app-derived
+ * theme. A chosen catalog theme keeps its own background.
+ */
+export function usesTranslucentTerminalBackground(preference: TerminalThemePreference): boolean {
+  return isTranslucentWindowMaterialActive() && !activeCatalogTheme(preference);
+}
+
 /**
  * Theme for the current app appearance. Unknown names (renamed or removed themes, hand-edited
  * settings) fall back to the bigbud theme. Catalog themes keep bigbud's scrollbar styling.
@@ -61,10 +78,14 @@ export function resolveTerminalTheme(
   themeHost?: HTMLElement | null,
 ): ITheme {
   const appTheme = terminalThemeFromApp(themeHost);
-  const isDark = document.documentElement.classList.contains("dark");
-  const name = isDark ? preference.terminalThemeDark : preference.terminalThemeLight;
-  const theme = catalog.get(name);
-  if (!theme) return appTheme;
+  const theme = activeCatalogTheme(preference);
+  if (!theme) {
+    const background =
+      themeHost && isTranslucentWindowMaterialActive()
+        ? transparentTerminalBackground(themeHost)
+        : null;
+    return background ? { ...appTheme, background } : appTheme;
+  }
   const {
     scrollbarSliderBackground,
     scrollbarSliderHoverBackground,

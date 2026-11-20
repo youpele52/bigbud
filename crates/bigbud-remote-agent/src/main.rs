@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
     AgentSession, identity, protocol_error_frame,
+    search::SearchWorkers,
     state::{AgentState, supervisor_socket_path},
     supervisor::{
         SupervisorPreparation, prepare_supervisor, request_restart, request_shutdown, run_proxy,
@@ -26,17 +27,30 @@ fn state_root() -> Option<std::path::PathBuf> {
         })
 }
 
+/// Paste staging lives beside the state folder (`~/.bigbud/agent/paste`). Without it the agent
+/// still runs; it just does not advertise `terminal.paste-staging`.
+fn enable_paste_staging(session: &mut AgentSession, state_root: &std::path::Path) {
+    let Some(root) = state_root.parent().map(|parent| parent.join("paste")) else {
+        return;
+    };
+    if let Err(error) = session.enable_paste_staging(&root) {
+        eprintln!("bigbud remote agent paste staging unavailable: {error}");
+    }
+}
+
 fn create_session() -> Result<AgentSession> {
     let state_root = state_root();
     match state_root {
         Some(root) => {
             let state = AgentState::open(&root)
                 .with_context(|| format!("failed to open agent state at {}", root.display()))?;
-            AgentSession::with_epoch_and_journal(
+            let mut session = AgentSession::with_epoch_and_journal(
                 state.epoch().to_owned(),
                 state.operation_journal_path(),
             )
-            .context("failed to restore the agent session journal")
+            .context("failed to restore the agent session journal")?;
+            enable_paste_staging(&mut session, &root);
+            Ok(session)
         }
         None => AgentSession::new().context("failed to create an ephemeral agent session"),
     }
@@ -53,6 +67,8 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
         let _ = write_stdio_responses(&watch_writer, vec![workspace_watch_event_frame(event)]);
     });
     let mut watch_subscriptions = HashSet::new();
+    let mut searches = SearchWorkers::new(session.search_registry().clone());
+    let mut os_index_searches = SearchWorkers::new(session.os_index_registry().clone());
     loop {
         let frame = match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
             Ok(Some(frame)) => frame,
@@ -91,6 +107,37 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessRequest(request)) => {
                 session.handle_process_request(request)
+            }
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceSearchRequest(request)) => {
+                match session.prepare_workspace_search(request) {
+                    Ok(prepared) => {
+                        let search_writer = Arc::clone(&writer);
+                        let operation_id = prepared.operation_id().to_owned();
+                        searches.spawn(operation_id, move || {
+                            prepared.execute(&mut |frame| {
+                                write_stdio_responses(&search_writer, vec![frame]).is_ok()
+                            });
+                        })?;
+                        Ok(Vec::new())
+                    }
+                    Err(refusal) => Ok(vec![*refusal]),
+                }
+            }
+            Some(bigbud_protocol::v1::frame::Payload::OsIndexSearchRequest(request)) => {
+                // Refused unless this session was started with `--ephemeral --os-index`.
+                match session.prepare_os_index_search(request) {
+                    Ok(prepared) => {
+                        let search_writer = Arc::clone(&writer);
+                        let operation_id = prepared.operation_id().to_owned();
+                        os_index_searches.spawn(operation_id, move || {
+                            prepared.execute(&mut |frame| {
+                                write_stdio_responses(&search_writer, vec![frame]).is_ok()
+                            });
+                        })?;
+                        Ok(Vec::new())
+                    }
+                    Err(refusal) => Ok(vec![*refusal]),
+                }
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessAttachRequest(request)) => {
                 session.handle_process_attach(request)
@@ -133,7 +180,13 @@ fn run_check(capabilities: bool) {
         std::env::consts::OS,
         std::env::consts::ARCH,
         if capabilities {
-            "\tinspect-local=1"
+            if cfg!(windows) {
+                "\tinspect-local=1\tlocal-control-pipe=1"
+            } else if cfg!(target_os = "linux") {
+                "\tinspect-local=1\tbackend-service=2\tbackend-service-graph=1"
+            } else {
+                "\tinspect-local=1"
+            }
         } else {
             ""
         },
@@ -141,34 +194,71 @@ fn run_check(capabilities: bool) {
 }
 
 #[cfg(unix)]
-fn run_supervisor_mode(root: std::path::PathBuf) -> Result<()> {
+fn run_supervisor_mode(
+    root: std::path::PathBuf,
+    managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+) -> Result<()> {
     let state = AgentState::open_for_supervisor(&root)
         .with_context(|| format!("failed to open supervisor state at {}", root.display()))?;
-    run_supervisor(
-        AgentSession::with_epoch_and_journal(
+    let logging = bigbud_remote_agent::supervisor::SupervisorLogging::start(&root)
+        .context("failed to start bounded supervisor logging")?;
+    let result = (|| {
+        let mut session = AgentSession::with_epoch_and_journal(
             state.epoch().to_owned(),
             state.operation_journal_path(),
         )
-        .context("failed to restore the supervisor session journal")?,
-        &supervisor_socket_path(root),
-    )
-    .context("remote agent supervisor failed")
+        .context("failed to restore the supervisor session journal")?;
+        enable_paste_staging(&mut session, &root);
+        if let Some(context) = managed {
+            session
+                .set_managed_service_account(context)
+                .context("managed service lease unavailable")?;
+        }
+        run_supervisor(session, &supervisor_socket_path(root))
+            .context("remote agent supervisor failed")
+    })();
+    if let Err(error) = &result {
+        eprintln!("{error}");
+    }
+    let log_result = logging
+        .finish()
+        .context("supervisor logging did not settle");
+    result.and(log_result)
 }
 
 #[cfg(not(unix))]
-fn run_supervisor_mode(_root: std::path::PathBuf) -> Result<()> {
+fn run_supervisor_mode(
+    _root: std::path::PathBuf,
+    _managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+) -> Result<()> {
     anyhow::bail!("the remote agent supervisor requires Unix-domain sockets on this platform")
 }
 
 fn main() -> Result<()> {
     match std::env::args().nth(1).as_deref() {
+        #[cfg(unix)]
+        Some("--service-lease-monitor") => bigbud_remote_agent::service_lease::run_monitor()
+            .context("private service lease monitor failed"),
+        #[cfg(unix)]
+        Some("--backend-service-command-monitor") => {
+            bigbud_remote_agent::backend_service::run_command_monitor(std::env::args_os().skip(2))
+                .context("bounded command monitor failed")
+        }
+        Some("--backend-service") => bigbud_remote_agent::backend_service::run_cli_with_supervisor(
+            std::env::args().skip(2),
+            |root, managed| {
+                run_supervisor_mode(root, Some(managed))
+                    .map_err(|_| bigbud_remote_agent::backend_service::ServiceError::Supervisor)
+            },
+        )
+        .context("account-service operation failed"),
         Some("--check") => {
             run_check(std::env::args().nth(2).as_deref() == Some("--capabilities"));
             Ok(())
         }
         Some("--supervisor") => {
             let root = state_root().context("HOME is required for supervisor mode")?;
-            run_supervisor_mode(root)
+            run_supervisor_mode(root, None)
         }
         Some("--prepare-supervisor") => {
             let root = state_root().context("HOME is required to prepare the supervisor")?;
@@ -215,11 +305,22 @@ fn main() -> Result<()> {
                 .context("remote agent proxy failed")
         }
         Some("--ephemeral") => {
-            run_stdio(AgentSession::new().context("failed to create the ephemeral agent session")?)
-                .context("remote agent stdio mode failed")
+            let mut session =
+                AgentSession::new().context("failed to create the ephemeral agent session")?;
+            // Only the desktop-embedded local agent passes `--os-index` ("this computer" search).
+            if std::env::args().nth(2).as_deref() == Some("--os-index") {
+                session.enable_os_index();
+            }
+            run_stdio(session).context("remote agent stdio mode failed")
         }
         Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
             .context("resource cleanup stdio mode failed"),
+        Some("--local-control-server") => {
+            bigbud_remote_agent::local_control::run_server().context("local pipe server failed")
+        }
+        Some("--local-control-client") => {
+            bigbud_remote_agent::local_control::run_client().context("local pipe client failed")
+        }
         Some("--inspect-local") => {
             bigbud_remote_agent::inspect_local::run_stdio().context("local inspection mode failed")
         }

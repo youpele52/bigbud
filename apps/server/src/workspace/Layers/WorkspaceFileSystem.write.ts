@@ -23,6 +23,8 @@ import type { WorkspaceEntriesShape } from "../Services/WorkspaceEntries.ts";
 import {
   WorkspaceFileSystemError,
   type WorkspaceFileSystemShape,
+  WORKSPACE_FILE_ALREADY_EXISTS,
+  WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
 } from "../Services/WorkspaceFileSystem.ts";
 import type { WorkspacePathsShape } from "../Services/WorkspacePaths.ts";
 
@@ -35,6 +37,10 @@ async function currentSha256(absolutePath: string): Promise<string | undefined> 
     if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") return undefined;
     throw cause;
   }
+}
+
+function isAlreadyExists(cause: unknown): boolean {
+  return cause instanceof Error && "code" in cause && cause.code === "EEXIST";
 }
 
 async function replaceConditionalFile(
@@ -89,6 +95,7 @@ export function makeWorkspaceWriteFile(input: {
     const executionTargetId = resolveExecutionTargetId(value.executionTargetId);
     const target = yield* input.workspacePaths.resolveRelativePathWithinRoot({
       workspaceRoot: value.cwd,
+      executionTargetId,
       relativePath: value.relativePath,
     });
 
@@ -102,7 +109,26 @@ export function makeWorkspaceWriteFile(input: {
       });
     }
 
+    if (value.createOnly === true && value.expectedSha256 !== undefined) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: value.cwd,
+        relativePath: value.relativePath,
+        operation: "workspaceFileSystem.writeFile",
+        detail: "createOnly cannot be combined with expectedSha256.",
+        writeDisposition: "not-dispatched",
+      });
+    }
+
     if (!isLocalExecutionTarget(executionTargetId)) {
+      if (value.createOnly === true) {
+        return yield* new WorkspaceFileSystemError({
+          cwd: value.cwd,
+          relativePath: value.relativePath,
+          operation: "workspaceFileSystem.writeFileCreateOnlyRemote",
+          detail: "Create-only remote writes are not supported.",
+          writeDisposition: "not-dispatched",
+        });
+      }
       if (value.expectedSha256 !== undefined) {
         return yield* new WorkspaceFileSystemError({
           cwd: value.cwd,
@@ -187,6 +213,30 @@ export function makeWorkspaceWriteFile(input: {
         writeDisposition,
         cause,
       });
+    if (value.createOnly === true) {
+      yield* Effect.tryPromise({
+        // `wx` is O_CREAT | O_EXCL: an existing file or symlink fails with EEXIST, untouched.
+        try: () =>
+          writeFileBytes(target.absolutePath, value.contents, { flag: "wx" }).catch(
+            (cause: unknown) => {
+              throw isAlreadyExists(cause)
+                ? new WorkspaceFileSystemError({
+                    cwd: value.cwd,
+                    relativePath: value.relativePath,
+                    operation: WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
+                    detail: WORKSPACE_FILE_ALREADY_EXISTS,
+                    writeDisposition: "terminal",
+                    cause,
+                  })
+                : localWriteError(cause, "terminal");
+            },
+          ),
+        catch: (cause) =>
+          Schema.is(WorkspaceFileSystemError)(cause) ? cause : localWriteError(cause),
+      });
+      yield* input.workspaceEntries.invalidate(value.cwd);
+      return { relativePath: target.relativePath };
+    }
     yield* value.expectedSha256 !== undefined
       ? Effect.tryPromise({
           // Only an actual rejection of the filesystem promise proves the local write settled.

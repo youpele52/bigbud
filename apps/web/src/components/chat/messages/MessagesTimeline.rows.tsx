@@ -1,3 +1,4 @@
+import { ACTIVITY_LAYOUT } from "~/constants/activityLayout";
 import { buildExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { Button } from "../../ui/button";
@@ -8,7 +9,6 @@ import type {
 } from "../../../models/types/app.types";
 import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
-import { UserInputQuestions } from "./UserInputQuestions";
 import { AnsweredUserInput } from "./AnsweredUserInput";
 import {
   TimelineMessageCopyButton,
@@ -35,7 +35,7 @@ import { ChatTimestamp } from "../common/ChatTimestamp";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 import { timelineRowAccordionControl } from "./MessagesTimeline.accordion";
-import { ActivityAccordion, activitySectionLabelTypography } from "../common/ActivityAccordion";
+import { ActivityAccordion } from "../common/ActivityAccordion";
 import {
   UserFileReferenceChips,
   UserFileSourcePaths,
@@ -79,7 +79,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
   );
   return (
     <div
-      className="pb-4"
+      className={ACTIVITY_LAYOUT.row}
       data-timeline-row-id={row.id}
       data-timeline-row-kind={row.kind}
       data-message-id={row.kind === "message" ? row.message.id : undefined}
@@ -240,7 +240,6 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                       variant="compact"
                       title="Extracted contents"
                       className="mt-2"
-                      panelClassName="pt-2"
                     >
                       <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/40 bg-background/45 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
                         {displayedUserMessage.readDocument.text}
@@ -331,7 +330,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
         />
       )}
       {row.kind === "proposed-plan" && (
-        <div className="min-w-0 px-1 py-0.5">
+        <div className="min-w-0 px-1">
           <ProposedPlanCard
             planMarkdown={row.proposedPlan.planMarkdown}
             cwd={markdownCwd}
@@ -342,26 +341,16 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
         </div>
       )}
 
-      {row.kind === "user-input-question" && (
-        // Answered questions are accordions, which share the work log's left edge.
-        <div className={cn("min-w-0 py-0.5", !row.answers && "px-1")}>
-          {row.answers ? (
-            <AnsweredUserInput
-              input={row.pendingUserInput}
-              answers={row.answers}
-              answeredAt={row.answeredAt ?? row.createdAt}
-              timestampFormat={timestampFormat}
-              accordion={accordion}
-            />
-          ) : (
-            <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
-              <p className={cn("mb-2.5", activitySectionLabelTypography)}>Input required</p>
-              <UserInputQuestions questions={row.pendingUserInput.questions} />
-              <p className="mt-3 text-[11px] text-muted-foreground/45">
-                Type your answer below and press send to continue.
-              </p>
-            </div>
-          )}
+      {/* Pending questions live in the panel above the composer; answered ones are accordions. */}
+      {row.kind === "user-input-question" && row.answers && (
+        <div className="min-w-0">
+          <AnsweredUserInput
+            input={row.pendingUserInput}
+            answers={row.answers}
+            answeredAt={row.answeredAt ?? row.createdAt}
+            timestampFormat={timestampFormat}
+            accordion={accordion}
+          />
         </div>
       )}
     </div>

@@ -21,6 +21,7 @@ export function runWsStreamOnSession<TValue>(
   markValueApplied: () => void,
   markListenerFailure: (error: unknown) => unknown,
   initialApplication?: WsInitialApplicationDeadline,
+  markInboundActivity: () => void = markWsInboundActivity,
 ): { readonly cancel: () => void; readonly completed: Promise<void> } {
   let resolveCompleted!: () => void;
   let rejectCompleted!: (error: unknown) => void;
@@ -37,7 +38,7 @@ export function runWsStreamOnSession<TValue>(
             Stream.runForEach(connect(client), (value) =>
               Effect.promise(() => {
                 if (!isActive()) return Promise.resolve();
-                markWsInboundActivity();
+                markInboundActivity();
                 markValueReceived();
                 return Promise.resolve()
                   .then(() => {

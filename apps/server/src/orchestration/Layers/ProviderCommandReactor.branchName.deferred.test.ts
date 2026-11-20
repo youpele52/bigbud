@@ -8,8 +8,7 @@ import { isThreadTextGenerationJobActive } from "../../git/Layers/InternalTextGe
 import * as savedIdentity from "../../git/Layers/WorktreeSavedIdentity.ts";
 import * as reactorTestHelpers from "./ProviderCommandReactor.test.helpers.ts";
 import * as firstTurn from "./ProviderCommandReactorSessionOps.firstTurn.ts";
-import * as titleGeneration from "./ProviderCommandReactorSessionOps.title.ts";
-import { hasUnresolvedTitleGeneration } from "./ProviderCommandReactorSessionOps.title.state.ts";
+import * as metadataGeneration from "./ThreadMetadataGeneration.ts";
 import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
 import { makeTextGenerationActivityHandler } from "./ProviderCommandReactorHandlers.textGeneration.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
@@ -26,6 +25,15 @@ async function deferredBranch(startReactor = true) {
   const baseDir = makeTrackedTempDir("bigbud-deferred-branch-");
   const worktreePath = path.join(baseDir, "worktree");
   fs.mkdirSync(worktreePath);
+  const metadataTitle = vi.fn(() => Effect.void);
+  vi.spyOn(metadataGeneration, "makeThreadMetadataGeneration").mockReturnValue(
+    Effect.succeed({
+      title: metadataTitle,
+      summary: () => Effect.void,
+      start: () => Effect.void,
+      step: () => Effect.void,
+    }),
+  );
   const harness = await createHarness({ baseDir, startReactor });
   harness.generateBranchName.mockReturnValue(Effect.succeed({ branch: "verified-feature" }));
   await Effect.runPromise(
@@ -66,7 +74,7 @@ async function deferredBranch(startReactor = true) {
         !isThreadTextGenerationJobActive(harness.engine, threadId, "branch")
       );
     });
-  return { harness, worktreePath };
+  return { harness, worktreePath, metadataTitle };
 }
 async function success(harness: Awaited<ReturnType<typeof createHarness>>, id: string) {
   const createdAt = new Date().toISOString();
@@ -91,7 +99,13 @@ async function success(harness: Awaited<ReturnType<typeof createHarness>>, id: s
 
 function sessionOps(harness: Awaited<ReturnType<typeof createHarness>>) {
   const readThread = harness.engine.getReadModel().pipe(Effect.map((model) => model.threads[0]));
+  const metadataTitle = vi.fn(() => Effect.void);
   const services = {
+    metadataGeneration: {
+      title: metadataTitle,
+      summary: () => Effect.void,
+      start: () => Effect.void,
+    },
     orchestrationEngine: harness.engine,
     resolveThread: () => readThread,
     serverSettingsService: {
@@ -105,7 +119,7 @@ function sessionOps(harness: Awaited<ReturnType<typeof createHarness>>) {
       generateThreadElevatorSummary: () => Effect.succeed({ summary: "Fixture summary" }),
     },
   } as unknown as SessionOpServices;
-  return { readThread, services };
+  return { readThread, services, metadataTitle };
 }
 
 describe("deferred worktree branch generation", () => {
@@ -182,7 +196,7 @@ describe("deferred worktree branch generation", () => {
     const release = Deferred.makeUnsafe<void>();
     const paused = Deferred.makeUnsafe<void>();
     const { harness, worktreePath } = await deferredBranch(false);
-    const { readThread, services } = sessionOps(harness);
+    const { readThread, services, metadataTitle } = sessionOps(harness);
     vi.spyOn(savedIdentity, "assertSavedWorktreeIdentity").mockImplementationOnce(() =>
       Deferred.succeed(paused, undefined).pipe(
         Effect.andThen(Deferred.await(release)),
@@ -215,10 +229,8 @@ describe("deferred worktree branch generation", () => {
             (item) => item.id === "fixture:success-before-deferral",
           )!;
           yield* handle({ payload: { threadId, activity } });
-          // A generated title proves the success handler ran, not merely that success was persisted.
-          yield* Effect.promise(() =>
-            waitFor(() => harness.generateThreadTitle.mock.calls.length > 0, 10_000),
-          );
+          // Admission proves the success handler ran; no auxiliary provider is needed here.
+          expect(metadataTitle).toHaveBeenCalledTimes(1);
           expect(harness.generateBranchName).not.toHaveBeenCalled();
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(branch);
@@ -243,8 +255,7 @@ describe("deferred worktree branch generation", () => {
     );
   });
   it("waits for first verified success and then generates/renames exactly once", async () => {
-    const generateThreadTitle = vi.spyOn(titleGeneration, "maybeGenerateThreadTitleForFirstTurn");
-    const { harness, worktreePath } = await deferredBranch();
+    const { harness, worktreePath, metadataTitle } = await deferredBranch();
     expect(harness.generateBranchName).not.toHaveBeenCalled();
     await success(harness, "fixture:success-1");
     await waitFor(() => harness.renameBranch.mock.calls.length === 1);
@@ -256,19 +267,10 @@ describe("deferred worktree branch generation", () => {
             (item.payload as { operation?: string }).operation === "branch",
         ) === true,
     );
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length > 0);
-    // The staged title pipeline can exhaust its provider attempts on the first success.
-    // Let that job settle: a success handled while a stage is "started" is skipped as unresolved.
-    await waitFor(
-      async () =>
-        !isThreadTextGenerationJobActive(harness.engine, threadId, "title") &&
-        !hasUnresolvedTitleGeneration(
-          (await Effect.runPromise(harness.engine.getReadModel())).threads[0]!,
-        ),
-    );
-    const titleCalls = generateThreadTitle.mock.calls.length;
+    await waitFor(() => metadataTitle.mock.calls.length > 1);
+    const titleCalls = metadataTitle.mock.calls.length;
     await success(harness, "fixture:success-2");
-    await waitFor(() => generateThreadTitle.mock.calls.length > titleCalls);
+    await waitFor(() => metadataTitle.mock.calls.length > titleCalls);
     await harness.drain();
     expect(harness.generateBranchName).toHaveBeenCalledTimes(1);
     expect(harness.generateBranchName.mock.calls[0]?.[0]).toMatchObject({
@@ -282,7 +284,7 @@ describe("deferred worktree branch generation", () => {
     "does not awaken stale generation after a changed %s",
     async (change) => {
       const { harness, worktreePath } = await deferredBranch(false);
-      const { readThread, services } = sessionOps(harness);
+      const { readThread, services, metadataTitle } = sessionOps(harness);
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
@@ -311,7 +313,7 @@ describe("deferred worktree branch generation", () => {
               firstTurn,
               "maybeGenerateAndRenameWorktreeBranchForFirstTurn",
             );
-            const generateTitle = vi.spyOn(titleGeneration, "maybeGenerateThreadTitleForFirstTurn");
+            expect(metadataTitle).not.toHaveBeenCalled();
             if (change === "workspace") {
               // Restore an earlier workspace snapshot without bypassing worktree transfer guards.
               const createdAt = new Date(Date.parse(deferred.createdAt) + 1).toISOString();
@@ -355,7 +357,7 @@ describe("deferred worktree branch generation", () => {
             const handle = yield* makeTextGenerationActivityHandler(services);
             yield* handle({ payload: { threadId, activity } });
             // Factory calls are synchronous: cancelled forks cannot make the negative check pass.
-            expect(generateTitle).toHaveBeenCalledTimes(1);
+            expect(metadataTitle).toHaveBeenCalledTimes(1);
             expect(generateBranch).not.toHaveBeenCalled();
             expect(harness.generateBranchName).not.toHaveBeenCalled();
             expect(harness.renameBranch).not.toHaveBeenCalled();

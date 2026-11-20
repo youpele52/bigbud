@@ -1,5 +1,5 @@
 import type { Game } from "@bigbud/shared/games";
-import { resolveWsHttpOrigin } from "~/rpc/wsHttpOrigin";
+import { resolveWsHttpOrigin, resolveWsHttpRequestHeaders } from "~/rpc/wsHttpOrigin";
 
 export interface GameMetadata {
   title: string;
@@ -23,7 +23,11 @@ export function loadGameMetadata(game: Game): Promise<GameMetadata> {
   if (cached) return cached;
   const promise = fetch(
     `${resolveWsHttpOrigin()}/api/games/metadata?url=${encodeURIComponent(game.url)}`,
-    { signal: AbortSignal.timeout(6000), cache: "no-store" },
+    {
+      signal: AbortSignal.timeout(6000),
+      cache: "no-store",
+      headers: resolveWsHttpRequestHeaders(),
+    },
   )
     .then(async (response) => {
       if (!response.ok) throw new Error(`Metadata request failed: ${response.status}`);

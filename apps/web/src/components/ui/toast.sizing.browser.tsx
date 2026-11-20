@@ -2,6 +2,7 @@ import "~/index.css";
 import { expect, it, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { settleToastForPointer } from "./toast.browser.utils";
 import { anchoredToastManager, ToastProvider, toastManager, type ToastPosition } from "./toast";
 
 vi.mock("@tanstack/react-router", () => ({ useParams: () => null }));
@@ -108,8 +109,7 @@ it("uses bounded heights for stack spacing, including content updates", async ()
     const id = toastManager.add({ title: "Older short card", timeout: 0 });
     toastManager.add({ title: "Newer long card", description: longDescription, timeout: 0 });
     await expect.element(screen.getByText("Newer long card")).toBeVisible();
-    await screen.getByText("Newer long card").hover();
-    await settle();
+    await settleToastForPointer(cards()[0]!);
     const checkStack = () => {
       const stack = cards();
       for (const card of stack) {
@@ -120,11 +120,11 @@ it("uses bounded heights for stack spacing, including content updates", async ()
         stack[0]!.getBoundingClientRect().bottom + 10,
       );
     };
-    checkStack();
+    await vi.waitFor(checkStack);
     toastManager.update(id, { description: longDescription });
     await expect.poll(() => cards()[1]!.offsetHeight).toBe(120);
-    await settle();
-    checkStack();
+    await settleToastForPointer(cards()[0]!);
+    await vi.waitFor(checkStack);
   } finally {
     toastManager.close();
     await screen.unmount();

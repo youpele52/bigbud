@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { TerminalEvent, TerminalSnapshotInput } from "./terminal";
+import { TerminalWorkActivity } from "./terminal.activity";
 
 /**
  * Terminal-scoped output delivery with an application-level parse-credit window.
@@ -39,8 +40,12 @@ export const TerminalSessionInventory = Schema.Struct({
 });
 export type TerminalSessionInventory = typeof TerminalSessionInventory.Type;
 
-/** Inventory is a subscription control item, never a per-terminal lifecycle event. */
-export const TerminalEventsStreamItem = Schema.Union([TerminalSessionInventory, TerminalEvent]);
+/** Inventory and work activity are subscription items, never per-terminal lifecycle events. */
+export const TerminalEventsStreamItem = Schema.Union([
+  TerminalSessionInventory,
+  TerminalWorkActivity,
+  TerminalEvent,
+]);
 export type TerminalEventsStreamItem = typeof TerminalEventsStreamItem.Type;
 
 /** `legacyDetection` omits output except for sessions whose agent detection runs in the client. */
@@ -48,6 +53,8 @@ export const TerminalEventsSubscriptionInput = Schema.Struct({
   outputScope: Schema.optional(Schema.Literals(["all", "legacyDetection"])),
   /** Opt in so older per-terminal consumers keep receiving only TerminalEvent. */
   includeInventory: Schema.optional(Schema.Boolean),
+  /** Opt in to `workActivity` items (terminal recency and finished work). */
+  includeWork: Schema.optional(Schema.Boolean),
 });
 export type TerminalEventsSubscriptionInput = Schema.Codec.Encoded<
   typeof TerminalEventsSubscriptionInput

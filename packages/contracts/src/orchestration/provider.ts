@@ -13,7 +13,6 @@ import {
   ChatAttachment,
   ModelSelection,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
-  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   ProviderApprovalDecision,
   ProviderApprovalPolicy,
   ProviderInteractionMode,
@@ -75,9 +74,7 @@ export const ProviderSendTurnInput = Schema.Struct({
   learningJob: Schema.optional(
     Schema.Struct({ ownerThreadId: ThreadId, jobId: TrimmedNonEmptyString }),
   ),
-  input: Schema.optional(
-    TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
-  ),
+  input: Schema.optional(TrimmedNonEmptyString),
   attachments: Schema.optional(
     Schema.Array(ChatAttachment).check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_ATTACHMENTS)),
   ),
@@ -104,7 +101,7 @@ export type ProviderInterruptTurnInput = typeof ProviderInterruptTurnInput.Type;
 export const ProviderSteerTurnInput = Schema.Struct({
   threadId: ThreadId,
   turnId: Schema.optional(TurnId),
-  input: TrimmedNonEmptyString.check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_INPUT_CHARS)),
+  input: TrimmedNonEmptyString,
   sessionEpoch: Schema.optional(NonNegativeInt),
 });
 export type ProviderSteerTurnInput = typeof ProviderSteerTurnInput.Type;

@@ -1,0 +1,26 @@
+---
+import { APP_NAME, GETTING_STARTED_PATH, MARKETING_ASSETS } from "../constants/app";
+import { NOT_FOUND_METADATA } from "../constants/seo";
+import Layout from "../layouts/Layout.astro";
+import "./404.css";
+---
+
+<Layout {...NOT_FOUND_METADATA}>
+  <section class="not-found-page" aria-labelledby="not-found-title">
+    <img
+      src={MARKETING_ASSETS.navLogoPath}
+      alt={APP_NAME}
+      class="not-found-logo"
+      width="96"
+      height="96"
+    />
+    <p class="not-found-code">404</p>
+    <h1 id="not-found-title" class="not-found-title">Page not found</h1>
+    <p class="not-found-copy">The page you were looking for does not exist or has moved.</p>
+    <nav class="not-found-links" aria-label="Helpful links">
+      <a href="/" class="not-found-link">home</a>
+      <a href="/download" class="not-found-link">download</a>
+      <a href={GETTING_STARTED_PATH} class="not-found-link">docs</a>
+    </nav>
+  </section>
+</Layout>

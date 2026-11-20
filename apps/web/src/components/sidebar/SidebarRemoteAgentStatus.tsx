@@ -7,6 +7,14 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { Button } from "../ui/button";
 import { REMOTE_AGENT_FAILURE_GUIDANCE } from "./SidebarRemoteAgentStatus.messages";
 import {
+  describeAgentBuild,
+  downloadedUpdateVersion,
+  REMOTE_AGENT_STATUS_FOOTER,
+  REMOTE_AGENT_STATUS_LABELS as LABELS,
+  remoteAgentUpdateStatusMessage,
+  remoteAgentUpdateStatusTone,
+} from "./SidebarRemoteAgentStatus.copy";
+import {
   notifyRemoteAgentConnection,
   remoteAgentConnectionWarning,
 } from "./SidebarRemoteAgentConnection.notifications";
@@ -144,6 +152,7 @@ export function SidebarRemoteAgentStatus({
         executionTargetId,
         requestId: admissionRequestId,
         intent: "fresh",
+        replace: true,
       });
       if (actionRevision !== revision.current) return;
       const usingFallback = result.outcome === "fallback" || Boolean(result.warning);
@@ -152,7 +161,7 @@ export function SidebarRemoteAgentStatus({
       useRemoteAccessStore.getState().recordRemoteConnection(executionTargetId, result);
       notifyRemoteAgentConnection(executionTargetId, result);
       setMessage(
-        `Connected to ${usingFallback ? "healthy fallback " : ""}${result.currentVersion}. Existing terminals and operations keep their original runtime.`,
+        `Connected to ${usingFallback ? "backup version " : ""}${result.currentVersion}. Existing terminals and operations keep their original runtime.${result.cleanupMessage ? ` ${result.cleanupMessage}` : ""}`,
       );
       completeRemoteAgentAdmission(executionTargetId, admissionRequestId);
       requestId.current = undefined;
@@ -171,12 +180,14 @@ export function SidebarRemoteAgentStatus({
 
   const currentVersion = updateStatus?.currentVersion ?? summary?.currentVersion;
   const pendingVersion = updateStatus
-    ? updateStatus.pendingVersion
+    ? downloadedUpdateVersion(updateStatus)
     : (summary?.pendingVersion ?? null);
   const predecessorVersion = updateStatus
     ? updateStatus.predecessorVersion
     : (summary?.fallbackVersion ?? null);
   const connectionWarning = summary ? remoteAgentConnectionWarning(summary) : undefined;
+  // Equal versions mean another build of that version (for example musl replacing gnu).
+  const sameVersion = Boolean(pendingVersion && pendingVersion === currentVersion);
 
   return (
     <section
@@ -184,37 +195,42 @@ export function SidebarRemoteAgentStatus({
       className="space-y-2 rounded-lg border border-border p-3 text-sm"
     >
       <dl className="grid grid-cols-2 gap-1">
-        <dt>Current connection</dt>
-        <dd>{currentVersion ?? "Not verified"}</dd>
-        <dt>Pending update</dt>
-        <dd>{pendingVersion ?? "None"}</dd>
-        <dt>Healthy fallback</dt>
-        <dd>{predecessorVersion ?? "None verified"}</dd>
+        <dt>{LABELS.running}</dt>
+        <dd>
+          {currentVersion
+            ? describeAgentBuild(
+                currentVersion,
+                {
+                  targetTriple: updateStatus?.currentTargetTriple,
+                  digestShort: updateStatus?.currentBuildDigestShort,
+                },
+                sameVersion,
+              )
+            : LABELS.notVerified}
+        </dd>
+        <dt>{LABELS.downloaded}</dt>
+        <dd>
+          {pendingVersion
+            ? describeAgentBuild(
+                pendingVersion,
+                {
+                  targetTriple: updateStatus?.pendingTargetTriple,
+                  digestShort: updateStatus?.pendingBuildDigestShort,
+                },
+                sameVersion,
+              )
+            : LABELS.none}
+        </dd>
+        <dt>{LABELS.backup}</dt>
+        <dd>{predecessorVersion ?? LABELS.none}</dd>
       </dl>
       {updateStatus ? (
-        <p
-          role="status"
-          className={
-            updateStatus.phase === "failed-using-stable" ||
-            updateStatus.phase === "verification-unavailable" ||
-            updateStatus.phase === "waiting-for-capacity" ||
-            updateStatus.phase === "capacity-noncompliant"
-              ? "text-amber-600"
-              : updateStatus.phase === "installing" ||
-                  updateStatus.phase === "checking-health" ||
-                  updateStatus.phase === "reserved"
-                ? "text-blue-600"
-                : "text-emerald-600"
-          }
-        >
+        <p role="status" className={remoteAgentUpdateStatusTone(updateStatus.phase)}>
           {remoteAgentUpdateStatusMessage(updateStatus)}
         </p>
       ) : null}
       {updateStatus?.reason ? <p className="text-amber-600">{updateStatus.reason}</p> : null}
-      <p className="text-xs text-muted-foreground">
-        Connect new session checks for the latest compatible agent. Retained work stays on its
-        original runtime, including after reconnect.
-      </p>
+      <p className="text-xs text-muted-foreground">{REMOTE_AGENT_STATUS_FOOTER}</p>
       {connectionWarning ? (
         <p role="status" className="text-amber-600">
           {connectionWarning}
@@ -247,33 +263,4 @@ export function SidebarRemoteAgentStatus({
       </div>
     </section>
   );
-}
-
-function remoteAgentUpdateStatusMessage(status: ServerRemoteAgentUpdateStatus): string {
-  switch (status.phase) {
-    case "installing":
-      return `Installing verified update ${status.pendingVersion ?? ""}. Existing work is unchanged.`;
-    case "checking-health":
-      return `Checking update ${status.pendingVersion ?? ""} before it can be selected.`;
-    case "ready-for-next-reconnect":
-      return `Update ${status.pendingVersion ?? ""} is ready for the next deliberate connection.`;
-    case "waiting-for-capacity":
-      return `Update ${status.pendingVersion ?? ""} is waiting for a safe storage slot.`;
-    case "capacity-noncompliant":
-      return "Update waiting: the remote installation has uncertain or excess builds.";
-    case "failed-using-stable":
-      return `Update unavailable; continuing with stable ${status.currentVersion ?? "fallback"}.`;
-    case "verification-unavailable":
-      return "Update verification is temporarily unavailable; existing work is unchanged.";
-    case "connected":
-      return status.reconnectOutcome === "fallback"
-        ? `Connected using verified fallback ${status.currentVersion ?? ""}.`
-        : "Connected to the current stable remote agent.";
-    case "waiting-for-authentication":
-      return "Update preparation will resume after remote authentication.";
-    case "reserved":
-      return "A safe storage slot is reserved for the verified update.";
-    case "idle":
-      return "Remote update preparation is idle.";
-  }
 }

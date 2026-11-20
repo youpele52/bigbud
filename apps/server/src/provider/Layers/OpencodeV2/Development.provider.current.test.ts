@@ -65,6 +65,8 @@ it.each(["2.1.4", "2.2.0"])(
               message: "Connected to your native OpenCode service.",
             });
             expect(snapshot.runtimeUpdateRecommended).toBeUndefined();
+            // Shared native service serves remote workspaces; no opt-out is declared.
+            expect(snapshot.supportsLocalRuntimeRemoteWorkspace).toBeUndefined();
             expect(snapshot.nativeAgents).toEqual([
               {
                 id: "babysitter",

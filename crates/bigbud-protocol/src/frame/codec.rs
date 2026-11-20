@@ -317,6 +317,21 @@ mod tests {
                 )),
             },
         );
+        assert_golden(
+            "write_file_request_create_only",
+            Frame {
+                payload: Some(frame::Payload::WriteFileRequest(v1::WriteFileRequest {
+                    request_id: "write-1".to_owned(),
+                    operation_id: "write-operation-1".to_owned(),
+                    request_digest: vec![5, 6],
+                    workspace_handle: "workspace-1".to_owned(),
+                    path: "config/hooks.json".to_owned(),
+                    bytes: b"{}".to_vec(),
+                    expected_sha256: String::new(),
+                    create_only: true,
+                })),
+            },
+        );
     }
 
     #[test]

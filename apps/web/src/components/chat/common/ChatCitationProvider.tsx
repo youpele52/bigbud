@@ -119,7 +119,12 @@ export function ChatCitationProvider({
       openCitation,
       questionFocus:
         target && "requestId" in target.source
-          ? { threadId, requestId: target.source.requestId, token: requestId }
+          ? {
+              threadId,
+              requestId: target.source.requestId,
+              questionId: target.source.questionId,
+              token: requestId,
+            }
           : null,
       onQuestionFocused,
     }),

@@ -46,13 +46,18 @@ export async function bestEffortFailedCandidateCleanup(
   const build = state.builds.find((entry) => entry.id === buildId);
   if (!build) return;
   await control.registry.update((current) => quarantineRemoteAgentBuild(current, buildId));
+  await reconcileRemoteAgentLaunchExits(control, { buildId });
+  state = await control.registry.read();
   const launch = state.launches.find((entry) => entry.buildId === buildId);
   if (launch && launch.phase !== "proven-dead") {
     try {
       const result = await control.run(buildRemoteAgentSupervisorShutdownCommand(build.runtime));
       if (result.trim() === "shutdown-accepted") {
-        const exited = await control.run(buildRemoteAgentCandidateExitWaitCommand(build.runtime));
-        if (exited.trim() === "exited") await reconcileRemoteAgentLaunchExits(control);
+        const exited = await control.run(
+          buildRemoteAgentCandidateExitWaitCommand(build.runtime, launch.attemptId),
+        );
+        if (exited.trim() === "exited" || exited.trim() === "prior-boot-dead")
+          await reconcileRemoteAgentLaunchExits(control, { buildId });
       }
     } catch {
       return;

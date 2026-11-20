@@ -20,8 +20,26 @@ export class WireWriter {
     this.fieldBytes(field, textEncoder.encode(value));
   }
 
+  /** Repeated scalar elements retain empty values rather than protobuf defaults. */
+  fieldRepeatedString(field: number, value: string): void {
+    if (value.length > 0) this.fieldString(field, value);
+    else {
+      this.tag(field, 2);
+      this.varint(0);
+    }
+  }
+
   fieldMessage(field: number, value: Uint8Array): void {
     this.fieldBytes(field, value);
+  }
+
+  /** Repeated message elements retain empty values rather than protobuf defaults. */
+  fieldRepeatedMessage(field: number, value: Uint8Array): void {
+    if (value.length > 0) this.fieldBytes(field, value);
+    else {
+      this.tag(field, 2);
+      this.varint(0);
+    }
   }
 
   fieldBool(field: number, value: boolean): void {

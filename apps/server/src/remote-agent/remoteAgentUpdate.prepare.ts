@@ -1,3 +1,4 @@
+import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import {
   RemoteAgentAdmissionError,
@@ -21,6 +22,12 @@ export class RemoteAgentUpdateUncertainError extends Error {
   readonly _tag = "RemoteAgentUpdateUncertainError";
 }
 
+/** A finite account-service start operation; never the supervisor process owner itself. */
+export type RemoteAgentCandidateLauncher = (
+  runtime: RemoteAgentRuntime,
+  attemptId: string,
+) => Promise<string>;
+
 export interface RemoteAgentPreparationResult {
   readonly status: "ready-for-reconnect";
   readonly requestId: string;
@@ -29,19 +36,40 @@ export interface RemoteAgentPreparationResult {
   readonly epoch: string;
 }
 
-function quote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
+export function buildRemoteAgentCandidateStartupWaitCommand(
+  runtime: RemoteAgentRuntime,
+  attemptId = launchAttemptId(runtime),
+): string {
+  return `set -eu
+${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
+for n in $(seq 1 300); do
+  observed=$(observe_supervisor)
+  case "$observed" in
+    ready) printf ready; exit 0 ;;
+    prior-boot-dead) printf prior-boot-dead; exit 0 ;;
+    exited:*) printf 'startup-exit:%s' "\${observed#exited:}"; exit 0 ;;
+  esac
+  sleep .1
+done
+printf unavailable
+`;
 }
 
-export function buildRemoteAgentCandidateStartupWaitCommand(runtime: RemoteAgentRuntime): string {
-  const state = quote(runtime.statePath);
-  return `set -eu\nstate=${state}\nfor n in $(seq 1 300); do\n  if test -f "$state/launch.exit" && test ! -L "$state/launch.exit"; then\n    printf 'startup-exit:'\n    cat "$state/launch.exit"\n    exit 0\n  fi\n  if test -S "$state/supervisor.sock"; then printf ready; exit 0; fi\n  sleep .1\ndone\nprintf unavailable\n`;
-}
-
-export function buildRemoteAgentCandidateExitWaitCommand(runtime: RemoteAgentRuntime): string {
-  const state = quote(runtime.statePath);
-  const socket = quote(runtime.socketPath);
-  return `set -eu\nstate=${state}\nsocket=${socket}\nfor n in $(seq 1 300); do\n  if test ! -S "$socket" && test -f "$state/launch.exit" && test ! -L "$state/launch.exit"; then printf exited; exit 0; fi\n  sleep .1\ndone\nprintf unavailable\n`;
+export function buildRemoteAgentCandidateExitWaitCommand(
+  runtime: RemoteAgentRuntime,
+  attemptId = launchAttemptId(runtime),
+): string {
+  return `set -eu
+${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
+for n in $(seq 1 300); do
+  case "$(observe_supervisor)" in
+    exited:*) printf exited; exit 0 ;;
+    prior-boot-dead) printf prior-boot-dead; exit 0 ;;
+  esac
+  sleep .1
+done
+printf unavailable
+`;
 }
 
 function buildIdForArtifact(artifact: RemoteAgentArtifact): string {
@@ -74,6 +102,7 @@ function candidateRuntime(
 async function ensureCandidateLaunch(input: {
   readonly control: RemoteAgentControl;
   readonly runtime: RemoteAgentRuntime;
+  readonly launch?: RemoteAgentCandidateLauncher;
 }): Promise<void> {
   let state = await input.control.registry.read();
   let launch = state.launches.find((entry) => entry.buildId === remoteAgentBuildId(input.runtime));
@@ -128,17 +157,16 @@ async function ensureCandidateLaunch(input: {
   if (ownsReservation) {
     let output: string;
     try {
+      const attemptId = launch.attemptId ?? launchAttemptId(input.runtime);
       output = (
-        await input.control.run(
-          buildIsolatedRemoteAgentLaunch(
-            input.runtime,
-            launch.attemptId ?? launchAttemptId(input.runtime),
-          ),
-        )
+        await (input.launch
+          ? input.launch(input.runtime, attemptId)
+          : input.control.run(buildIsolatedRemoteAgentLaunch(input.runtime, attemptId)))
       ).trim();
     } catch (cause) {
       throw new RemoteAgentUpdateUncertainError(
         `Candidate launch could not be confirmed (${cause instanceof Error ? cause.message : String(cause)}).`,
+        { cause },
       );
     }
     if (output !== "launch-reserved" && output !== "launch-uncertain") {
@@ -148,11 +176,17 @@ async function ensureCandidateLaunch(input: {
   let startup: string;
   try {
     startup = (
-      await input.control.run(buildRemoteAgentCandidateStartupWaitCommand(input.runtime))
+      await input.control.run(
+        buildRemoteAgentCandidateStartupWaitCommand(
+          input.runtime,
+          launch.attemptId ?? launchAttemptId(input.runtime),
+        ),
+      )
     ).trim();
   } catch (cause) {
     throw new RemoteAgentUpdateUncertainError(
       `Candidate startup could not be verified (${cause instanceof Error ? cause.message : String(cause)}).`,
+      { cause },
     );
   }
   if (startup === "ready") return;
@@ -205,6 +239,7 @@ export async function prepareRemoteAgentCandidate(input: {
   readonly artifact: RemoteAgentArtifact;
   readonly source: RemoteAgentInstallSource;
   readonly control: RemoteAgentControl;
+  readonly launch?: RemoteAgentCandidateLauncher;
   readonly install: (input: {
     readonly executionTargetId: string;
     readonly source: RemoteAgentInstallSource;
@@ -260,6 +295,7 @@ export async function prepareRemoteAgentCandidate(input: {
     requestId: input.requestId,
     buildId,
     control: input.control,
+    ...(input.launch ? { launch: input.launch } : {}),
     ...(input.connect ? { connect: input.connect } : {}),
   });
   return {
@@ -277,6 +313,7 @@ export async function prepareStagedRemoteAgentCandidate(input: {
   readonly requestId: string;
   readonly buildId: string;
   readonly control: RemoteAgentControl;
+  readonly launch?: RemoteAgentCandidateLauncher;
   readonly connect?: (
     target: string,
     runtime: RemoteAgentRuntime,
@@ -293,6 +330,7 @@ export async function prepareStagedRemoteAgentCandidate(input: {
   await ensureCandidateLaunch({
     control: input.control,
     runtime,
+    ...(input.launch ? { launch: input.launch } : {}),
   });
   const epoch = await verifyRemoteAgentRuntimeHealth({
     target: input.target,

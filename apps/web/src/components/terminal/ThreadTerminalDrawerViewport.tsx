@@ -1,4 +1,9 @@
 import {
+  normalizeTerminalSplitLayout,
+  terminalSplitBounds,
+  type TerminalSplitLayout,
+} from "../../lib/terminalSplitLayout";
+import {
   type ExecutionTargetId,
   type ResolvedKeybindingsConfig,
   type ThreadId,
@@ -15,6 +20,7 @@ interface ThreadTerminalDrawerViewportProps {
   runtimeEnv: Record<string, string> | undefined;
   visible: boolean;
   visibleTerminalIds: string[];
+  splitLayout?: TerminalSplitLayout | undefined;
   resolvedActiveTerminalId: string;
   terminalLabelById: ReadonlyMap<string, string>;
   focusRequestId: number;
@@ -34,6 +40,7 @@ export function ThreadTerminalDrawerViewport({
   runtimeEnv,
   visible,
   visibleTerminalIds,
+  splitLayout,
   resolvedActiveTerminalId,
   terminalLabelById,
   focusRequestId,
@@ -59,24 +66,30 @@ export function ThreadTerminalDrawerViewport({
   };
 
   if (visibleTerminalIds.length > 1) {
+    const bounds = terminalSplitBounds(
+      normalizeTerminalSplitLayout(splitLayout, visibleTerminalIds),
+    );
     return (
-      <div
-        className="grid h-full w-full min-w-0 gap-0 overflow-hidden"
-        style={{ gridTemplateColumns: `repeat(${visibleTerminalIds.length}, minmax(0, 1fr))` }}
-      >
+      <div className="relative h-full w-full min-w-0 overflow-hidden">
         {visibleTerminalIds.map((terminalId) => (
           <div
             key={terminalId}
-            className={`min-h-0 min-w-0 border-l first:border-l-0 ${
+            style={Object.fromEntries(
+              Object.entries(bounds.get(terminalId)!).map(([key, value]) => [key, `${value}%`]),
+            )}
+            className={`absolute min-h-0 min-w-0 ${bounds.get(terminalId)!.left > 0 ? "border-l" : ""} ${bounds.get(terminalId)!.top > 0 ? "border-t" : ""} ${
               terminalId === resolvedActiveTerminalId ? "border-border" : "border-border/70"
             }`}
+            onFocusCapture={() => {
+              if (terminalId !== resolvedActiveTerminalId) onActiveTerminalChange(terminalId);
+            }}
             onMouseDown={() => {
               if (terminalId !== resolvedActiveTerminalId) {
                 onActiveTerminalChange(terminalId);
               }
             }}
           >
-            <div className="thread-terminal-theme-host h-full bg-background p-1">
+            <div className="thread-terminal-theme-host h-full bg-[var(--app-shell-pane-fill)] p-1">
               <TerminalViewportErrorBoundary
                 terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
               >
@@ -96,7 +109,7 @@ export function ThreadTerminalDrawerViewport({
   }
 
   return (
-    <div className="thread-terminal-theme-host h-full bg-background p-1">
+    <div className="thread-terminal-theme-host h-full bg-[var(--app-shell-pane-fill)] p-1">
       <TerminalViewportErrorBoundary
         key={resolvedActiveTerminalId}
         terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}

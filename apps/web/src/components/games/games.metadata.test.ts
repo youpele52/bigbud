@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GAMES } from "@bigbud/shared/games";
 
-vi.mock("~/rpc/wsHttpOrigin", () => ({ resolveWsHttpOrigin: () => "http://localhost:1234" }));
+vi.mock("~/rpc/wsHttpOrigin", () => ({
+  resolveWsHttpOrigin: () => "http://localhost:1234",
+  resolveWsHttpRequestHeaders: () => ({}),
+}));
 
 describe("Games catalog metadata", () => {
   beforeEach(() => vi.resetModules());

@@ -13,7 +13,7 @@ import {
   CompactChatModelPreference,
   type CompactChatModelPreference as CompactChatModelPreferenceValue,
 } from "~/models/compactChatModelPreference";
-import { useLocalStorage } from "~/hooks/useLocalStorage";
+import { BACKEND_SCOPED_STORAGE_OPTIONS, useLocalStorage } from "~/hooks/useLocalStorage";
 import { useServerProviders } from "~/rpc/serverState";
 
 import { Switch } from "../ui/switch";
@@ -30,6 +30,7 @@ export function FloatingAssistantSettingsSection() {
     COMPACT_CHAT_MODEL_PREFERENCE_STORAGE_KEY,
     null,
     CompactChatModelPreference,
+    BACKEND_SCOPED_STORAGE_OPTIONS,
   );
   const modelOptionsByProvider = useMemo(
     () =>

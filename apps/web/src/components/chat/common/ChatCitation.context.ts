@@ -7,7 +7,12 @@ export type ChatCitationTarget = Pick<ComposerChatCitationAttachment, "source" |
 
 export const ChatCitationContext = createContext<{
   openCitation: (citation: ChatCitationTarget) => void;
-  questionFocus: { threadId: ThreadId; requestId: string; token: number } | null;
+  questionFocus: {
+    threadId: ThreadId;
+    requestId: string;
+    questionId: string;
+    token: number;
+  } | null;
   onQuestionFocused: (token: number) => void;
 } | null>(null);
 

@@ -4,6 +4,7 @@ import {
   buildWorkspaceFilePreviewUrl,
   isHtmlFilePath,
   isImageFilePath,
+  isKnownBinaryFilePath,
   isVideoFilePath,
   isVideoMimeType,
 } from "./workspaceFilePreview";
@@ -24,6 +25,20 @@ describe("isImageFilePath", () => {
 
   it("strips line suffixes before checking the extension", () => {
     expect(isImageFilePath("/tmp/workspace/assets/logo.png:12")).toBe(true);
+  });
+});
+
+describe("isKnownBinaryFilePath", () => {
+  it("recognizes formats bigbud cannot display, ignoring case and line suffixes", () => {
+    for (const path of ["a.docx", "b.XLSX", "c.mp3", "d.zip", "e.woff2", "f.exe", "g.zip:3"]) {
+      expect(isKnownBinaryFilePath(path), path).toBe(true);
+    }
+  });
+
+  it("leaves text, code and in-app media formats alone", () => {
+    for (const path of ["README.md", "src/a.ts", "logo.png", "clip.mp4", "doc.pdf", ".zip"]) {
+      expect(isKnownBinaryFilePath(path), path).toBe(false);
+    }
   });
 });
 

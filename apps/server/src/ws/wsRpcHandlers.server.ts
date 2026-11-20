@@ -1,3 +1,4 @@
+import { createLegacyMobilePairing } from "../remote-backend/mobileOwnerPairing.legacy.ts";
 import { Effect, Option, Schema, Stream } from "effect";
 import {
   ServerCliProxyActivationError,
@@ -22,6 +23,7 @@ import { PingTraceSampler } from "./wsPingTraceSampler.ts";
 import { makeServerConfigUpdateStream } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import type { ServerOpencodeV2ThreadToolsSetupInput } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
+import { getOrchestrationThread } from "../orchestration/Services/OrchestrationEngine.ts";
 
 /** Identifies the WebSocket connection an RPC arrived on. */
 interface RpcCallOptions {
@@ -124,8 +126,9 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
             commandId: context.serverCommandId(input.pinned ? "thread-pin" : "thread-unpin"),
             threadId: input.threadId,
           });
+          const thread = yield* getOrchestrationThread(context.orchestrationEngine, input.threadId);
+          // Pinned threads are operational: loaded at startup and never evicted.
           const readModel = yield* context.orchestrationEngine.getReadModel();
-          const thread = readModel.threads.find((candidate) => candidate.id === input.threadId);
           const count = readModel.threads.filter(
             (candidate) => candidate.deletedAt === null && (candidate.pinnedAt ?? null) !== null,
           ).length;
@@ -248,7 +251,11 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
     }) =>
       observeRpcEffect(
         WS_METHODS.serverCreateMobileRemotePairing,
-        context.mobileRemoteControl.createPairing(input).pipe(
+        createLegacyMobilePairing(
+          context.config.mode,
+          (value) => context.mobileRemoteControl.createPairing(value),
+          input,
+        ).pipe(
           Effect.mapError(
             (cause) =>
               new ServerMobileRemoteError({

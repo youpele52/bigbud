@@ -55,6 +55,8 @@ function Harness() {
               online: true,
               serving: true,
               remoteBaseUrl: "https://desktop.ts.net",
+              httpsPort: 443,
+              conflict: null,
               error: null,
             },
             setBackendBaseUrl: setBackend,

@@ -184,7 +184,7 @@ export function ChatViewChatBody({
                 <div
                   ref={runtime.scrollBehavior.setMessagesScrollContainerRef}
                   data-chat-cite-scope
-                  className="h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-5 sm:py-4 [scrollbar-gutter:stable]"
+                  className="h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 pt-3 pb-8 sm:px-5 sm:pt-4 [scrollbar-gutter:stable]"
                   onScroll={runtime.scrollBehavior.onMessagesScroll}
                   onClickCapture={runtime.scrollBehavior.onMessagesClickCapture}
                   onWheel={runtime.scrollBehavior.onMessagesWheel}

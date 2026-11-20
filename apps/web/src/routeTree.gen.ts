@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsTerminalRouteImport } from './routes/settings.terminal'
 import { Route as SettingsRemoteRouteImport } from './routes/settings.remote'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
@@ -48,6 +49,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ChatRoute,
+} as any)
+const SettingsTerminalRoute = SettingsTerminalRouteImport.update({
+  id: '/terminal',
+  path: '/terminal',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsRemoteRoute = SettingsRemoteRouteImport.update({
   id: '/remote',
@@ -179,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/remote': typeof SettingsRemoteRoute
+  '/settings/terminal': typeof SettingsTerminalRoute
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/plugins/$pluginId': typeof ChatPluginsPluginIdRoute
   '/automations/': typeof ChatAutomationsIndexRoute
@@ -199,6 +206,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/remote': typeof SettingsRemoteRoute
+  '/settings/terminal': typeof SettingsTerminalRoute
   '/': typeof ChatIndexRoute
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/plugins/$pluginId': typeof ChatPluginsPluginIdRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/settings/remote': typeof SettingsRemoteRoute
+  '/settings/terminal': typeof SettingsTerminalRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/_chat/plugins/$pluginId': typeof ChatPluginsPluginIdRoute
@@ -256,6 +265,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/providers'
     | '/settings/remote'
+    | '/settings/terminal'
     | '/automations/$automationId'
     | '/plugins/$pluginId'
     | '/automations/'
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/providers'
     | '/settings/remote'
+    | '/settings/terminal'
     | '/'
     | '/automations/$automationId'
     | '/plugins/$pluginId'
@@ -303,6 +314,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/providers'
     | '/settings/remote'
+    | '/settings/terminal'
     | '/_chat/'
     | '/_chat/automations/$automationId'
     | '/_chat/plugins/$pluginId'
@@ -340,6 +352,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/settings/terminal': {
+      id: '/settings/terminal'
+      path: '/terminal'
+      fullPath: '/settings/terminal'
+      preLoaderRoute: typeof SettingsTerminalRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/remote': {
       id: '/settings/remote'
@@ -594,6 +613,7 @@ interface SettingsRouteChildren {
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsRemoteRoute: typeof SettingsRemoteRoute
+  SettingsTerminalRoute: typeof SettingsTerminalRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
@@ -605,6 +625,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsRemoteRoute: SettingsRemoteRoute,
+  SettingsTerminalRoute: SettingsTerminalRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(

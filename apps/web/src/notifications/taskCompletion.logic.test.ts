@@ -106,7 +106,7 @@ describe("collectCompletedThreadCandidates", () => {
     expect(collectCompletedThreadCandidates([previous], [next])).toEqual([]);
   });
 
-  it("emits once when the thread enters the same completed state shown in the plan card", () => {
+  it("emits once when a live authoritative settlement reaches completed status", () => {
     const previous = makeThread({
       latestTurn: {
         turnId: "turn-1" as never,
@@ -166,6 +166,12 @@ describe("collectCompletedThreadCandidates", () => {
       ],
     });
 
+    next.latestTurn = { ...next.latestTurn!, terminalOutcome: "completed" };
+    next.notificationObservation = {
+      messages: [],
+      settledTurnId: "turn-1",
+      settledSessionEpoch: 0,
+    };
     expect(collectCompletedThreadCandidates([previous], [next])).toMatchObject([
       {
         threadId: "thread-1",

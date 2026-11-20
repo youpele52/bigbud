@@ -1,3 +1,7 @@
+import {
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import { renderPiComputerUseTool } from "./orchestrationComputerUseTool.selected.ts";
 import {
   HTML_RENDER_TOOL_DESCRIPTION,
@@ -5,6 +9,10 @@ import {
 } from "./htmlRenderTool.shared.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
+import { renderPiAskUserToolSource } from "./PiOrchestrationBridge.template.question.ts";
+import { renderPiRemoteAgentToolsSource } from "./PiOrchestrationBridge.template.remoteAgent.ts";
+import { peerToolsOfferedTo } from "./peerTools.shared.ts";
+import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
@@ -54,6 +62,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
+    "",
+    renderRenameThreadResultTextSource(),
     "",
     `const workspaceToolSpecs = ${JSON.stringify(AGENT_WORKSPACE_TOOL_SPECS)};`,
     "const workspaceTools = workspaceToolSpecs.map((spec) => defineTool({",
@@ -154,6 +164,15 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  },",
     "});",
     "",
+    "const summaryTool = defineTool({",
+    `  name: 'set_elevator_summary', label: 'set_elevator_summary', description: ${JSON.stringify(SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION)}, parameters: ${JSON.stringify(SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS)},`,
+    "  async execute(toolCallId, args) {",
+    "    if (!args || typeof args.summary !== 'string' || Object.keys(args).some(key => key !== 'summary')) throw new Error('Only summary is accepted.');",
+    "    const result = await callOrchestrationTool({ action: 'set_elevator_summary', threadId: resolveCurrentThreadId(), summary: args.summary, invocationId: toolCallId, sourceMessageId: SOURCE_MESSAGE_ID });",
+    "    return textResult(JSON.stringify(result));",
+    "  },",
+    "});",
+    "",
     "const renameThreadTool = defineTool({",
     '  name: "rename_thread",',
     '  label: "rename_thread",',
@@ -173,11 +192,13 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "      invocationId: toolCallId,",
     "      sourceMessageId: SOURCE_MESSAGE_ID,",
     "    });",
-    '    return textResult(`Renamed thread to "${result.title ?? trimmed}".`);',
+    "    return textResult(renameThreadResultText(result, trimmed));",
     "  },",
     "});",
     "",
     renderPiOrganizationToolsSource(),
+    "",
+    renderPiRemoteAgentToolsSource({ peerTools: peerToolsOfferedTo(input.threadId) }),
     "",
     "const archiveThreadTool = defineTool({",
     '  name: "archive_thread",',
@@ -306,6 +327,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "",
     renderPiComputerUseTool(),
     "",
+    renderPiAskUserToolSource(),
+    "",
     renderPiBrowserToolSource(),
     "",
     "export default function bigbudOrchestrationBridge(pi) {",
@@ -317,10 +340,12 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "    },",
     "  }));",
     "  for (const tool of workspaceTools) pi.registerTool(tool);",
+    "  for (const tool of remoteAgentTools) pi.registerTool(tool);",
     "  pi.registerTool(searchCapabilitiesTool);",
     "  pi.registerTool(readCapabilityGuideTool);",
     "  pi.registerTool(createThreadTool);",
     "  pi.registerTool(listAvailableModelsTool);",
+    "  pi.registerTool(summaryTool);",
     "  pi.registerTool(renameThreadTool);",
     "  pi.registerTool(moveThreadTool);",
     "  pi.registerTool(snoozeThreadTool);",
@@ -332,6 +357,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  pi.registerTool(pinThreadTool);",
     "  pi.registerTool(unpinThreadTool);",
     "  pi.registerTool(updatePlanTool);",
+    "  pi.registerTool(askUserTool);",
     "  pi.registerTool(computerUseTool);",
     "  pi.registerTool(browserTool);",
     "}",

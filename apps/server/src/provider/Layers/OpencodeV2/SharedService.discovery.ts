@@ -1,4 +1,4 @@
-import { Service } from "@opencode/client/service";
+import { opencodeV2Sdk } from "./Client.sdk.ts";
 import { Schema } from "effect";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { validateOwnedEndpoint } from "./Compatibility.ts";
@@ -35,12 +35,12 @@ export async function readV2SharedServiceJson(
         if (route === "/api/info")
           return makeV2Client({
             endpoint: origin,
-            headers: Service.headers(registration.endpoint),
+            headers: opencodeV2Sdk().Service.headers(registration.endpoint),
             ...(options.fetch ? { fetch: options.fetch } : {}),
           }).server.info({ signal });
         const physical = (options.fetch ?? globalThis.fetch)(new URL(route, origin), {
           method: "GET",
-          headers: Service.headers(registration.endpoint),
+          headers: opencodeV2Sdk().Service.headers(registration.endpoint),
           redirect: "error",
           signal,
         });

@@ -134,6 +134,7 @@ export function verifyAssembledDesktopReleaseAssets(
     "server-workspace-agent-darwin-arm64",
     "server-workspace-agent-darwin-x64",
     "server-workspace-agent-linux-x64",
+    "server-workspace-agent-linux-arm64",
     "server-workspace-agent-win32-x64.exe",
     "server-workspace-agent-win32-arm64.exe",
   ]) {
@@ -144,6 +145,7 @@ export function verifyAssembledDesktopReleaseAssets(
     "darwin-arm64",
     "darwin-x64",
     "linux-x64",
+    "linux-arm64",
     "win32-x64.exe",
     "win32-arm64.exe",
   ]) {

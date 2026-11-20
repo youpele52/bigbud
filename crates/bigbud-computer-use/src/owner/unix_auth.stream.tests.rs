@@ -39,12 +39,31 @@ fn retry_refused(capability: &mut BootstrapCapability, secret: &[u8; 32]) {
 fn assert_closed(mut client: UnixStream) {
     // Darwin can reject SO_RCVTIMEO on an already disconnected socket. A
     // nonblocking read proves closure without a timing-dependent setsockopt.
+    // Peer teardown can become observable after drop returns under load.
     client.set_nonblocking(true).unwrap();
-    match client.read(&mut [0]) {
-        Ok(0) => {}
-        Err(error) if error.kind() == io::ErrorKind::ConnectionReset => {}
-        result => panic!("failed bootstrap retained its endpoint: {result:?}"),
+    let deadline = Instant::now() + Duration::from_secs(1);
+    loop {
+        match client.read(&mut [0]) {
+            Ok(0) => return,
+            Err(error) if error.kind() == io::ErrorKind::ConnectionReset => return,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+                ) && Instant::now() < deadline =>
+            {
+                thread::sleep(Duration::from_millis(1));
+            }
+            result => panic!("failed bootstrap retained its endpoint: {result:?}"),
+        }
     }
+}
+
+#[test]
+#[should_panic(expected = "failed bootstrap retained its endpoint")]
+fn closure_assertion_rejects_a_retained_endpoint() {
+    let (client, _server) = socket();
+    assert_closed(client);
 }
 
 #[test]

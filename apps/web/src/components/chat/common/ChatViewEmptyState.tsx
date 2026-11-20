@@ -4,7 +4,7 @@ import { SidebarTrigger } from "../../ui/sidebar";
 
 export function ChatViewEmptyState() {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-muted-foreground/40">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--app-shell-pane-fill)] text-muted-foreground/40">
       {!isElectron && (
         <header className="border-b border-border px-3 py-2 md:hidden">
           <div className="flex items-center gap-2">

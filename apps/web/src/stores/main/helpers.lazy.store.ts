@@ -9,56 +9,18 @@ import type {
 import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { AppState, ThreadHydration } from "./main.store";
-import { mapSidebarThreadSummary, mapThreadSummary, mergeThreadDetail } from "./mappers.lazy.store";
+import { mergeThreadDetail } from "./mappers.lazy.store";
 import { sidebarMembershipFromCatalog } from "./helpers.sidebar.store";
 import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
 import { mergeProjectCatalog } from "./helpers.lazy.projects.store";
-import { newerOrganization } from "./helpers.organization.logic.store";
+import { pruneProjectDependencies } from "./helpers.projectDependencies.store";
+import {
+  mapSequencedThreadSummary,
+  mergeThreadSummary,
+  mergeSidebarThreadSummary,
+} from "./helpers.lazy.summaries.store";
 
-export function mergeThreadSummary(
-  thread: AppState["threads"][number],
-  summary: Parameters<typeof mapThreadSummary>[0],
-): AppState["threads"][number] {
-  const mapped = mapThreadSummary(summary);
-  return {
-    ...thread,
-    ...mapped,
-    organization: newerOrganization(thread.organization, mapped.organization),
-    session: thread.session ?? mapped.session,
-    latestTurn: thread.latestTurn ?? mapped.latestTurn,
-    error: thread.error ?? mapped.error,
-    elevatorSummaryMessageCount:
-      thread.elevatorSummaryMessageCount ?? mapped.elevatorSummaryMessageCount ?? 0,
-    archivedAt: thread.archivedAt,
-    ...(thread.deletingAt !== undefined ? { deletingAt: thread.deletingAt } : {}),
-    messages: thread.messages,
-    activities: thread.activities,
-    proposedPlans: thread.proposedPlans,
-    turnDiffSummaries: thread.turnDiffSummaries,
-    ...(thread.pendingSourceProposedPlan !== undefined
-      ? { pendingSourceProposedPlan: thread.pendingSourceProposedPlan }
-      : {}),
-  };
-}
-
-export function mergeSidebarThreadSummary(
-  previous: AppState["sidebarThreadsById"][string] | undefined,
-  summary: Parameters<typeof mapSidebarThreadSummary>[0],
-): AppState["sidebarThreadsById"][string] {
-  const mapped = mapSidebarThreadSummary(summary);
-  if (!previous) return mapped;
-  return {
-    ...mapped,
-    organization: newerOrganization(previous.organization, mapped.organization),
-    session: previous.session ?? mapped.session,
-    latestTurn: previous.latestTurn ?? mapped.latestTurn,
-    elevatorSummaryMessageCount:
-      previous.elevatorSummaryMessageCount ?? mapped.elevatorSummaryMessageCount ?? 0,
-    archivedAt: previous.archivedAt,
-    ...(previous.providerAgents !== undefined ? { providerAgents: previous.providerAgents } : {}),
-    ...(previous.deletingAt !== undefined ? { deletingAt: previous.deletingAt } : {}),
-  };
-}
+export { mergeThreadSummary, mergeSidebarThreadSummary } from "./helpers.lazy.summaries.store";
 
 export function setThreadHydration(
   state: AppState,
@@ -79,23 +41,35 @@ export function syncBoundedCatalog(
   sidebarCatalog: GetSidebarThreadCatalogResult,
   pages: ReadonlyArray<GetProjectThreadSummariesResult>,
 ): AppState {
+  // Later map entries win, so merge snapshots in projection order, not fetch order.
+  const sources = [sidebarCatalog, ...pages].toSorted(
+    (a, b) => a.projectionSequence - b.projectionSequence,
+  );
   const summaries = [
     ...new Map(
-      [...sidebarCatalog.threads, ...pages.flatMap((page) => page.threads)].map((summary) => [
-        summary.id,
-        summary,
-      ]),
+      sources.flatMap((source) => source.threads.map((summary) => [summary.id, summary] as const)),
     ).values(),
   ];
+  const summarySequenceById = new Map(
+    sources.flatMap((source) =>
+      source.threads.map((summary) => [summary.id, source.projectionSequence] as const),
+    ),
+  );
   const previousThreads = new Map(state.threads.map((thread) => [thread.id, thread]));
   const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
   const threads = state.threads
     .map((thread) => {
       const summary = summaryById.get(thread.id);
       if (!summary) return thread;
-      return mergeThreadSummary(thread, summary);
+      return mergeThreadSummary(thread, summary, summarySequenceById.get(thread.id));
     })
-    .concat(summaries.filter((summary) => !previousThreads.has(summary.id)).map(mapThreadSummary));
+    .concat(
+      summaries
+        .filter((summary) => !previousThreads.has(summary.id))
+        .map((summary) =>
+          mapSequencedThreadSummary(summary, summarySequenceById.get(summary.id) ?? 0),
+        ),
+    );
   const sidebarThreadsById = {
     ...state.sidebarThreadsById,
     ...Object.fromEntries(
@@ -136,7 +110,9 @@ export function syncBoundedCatalog(
   };
   let projectCatalog = {
     projects: state.projects,
+    projectDependencyOnlyIds: state.projectDependencyOnlyIds ?? {},
     pendingUnloadedProjectPatchById: state.pendingUnloadedProjectPatchById ?? {},
+    projectCatalogSequenceById: state.projectCatalogSequenceById ?? {},
   };
   for (const scope of ["local", "remote"] as const) {
     const catalog = catalogs[scope];
@@ -145,7 +121,9 @@ export function syncBoundedCatalog(
         {
           ...state,
           projects: projectCatalog.projects,
+          projectDependencyOnlyIds: projectCatalog.projectDependencyOnlyIds,
           pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+          projectCatalogSequenceById: projectCatalog.projectCatalogSequenceById,
         },
         catalog,
         projectThreadCountsById,
@@ -180,6 +158,7 @@ export function syncBoundedCatalog(
   return {
     ...state,
     projects: projectCatalog.projects,
+    projectDependencyOnlyIds: projectCatalog.projectDependencyOnlyIds,
     projectCatalogCursorByScope: nextCursorByScope,
     projectCatalogRemainingCountByScope: nextRemainingCountByScope,
     projectCatalogGenerationByScope: {
@@ -191,6 +170,7 @@ export function syncBoundedCatalog(
     projectCatalogRetryHeadByScope: nextRetryHeadByScope,
     projectCatalogRestartProjectIdByScope: nextRestartProjectIdByScope,
     pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+    projectCatalogSequenceById: projectCatalog.projectCatalogSequenceById,
     projectThreadCountsById,
     threads,
     sidebarThreadsById,
@@ -218,9 +198,15 @@ export function syncSidebarCatalog(
   const threads = state.threads
     .map((thread) => {
       const summary = summaries.find((candidate) => candidate.id === thread.id);
-      return summary ? mergeThreadSummary(thread, summary) : thread;
+      return summary
+        ? mergeThreadSummary(thread, summary, sidebarCatalog.projectionSequence)
+        : thread;
     })
-    .concat(summaries.filter((summary) => !previousThreads.has(summary.id)).map(mapThreadSummary));
+    .concat(
+      summaries
+        .filter((summary) => !previousThreads.has(summary.id))
+        .map((summary) => mapSequencedThreadSummary(summary, sidebarCatalog.projectionSequence)),
+    );
   const sidebarThreadsById = {
     ...state.sidebarThreadsById,
     ...Object.fromEntries(
@@ -285,6 +271,7 @@ export function appendProjectCatalogPage(
   return {
     ...state,
     projects: projectCatalog.projects,
+    projectDependencyOnlyIds: projectCatalog.projectDependencyOnlyIds,
     projectCatalogCursorByScope: {
       ...state.projectCatalogCursorByScope,
       [scope]: page.nextCursor ?? null,
@@ -301,6 +288,7 @@ export function appendProjectCatalogPage(
       [scope]: null,
     },
     pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+    projectCatalogSequenceById: projectCatalog.projectCatalogSequenceById,
   };
 }
 
@@ -308,13 +296,15 @@ export function mergeProjectCatalogPage(
   state: AppState,
   page: GetStartupProjectCatalogResult,
 ): AppState {
-  const projectCatalog = mergeProjectCatalog(state, page, state.projectThreadCountsById, true);
-
-  return {
-    ...state,
-    projects: projectCatalog.projects,
-    pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
-  };
+  const projectCatalog = mergeProjectCatalog(
+    state,
+    page,
+    state.projectThreadCountsById,
+    true,
+    undefined,
+    true,
+  );
+  return pruneProjectDependencies({ ...state, ...projectCatalog });
 }
 
 export function appendProjectThreadSummaries(
@@ -333,12 +323,12 @@ export function appendProjectThreadSummaries(
     threads: state.threads
       .map((thread) => {
         const summary = summaryById.get(thread.id);
-        return summary ? mergeThreadSummary(thread, summary) : thread;
+        return summary ? mergeThreadSummary(thread, summary, page.projectionSequence) : thread;
       })
       .concat(
         page.threads
           .filter((summary) => !state.threads.some((thread) => thread.id === summary.id))
-          .map(mapThreadSummary),
+          .map((summary) => mapSequencedThreadSummary(summary, page.projectionSequence)),
       ),
     sidebarThreadsById: {
       ...state.sidebarThreadsById,

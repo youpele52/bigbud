@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createDebouncedStorage, createMemoryStorage, resolveStorage } from "../../lib/storage";
+import {
+  createBackendScopedStorage,
+  rehydrateOnBackendStorageReady,
+} from "../../lib/backendScopedStorage";
 
 // ── Re-exports from sub-modules ───────────────────────────────────────
 
@@ -147,7 +151,9 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
     {
       name: composerStorageKey,
       version: COMPOSER_DRAFT_STORAGE_VERSION,
-      storage: createJSONStorage(() => composerDebouncedStorage),
+      // Scope outside the debouncer: a write issued before a bound window knows its identity is
+      // dropped rather than flushed later over that backend's saved drafts.
+      storage: createJSONStorage(() => createBackendScopedStorage(composerDebouncedStorage)),
       migrate: migratePersistedComposerDraftStoreState,
       partialize: partializeComposerDraftStoreState,
       merge: (persistedState, currentState) => {
@@ -171,6 +177,8 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
     },
   ),
 );
+
+rehydrateOnBackendStorageReady(useComposerDraftStore);
 
 // ── Utility functions ─────────────────────────────────────────────────
 

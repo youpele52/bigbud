@@ -7,7 +7,12 @@ import { render } from "vitest-browser-react";
 import { EMPTY_FILE_HISTORY } from "../../stores/files/filesPanel.history";
 import { renderFilesPanelPreviewBody } from "./FilesPanel.previewBody";
 import { FILES_DRAWER_EDGE_WIDTH } from "./FilesPanel.drawer.edge";
-import { button, DrawerHarness, previewRegion, treeRegion } from "./FilesPanel.drawer.fixtures";
+import {
+  DrawerHarness,
+  filesHandle,
+  previewRegion,
+  treeRegion,
+} from "./FilesPanel.drawer.fixtures";
 
 async function advance(milliseconds: number) {
   await vi.advanceTimersByTimeAsync(milliseconds);
@@ -27,7 +32,7 @@ describe("full-height files drawer preview edge", () => {
   afterEach(() => vi.useRealTimers());
 
   it.each(["top", "middle", "bottom"] as const)(
-    "reveals from the real %s edge, including toolbar/scrollbar, without reflow",
+    "reveals from the real %s edge, including toolbar/scrollbar, docked beside the preview",
     async (position) => {
       const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
       try {
@@ -47,7 +52,9 @@ describe("full-height files drawer preview edge", () => {
         expect(treeRegion().inert).toBe(true);
         await advance(1);
         expect(treeRegion().inert).toBe(false);
-        expect(preview.getBoundingClientRect().width).toBe(bounds.width);
+        expect(preview.getBoundingClientRect().right).toBeLessThanOrEqual(
+          treeRegion().getBoundingClientRect().left,
+        );
         expect(document.querySelector("[data-preview-content]")).toBe(content);
         expect(treeRegion().getBoundingClientRect().top).toBe(bounds.top);
 
@@ -82,11 +89,11 @@ describe("full-height files drawer preview edge", () => {
       await hoverPreview(bounds.width - 2, bounds.height / 2);
       await advance(250);
       expect(treeRegion().inert).toBe(false);
-      button("Keep tree beside file").click();
+      filesHandle().click();
       await advance(0);
       await hoverPreview(previewRegion().getBoundingClientRect().width - 2, 20);
       await advance(2000);
-      expect(button("Unpin file tree")).toBeTruthy();
+      expect(filesHandle().getAttribute("aria-pressed")).toBe("true");
       expect(document.querySelector('[role="separator"]')).not.toBeNull();
     } finally {
       await mounted.unmount();

@@ -1,11 +1,13 @@
 import type { Terminal } from "@xterm/xterm";
 import type { MutableRefObject } from "react";
-import type { NativeApi, ResolvedKeybindingsConfig } from "@bigbud/contracts";
+import type { NativeApi, ResolvedKeybindingsConfig, TerminalDropPathMode } from "@bigbud/contracts";
 import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
 import { TerminalInputQueue } from "./TerminalInputQueue";
 import { TerminalSetupCleanup } from "./TerminalSetupCleanup";
 import { attachTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { attachTerminalMouseWheelMultiplier } from "./TerminalViewport.wheel";
+import { attachTerminalPaste } from "./TerminalViewport.paste";
+import { attachTerminalClipboardProtocol } from "./TerminalViewport.clipboardProtocol";
 import { readTerminalLaunch, subscribeTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import {
   readTerminalLifecycle,
@@ -25,6 +27,8 @@ export interface AttachTerminalViewportInputOptions {
   /** Mouse reports per resolved wheel row while a full-screen TUI tracks the mouse. */
   readonly tuiWheelMultiplier: () => number;
   readonly onFind: () => void;
+  /** Shell family of the running pane, for pasted and dropped paths. */
+  readonly dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
 }
 
 /**
@@ -52,11 +56,13 @@ export function attachTerminalViewportInput(options: AttachTerminalViewportInput
   );
   const resources = new TerminalSetupCleanup();
   resources.add(() => queue.dispose());
+  let resetClipboardProtocol: (() => void) | undefined;
   const syncGeneration = () => {
     const current = readTerminalLaunch(threadId, terminalId)?.runtimeGeneration;
     if (current === generation) return;
     // An external restart can replace the shell without a local lifecycle operation.
     queue.clear();
+    resetClipboardProtocol?.();
     generation = current;
   };
   try {
@@ -66,19 +72,46 @@ export function attachTerminalViewportInput(options: AttachTerminalViewportInput
         if (readTerminalLifecycle(threadId, terminalId)) queue.clear();
       }),
     );
-    const send = (data: string) => {
+    const admit = (hasData: boolean) => {
       syncGeneration();
-      if (!options.acceptsInput() || readTerminalLifecycle(threadId, terminalId)) return;
-      if (data.length > 0)
-        useTerminalStateStore.getState().markTerminalAgentActive(threadId, terminalId);
+      if (!options.acceptsInput() || readTerminalLifecycle(threadId, terminalId)) return false;
+      if (hasData) useTerminalStateStore.getState().markTerminalAgentActive(threadId, terminalId);
       options.markInput();
-      queue.enqueue(data);
+      return true;
+    };
+    const admitInput = () => admit(true);
+    const send = (data: string) => {
+      if (admit(data.length > 0)) queue.enqueue(data);
     };
     const dataDisposable = terminal.onData(send);
     resources.add(() => dataDisposable.dispose());
     attachTerminalMouseWheelMultiplier(terminal, {
       getTuiMouseWheelMultiplier: options.tuiWheelMultiplier,
     });
+    const clipboardProtocol = attachTerminalClipboardProtocol({
+      terminal,
+      // Replies to the program are terminal reports, not user activity.
+      reply: (data) => {
+        syncGeneration();
+        if (options.acceptsInput() && !readTerminalLifecycle(threadId, terminalId))
+          queue.enqueue(data);
+      },
+    });
+    resources.add(() => clipboardProtocol.dispose());
+    resetClipboardProtocol = clipboardProtocol.reset;
+    resources.add(
+      attachTerminalPaste({
+        terminal,
+        api,
+        threadId,
+        terminalId,
+        enqueueDeferred: (data, timeoutMs) => queue.enqueueDeferred(data, timeoutMs),
+        admitInput,
+        readDropPathMode: () => options.dropPathModeRef.current,
+        writeNotice: (message) => options.writeNotice(terminal, message),
+        onPasteGesture: (gesture) => clipboardProtocol.onPasteGesture(gesture),
+      }),
+    );
     attachTerminalKeybindings({
       terminal,
       terminalRef: options.terminalRef,

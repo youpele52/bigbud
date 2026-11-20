@@ -89,24 +89,15 @@ export function buildThreadMessageLatestTurn(
   const previous = thread.latestTurn;
   return {
     turnId: event.payload.turnId,
-    state: event.payload.streaming
-      ? "running"
-      : previous?.state === "interrupted"
-        ? "interrupted"
-        : previous?.state === "error"
-          ? "error"
-          : "completed",
+    ...(previous?.terminalOutcome ? { terminalOutcome: previous.terminalOutcome } : {}),
+    state: previous?.state ?? "running",
     requestedAt:
       previous?.turnId === event.payload.turnId ? previous.requestedAt : event.payload.createdAt,
     startedAt:
       previous?.turnId === event.payload.turnId
         ? (previous.startedAt ?? event.payload.createdAt)
         : event.payload.createdAt,
-    completedAt: event.payload.streaming
-      ? previous?.turnId === event.payload.turnId
-        ? (previous.completedAt ?? null)
-        : null
-      : event.payload.updatedAt,
+    completedAt: previous?.completedAt ?? null,
     assistantMessageId: event.payload.messageId,
     ...(previous?.sourceProposedPlan !== undefined
       ? { sourceProposedPlan: previous.sourceProposedPlan }

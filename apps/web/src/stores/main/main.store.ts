@@ -15,6 +15,7 @@ import { create } from "zustand";
 import { type Project, type SidebarThreadSummary, type Thread } from "../../models/types";
 import { applyOrchestrationEvent, applyOrchestrationEvents } from "./events.store";
 import { syncServerReadModel } from "./helpers.snapshot.store";
+import { resetProjectCatalogState } from "./helpers.projectEpoch.store";
 import { mergeSearchMessageDetail } from "./helpers.searchMessage.store";
 import {
   setThreadHydration,
@@ -37,6 +38,8 @@ import {
 } from "./selectors.store";
 import type { GetOrganizationThreadSummariesResult } from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
 import { appendOrganizationPage } from "./helpers.organization.store";
+import { applyTerminalWorkActivity } from "./helpers.terminalWork.store";
+import type { TerminalWorkActivity } from "@bigbud/contracts/workspace/terminal.activity.ts";
 import { markThreadViewed, unloadHydratedThreads } from "./helpers.lazy.eviction.store";
 import { mergeTurnActivities } from "./helpers.turnActivities.store";
 import type { OrchestrationThreadActivity } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
@@ -59,6 +62,11 @@ export interface AppState {
   projectCatalogErrorByScope: Record<ProjectCatalogScope, string | undefined>;
   projectCatalogRetryHeadByScope: Record<ProjectCatalogScope, boolean>;
   projectCatalogRestartProjectIdByScope: Record<ProjectCatalogScope, ProjectId | null>;
+  /** Mounted chat dependencies survive bounded catalog replacement, not deletion events. */
+  projectDependencyRefCounts?: Record<string, number>;
+  projectDependencyOnlyIds?: Record<string, true>;
+  projectServerEpoch?: string | undefined;
+  projectCatalogSequenceById?: Record<string, number>;
   latestProjectEventSequenceById?: Record<string, number>;
   deletedProjectSequenceById?: Record<string, number>;
   pendingUnloadedProjectPatchById?: Record<
@@ -96,6 +104,10 @@ const initialState: AppState = {
   projectCatalogErrorByScope: { local: undefined, remote: undefined },
   projectCatalogRetryHeadByScope: { local: false, remote: false },
   projectCatalogRestartProjectIdByScope: { local: null, remote: null },
+  projectDependencyRefCounts: {},
+  projectDependencyOnlyIds: {},
+  projectServerEpoch: undefined,
+  projectCatalogSequenceById: {},
   latestProjectEventSequenceById: {},
   deletedProjectSequenceById: {},
   pendingUnloadedProjectPatchById: {},
@@ -127,6 +139,7 @@ export {
 
 interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
+  resetProjectCatalogEpoch: (serverEpoch: string) => void;
   syncBoundedCatalog: (
     catalogs: Partial<Record<ProjectCatalogScope, GetStartupProjectCatalogResult>>,
     catalogErrors: Partial<Record<ProjectCatalogScope, string>>,
@@ -161,6 +174,7 @@ interface AppStore extends AppState {
   unloadHydratedThreads: (keepThreadId: ThreadId | null) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
+  applyTerminalWorkActivity: (item: TerminalWorkActivity) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
   setThreadBranch: (threadId: ThreadId, branch: string | null, worktreePath: string | null) => void;
 }
@@ -168,6 +182,12 @@ interface AppStore extends AppState {
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
+  resetProjectCatalogEpoch: (serverEpoch) =>
+    set((state) =>
+      state.projectServerEpoch === serverEpoch
+        ? state
+        : resetProjectCatalogState(state, serverEpoch),
+    ),
   syncBoundedCatalog: (catalogs, catalogErrors, catalogRestartProjectIds, sidebarCatalog, pages) =>
     set((state) =>
       syncBoundedCatalog(
@@ -210,6 +230,7 @@ export const useStore = create<AppStore>((set) => ({
     set((state) => unloadHydratedThreads(state, keepThreadId)),
   applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
   applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
+  applyTerminalWorkActivity: (item) => set((state) => applyTerminalWorkActivity(state, item)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),
   setThreadBranch: (threadId, branch, worktreePath) =>
     set((state) => setThreadBranch(state, threadId, branch, worktreePath)),

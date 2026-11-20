@@ -21,7 +21,7 @@ import {
   renderOutput,
   type OutputRendering,
 } from "./IpynbPreview.logic";
-import { OutputArea } from "./IpynbPreview.render";
+import { NOTEBOOK_CODE_CELL_SURFACE, OutputArea } from "./IpynbPreview.render";
 import { NotebookAnnotationComposer } from "./IpynbPreview.annotations";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
@@ -236,8 +236,8 @@ export const IpynbPreview = memo(function IpynbPreview({
               key={notebookSizerCellKey(source, cell.execution_count)}
               className="notebook-cell-code w-full"
             >
-              <div className="rounded-md w-full">
-                <div className="w-full bg-muted/50 px-16 py-8">
+              <div className={`rounded-md w-full ${NOTEBOOK_CODE_CELL_SURFACE}`}>
+                <div className="w-full px-16 py-8">
                   <SyntaxHighlightedCode
                     code={source}
                     language={language}
@@ -250,7 +250,7 @@ export const IpynbPreview = memo(function IpynbPreview({
                     }
                   />
                 </div>
-                <div className="w-full flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
+                <div className="w-full flex items-center justify-end px-3 py-1.5 border-t border-border/20">
                   <span className="text-xs text-muted-foreground/60 font-mono">{language}</span>
                 </div>
               </div>
@@ -271,7 +271,7 @@ export const IpynbPreview = memo(function IpynbPreview({
   }, [measureSizer]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--app-shell-pane-fill)]">
       {measureSizer}
       <FilePreviewHeader
         breadcrumb={breadcrumb}
@@ -348,9 +348,9 @@ export const IpynbPreview = memo(function IpynbPreview({
                     className="notebook-cell-code"
                     style={codeCellWidth != null ? { width: codeCellWidth } : undefined}
                   >
-                    <div className="rounded-md w-full">
+                    <div className={`rounded-md w-full ${NOTEBOOK_CODE_CELL_SURFACE}`}>
                       <div
-                        className="w-full bg-muted/50 px-16 py-8"
+                        className="w-full px-16 py-8"
                         {...(hasAnnotation ? { onContextMenu: handleNotebookContextMenu } : {})}
                       >
                         <SyntaxHighlightedCode
@@ -365,7 +365,7 @@ export const IpynbPreview = memo(function IpynbPreview({
                           }
                         />
                       </div>
-                      <div className="w-full flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
+                      <div className="w-full flex items-center justify-end px-3 py-1.5 border-t border-border/20">
                         <span className="text-xs text-muted-foreground/60 font-mono">
                           {language}
                         </span>

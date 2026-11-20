@@ -1,5 +1,7 @@
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { type ProjectId } from "@bigbud/contracts";
-import { CheckIcon, ChevronDownIcon, FolderIcon, MessageSquareIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, FolderIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -248,7 +250,12 @@ function AutomationProjectMenu({
             className="sm:text-sm"
           >
             {option.isChats ? (
-              <MessageSquareIcon className="size-3 opacity-60" />
+              <HugeiconsIcon
+                aria-hidden="true"
+                className="size-3 opacity-60"
+                icon={Comment03Icon}
+                strokeWidth={1.5}
+              />
             ) : (
               <FolderIcon className="size-3 opacity-60" />
             )}

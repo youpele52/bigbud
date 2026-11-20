@@ -181,35 +181,41 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
   ) =>
     sql
       .withTransaction(
-        Effect.all(
-          [
-            sql.unsafe(
-              `UPDATE projection_baselines SET verification_status = 'verified',
-                verification_detail = NULL, verified_at = ? WHERE baseline_id = ?`,
-              [verifiedAt, baselineId],
-            ),
-            sql.unsafe(
-              `UPDATE orchestration_deletion_markers
-               SET covered_by_baseline_sequence = ?
-               WHERE deletion_sequence <= ?
-                 AND (covered_by_baseline_sequence IS NULL OR covered_by_baseline_sequence < ?)`,
-              [sequence, sequence, sequence],
-            ),
-            sql.unsafe(
-              `UPDATE orchestration_retention_state
-               SET compact_through_sequence = MAX(compact_through_sequence, ?), updated_at = ?
-               WHERE singleton_id = 1`,
-              [sequence, verifiedAt],
-            ),
-            sql.unsafe("DELETE FROM projection_baselines WHERE baseline_id <> ? AND sequence < ?", [
-              baselineId,
-              sequence,
-            ]),
-            sql.unsafe(`DELETE FROM projection_baseline_rows
-              WHERE baseline_id NOT IN (SELECT baseline_id FROM projection_baselines)`),
-          ],
-          { concurrency: 1, discard: true },
-        ),
+        Effect.gen(function* () {
+          // Coverage is recorded only for a baseline row that still exists: a rejected (deleted)
+          // candidate must never mark deletions covered or advance the compaction target.
+          const marked = yield* sql.unsafe<{ readonly baselineId: number }>(
+            `UPDATE projection_baselines SET verification_status = 'verified',
+              verification_detail = NULL, verified_at = ?
+            WHERE baseline_id = ? AND sequence = ?
+            RETURNING baseline_id AS "baselineId"`,
+            [verifiedAt, baselineId, sequence],
+          );
+          if (marked.length !== 1) {
+            return yield* Effect.fail(
+              new Error(`projection baseline ${baselineId} at ${sequence} no longer exists`),
+            );
+          }
+          yield* sql.unsafe(
+            `UPDATE orchestration_deletion_markers
+             SET covered_by_baseline_sequence = ?
+             WHERE deletion_sequence <= ?
+               AND (covered_by_baseline_sequence IS NULL OR covered_by_baseline_sequence < ?)`,
+            [sequence, sequence, sequence],
+          );
+          yield* sql.unsafe(
+            `UPDATE orchestration_retention_state
+             SET compact_through_sequence = MAX(compact_through_sequence, ?), updated_at = ?
+             WHERE singleton_id = 1`,
+            [sequence, verifiedAt],
+          );
+          yield* sql.unsafe(
+            "DELETE FROM projection_baselines WHERE baseline_id <> ? AND sequence < ?",
+            [baselineId, sequence],
+          );
+          yield* sql.unsafe(`DELETE FROM projection_baseline_rows
+            WHERE baseline_id NOT IN (SELECT baseline_id FROM projection_baselines)`);
+        }),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.markVerified")));
 

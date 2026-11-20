@@ -1,3 +1,4 @@
+import type { MobileCommandReceiptSourceValue } from "./mobileCommandReceiptSource";
 import type { ClientOrchestrationCommand } from "@bigbud/contracts";
 import type { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 
@@ -14,12 +15,18 @@ export interface MobileCommandDeliveryOperation {
   readonly submittedRevision: number;
   readonly submittedAt: string;
   readonly deadlineAt: number;
+  readonly receiptSource?: MobileCommandReceiptSourceValue;
 }
 
 export interface MobileCommandDeliveryState {
   readonly status: MobileCommandDeliveryStatus;
   readonly operation: MobileCommandDeliveryOperation | null;
   readonly rejectionReason?: OrchestrationCommandRejectionReason;
+  /**
+   * Set when a delivery check found no record of the command on the server.
+   * Only then may the user resend it, with the same command ID.
+   */
+  readonly outcomeUnknown?: true;
 }
 
 export type MobileCommandOutcome =
@@ -51,6 +58,7 @@ export function createMobileCommandDeliveryState(
       submittedRevision: submitted.submittedRevision,
       submittedAt: submitted.submittedAt,
       deadlineAt: submitted.deadlineAt,
+      ...(submitted.receiptSource ? { receiptSource: submitted.receiptSource } : {}),
     },
     ...(submitted.rejectionReason ? { rejectionReason: submitted.rejectionReason } : {}),
   };
@@ -92,7 +100,7 @@ export function markMobileCommandUncertain(
 export function beginMobileCommandReconciliation(
   state: MobileCommandDeliveryState,
 ): MobileCommandDeliveryState | null {
-  return state.status === "uncertain" && state.operation
+  return state.status === "uncertain" && state.operation && !state.operation.receiptSource
     ? { status: "reconciling", operation: state.operation }
     : null;
 }
@@ -103,5 +111,5 @@ export function settleMobileCommandOutcome(
 ): MobileCommandDeliveryState {
   if (outcome.status === "accepted") return settleMobileCommandAccepted(state);
   if (outcome.status === "rejected") return settleMobileCommandRejected(state, outcome.reason);
-  return markMobileCommandUncertain(state);
+  return { ...markMobileCommandUncertain(state), outcomeUnknown: true };
 }

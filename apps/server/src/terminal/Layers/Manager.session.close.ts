@@ -1,9 +1,16 @@
+import {
+  assertDirectShellCloseAvailable,
+  assertDirectShellThreadCloseAvailable,
+} from "./Manager.shell.direct.policy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types";
 import { assertTerminalGeneration } from "./Manager.session.generation";
+import { resolveExecutionTargetId } from "@bigbud/contracts";
+import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
 
 export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape["close"] {
   const closeSession = Effect.fn("terminal.closeSession")(function* (
@@ -12,15 +19,31 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
     deleteHistory: boolean,
     expectedGeneration?: string,
     onlyIfNotRunning = false,
+    executionTargetId?: string,
   ) {
     const key = toSessionKey(threadId, terminalId);
     const session = yield* ctx.getSession(threadId, terminalId);
+    if (Option.isSome(session)) yield* assertTerminalGeneration(session.value, expectedGeneration);
+    yield* assertDirectShellCloseAvailable(
+      ctx.directShellOwners,
+      {
+        threadId,
+        terminalId,
+        executionTargetId: Option.isSome(session) ? session.value.executionTargetId : "unknown",
+      },
+      Option.getOrUndefined(session),
+    );
     // A recovered remote owner can outlive the server session map. History is its existing
     // recovery marker; do not discard it or its lease while shutdown identity is unknown.
+    // Only the pane target's durable owner store can prove no owned process survives.
+    const ownedRuntime = executionTargetId
+      ? sessionOwnedPtyRuntime(ctx, resolveExecutionTargetId(executionTargetId))
+      : undefined;
     if (
       Option.isNone(session) &&
       (onlyIfNotRunning || expectedGeneration !== undefined) &&
-      (yield* ctx.historyExists(threadId, terminalId))
+      (yield* ctx.historyExists(threadId, terminalId)) &&
+      (!ownedRuntime || (yield* ownedTerminalMayBeRetained(ownedRuntime, threadId, terminalId)))
     ) {
       return yield* new TerminalExecutionTargetError({
         threadId,
@@ -43,7 +66,6 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
             "Terminal ownership is unresolved or its identity is unavailable. Reconnect before closing it; a process may still be running.",
         });
       }
-      yield* assertTerminalGeneration(session.value, expectedGeneration);
       yield* ctx.flushPtyOutput(threadId, terminalId);
       yield* ctx.stopProcess(session.value);
       yield* ctx.persistHistory(threadId, terminalId, session.value.history);
@@ -78,9 +100,11 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
             input.deleteHistory === true,
             input.expectedGeneration,
             input.onlyIfNotRunning,
+            input.executionTargetId,
           );
           return;
         }
+        yield* assertDirectShellThreadCloseAvailable(ctx.directShellOwners, input.threadId);
         const sessions = yield* ctx.sessionsForThread(input.threadId);
         yield* Effect.forEach(
           sessions,

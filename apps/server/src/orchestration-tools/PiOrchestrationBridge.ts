@@ -10,6 +10,7 @@ import {
   type ThreadOrchestrationHttpConfig,
   type ThreadOrchestrationSessionBridgeInput,
 } from "./threadOrchestrationBridge.shared.ts";
+import { writeBigbudTempDirOwner } from "../startup/tempDirSweep.ts";
 
 export interface PiOrchestrationBridge {
   readonly extensionPath: string;
@@ -31,6 +32,8 @@ export async function createPiOrchestrationBridge(
   });
   const httpConfig = resolveThreadOrchestrationHttpConfig(input, token);
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
+  // Lets the startup temp sweep tell a crashed owner from a live one (F-B7).
+  await writeBigbudTempDirOwner(bridgeDir);
   const extensionPath = path.join(bridgeDir, ".bigbud", "bigbud-orchestration-bridge.ts");
   await writeFile(extensionPath, renderPiOrchestrationBridgeSource(httpConfig), "utf8");
 

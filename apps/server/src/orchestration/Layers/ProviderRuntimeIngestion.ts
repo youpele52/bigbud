@@ -8,9 +8,9 @@ import { isRoutableProviderSelection } from "../../provider/providerSelectionCom
  *
  * @module ProviderRuntimeIngestion
  */
-import { Clock, Effect, Layer, Schedule, Scope, Semaphore, Stream } from "effect";
+import { Clock, Effect, Layer, Schedule, Stream } from "effect";
 import { Cause } from "effect";
-import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
+import { makeKeyedDrainableWorkers } from "../keyedDrainableWorkers.ts";
 import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
 import { increment } from "../../observability/Metrics.ts";
 import {
@@ -115,9 +115,8 @@ const make = Effect.fn("make")(function* () {
         });
       }),
     );
-  const threadWorkers = new Map<string, DrainableWorker<RuntimeIngestionQueueInput>>();
-  const workerCreation = yield* Semaphore.make(1);
-  const outerScope = yield* Effect.scope;
+  // One ordered worker per thread; idle ones are closed and recreated on demand (F-B2).
+  const threadWorkers = yield* makeKeyedDrainableWorkers(processInputSafely);
   let reconciliationPassRunning = false;
   const discoveryCacheTtlMs = 15_000;
   let discoveryCache: {
@@ -171,18 +170,7 @@ const make = Effect.fn("make")(function* () {
   });
 
   const getOrCreateThreadWorker = (threadId: string) =>
-    workerCreation.withPermits(1)(
-      Effect.suspend(() => {
-        const existing = threadWorkers.get(threadId);
-        if (existing !== undefined) {
-          return Effect.succeed(existing);
-        }
-        return makeDrainableWorker(processInputSafely).pipe(
-          Effect.provideService(Scope.Scope, outerScope),
-          Effect.tap((worker) => Effect.sync(() => threadWorkers.set(threadId, worker))),
-        );
-      }),
-    );
+    Effect.succeed(threadWorkers.forKey(threadId));
 
   const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
     function* () {
@@ -369,11 +357,7 @@ const make = Effect.fn("make")(function* () {
   return {
     start,
     reconcileInspection: makeReconcileInspection(getOrCreateThreadWorker),
-    drain: Effect.suspend(() =>
-      Effect.forEach(Array.from(threadWorkers.values()), (worker) => worker.drain, {
-        concurrency: "unbounded",
-      }),
-    ).pipe(Effect.asVoid),
+    drain: threadWorkers.drain,
   } satisfies ProviderRuntimeIngestionShape;
 });
 

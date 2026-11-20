@@ -22,6 +22,10 @@ import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
 import { ProjectionCatalogQueryLive } from "./ProjectionCatalogQuery.ts";
+import {
+  WorkspaceModeGate,
+  type WorkspaceModeGateShape,
+} from "../../remote-backend/workspaceMode.gate.ts";
 
 export const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 export const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
@@ -52,12 +56,18 @@ export async function createOrchestrationSystem(input?: {
   readonly receipts?: OrchestrationCommandReceiptRepositoryShape;
   readonly catalog?: boolean;
   readonly databaseFilename?: string;
+  readonly workspaceModeGate?: WorkspaceModeGateShape;
 }) {
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "t3-orchestration-engine-test-",
   });
   const orchestrationLayer = OrchestrationEngineLive.pipe(
     Layer.provide(input?.catalog ? ProjectionCatalogQueryLive : Layer.empty),
+    Layer.provide(
+      input?.workspaceModeGate
+        ? Layer.succeed(WorkspaceModeGate, input.workspaceModeGate)
+        : Layer.empty,
+    ),
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(ProjectionOperationalStateQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),

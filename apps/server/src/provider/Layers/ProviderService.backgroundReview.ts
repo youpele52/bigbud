@@ -8,6 +8,7 @@ import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderAdapterRegistryShape } from "../Services/ProviderAdapterRegistry.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
+import { BACKGROUND_SESSION_THREAD_PREFIX } from "../backgroundSessionThreads.ts";
 import { supportsProviderWorkload } from "../providerWorkloadSupport.ts";
 import {
   prepareProviderSession,
@@ -29,7 +30,7 @@ export function makeBackgroundReviews(
     readonly registry: ProviderAdapterRegistryShape;
   },
 ) {
-  const prefix = `learning-${crypto.randomUUID()}-`;
+  const prefix = `${BACKGROUND_SESSION_THREAD_PREFIX}${crypto.randomUUID()}-`;
   const handlers = new Map<ThreadId, (event: ProviderRuntimeEvent) => Effect.Effect<void>>();
   const isBackground = (threadId: ThreadId) =>
     threadId.startsWith(prefix) || isDurableLearningThread(threadId);

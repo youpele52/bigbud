@@ -33,6 +33,7 @@ export function makeV2AuxiliaryTextGenerator(input: {
     readonly operation: string;
     readonly selection: OpencodeV2ModelSelection;
     readonly signal: AbortSignal;
+    readonly beforeDispatch?: () => Promise<void>;
   }): Promise<string> => {
     const { selection, signal } = request;
     signal.throwIfAborted();
@@ -116,6 +117,11 @@ export function makeV2AuxiliaryTextGenerator(input: {
         ),
       );
       current();
+      // Proven owned, idle session may be cleaned if admission rejects before inference.
+      mutationUncertain = false;
+      await request.beforeDispatch?.();
+      current();
+      mutationUncertain = true;
       const result = await v2Request(
         "auxiliary session.generate",
         (abort) => {

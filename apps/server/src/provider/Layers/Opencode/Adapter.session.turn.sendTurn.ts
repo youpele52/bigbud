@@ -120,7 +120,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       }
 
       const promptText = prepared.text;
-      const systemPrompt = buildOpencodeSystemPrompt(record.remoteWorkspaceSystemPrompt);
+      const systemPrompt = buildOpencodeSystemPrompt();
 
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;

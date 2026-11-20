@@ -1,7 +1,8 @@
 import type { MonitorAppGroup } from "@bigbud/contracts/system-monitor/types";
+import { formatBytes } from "@bigbud/shared/bytes";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { APP_GROUP_LABELS, appMetricValue } from "./BigbudResourceView.logic";
-import { formatBytes, formatPercent } from "./resourceMonitor.format";
+import { formatPercent } from "./resourceMonitor.format";
 
 export function BigbudResourceBreakdown({ groups }: { groups: readonly MonitorAppGroup[] }) {
   return (

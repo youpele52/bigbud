@@ -4,7 +4,7 @@ import type {
   ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
-import { Cause, Data, Effect, Layer, Option, Ref, ServiceMap } from "effect";
+import { Data, Effect, Layer, Option, Ref, ServiceMap } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { DiscoveredThreadDeletionFiles } from "../Layers/ThreadDeletion.files.ts";
@@ -13,10 +13,19 @@ import {
   discoverThreadDeletionFiles,
 } from "../Layers/ThreadDeletion.files.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import {
+  describeDeletionError,
+  describeDeletionFailure,
+} from "../Layers/DeletionFailure.detail.ts";
 
 export type ThreadDeletionOutcome =
   | { readonly type: "deleted"; readonly threadIds: ReadonlyArray<ThreadId> }
-  | { readonly type: "skipped_active"; readonly threadIds: ReadonlyArray<ThreadId> }
+  | {
+      readonly type: "skipped_active";
+      readonly threadIds: ReadonlyArray<ThreadId>;
+      /** A thread in the subtree had a live active runtime, or the subtree changed meanwhile. */
+      readonly reason: ThreadDeletionSkippedActiveReason;
+    }
   | { readonly type: "skipped_pinned"; readonly threadIds: ReadonlyArray<ThreadId> }
   | {
       readonly type: "failed";
@@ -24,9 +33,23 @@ export type ThreadDeletionOutcome =
       readonly detail: string;
     };
 
+export type ThreadDeletionSkippedActiveReason = "active-runtime" | "subtree-changed";
+
 export class ThreadDeletionOperationError extends Data.TaggedError("ThreadDeletionOperationError")<{
   readonly detail: string;
-}> {}
+  readonly cause?: unknown;
+}> {
+  override get message(): string {
+    return this.detail;
+  }
+}
+
+/** Wraps a deletion-step failure, keeping its safe reason as `detail` and the error as `cause`. */
+export function toThreadDeletionOperationError(error: unknown): ThreadDeletionOperationError {
+  return error instanceof ThreadDeletionOperationError
+    ? error
+    : new ThreadDeletionOperationError({ detail: describeDeletionError(error), cause: error });
+}
 
 export function resolveThreadSubtree(
   rootThreadId: ThreadId,
@@ -247,7 +270,11 @@ const makeThreadDeletion = Effect.gen(function* () {
         knownThreadIds = initialIds;
         const firstPreflight = yield* input.preflight(initial);
         if (firstPreflight === "active")
-          return { type: "skipped_active" as const, threadIds: initialIds };
+          return {
+            type: "skipped_active" as const,
+            threadIds: initialIds,
+            reason: "active-runtime" as const,
+          };
         if (firstPreflight === "pinned")
           return { type: "skipped_pinned" as const, threadIds: initialIds };
 
@@ -264,11 +291,19 @@ const makeThreadDeletion = Effect.gen(function* () {
           initialIds.length !== currentIds.length ||
           initialIds.some((id) => !currentIds.includes(id))
         ) {
-          return { type: "skipped_active" as const, threadIds: currentIds };
+          return {
+            type: "skipped_active" as const,
+            threadIds: currentIds,
+            reason: "subtree-changed" as const,
+          };
         }
         const secondPreflight = yield* input.preflight(current);
         if (secondPreflight === "active")
-          return { type: "skipped_active" as const, threadIds: currentIds };
+          return {
+            type: "skipped_active" as const,
+            threadIds: currentIds,
+            reason: "active-runtime" as const,
+          };
         if (secondPreflight === "pinned")
           return { type: "skipped_pinned" as const, threadIds: currentIds };
 
@@ -280,7 +315,7 @@ const makeThreadDeletion = Effect.gen(function* () {
           Effect.succeed({
             type: "failed" as const,
             threadIds: knownThreadIds,
-            detail: Cause.pretty(cause),
+            detail: describeDeletionFailure(cause),
           }),
         ),
         Effect.tap((outcome) =>
@@ -299,14 +334,14 @@ const makeThreadDeletion = Effect.gen(function* () {
       ? discoverThreadDeletionFiles(input).pipe(
           Effect.provideService(SqlClient.SqlClient, sql.value),
           Effect.provideService(ServerConfig, config.value),
-          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+          Effect.mapError(toThreadDeletionOperationError),
         )
       : Effect.fail(unavailableFiles);
   const cleanupWorktrees: ThreadDeletionShape["cleanupWorktrees"] = (files) =>
     Option.isSome(config)
       ? cleanupDiscoveredThreadWorktrees(files).pipe(
           Effect.provideService(ServerConfig, config.value),
-          Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
+          Effect.mapError(toThreadDeletionOperationError),
         )
       : Effect.succeed([]);
 

@@ -1,4 +1,4 @@
-import { OrchestrationReadModel, type ThreadId } from "@bigbud/contracts";
+import { OrchestrationReadModel, type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -16,7 +16,9 @@ import {
   STARTUP_OPERATIONAL_MESSAGE_LIMIT,
   makeStartupOperationalWindowSql,
 } from "./ProjectionOperationalStateQuery.sql.ts";
+import { makeProjectOperationalStateSql } from "./ProjectionOperationalStateQuery.projectSql.ts";
 import { makeThreadOperationalStateSql } from "./ProjectionOperationalStateQuery.threadSql.ts";
+import { makeThreadResidencySql } from "./ProjectionOperationalStateQuery.residencySql.ts";
 import { assembleSnapshotRows } from "./ProjectionSnapshotQueryAssembly.snapshot.ts";
 import { makeProjectionSnapshotQuerySql } from "./ProjectionSnapshotQuerySql.ts";
 
@@ -38,6 +40,8 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
   const snapshotSql = makeProjectionSnapshotQuerySql(sql);
   const startupWindowSql = makeStartupOperationalWindowSql(sql);
   const threadSql = makeThreadOperationalStateSql(sql);
+  const projectSql = makeProjectOperationalStateSql(sql);
+  const residencySql = makeThreadResidencySql(sql);
 
   const getStartupOperationalState: ProjectionOperationalStateQueryShape["getStartupOperationalState"] =
     () =>
@@ -127,10 +131,65 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
         ),
       );
 
+  const getProjectOperationalState: ProjectionOperationalStateQueryShape["getProjectOperationalState"] =
+    (projectId) =>
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const projectRows = yield* projectSql.listProjectRowsById({ projectId });
+            if (projectRows.length === 0) return Option.none<OrchestrationReadModel>();
+            const stateRows = yield* threadSql.listProjectionStateRows(undefined);
+            const readModel = yield* decodeReadModel(
+              assembleSnapshotRows({
+                projectRows,
+                threadRows: [],
+                messageRows: [],
+                proposedPlanRows: [],
+                activityRows: [],
+                taskRows: [],
+                sessionRows: [],
+                checkpointRows: [],
+                latestTurnRows: [],
+                stateRows,
+                threadWatchRows: [],
+              }),
+            );
+            return Option.some(readModel);
+          }),
+        )
+        .pipe(
+          Effect.mapError(
+            mapQueryError("ProjectionOperationalStateQuery.getProjectOperationalState"),
+          ),
+        );
+
   return {
     getStartupOperationalState,
     getThreadOperationalState: (threadId) => readThread(threadId, false),
     getFullThreadHistory: (threadId) => readThread(threadId, true),
+    getProjectOperationalState,
+    listProjectThreadIds: (projectId) =>
+      projectSql.listProjectThreadIds({ projectId }).pipe(
+        Effect.map((rows) => rows.map((row) => row.threadId as ThreadId)),
+        Effect.mapError(mapQueryError("ProjectionOperationalStateQuery.listProjectThreadIds")),
+      ),
+    listProjectIdsByWorkspaceRoot: (workspaceRoot) =>
+      projectSql.listProjectIdsByWorkspaceRoot({ workspaceRoot }).pipe(
+        Effect.map((rows) => rows.map((row) => row.projectId as ProjectId)),
+        Effect.mapError(
+          mapQueryError("ProjectionOperationalStateQuery.listProjectIdsByWorkspaceRoot"),
+        ),
+      ),
+    isThreadOperational: (threadId) =>
+      residencySql.findOperationalThread({ threadId }).pipe(
+        Effect.map((rows) => rows.length > 0),
+        Effect.mapError(mapQueryError("ProjectionOperationalStateQuery.isThreadOperational")),
+      ),
+    listThreadSubtreeIds: (threadId) =>
+      residencySql.listThreadSubtreeIds({ threadId }).pipe(
+        Effect.map((rows) => rows.map((row) => row.threadId as ThreadId)),
+        Effect.mapError(mapQueryError("ProjectionOperationalStateQuery.listThreadSubtreeIds")),
+      ),
   } satisfies ProjectionOperationalStateQueryShape;
 });
 

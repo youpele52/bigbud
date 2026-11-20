@@ -115,6 +115,8 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
     >
       <div
         ref={listRef}
+        // Escape may close this menu without preventDefault; it must never count toward a stop.
+        data-escape-layer="true"
         onScrollCapture={(event) => {
           if (
             event.target instanceof HTMLElement &&

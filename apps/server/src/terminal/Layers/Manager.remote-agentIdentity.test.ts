@@ -35,10 +35,12 @@ class RemoteFakeAdapter extends FakePtyAdapter {
   override spawn(input: PtySpawnInput) {
     return super.spawn(input).pipe(
       Effect.map((process) =>
-        Object.assign(process, {
-          pidDomain: "remote" as const,
-          recovered: true,
-        }),
+        input.executionTargetId === "local"
+          ? process
+          : Object.assign(process, {
+              pidDomain: "remote" as const,
+              recovered: true,
+            }),
       ),
     );
   }
@@ -221,8 +223,17 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("remote identity lif
           // Keep the replacement agent-free until the restart snapshot is asserted;
           // polling may legitimately identify a real agent before restart returns.
           command = "";
+          const refused = yield* manager
+            .restart(restartInput({ executionTargetId: target, cwd: "/project" }))
+            .pipe(Effect.flip);
+          expect(refused).toMatchObject({ reason: "restartNotStarted" });
+          expect(adapter.processes).toHaveLength(1);
           const restarted = yield* manager.restart(
-            restartInput({ executionTargetId: target, cwd: "/project" }),
+            restartInput({
+              executionTargetId: target,
+              cwd: "/project",
+              shellSelection: { kind: "legacy-auto" },
+            }),
           );
           expect(restarted.activeAgent).toBeNull();
           expect(restarted.runtimeGeneration).not.toBe(opened.runtimeGeneration);

@@ -2,6 +2,8 @@
 mod directory;
 #[path = "files.rs"]
 mod files;
+#[path = "files.create.rs"]
+mod files_create;
 #[path = "path.rs"]
 mod path;
 #[path = "search.rs"]
@@ -49,6 +51,10 @@ pub enum WorkspaceError {
         expected: String,
         actual: Option<String>,
     },
+    #[error("workspace file already exists")]
+    AlreadyExists,
+    #[error("create-only writes cannot carry an expected hash")]
+    ConditionalCreate,
     #[error("workspace search query cannot be empty")]
     EmptySearchQuery,
     #[error("workspace search exceeded the configured file limit")]

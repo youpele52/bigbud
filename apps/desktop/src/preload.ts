@@ -9,7 +9,9 @@ import {
 } from "./window/certificateChallenge.channels";
 import { isDesktopMenuAction } from "./window/menuAction.validation";
 import { desktopIpcChannels } from "./main.channels";
+import { isCommandLineToolOffered } from "./commandLine/commandLineTool.gate";
 import { createWindowZoomObserver } from "./window/windowZoom.preload";
+import { windowMaterialBridge } from "./window/windowMaterial.preload";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -61,6 +63,7 @@ const allowDevelopmentDiagnostics = process.defaultApp === true;
 const windowZoom = createWindowZoomObserver(desktopIpcChannels.windowZoomChanged);
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  ...windowMaterialBridge,
   resourceAwarenessGet: () => ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessGet),
   resourceAwarenessAcknowledge: (ids) =>
     ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessAcknowledge, ids),
@@ -99,10 +102,19 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   onWindowZoomFactorChange: windowZoom.onWindowZoomFactorChange,
   getWindowRole: () => {
     const result = ipcRenderer.sendSync(GET_WINDOW_ROLE_CHANNEL);
-    return result === "main" || result === "mascot" || result === "compact-chat" ? result : null;
+    return result === "main" ||
+      result === "mascot" ||
+      result === "compact-chat" ||
+      result === "remote-backend"
+      ? result
+      : null;
   },
   openMainWindow: (threadId) => ipcRenderer.invoke(OPEN_MAIN_WINDOW_CHANNEL, threadId),
   openCompactChat: () => ipcRenderer.invoke(OPEN_COMPACT_CHAT_CHANNEL),
+  openRemoteBackendWindow: (profileId) =>
+    ipcRenderer.invoke(desktopIpcChannels.openRemoteBackendWindow, profileId),
+  bindRemoteBackendAssets: (binding) =>
+    ipcRenderer.invoke(desktopIpcChannels.bindRemoteBackendAssets, binding),
   compactChatScreenshot: {
     getPending: (threadId) =>
       ipcRenderer.invoke(desktopIpcChannels.getPendingCompactScreenshot, threadId),
@@ -179,11 +191,18 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL),
   requestComputerUsePermissions: () => ipcRenderer.invoke(REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL),
   installComputerUseRuntime: () => ipcRenderer.invoke(INSTALL_COMPUTER_USE_RUNTIME_CHANNEL),
+  ...(isCommandLineToolOffered(process.platform)
+    ? {
+        installCommandLineTool: () => ipcRenderer.invoke(desktopIpcChannels.installCommandLineTool),
+      }
+    : {}),
   runComputerUseDoctor: () => ipcRenderer.invoke(RUN_COMPUTER_USE_DOCTOR_CHANNEL),
   getTailscaleRemoteAccessStatus: () =>
     ipcRenderer.invoke(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL),
   enableTailscaleRemoteAccess: () => ipcRenderer.invoke(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL),
   disableTailscaleRemoteAccess: () => ipcRenderer.invoke(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL),
+  takeOverTailscaleRemoteAccess: () =>
+    ipcRenderer.invoke(desktopIpcChannels.takeOverTailscaleRemoteAccess),
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
@@ -198,10 +217,12 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   resolveCertificateChallenge: (resolution) =>
     ipcRenderer.invoke(RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL, resolution),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
-  setWindowMaterial: (windowMaterial) =>
-    ipcRenderer.invoke(SET_WINDOW_MATERIAL_CHANNEL, windowMaterial),
+  setWindowMaterial: (windowMaterial, requestId) =>
+    ipcRenderer.invoke(SET_WINDOW_MATERIAL_CHANNEL, windowMaterial, requestId),
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),
+  openPath: (path: string) => ipcRenderer.invoke(desktopIpcChannels.openPath, path),
+  showItemInFolder: (path: string) => ipcRenderer.invoke(desktopIpcChannels.showItemInFolder, path),
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (!isDesktopMenuAction(action)) return;

@@ -1,12 +1,14 @@
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { notificationSafetySql } from "./ProjectionCatalogQuery.notificationSafety.ts";
 import { threadOrganizationJsonSqlText } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 /**
  * The `ThreadSummary` columns shared by every catalog query. Requires the aliases
  * `t` (`projection_threads`), `s` (`projection_thread_sessions`, LEFT JOIN), and `turn`
  * (`projection_turns` for the latest turn, LEFT JOIN). Decode rows with `ThreadSummaryDbRow`.
- * `latest_user_message_at` is kept exact by the migration 154 triggers.
+ * `latest_user_message_at` is kept exact by the migration 154 triggers;
+ * `latest_terminal_activity_at` and `terminal_finished_attention` come from migration 180.
  */
 const THREAD_SUMMARY_COLUMNS_SQL = `
   t.thread_id AS id,
@@ -25,13 +27,32 @@ const THREAD_SUMMARY_COLUMNS_SQL = `
   t.created_at AS "createdAt",
   t.updated_at AS "updatedAt",
   t.latest_user_message_at AS "latestUserMessageAt",
+  t.latest_terminal_activity_at AS "latestTerminalActivityAt",
+  COALESCE((SELECT json_group_array(json_object(
+    'terminalId', f.terminal_id, 'finishedAt', f.finished_at, 'command', f.command,
+    'exitCode', f.exit_code, 'durationMs', f.duration_ms, 'source', f.source
+  )) FROM terminal_finished_attention f WHERE f.thread_id = t.thread_id), '[]') AS "terminalFinished",
   t.pinned_at AS "pinnedAt",
   ${threadOrganizationJsonSqlText("t")} AS "organization",
   s.status AS "sessionStatus",
   s.provider_name AS "providerName",
   s.active_turn_id AS "activeTurnId",
   s.retained_family AS "retainedFamily",
+  COALESCE(s.session_epoch, 0) AS "sessionEpoch",
+  s.reason AS "sessionReason",
+  ${notificationSafetySql} AS "notificationSafety",
+  t.recovery_json AS "recovery",
+  t.pending_turn_control_operation_json AS "pendingTurnControlOperation",
   turn.state AS "latestTurnState",
+  CASE WHEN turn.turn_id IS NOT NULL THEN json_patch(json_object(
+    'turnId', turn.turn_id, 'state', CASE WHEN turn.state = 'pending' THEN 'running' ELSE turn.state END,
+    'requestedAt', turn.requested_at, 'startedAt', turn.started_at,
+    'completedAt', turn.completed_at, 'assistantMessageId', turn.assistant_message_id
+  ), json_object('terminalOutcome', turn.terminal_outcome,
+    'sourceProposedPlan', CASE WHEN turn.source_proposed_plan_thread_id IS NOT NULL
+      AND turn.source_proposed_plan_id IS NOT NULL THEN json_object(
+        'threadId', turn.source_proposed_plan_thread_id, 'planId', turn.source_proposed_plan_id
+      ) END)) END AS "latestTurn",
   EXISTS (
     SELECT 1 FROM projection_thread_watches w
     WHERE w.watcher_thread_id = t.thread_id AND w.status = 'active'

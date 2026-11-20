@@ -135,24 +135,24 @@ describe("useFilesPanelDirectoryLoader lifecycle", () => {
     await vi.waitFor(() => expect(loaderRef.current?.getDirectoryPaths()).toEqual([""]));
   });
 
-  it("forwards the remote execution target when loading a directory", async () => {
+  it("preserves whitespace paths and the remote execution target when loading a directory", async () => {
     mocks.listDirectory.mockResolvedValue({ entries: [] });
     const loaderRef = createRef<LoaderHarnessHandle>();
     await render(
       <LoaderHarness
         ref={loaderRef}
         workspaceKey="remote-project"
-        workspaceRoot="/srv/project"
+        workspaceRoot="/srv/project "
         workspaceExecutionTargetId="ssh:dev"
       />,
     );
 
-    await loaderRef.current?.loadDirectory("src");
+    await loaderRef.current?.loadDirectory("src ");
 
     expect(mocks.listDirectory).toHaveBeenCalledWith({
-      cwd: "/srv/project",
+      cwd: "/srv/project ",
       executionTargetId: "ssh:dev",
-      relativePath: "src",
+      relativePath: "src ",
     });
   });
 

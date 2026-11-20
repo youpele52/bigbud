@@ -29,10 +29,19 @@ export async function invokeV2ThreadOwner(
   const captured = implementations.acquire(owner.implementation);
   if (
     request.action === "render_html" &&
-    captured.handler.bootstrapAbi !== "bigbud.thread.bootstrap.v4"
+    !["bigbud.thread.bootstrap.v4", "bigbud.thread.bootstrap.v5"].includes(
+      captured.handler.bootstrapAbi,
+    )
   ) {
     captured.release();
     throw new Error("Retained bootstrap does not authorize HTML publication.");
+  }
+  if (
+    request.action === "set_elevator_summary" &&
+    captured.handler.bootstrapAbi !== "bigbud.thread.bootstrap.v5"
+  ) {
+    captured.release();
+    throw new Error("Retained bootstrap does not authorize summary updates.");
   }
   signal = AbortSignal.any([signal, controller.signal]);
   return owner.active

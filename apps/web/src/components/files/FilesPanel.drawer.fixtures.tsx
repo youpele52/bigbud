@@ -93,6 +93,14 @@ export function filesHandle() {
   return document.querySelector<HTMLButtonElement>("[data-files-tree-toggle]")!;
 }
 
+/** Opens a transient tree from the header control, as keyboard users do. */
+export function keyboardOpen() {
+  filesHandle().focus();
+  filesHandle().dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+  );
+}
+
 export function button(label: string) {
   const match = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (entry) => entry.getAttribute("aria-label") === label || entry.textContent === label,

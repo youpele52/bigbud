@@ -127,7 +127,7 @@ function envCaptureEnd(name: string): string {
   return `__T3CODE_ENV_${name}_END__`;
 }
 
-function buildEnvironmentCaptureCommand(names: ReadonlyArray<string>): string {
+export function buildEnvironmentCaptureCommand(names: ReadonlyArray<string>): string {
   return names
     .map((name) => {
       if (!SHELL_ENV_NAME_PATTERN.test(name)) {
@@ -143,7 +143,7 @@ function buildEnvironmentCaptureCommand(names: ReadonlyArray<string>): string {
     .join("; ");
 }
 
-function extractEnvironmentValue(output: string, name: string): string | undefined {
+export function extractEnvironmentValue(output: string, name: string): string | undefined {
   const startMarker = envCaptureStart(name);
   const endMarker = envCaptureEnd(name);
   const startIndex = output.indexOf(startMarker);

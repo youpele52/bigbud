@@ -11,6 +11,20 @@ import type { Effect } from "effect";
 import type { ChatAttachment, ModelSelection, ProviderKind } from "@bigbud/contracts";
 
 import type { TextGenerationError } from "@bigbud/contracts";
+import type { ServerSettings } from "@bigbud/contracts/core/settings.ts";
+
+/** Runtime-only dispatch authority. Captured settings are never written into job payloads. */
+export interface MetadataTextGenerationAttempt {
+  readonly selection: ModelSelection;
+  readonly executionTarget: string;
+  readonly providerSettings: ServerSettings["providers"];
+  readonly beforeDispatch: () => Effect.Effect<void, TextGenerationError>;
+}
+
+export interface MetadataTextGenerationContext {
+  /** Bypasses settings overrides and candidate fallback; exactly one captured execution path. */
+  readonly metadataAttempt?: MetadataTextGenerationAttempt;
+}
 
 /** Providers that support git text generation (commit messages, PR content, branch names). */
 export type TextGenerationProvider = ProviderKind;
@@ -75,7 +89,8 @@ export interface BranchNameGenerationResult {
   branch: string;
 }
 
-export interface ThreadTitleGenerationInput extends InternalTextGenerationContext {
+export interface ThreadTitleGenerationInput
+  extends InternalTextGenerationContext, MetadataTextGenerationContext {
   /** Staged recovery may use only this turn's verified pair, ignoring the global override. */
   verifiedThreadModelOnly?: boolean;
   cwd: string;
@@ -90,7 +105,8 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
-export interface ThreadElevatorSummaryGenerationInput extends InternalTextGenerationContext {
+export interface ThreadElevatorSummaryGenerationInput
+  extends InternalTextGenerationContext, MetadataTextGenerationContext {
   cwd: string;
   transcript: string;
   attachments?: ReadonlyArray<ChatAttachment> | undefined;

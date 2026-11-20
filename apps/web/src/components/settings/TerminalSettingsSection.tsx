@@ -9,7 +9,10 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { TerminalRenderingSettings } from "./TerminalRenderingSettings";
 import { TerminalThemeSettings } from "./TerminalThemeSettings";
-import { TerminalInteractionSettings } from "./TerminalInteractionSettings";
+import { TerminalInteractionSettings, TerminalScrollSettings } from "./TerminalInteractionSettings";
+import { TerminalShellSettings } from "./TerminalShellSettings";
+import { TerminalAgentHooksSettings } from "./TerminalAgentHooksSettings";
+import { TerminalPasteSettings } from "./TerminalPasteSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
   {
@@ -26,107 +29,122 @@ const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }>
   },
 ];
 
+/** The Terminal settings page: appearance, shell, scrolling, paste and agent activity sections. */
 export function TerminalSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
 
   return (
-    <SettingsSection title="Terminal">
-      <SettingsRow
-        title="Terminal font"
-        description="JetBrains Mono is the default with compact terminal spacing. Both bundled Nerd Fonts support prompt icons."
-        resetAction={
-          settings.terminalFontFamily !== DEFAULT_UNIFIED_SETTINGS.terminalFontFamily ? (
-            <SettingResetButton
-              label="terminal font"
-              onClick={() =>
-                updateSettings({
-                  terminalFontFamily: DEFAULT_UNIFIED_SETTINGS.terminalFontFamily,
-                })
-              }
-            />
-          ) : null
-        }
-        control={
-          <Select
-            value={settings.terminalFontFamily}
-            onValueChange={(value) => {
-              if (Schema.is(TerminalFontFamily)(value)) {
-                updateSettings({ terminalFontFamily: value });
-              }
-            }}
-          >
-            <SelectTrigger
-              variant="muted-outline"
-              className="w-full sm:w-64"
-              aria-label="Terminal font family"
+    <>
+      <SettingsSection title="Appearance">
+        <SettingsRow
+          title="Terminal font"
+          description="JetBrains Mono is the default with compact terminal spacing. Both bundled Nerd Fonts support prompt icons."
+          resetAction={
+            settings.terminalFontFamily !== DEFAULT_UNIFIED_SETTINGS.terminalFontFamily ? (
+              <SettingResetButton
+                label="terminal font"
+                onClick={() =>
+                  updateSettings({
+                    terminalFontFamily: DEFAULT_UNIFIED_SETTINGS.terminalFontFamily,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.terminalFontFamily}
+              onValueChange={(value) => {
+                if (Schema.is(TerminalFontFamily)(value)) {
+                  updateSettings({ terminalFontFamily: value });
+                }
+              }}
             >
-              <SelectValue>
-                {TERMINAL_FONT_OPTIONS.find(
-                  (option) => option.value === settings.terminalFontFamily,
-                )?.label ?? "JetBrains Mono Nerd Font Mono"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectPopup align="end" alignItemWithTrigger={false}>
-              {TERMINAL_FONT_OPTIONS.map((option) => (
-                <SelectItem hideIndicator key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        }
-      />
+              <SelectTrigger
+                variant="muted-outline"
+                className="w-full sm:w-64"
+                aria-label="Terminal font family"
+              >
+                <SelectValue>
+                  {TERMINAL_FONT_OPTIONS.find(
+                    (option) => option.value === settings.terminalFontFamily,
+                  )?.label ?? "JetBrains Mono Nerd Font Mono"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {TERMINAL_FONT_OPTIONS.map((option) => (
+                  <SelectItem hideIndicator key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
 
-      <SettingsRow
-        title="Terminal font size"
-        description="Tune the built-in terminal density without changing the rest of the app typography."
-        resetAction={
-          settings.terminalFontSize !== DEFAULT_UNIFIED_SETTINGS.terminalFontSize ? (
-            <SettingResetButton
-              label="terminal font size"
-              onClick={() =>
-                updateSettings({
-                  terminalFontSize: DEFAULT_UNIFIED_SETTINGS.terminalFontSize,
-                })
-              }
-            />
-          ) : null
-        }
-        control={
-          <Select
-            value={String(settings.terminalFontSize)}
-            onValueChange={(value) => {
-              const nextFontSize = Number(value);
-              if (
-                Number.isInteger(nextFontSize) &&
-                TERMINAL_FONT_SIZES.includes(nextFontSize as (typeof TERMINAL_FONT_SIZES)[number])
-              ) {
-                updateSettings({ terminalFontSize: nextFontSize });
-              }
-            }}
-          >
-            <SelectTrigger
-              variant="muted-outline"
-              className="w-full sm:w-32"
-              aria-label="Terminal font size"
+        <SettingsRow
+          title="Terminal font size"
+          description="Tune the built-in terminal density without changing the rest of the app typography."
+          resetAction={
+            settings.terminalFontSize !== DEFAULT_UNIFIED_SETTINGS.terminalFontSize ? (
+              <SettingResetButton
+                label="terminal font size"
+                onClick={() =>
+                  updateSettings({
+                    terminalFontSize: DEFAULT_UNIFIED_SETTINGS.terminalFontSize,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={String(settings.terminalFontSize)}
+              onValueChange={(value) => {
+                const nextFontSize = Number(value);
+                if (
+                  Number.isInteger(nextFontSize) &&
+                  TERMINAL_FONT_SIZES.includes(nextFontSize as (typeof TERMINAL_FONT_SIZES)[number])
+                ) {
+                  updateSettings({ terminalFontSize: nextFontSize });
+                }
+              }}
             >
-              <SelectValue>{`${settings.terminalFontSize}px`}</SelectValue>
-            </SelectTrigger>
-            <SelectPopup align="end" alignItemWithTrigger={false}>
-              {TERMINAL_FONT_SIZES.map((fontSize) => (
-                <SelectItem hideIndicator key={fontSize} value={String(fontSize)}>
-                  {fontSize}px
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        }
-      />
+              <SelectTrigger
+                variant="muted-outline"
+                className="w-full sm:w-32"
+                aria-label="Terminal font size"
+              >
+                <SelectValue>{`${settings.terminalFontSize}px`}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {TERMINAL_FONT_SIZES.map((fontSize) => (
+                  <SelectItem hideIndicator key={fontSize} value={String(fontSize)}>
+                    {fontSize}px
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
 
-      <TerminalThemeSettings />
-      <TerminalInteractionSettings />
-      <TerminalRenderingSettings />
-    </SettingsSection>
+        <TerminalThemeSettings />
+        <TerminalInteractionSettings />
+        <TerminalRenderingSettings />
+      </SettingsSection>
+      <SettingsSection title="Shell">
+        <TerminalShellSettings />
+      </SettingsSection>
+      <SettingsSection title="Scrolling">
+        <TerminalScrollSettings />
+      </SettingsSection>
+      <SettingsSection title="Paste">
+        <TerminalPasteSettings />
+      </SettingsSection>
+      <SettingsSection title="Agent activity">
+        <TerminalAgentHooksSettings />
+      </SettingsSection>
+    </>
   );
 }

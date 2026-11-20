@@ -80,7 +80,6 @@ function openRemoteExecutionAuthDialog(input: {
 
 export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   const {
-    verifiedExecutionTargetIds,
     executionTargetChecks,
     isRemoteExecutionAuthDialogOpen,
     remoteExecutionAuthMode,
@@ -92,7 +91,6 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
     setRemoteExecutionAuthSecret,
   } = useRemoteAccessStore(
     useShallow((state) => ({
-      verifiedExecutionTargetIds: state.verifiedExecutionTargetIds,
       executionTargetChecks: state.executionTargetChecks,
       isRemoteExecutionAuthDialogOpen: state.isAuthDialogOpen,
       remoteExecutionAuthMode: state.authMode,
@@ -216,14 +214,15 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         return false;
       }
 
-      if (verifiedExecutionTargetIds[executionTargetId]) {
+      // Auth dialogs retain callbacks across renders; verification must be read live.
+      if (isExecutionTargetVerified(executionTargetId)) {
         if (!input.resumeOnUnlockOnly) {
           await input.onVerified?.();
         }
         return true;
       }
 
-      const check = executionTargetChecks[executionTargetId];
+      const check = readRemoteExecutionCheck(executionTargetId);
       if (
         check?.status === "auth_required" &&
         check.authMode !== null &&
@@ -271,7 +270,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       }
       return true;
     },
-    [beginRemoteExecutionTargetAccessCheck, executionTargetChecks, verifiedExecutionTargetIds],
+    [beginRemoteExecutionTargetAccessCheck],
   );
 
   const submitRemoteExecutionAuth = useCallback(async () => {

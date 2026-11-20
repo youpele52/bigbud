@@ -1,12 +1,11 @@
 import type { Thread } from "../models/types";
 import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
-import {
-  derivePendingApprovals,
-  derivePendingUserInputs,
-  findLatestProposedPlan,
-  hasActionableProposedPlan,
-} from "../logic/session";
+import { derivePendingApprovals, derivePendingUserInputs } from "../logic/session";
 import { isThreadCompletedStatus } from "../logic/thread/threadCompletion.logic";
+import {
+  hasCurrentRunActionablePlan,
+  hasUnsettledCurrentRunWork,
+} from "../logic/thread/threadBackgroundWork.logic";
 
 export interface CompletedThreadCandidate {
   threadId: string;
@@ -14,6 +13,9 @@ export interface CompletedThreadCandidate {
   title: string;
   completedAt: string;
   assistantSummary: string | null;
+  kind?: "update" | "completed";
+  notificationKey?: string;
+  messageId?: string | undefined;
 }
 
 const ASSISTANT_SUMMARY_MAX_LENGTH = 140;
@@ -25,9 +27,7 @@ function isCompletedThreadStatusFromThread(thread: Thread): boolean {
     session: thread.session,
     hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
     hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
-    hasActionableProposedPlan: hasActionableProposedPlan(
-      findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
-    ),
+    hasActionableProposedPlan: hasCurrentRunActionablePlan(thread),
   });
 }
 
@@ -39,7 +39,7 @@ export function summarizeLatestAssistantMessage(thread: Thread): string | null {
   const messages = thread.messages;
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
-    if (message && message.role === "assistant") {
+    if (message && message.role === "assistant" && message.turnId === thread.latestTurn?.turnId) {
       const text = message.text.trim();
       if (text.length === 0) continue;
       return text.length > ASSISTANT_SUMMARY_MAX_LENGTH
@@ -54,14 +54,16 @@ export function summarizeLatestAssistantMessage(thread: Thread): string | null {
  * Diffs two thread snapshots and returns candidates for completed-task
  * notifications. A candidate is emitted when:
  *   - The thread exists in both snapshots.
- *   - The next thread has entered the same "Completed" state shown in the plan card UI.
- *   - The previous thread was not already in that state.
+ *   - Live native proof confirms successful settlement of this exact root run.
+ *   - No owned current-run task, descendant, or pending interaction remains unsettled.
+ *   - The previous snapshot was not already eligible (including descendant changes).
  */
 export function collectCompletedThreadCandidates(
   previousThreads: Thread[],
   nextThreads: Thread[],
 ): CompletedThreadCandidate[] {
   const previousById = new Map(previousThreads.map((t) => [t.id, t]));
+  const nextById = new Map(nextThreads.map((t) => [t.id, t]));
   const candidates: CompletedThreadCandidate[] = [];
 
   for (const next of nextThreads) {
@@ -69,7 +71,13 @@ export function collectCompletedThreadCandidates(
       continue;
     }
     const nextTurn = next.latestTurn;
-    if (!nextTurn?.completedAt) {
+    if (
+      !nextTurn?.completedAt ||
+      nextTurn.terminalOutcome !== "completed" ||
+      next.notificationObservation?.settledTurnId !== nextTurn.turnId ||
+      next.notificationObservation.settledSessionEpoch !== (next.session?.sessionEpoch ?? 0) ||
+      hasUnsettledCurrentRunWork(next, nextById)
+    ) {
       continue;
     }
 
@@ -78,7 +86,18 @@ export function collectCompletedThreadCandidates(
       continue;
     }
 
-    if (!isCompletedThreadStatusFromThread(next) || isCompletedThreadStatusFromThread(previous)) {
+    if (
+      !isCompletedThreadStatusFromThread(next) ||
+      (previous.latestTurn?.turnId === nextTurn.turnId &&
+        previous.latestTurn.terminalOutcome === "completed" &&
+        previous.notificationObservation?.settledTurnId === nextTurn.turnId &&
+        previous.notificationObservation.settledSessionEpoch ===
+          (previous.session?.sessionEpoch ?? 0) &&
+        previous.notificationObservation.settledSessionEpoch ===
+          next.notificationObservation.settledSessionEpoch &&
+        !hasUnsettledCurrentRunWork(previous, previousById) &&
+        isCompletedThreadStatusFromThread(previous))
+    ) {
       continue;
     }
 
@@ -87,14 +106,52 @@ export function collectCompletedThreadCandidates(
       projectId: next.projectId,
       title: next.title,
       completedAt: nextTurn.completedAt,
-      assistantSummary: summarizeLatestAssistantMessage(next),
+      assistantSummary:
+        next.notificationObservation?.messages.findLast(
+          (message) => message.turnId === nextTurn.turnId && message.completedAt,
+        )?.text || summarizeLatestAssistantMessage(next),
+      kind: "completed",
+      notificationKey: `completed:${next.id}:${next.notificationObservation.settledSessionEpoch}:${nextTurn.turnId}`,
+      messageId: nextTurn.assistantMessageId ?? undefined,
     });
   }
 
   return candidates;
 }
 
-/** Builds the title and body copy for a task completion notification. */
+export function collectAgentUpdateCandidates(
+  previousThreads: Thread[],
+  nextThreads: Thread[],
+): CompletedThreadCandidate[] {
+  const previousById = new Map(previousThreads.map((thread) => [thread.id, thread]));
+  return nextThreads.flatMap((thread) => {
+    const previous = previousById.get(thread.id);
+    if (!previous || !isVisibleThread(thread)) return [];
+    const seen = new Set(
+      previous.notificationObservation?.messages
+        .filter((message) => message.completedAt)
+        .map((message) => message.messageId),
+    );
+    return (thread.notificationObservation?.messages ?? []).flatMap((message) =>
+      !message.completedAt || seen.has(message.messageId)
+        ? []
+        : [
+            {
+              threadId: thread.id,
+              projectId: thread.projectId,
+              title: thread.title,
+              completedAt: message.completedAt,
+              assistantSummary: message.text || null,
+              kind: "update" as const,
+              notificationKey: `update:${thread.id}:${message.messageId}`,
+              messageId: message.messageId,
+            },
+          ],
+    );
+  });
+}
+
+/** Builds truthful copy for either a progress update or native task settlement. */
 export function buildTaskCompletionCopy(candidate: CompletedThreadCandidate): {
   title: string;
   body: string;
@@ -103,5 +160,5 @@ export function buildTaskCompletionCopy(candidate: CompletedThreadCandidate): {
     ? `${candidate.title}: ${candidate.assistantSummary}`
     : candidate.title;
 
-  return { title: "Task completed", body };
+  return { title: candidate.kind === "update" ? "Agent update" : "Task completed", body };
 }

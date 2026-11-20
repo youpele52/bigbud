@@ -4,7 +4,10 @@ import type { Deferred } from "effect";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationCommandPayloadDigest } from "../commandDigest.ts";
 
+import type { MetadataCommitIdentity } from "./ThreadMetadataGeneration.identity.ts";
+
 export interface CommandEnvelope {
+  readonly metadataCommit?: MetadataCommitIdentity;
   readonly worktreeOperationId?: string;
   readonly nativeWorkspaceOperationId?: string;
   readonly nativeOrganizationOperation?: ThreadOrganizationNativeOperation;

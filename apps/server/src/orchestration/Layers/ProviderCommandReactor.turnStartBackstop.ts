@@ -1,7 +1,10 @@
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 import { Cause, Effect } from "effect";
 
-import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import {
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../Services/OrchestrationEngine.ts";
 import { makeProviderFailureHandlers } from "./ProviderCommandReactorHandlers.failures.ts";
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
 
@@ -18,9 +21,7 @@ export const failUnhandledTurnStart = Effect.fn("failUnhandledTurnStart")(functi
   readonly cause: Cause.Cause<unknown>;
 }) {
   const { event, orchestrationEngine } = input;
-  const thread = (yield* orchestrationEngine.getReadModel()).threads.find(
-    (candidate) => candidate.id === event.payload.threadId,
-  );
+  const thread = yield* getOrchestrationThread(orchestrationEngine, event.payload.threadId);
   if (thread?.pendingTurnStart?.messageId !== event.payload.messageId) return;
   yield* makeProviderFailureHandlers(orchestrationEngine).recordTurnStartFailure({
     threadId: event.payload.threadId,

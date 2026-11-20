@@ -6,6 +6,7 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
+import { LegacyMetadataAuthorization } from "../../persistence/Layers/ThreadMetadataGeneration.legacy.authorization.ts";
 import type { OrchestrationEngineShape } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 
@@ -37,6 +38,7 @@ export const TextGenerationRequest = Schema.Struct({
   operation: Schema.Literals(["title", "summary"]),
   requestId: EventId,
   sourceActivityId: EventId,
+  legacyRecovery: Schema.optionalKey(LegacyMetadataAuthorization),
   context: TextGenerationRequestContext,
 });
 export type TextGenerationRequest = typeof TextGenerationRequest.Type;

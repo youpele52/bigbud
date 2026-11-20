@@ -1,5 +1,6 @@
 use super::{
     AgentSession, admission, io_helpers::broadcast_response, job_lifecycle, serve_connection,
+    signals,
 };
 use crate::workspace_watch_event_frame;
 use bigbud_workspace_watch::WorkspaceWatchRegistry;
@@ -13,7 +14,10 @@ pub fn run_supervisor(session: AgentSession, socket_path: &Path) -> io::Result<(
     let _cleanup = crate::pty::CleanupOwner::start()?;
     let listener = UnixListener::bind(socket_path)?;
     std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o700))?;
+    let bound = signals::BoundSocket::capture(socket_path)?;
     let sessions = Arc::new(Mutex::new(session));
+    // Installed before any connection can spawn a PTY child.
+    signals::spawn(signals::install()?, Arc::clone(&sessions), bound)?;
     let subscribers = Arc::new(Mutex::new(HashMap::new()));
     let watch_subscribers = Arc::new(Mutex::new(HashMap::new()));
     let watch_sink = Arc::clone(&watch_subscribers);

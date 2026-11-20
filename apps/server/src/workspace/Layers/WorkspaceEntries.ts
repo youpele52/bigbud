@@ -1,3 +1,4 @@
+import { validateLocalDirectoryPath } from "./WorkspaceEntries.paths.ts";
 import fsPromises from "node:fs/promises";
 import type { Dirent } from "node:fs";
 
@@ -13,16 +14,18 @@ import {
 } from "../Services/WorkspaceEntries.ts";
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
 import {
+  insertRankedName,
+  normalizeNameRankQuery,
+  scoreNameRankCandidate,
+  type RankedName,
+} from "@bigbud/shared/search/nameRank";
+import {
   type SearchableWorkspaceEntry,
-  type RankedWorkspaceEntry,
   toPosixPath,
   parentPathOf,
   toSearchableWorkspaceEntry,
-  normalizeQuery,
   isPathInIgnoredDirectory,
   directoryAncestorsOf,
-  scoreEntry,
-  insertRankedEntry,
 } from "./WorkspaceEntriesSearch.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import {
@@ -124,6 +127,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     { readonly relativeDir: string; readonly dirents: Dirent[] | null },
     WorkspaceEntriesError
   > {
+    yield* validateLocalDirectoryPath(cwd, relativeDir, path.sep);
     return yield* Effect.tryPromise({
       try: async () => {
         const absoluteDir = relativeDir ? path.join(cwd, relativeDir) : cwd;
@@ -358,19 +362,19 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
           });
       return yield* indexEffect.pipe(
         Effect.map((index) => {
-          const normalizedQueryStr = normalizeQuery(input.query);
+          const normalizedQuery = normalizeNameRankQuery(input.query);
           const limit = Math.max(0, Math.floor(input.limit));
-          const rankedEntries: RankedWorkspaceEntry[] = [];
+          const rankedEntries: RankedName<SearchableWorkspaceEntry>[] = [];
           let matchedEntryCount = 0;
 
           for (const entry of index.entries) {
-            const score = scoreEntry(entry, normalizedQueryStr);
+            const score = scoreNameRankCandidate(entry, normalizedQuery);
             if (score === null) {
               continue;
             }
 
             matchedEntryCount += 1;
-            insertRankedEntry(rankedEntries, { entry, score }, limit);
+            insertRankedName(rankedEntries, { entry, score }, limit);
           }
 
           return {

@@ -11,20 +11,29 @@ import {
   wsConnectionDiagnosticsLifecycle,
 } from "./wsConnectionDiagnosticsReporter";
 import { requestServerConfig } from "./wsRpcClient.config";
+import { requestProjectCatalog } from "./wsRpcClient.projectCatalog";
 import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
 import { requestConnectedSshMonitors, requestSshMonitorSample } from "./wsRpcClient.monitor";
-import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
+import { createServerRemoteRpcMethods } from "./wsRpcClient.serverRemote";
+import { createRemoteBackendRelayRpcMethods } from "./wsRpcClient.remoteBackendRelay";
+import { createRemoteRuntimeUpdateRpcMethods } from "./wsRpcClient.remoteBackendUpdate";
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
+import { createSearchRpcClient } from "./wsRpcClient.search";
 import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
+import { createMetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
+import { resolveBoundWsRpcClient } from "./backendScope.state";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
 
 export function getWsRpcClient(): WsRpcClient {
+  // A `?backend=` window gets its owned client (or a typed error), never the local singleton.
+  const bound = resolveBoundWsRpcClient();
+  if (bound) return bound;
   if (sharedWsRpcClient) {
     return sharedWsRpcClient;
   }
@@ -50,7 +59,10 @@ function subscribeEmptyInput<TEvent>(
   return transport.subscribe((client) => method(client)({}), listener, options);
 }
 
-export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
+export function createWsRpcClient(
+  transport = new WsTransport(),
+  resetReconnectBackoff: () => void = resetWsReconnectBackoff,
+): WsRpcClient {
   return {
     organization: {
       status: () =>
@@ -60,12 +72,13 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     dispose: () => transport.dispose(),
     reconnect: async () => {
-      resetWsReconnectBackoff();
+      resetReconnectBackoff();
       await transport.reconnect();
     },
     reconnectNow: () => transport.reconnectNow(),
     terminal: createTerminalRpcClient(transport),
     computerUse: createComputerUseRpcClient(transport),
+    search: createSearchRpcClient(transport),
     browser: {
       completeCommand: (input) =>
         transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),
@@ -202,6 +215,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     server: {
       ...createDatabaseCompactionRpcMethods(transport),
+      ...createMetadataWarningRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
@@ -214,32 +228,9 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
       sampleSshMonitor: (input) => requestSshMonitorSample(transport, input),
       listConnectedSshMonitors: () => requestConnectedSshMonitors(transport),
-      listSshConfigHosts: (input) => requestSshConfigHosts(transport, input),
-      listRemoteFolders: (input) => requestRemoteFolders(transport, input),
-      installRemoteAgent: (input) =>
-        transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
-      connectRemoteAgent: (input) =>
-        transport.request((client) => client[WS_METHODS.serverConnectRemoteAgent](input)),
-      restartRemoteAgent: (input) =>
-        transport.request((client) => client[WS_METHODS.serverRestartRemoteAgent](input)),
-      getRemoteAgentRestartStatus: (input) =>
-        transport.request((client) => client[WS_METHODS.serverGetRemoteAgentRestartStatus](input)),
-      disconnectExecutionTarget: (input) =>
-        transport.request((client) => client[WS_METHODS.serverDisconnectExecutionTarget](input)),
-      connectExecutionTarget: (input) =>
-        transport.request((client) => client[WS_METHODS.serverConnectExecutionTarget](input)),
-      listDisconnectedExecutionTargets: () =>
-        transport.request((client) =>
-          client[WS_METHODS.serverListDisconnectedExecutionTargets]({}),
-        ),
-      getRemoteAgentUpdateStatus: (input) =>
-        transport.request((client) => client[WS_METHODS.serverGetRemoteAgentUpdateStatus](input)),
-      unlockSshKey: (input) =>
-        transport.request((client) => client[WS_METHODS.serverUnlockSshKey](input)),
-      unlockSshPassword: (input) =>
-        transport.request((client) => client[WS_METHODS.serverUnlockSshPassword](input)),
-      trustSshHost: (input) =>
-        transport.request((client) => client[WS_METHODS.serverTrustSshHost](input)),
+      ...createServerRemoteRpcMethods(transport),
+      ...createRemoteBackendRelayRpcMethods(transport),
+      ...createRemoteRuntimeUpdateRpcMethods(transport),
       upsertKeybinding: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpsertKeybinding](input)),
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
@@ -273,6 +264,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         ),
       copilotRuntime: (input) =>
         transport.request((client) => client[WS_METHODS.serverCopilotRuntime](input)),
+      peerPairing: (input) =>
+        transport.request((client) => client[WS_METHODS.serverPeerPairing](input)),
       createMobileRemotePairing: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
       listMobileRemoteSessions: () =>
@@ -328,10 +321,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     orchestration: {
       getSidebarThreadCatalog: () =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog]({})),
-      getStartupProjectCatalog: (input) =>
-        transport.request((client) =>
-          client[ORCHESTRATION_WS_METHODS.getStartupProjectCatalog](input),
-        ),
+      getStartupProjectCatalog: (input) => requestProjectCatalog(transport, input),
       searchConversationMessages: (input) =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.searchConversationMessages](input),

@@ -1,5 +1,8 @@
+import { hasUnconfirmedDirectShell } from "./Manager.shell.direct.policy";
 import { makeInactiveSessionEviction } from "./Manager.process.eviction.ts";
 import { makeTerminalIdleWorkTracker } from "./Manager.idleWork.ts";
+import { makeTerminalWorkSignals } from "./Manager.workSignals.ts";
+import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import * as Effect from "effect/Effect";
@@ -143,9 +146,15 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       sessionsForThread(threadId).pipe(
         Effect.map((sessions) => idleWork.refreshThread(threadId, sessions)),
       );
+    const workSignals = makeTerminalWorkSignals(options.workSink);
     const publishEvent = (event: TerminalEvent) =>
       Effect.gen(function* () {
         if (event.type !== "output") yield* refreshThreadIdleWork(event.threadId);
+        if (event.type === "activity" && workSignals.enabled) {
+          const session = yield* getSession(event.threadId, event.terminalId);
+          if (Option.isSome(session))
+            yield* workSignals.activity(session.value, event.hasRunningSubprocess);
+        }
         for (const listener of terminalEventListeners) {
           yield* listener(event).pipe(Effect.ignoreCause({ log: true }));
         }
@@ -266,6 +275,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       subprocessPollIntervalMs,
       shellResolver,
       ptyAdapter: options.ptyAdapter,
+      directShellOwners: options.directShellOwners,
+      workSignals,
+      shellIntegrationEnv: options.shellIntegrationEnv,
     };
 
     const clearKillFiber = (proc: PtyProcess | null) =>
@@ -275,7 +287,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       drainProcessEventsWith(lifecycleCtx, clearKillFiber, session, expectedPid).pipe(
         Effect.andThen(
           Effect.suspend(() =>
-            session.process === null
+            session.process === null && !hasUnconfirmedDirectShell(session)
               ? releaseWorktreeLease({
                   threadId: session.threadId,
                   terminalId: session.terminalId,
@@ -337,6 +349,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     );
 
     const api = buildSessionApi({
+      resolveOwnedRuntime: (target) => resolveOwnedPtyRuntime(options.ptyAdapter, target),
+      getLocalShellDefault: options.getLocalShellDefault,
+      listLocalShellProfiles: options.listLocalShellProfiles,
       publishEvent,
       modifyManagerState,
       getSession,
@@ -355,11 +370,16 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,
+      directShellOwners: options.directShellOwners,
+      resolveShellProfile: options.resolveShellProfile,
+      preflightRemoteShellProfile: options.preflightRemoteShellProfile,
+      listShellProfiles: options.listShellProfiles,
       snapshot,
       acquireWorktreeLease,
       markWorktreeLeaseStarted,
       releaseWorktreeLease,
       terminalEventListeners,
+      workSignals,
     });
     return {
       ...api,

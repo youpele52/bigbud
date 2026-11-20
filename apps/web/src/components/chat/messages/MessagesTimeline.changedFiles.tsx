@@ -1,3 +1,4 @@
+import { ACTIVITY_LAYOUT } from "~/constants/activityLayout";
 import type { MessageId, TurnId } from "@bigbud/contracts";
 import { type TurnDiffSummary } from "../../../models/types";
 import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
@@ -50,48 +51,49 @@ export function AssistantTurnChangedFiles({
   );
 
   return (
-    <ActivityAccordion
-      className="mt-2"
-      title={`Changed files (${checkpointFiles.length})`}
-      meta={
-        hasNonZeroStat(summaryStat) ? (
-          <>
-            <span className="mr-1.5">•</span>
-            <DiffStatLabel additions={summaryStat.additions} deletions={summaryStat.deletions} />
-          </>
-        ) : undefined
-      }
-      actions={
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            data-scroll-anchor-ignore
-            onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
-          >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
-          </Button>
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
-          >
-            View diff
-          </Button>
-        </div>
-      }
-      {...accordion}
-    >
-      <ChangedFilesTree
-        key={`changed-files-tree:${turnSummary.turnId}`}
-        turnId={turnSummary.turnId}
-        files={checkpointFiles}
-        allDirectoriesExpanded={allDirectoriesExpanded}
-        resolvedTheme={resolvedTheme}
-        onOpenTurnDiff={onOpenTurnDiff}
-      />
-    </ActivityAccordion>
+    <div className={ACTIVITY_LAYOUT.attached}>
+      <ActivityAccordion
+        title={`Changed files (${checkpointFiles.length})`}
+        meta={
+          hasNonZeroStat(summaryStat) ? (
+            <>
+              <span className="mr-1.5">•</span>
+              <DiffStatLabel additions={summaryStat.additions} deletions={summaryStat.deletions} />
+            </>
+          ) : undefined
+        }
+        actions={
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="xs"
+              variant="text"
+              type="button"
+              data-scroll-anchor-ignore
+              onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
+            >
+              {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            </Button>
+            <Button
+              size="xs"
+              variant="text"
+              type="button"
+              onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
+            >
+              View diff
+            </Button>
+          </div>
+        }
+        {...accordion}
+      >
+        <ChangedFilesTree
+          key={`changed-files-tree:${turnSummary.turnId}`}
+          turnId={turnSummary.turnId}
+          files={checkpointFiles}
+          allDirectoriesExpanded={allDirectoriesExpanded}
+          resolvedTheme={resolvedTheme}
+          onOpenTurnDiff={onOpenTurnDiff}
+        />
+      </ActivityAccordion>
+    </div>
   );
 }

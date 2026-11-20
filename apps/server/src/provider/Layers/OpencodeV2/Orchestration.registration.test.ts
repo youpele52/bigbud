@@ -21,7 +21,7 @@ it("freezes the exact previous descriptor and preserves canonical implementation
     knownV2BootstrapCompatibility(V2_N2_BOOTSTRAP_COMPATIBILITY, V2_N2_COMPATIBILITY_DIGEST),
   ).toBe(V2_N2_BOOTSTRAP_COMPATIBILITY);
   const implementation = v2ThreadImplementation();
-  expect(implementation.bootstrapAbi).toBe("bigbud.thread.bootstrap.v4");
+  expect(implementation.bootstrapAbi).toBe("bigbud.thread.bootstrap.v5");
   expect(() => assertV2ImplementationCompatible(implementation)).not.toThrow();
   expect(() =>
     assertV2ImplementationCompatible({ ...implementation, schemaDigest: "foreign" }),

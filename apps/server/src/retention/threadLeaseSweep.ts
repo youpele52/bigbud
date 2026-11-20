@@ -1,3 +1,8 @@
+import { retainedDirectOwnerKey } from "./directShellLease";
+import {
+  retainedRustTerminalOwnerKey,
+  rustTerminalLeaseReleaseAllowed,
+} from "./ownedRustTerminalLease.ts";
 /**
  * Bounded sweep of leases that no longer stand for real work, so retention stops skipping
  * threads for them. One tick deletes at most `limit` rows across every category:
@@ -10,8 +15,9 @@
  *   expiry;
  * - learning cleanup fences whose job is gone, or is not running and untouched for 7 days.
  *
- * A held lease is renewed by the heartbeat, so "not held and expired" only matches a lease
- * whose holder is gone. A crash mid-sweep leaves the remaining rows for the next tick.
+ * Durable direct/Rust ownership can outlive the TypeScript holder, so it independently fences
+ * cleanup. Deletion also rechecks the observed row so concurrent renew/acquire wins. A crash
+ * mid-sweep leaves the remaining rows for the next tick.
  *
  * @module threadLeaseSweep
  */
@@ -49,10 +55,15 @@ export const sweepThreadLeases = Effect.fn("sweepThreadLeases")(function* (
   if (budget > 0) {
     const candidates = yield* sql<{
       readonly leaseId: string;
+      readonly threadId: string;
+      readonly runtimeKind: string;
       readonly processId: number | null;
       readonly expired: number;
+      readonly updatedAt: string;
+      readonly expiresAt: string | null;
     }>`
-      SELECT lease_id AS "leaseId", process_id AS "processId",
+      SELECT lease_id AS "leaseId", process_id AS "processId", thread_id AS "threadId", runtime_kind AS "runtimeKind",
+        updated_at AS "updatedAt", expires_at AS "expiresAt",
         CASE WHEN expires_at IS NULL OR expires_at <= ${now} THEN 1 ELSE 0 END AS expired
       FROM worktree_runtime_leases
       WHERE runtime_kind IN ('terminal', 'shell')
@@ -65,14 +76,32 @@ export const sweepThreadLeases = Effect.fn("sweepThreadLeases")(function* (
         row.expired === 1 || (row.processId !== null && isDefinitelyTerminated(row.processId)),
     );
     if (stale.length > 0) {
+      const candidates = JSON.stringify(
+        stale.map((row) => ({
+          leaseId: row.leaseId,
+          ownerKey: retainedDirectOwnerKey(row),
+          rustOwnerKey: retainedRustTerminalOwnerKey(row),
+          updatedAt: row.updatedAt,
+          expiresAt: row.expiresAt,
+          processId: row.processId,
+        })),
+      );
       runtime = (yield* sql`
         DELETE FROM worktree_runtime_leases
-        WHERE lease_id IN (SELECT value FROM json_each(${JSON.stringify(stale.map((row) => row.leaseId))}))
+        WHERE lease_id IN (
+          SELECT json_extract(value, '$.leaseId') FROM json_each(${candidates})
+          WHERE NOT EXISTS (SELECT 1 FROM direct_shell_launch_owners
+            WHERE owner_key = json_extract(value, '$.ownerKey'))
+            AND ${rustTerminalLeaseReleaseAllowed(sql, sql`json_extract(value, '$.rustOwnerKey')`)}
+            AND worktree_runtime_leases.updated_at IS json_extract(value, '$.updatedAt')
+            AND worktree_runtime_leases.expires_at IS json_extract(value, '$.expiresAt')
+            AND worktree_runtime_leases.process_id IS json_extract(value, '$.processId')
+        )
           AND lease_id NOT IN (SELECT value FROM json_each(${held}))
         RETURNING lease_id
       `).length;
-      budget -= runtime;
     }
+    budget -= runtime;
   }
 
   let activity = 0;

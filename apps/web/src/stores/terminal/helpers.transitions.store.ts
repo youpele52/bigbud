@@ -1,3 +1,8 @@
+import {
+  normalizeTerminalSplitLayout,
+  splitTerminalLayout,
+  type TerminalSplitDirection,
+} from "../../lib/terminalSplitLayout";
 /**
  * Per-thread state transition helpers for the terminal Zustand store.
  *
@@ -48,6 +53,7 @@ export function upsertTerminalIntoGroups(
   state: ThreadTerminalState,
   terminalId: string,
   mode: "split" | "new",
+  direction: TerminalSplitDirection = "right",
 ): ThreadTerminalState {
   const normalized = normalizeThreadTerminalState(state);
   if (!isValidTerminalId(terminalId)) {
@@ -114,6 +120,12 @@ export function upsertTerminalIntoGroups(
   }
 
   if (!destinationGroup.terminalIds.includes(terminalId)) {
+    destinationGroup.layout = splitTerminalLayout(
+      normalizeTerminalSplitLayout(destinationGroup.layout, destinationGroup.terminalIds),
+      normalized.activeTerminalId,
+      terminalId,
+      direction,
+    );
     const anchorIndex = destinationGroup.terminalIds.indexOf(normalized.activeTerminalId);
     if (anchorIndex >= 0) {
       destinationGroup.terminalIds.splice(anchorIndex + 1, 0, terminalId);
@@ -135,8 +147,9 @@ export function upsertTerminalIntoGroups(
 export function splitThreadTerminal(
   state: ThreadTerminalState,
   terminalId: string,
+  direction: TerminalSplitDirection = "right",
 ): ThreadTerminalState {
-  return upsertTerminalIntoGroups(state, terminalId, "split");
+  return upsertTerminalIntoGroups(state, terminalId, "split", direction);
 }
 
 export function newThreadTerminal(
