@@ -146,7 +146,7 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
         expect(runToolCommand).toHaveBeenCalledWith(
           expect.objectContaining({
             command: "rg",
-            args: expect.arrayContaining(["--ignore-case"]),
+            args: expect.arrayContaining(["--ignore-case", "--fixed-strings"]),
             allowNonZeroExit: true,
           }),
         );
