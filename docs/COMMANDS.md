@@ -305,8 +305,9 @@ Exit codes: 0 as expected, 1 mismatch or disallowed redirect, 2 unreachable.
 
 ### Download links
 
-The marketing site's Pages Function (`apps/marketing/functions/download/[ref]/remote-agent.ts`)
-redirects to a release's `remote-agent.sh` asset on GitHub. The release job stamps the version
+The marketing site's Pages advanced-mode worker (`apps/marketing/worker/index.ts`, bundled into
+`dist/_worker.js` by `bun run --cwd apps/marketing build`) redirects to a release's
+`remote-agent.sh` asset on GitHub. The release job stamps the version
 into that asset, so `curl -fsSL <link> | sh` needs no environment variable.
 
 | Link                                                | Resolves to                                                        |

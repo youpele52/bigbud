@@ -3,8 +3,8 @@ import {
   RELEASE_CHANNELS,
   resolveReleaseVersion,
   type ReleaseChannel,
-} from "../../../../packages/shared/src/releaseChannel.ts";
-import { GITHUB_REPO_SLUG } from "../../src/constants/app";
+} from "../../../packages/shared/src/releaseChannel.ts";
+import { GITHUB_REPO_SLUG } from "../src/constants/app";
 
 /**
  * Pure release resolution for `/download/<ref>/remote-agent`. No Workers globals. Release tags use
