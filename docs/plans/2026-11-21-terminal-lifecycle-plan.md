@@ -1414,3 +1414,15 @@ External facts were checked on 2026-11-21.
     - batch the macOS PTY reads, which come in about 1 KiB pieces (about 50,000 frames per 51 MB), to cut per-frame overhead.
   - **Known limit:** the global writer budget (8 MiB) can still couple PTYs once about 32 connections are stalled at once.
   - **Diagnostics:** supervisor stderr goes to `<state>/supervisor.log`. Surface it in diagnostics.
+- S6 (committed 543b602fc2):
+  - **Shell integration:** it travels through the environment only (`ZDOTDIR`, `PROMPT_COMMAND`, `XDG_DATA_DIRS`, hook paths), exactly as node-pty gets it. The intent's `integration` field stays `"disabled"`.
+  - **PWD:** set to the requested cwd, as node-pty does.
+  - **Environment limits:** an environment over 512 entries or 256 KiB, or hook paths outside `<stateDir>/shell-integration`, runs in-process.
+  - **S1 fixes:** generation-based connection binding, and pin-registry promotions.
+  - **Handed to S3:**
+    - `Manager.ts:136` must call `shellIntegrationRoot(stateDir)`.
+    - **Coordinator decision:** a custom shell outside the Rust `pty_profile` allowlist (`/bin`, `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`) falls back to in-process in TypeScript instead of failing on the host.
+    - Quit close-all must reach draining generations too, not only the admitted one.
+    - Mark lost PTYs `host-lost` and request cold snapshots.
+    - `Manager.shell.profile.ts:40` must accept `local-terminal-host`.
+  - **Old opt-in owners:** S1 owner rows from opt-in dev builds recorded `platform: "linux"`. Recovery is unaffected; a fresh spawn against a live one reports a launch-intent conflict.
