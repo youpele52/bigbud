@@ -3,7 +3,6 @@ import { Throttler } from "@tanstack/react-pacer";
 import { type QueryClient } from "@tanstack/react-query";
 import { flushComposerDraftPersistence, useComposerDraftStore } from "../stores/composer";
 import { useStore } from "../stores/main";
-import { toastManager } from "../components/ui/toast";
 import { applySideChatLifecycleEvents } from "../components/chat/side-chat/sideChat.actions";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
@@ -21,7 +20,7 @@ import {
   setThreadHydrationEventApplier,
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
-import { getBatchFailedThreadDeletionToast } from "../logic/orchestration/thread-deletion.logic";
+import { notifyFailedThreadDeletions } from "../lib/threadDeletionRemoteShell";
 import { clearPersistedCommandsForCanonicalEvents } from "../lib/orchestrationCommandRecovery";
 import {
   coalesceOrchestrationUiEvents,
@@ -145,12 +144,11 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     for (const threadId of batchEffects.removeTerminalStateThreadIds) {
       input.removeTerminalState(threadId);
     }
-    const failedDeleteToast = getBatchFailedThreadDeletionToast({
+    notifyFailedThreadDeletions({
       events: nextEvents,
       failedThreadIds: batchEffects.failedDeleteThreadIds,
       alreadyNotifiedThreadIds: sidecarDeletionFailureIds,
     });
-    if (failedDeleteToast) toastManager.add(failedDeleteToast);
   };
 
   const applyEventBatchNow = async (

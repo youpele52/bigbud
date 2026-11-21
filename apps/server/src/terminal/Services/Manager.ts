@@ -42,6 +42,11 @@ import type {
 } from "@bigbud/contracts/workspace/terminal.shellProfiles.ts";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
 import type {
+  TerminalForgetRetainedShellOwnersResult,
+  TerminalRetainedShellOwners,
+  TerminalRetainedShellOwnersInput,
+} from "@bigbud/contracts/workspace/terminal.shellOwners.ts";
+import type {
   TerminalRecoveryInput,
   TerminalRecoveryResult,
 } from "@bigbud/contracts/workspace/terminal.recovery.ts";
@@ -119,6 +124,14 @@ export interface TerminalManagerShape {
   ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
   readonly remoteDetach?: (input: TerminalRemoteDetachInput) => Effect.Effect<void, TerminalError>;
   readonly remoteStop?: (input: TerminalRemoteAttachInput) => Effect.Effect<void, TerminalError>;
+  /** Unverifiable direct-shell records that block this thread's deletion. */
+  readonly retainedShellOwners?: (
+    input: TerminalRetainedShellOwnersInput,
+  ) => Effect.Effect<TerminalRetainedShellOwners, TerminalError>;
+  /** Explicit user recovery: forgets only this thread's records; remote shells keep running. */
+  readonly forgetRetainedShellOwners?: (
+    input: TerminalRetainedShellOwnersInput,
+  ) => Effect.Effect<TerminalForgetRetainedShellOwnersResult, TerminalError>;
   readonly listShellProfiles: (
     input: TerminalShellProfilesInput,
   ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;

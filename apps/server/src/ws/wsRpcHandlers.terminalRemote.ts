@@ -6,6 +6,7 @@ import type {
   TerminalRemoteAttachInput,
   TerminalRemoteDetachInput,
 } from "@bigbud/contracts/workspace/terminal.remote.ts";
+import type { TerminalRetainedShellOwnersInput } from "@bigbud/contracts/workspace/terminal.shellOwners.ts";
 import { observeRpcEffect } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
 
@@ -41,6 +42,17 @@ export function makeRemoteTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.terminalRemoteStop,
         context.terminalManager.remoteStop?.(input) ?? unavailable(),
+      ),
+    [WS_METHODS.terminalRetainedShellOwners]: (input: TerminalRetainedShellOwnersInput) =>
+      observeRpcEffect(
+        WS_METHODS.terminalRetainedShellOwners,
+        context.terminalManager.retainedShellOwners?.(input) ??
+          Effect.succeed({ hosts: [], count: 0 }),
+      ),
+    [WS_METHODS.terminalForgetRetainedShellOwners]: (input: TerminalRetainedShellOwnersInput) =>
+      observeRpcEffect(
+        WS_METHODS.terminalForgetRetainedShellOwners,
+        context.terminalManager.forgetRetainedShellOwners?.(input) ?? unavailable(),
       ),
   };
 }

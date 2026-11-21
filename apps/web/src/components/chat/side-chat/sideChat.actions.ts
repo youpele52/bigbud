@@ -13,6 +13,7 @@ import { type RemovedComposerThreadReferenceFiles, useComposerDraftStore } from 
 import { useStore } from "~/stores/main";
 import { isSideChatClosing, useSideChatStore } from "~/stores/sideChat";
 import { toastManager } from "~/components/ui/toast";
+import { offerForgetRemoteShell } from "~/lib/threadDeletionRemoteShell";
 import {
   describeThreadDeletionFailure,
   getDeletedThreadIds,
@@ -267,7 +268,9 @@ export function applySideChatLifecycleEvents(
             describeThreadDeletionFailure(event.payload.reason),
           )
         ) {
-          notifiedFailures.add(event.payload.threadId);
+          const threadId = event.payload.threadId;
+          notifiedFailures.add(threadId);
+          void offerForgetRemoteShell({ threadId, retryDelete: () => closeSideChat(threadId) });
         }
         break;
       case "thread.deleted":

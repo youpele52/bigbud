@@ -8,6 +8,7 @@ import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/termin
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types";
 import { assertTerminalGeneration } from "./Manager.session.generation";
+import { knownThreadTerminalIds } from "./Manager.session.shellOwners";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
@@ -104,15 +105,12 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
           );
           return;
         }
-        const sessions = yield* ctx.sessionsForThread(input.threadId);
-        const historyTerminalIds = yield* ctx.historyTerminalIdsForThread(input.threadId);
         yield* assertDirectShellThreadCloseAvailable(
           ctx.directShellOwners,
           input.threadId,
-          historyTerminalIds === "unknown"
-            ? "unknown"
-            : [...sessions.map((session) => session.terminalId), ...historyTerminalIds],
+          yield* knownThreadTerminalIds(ctx, input.threadId),
         );
+        const sessions = yield* ctx.sessionsForThread(input.threadId);
         yield* Effect.forEach(
           sessions,
           (session) =>

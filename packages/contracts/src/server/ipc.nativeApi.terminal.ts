@@ -1,4 +1,5 @@
 import type * as RemoteTerminal from "../workspace/terminal.remote";
+import type * as ShellOwners from "../workspace/terminal.shellOwners";
 import type * as Terminal from "../workspace/terminal";
 import type * as TerminalStream from "../workspace/terminal.stream";
 import type * as TerminalSearch from "../workspace/terminal.search";
@@ -20,6 +21,12 @@ export interface TerminalNativeApi {
   ) => Promise<Terminal.TerminalSessionSnapshot>;
   remoteDetach?: (input: RemoteTerminal.TerminalRemoteDetachInput) => Promise<void>;
   remoteStop?: (input: RemoteTerminal.TerminalRemoteAttachInput) => Promise<void>;
+  retainedShellOwners?: (
+    input: ShellOwners.TerminalRetainedShellOwnersInput,
+  ) => Promise<ShellOwners.TerminalRetainedShellOwners>;
+  forgetRetainedShellOwners?: (
+    input: ShellOwners.TerminalRetainedShellOwnersInput,
+  ) => Promise<ShellOwners.TerminalForgetRetainedShellOwnersResult>;
   shellProfiles?: (input: TerminalShellProfilesInput) => Promise<TerminalShellProfileInventory>;
   recovery?: (
     input: TerminalRecovery.TerminalRecoveryInput,

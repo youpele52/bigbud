@@ -105,6 +105,19 @@ export interface DirectShellLaunchOwnerStore {
     threadId: string,
     isThreadPaneKey?: (ownerKey: string) => boolean,
   ) => Promise<boolean>;
+  /** The owners `hasOwnersForThread` would match, for an explicit user decision. */
+  readonly listForThread?: (
+    threadId: string,
+    isThreadPaneKey: (ownerKey: string) => boolean,
+  ) => Promise<ReadonlyArray<DirectShellLaunchOwner>>;
+  /**
+   * Explicit user recovery only: forgets exactly the owners `listForThread` returns (unchanged
+   * since they were read), never another thread's. The remote shell is not stopped.
+   */
+  readonly forgetForThread?: (
+    threadId: string,
+    isThreadPaneKey: (ownerKey: string) => boolean,
+  ) => Promise<number>;
   readonly get: (ownerKey: string) => Promise<DirectShellLaunchOwner | undefined>;
   readonly reserve: (owner: DirectShellLaunchOwner) => Promise<{
     readonly created: boolean;

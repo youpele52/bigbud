@@ -371,6 +371,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
         mode,
         origin: event.payload.origin,
         deletionEventId: event.eventId,
+        deletionCommandId: event.commandId,
         createdAt,
         outcome,
       });

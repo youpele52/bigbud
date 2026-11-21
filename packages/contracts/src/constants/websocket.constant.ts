@@ -83,6 +83,8 @@ export const WS_METHODS = {
   terminalRemoteAttach: "terminal.remoteAttach",
   terminalRemoteDetach: "terminal.remoteDetach",
   terminalRemoteStop: "terminal.remoteStop",
+  terminalRetainedShellOwners: "terminal.retainedShellOwners",
+  terminalForgetRetainedShellOwners: "terminal.forgetRetainedShellOwners",
   terminalRecovery: "terminal.recovery",
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",

@@ -2,6 +2,13 @@ import type { ThreadRetentionSelectionMode } from "@bigbud/contracts/core/settin
 
 export type ThreadDeletionMode = "single" | "subtree";
 
+/** Command-id prefix of deletions that background thread retention requests. */
+export const RETENTION_DELETION_COMMAND_PREFIX = "server:thread-retention-delete:";
+
+export function isRetentionDeletionCommandId(commandId: string | null | undefined): boolean {
+  return commandId?.startsWith(RETENTION_DELETION_COMMAND_PREFIX) === true;
+}
+
 /**
  * The deletion mode a `thread.retention-delete` requests. The decider writes it into
  * `thread.deletion-requested` and the engine's deletion fence must be held in the same mode:

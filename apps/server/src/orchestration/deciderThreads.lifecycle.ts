@@ -223,6 +223,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         payload: {
           threadId: command.threadId,
           ...(command.reason !== undefined ? { reason: command.reason } : {}),
+          ...(command.initiator !== undefined ? { initiator: command.initiator } : {}),
           updatedAt: command.createdAt,
         },
       };

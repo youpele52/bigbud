@@ -9,6 +9,7 @@ import type { ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { ThreadDeletionOutcome } from "../../deletion/Services/ThreadDeletion.ts";
+import { isRetentionDeletionCommandId } from "../../deletion/Services/ThreadDeletion.mode.ts";
 import { DELETION_FAILURE_DETAIL_MAX_LENGTH } from "../../deletion/Layers/DeletionFailure.detail.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { appendDeletionFailureActivity } from "./ProviderCommandReactorHandlers.delete.cleanup.ts";
@@ -44,17 +45,31 @@ export const abortThreadDeletion = Effect.fn("abortThreadDeletion")(function* (
     readonly mode: "single" | "subtree";
     readonly origin: string | undefined;
     readonly deletionEventId: string;
+    /** Command that requested the deletion; identifies background retention requests. */
+    readonly deletionCommandId: string | null;
     readonly createdAt: string;
     readonly outcome: UndoneThreadDeletionOutcome;
   },
 ) {
   const { outcome } = input;
+  const reason = threadDeletionAbortReason(outcome);
+  const retention = isRetentionDeletionCommandId(input.deletionCommandId);
+  if (retention) {
+    // Nobody is waiting on a background deletion: the run records it as failed, the thread keeps
+    // its activity, and clients do not raise a toast for it.
+    yield* Effect.logWarning("thread retention deletion was undone", {
+      threadId: input.threadId,
+      outcome: outcome.type,
+      reason,
+    });
+  }
   yield* orchestrationEngine.dispatch({
     type: "thread.delete.abort",
     commandId: serverCommandId("thread-delete-abort"),
     threadId: input.threadId,
     mode: input.mode,
-    reason: threadDeletionAbortReason(outcome),
+    reason,
+    ...(retention ? { initiator: "retention" as const } : {}),
     createdAt: input.createdAt,
   });
   if (outcome.type === "failed") {

@@ -66,6 +66,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     remoteAttach: vi.fn(),
     remoteDetach: vi.fn(),
     remoteStop: vi.fn(),
+    retainedShellOwners: vi.fn(),
+    forgetRetainedShellOwners: vi.fn(),
     shellProfiles: vi.fn(),
     wslDistributions: vi.fn(),
     snapshot: vi.fn(),

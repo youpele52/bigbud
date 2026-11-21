@@ -61,15 +61,41 @@ export function getFailedThreadDeletionToast(
  * The toast for a batch's undone deletions, skipping threads whose own surface (a Sidecar that
  * failed to close) already explained the failure: one action shows one toast.
  */
-export function getBatchFailedThreadDeletionToast(input: {
+export function getBatchFailedThreadDeletionToast(
+  input: BatchFailedThreadDeletionsInput,
+): ReturnType<typeof getFailedThreadDeletionToast> {
+  return getFailedThreadDeletionToast(getBatchFailedThreadDeletions(input));
+}
+
+interface BatchFailedThreadDeletionsInput {
   readonly events: ReadonlyArray<OrchestrationEvent>;
   readonly failedThreadIds: ReadonlyArray<ThreadId>;
   readonly alreadyNotifiedThreadIds: ReadonlySet<ThreadId>;
-}): ReturnType<typeof getFailedThreadDeletionToast> {
+}
+
+/**
+ * The undone deletions a person should hear about: not those a Sidecar already explained, and
+ * not background retention deletions (the retention run records those as failed).
+ */
+export function getBatchFailedThreadDeletions(
+  input: BatchFailedThreadDeletionsInput,
+): Array<{ readonly threadId: ThreadId; readonly reason: string | undefined }> {
   const reasons = getThreadDeletionFailureReasons(input.events);
-  return getFailedThreadDeletionToast(
-    input.failedThreadIds
-      .filter((threadId) => !input.alreadyNotifiedThreadIds.has(threadId))
-      .map((threadId) => ({ threadId, reason: reasons.get(threadId) })),
-  );
+  const retention = getRetentionDeletionFailureIds(input.events);
+  return input.failedThreadIds
+    .filter((threadId) => !input.alreadyNotifiedThreadIds.has(threadId) && !retention.has(threadId))
+    .map((threadId) => ({ threadId, reason: reasons.get(threadId) }));
+}
+
+/** Threads whose latest undone deletion in the batch was requested by background retention. */
+export function getRetentionDeletionFailureIds(
+  events: ReadonlyArray<OrchestrationEvent>,
+): ReadonlySet<ThreadId> {
+  const retention = new Set<ThreadId>();
+  for (const event of events) {
+    if (event.type !== "thread.deletion-failed") continue;
+    if (event.payload.initiator === "retention") retention.add(event.payload.threadId);
+    else retention.delete(event.payload.threadId);
+  }
+  return retention;
 }

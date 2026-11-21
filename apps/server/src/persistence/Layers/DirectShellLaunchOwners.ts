@@ -66,18 +66,31 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
         AND owner_json = ${current.text} RETURNING owner_key`);
     return rows.length === 1;
   };
+  // The journal is capped at MAX_OWNERS. Validate stored bindings before trusting scope;
+  // an old opaque hash matches only a pane the caller proves belongs to this thread.
+  const rowsForThread = async (threadId: string, isThreadPaneKey: (key: string) => boolean) => {
+    const rows =
+      await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
+      FROM direct_shell_launch_owners`);
+    return rows
+      .map(decodeRow)
+      .filter(({ owner }) =>
+        owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
+      );
+  };
   return {
-    hasOwnersForThread: async (threadId, isThreadPaneKey = () => true) => {
-      // The journal is capped at MAX_OWNERS. Validate stored bindings before trusting scope;
-      // an old opaque hash matches only a pane the caller proves belongs to this thread.
-      const rows =
-        await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
-        FROM direct_shell_launch_owners`);
-      return rows
-        .map(decodeRow)
-        .some(({ owner }) =>
-          owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
-        );
+    hasOwnersForThread: async (threadId, isThreadPaneKey = () => true) =>
+      (await rowsForThread(threadId, isThreadPaneKey)).length > 0,
+    listForThread: async (threadId, isThreadPaneKey) =>
+      (await rowsForThread(threadId, isThreadPaneKey)).map(({ owner }) => owner),
+    forgetForThread: async (threadId, isThreadPaneKey) => {
+      let forgotten = 0;
+      for (const { owner, text } of await rowsForThread(threadId, isThreadPaneKey)) {
+        const rows = await run(sql`DELETE FROM direct_shell_launch_owners
+          WHERE owner_key = ${owner.ownerKey} AND owner_json = ${text} RETURNING owner_key`);
+        forgotten += rows.length;
+      }
+      return forgotten;
     },
     get: async (key) => (await read(key))?.owner,
     reserve: async (input) => {

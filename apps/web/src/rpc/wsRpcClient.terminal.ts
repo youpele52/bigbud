@@ -13,6 +13,10 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
       transport.request((client) => client[WS_METHODS.terminalRemoteDetach](input)),
     remoteStop: (input) =>
       transport.request((client) => client[WS_METHODS.terminalRemoteStop](input)),
+    retainedShellOwners: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRetainedShellOwners](input)),
+    forgetRetainedShellOwners: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalForgetRetainedShellOwners](input)),
 
     shellProfiles: (input) =>
       transport.request((client) => client[WS_METHODS.terminalShellProfiles](input)),

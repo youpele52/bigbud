@@ -10,12 +10,7 @@ import {
   WsServerGetRemoteRuntimeUpdateStatusRpc,
   WsServerRequestRemoteRuntimeUpdateRpc,
 } from "./rpc.remoteBackendUpdate";
-import {
-  WsTerminalRemoteInventoryRpc,
-  WsTerminalRemoteAttachRpc,
-  WsTerminalRemoteDetachRpc,
-  WsTerminalRemoteStopRpc,
-} from "./rpc.terminalRemote";
+import { TerminalRemoteRpcs } from "./rpc.terminalRemote";
 import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
@@ -347,10 +342,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalSnapshotRpc,
-  WsTerminalRemoteInventoryRpc,
-  WsTerminalRemoteAttachRpc,
-  WsTerminalRemoteDetachRpc,
-  WsTerminalRemoteStopRpc,
+  ...TerminalRemoteRpcs,
   WsTerminalRecoveryRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,

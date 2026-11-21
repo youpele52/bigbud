@@ -21,6 +21,8 @@ export function createNativeTerminalApi(terminal: TerminalRpcClient): NativeApi[
         terminalId: input.terminalId ?? DEFAULT_TERMINAL_ID,
       }),
 
+    retainedShellOwners: (input) => terminal.retainedShellOwners(input),
+    forgetRetainedShellOwners: (input) => terminal.forgetRetainedShellOwners(input),
     shellProfiles: (input) => terminal.shellProfiles(input),
     wslDistributions: () => terminal.wslDistributions(),
     snapshot: (input) => terminal.snapshot(input as never),

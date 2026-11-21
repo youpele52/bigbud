@@ -11,6 +11,7 @@ import type {
   ThreadRetentionRunItem,
 } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { settleRetentionCleanup, settleRetentionDelete } from "./ThreadRetention.direct.settle.ts";
+import { RETENTION_DELETION_COMMAND_PREFIX } from "../../deletion/Services/ThreadDeletion.mode.ts";
 
 const SELECTION_PAGE_SIZE = 250;
 const DELETE_SETTLE_TIMEOUT_MS = 120_000;
@@ -252,7 +253,7 @@ export function runDirectThreadRetentionCoordinated(
       const items = candidates.map((candidate) => ({
         threadId: candidate.threadId,
         expectedLastActivityAt: candidate.lastActivityAt,
-        deletionCommandId: `server:thread-retention-delete:${input.run.runId}:${candidate.threadId}`,
+        deletionCommandId: `${RETENTION_DELETION_COMMAND_PREFIX}${input.run.runId}:${candidate.threadId}`,
         createdAt,
       }));
       const inserted = yield* input.repository.insertSelectedPage({

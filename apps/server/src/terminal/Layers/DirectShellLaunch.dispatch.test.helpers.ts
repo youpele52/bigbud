@@ -87,6 +87,23 @@ export function fixture() {
         owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
       ),
     ),
+    listForThread: vi.fn(async (threadId, isThreadPaneKey) =>
+      [...entries.values()]
+        .filter((owner) =>
+          owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
+        )
+        .map((owner) => structuredClone(owner)),
+    ),
+    forgetForThread: vi.fn(async (threadId, isThreadPaneKey) => {
+      let forgotten = 0;
+      for (const [key, owner] of entries) {
+        if (owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey)) {
+          entries.delete(key);
+          forgotten++;
+        }
+      }
+      return forgotten;
+    }),
     get: vi.fn(async (key) => {
       const owner = entries.get(key);
       return owner && structuredClone(owner);

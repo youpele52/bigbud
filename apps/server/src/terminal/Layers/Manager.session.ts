@@ -9,6 +9,7 @@ import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { subscribeToTerminalEvents } from "./Manager.session.subscription";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types";
 import { makeTerminalClose } from "./Manager.session.close";
+import { makeRetainedShellOwnerApi } from "./Manager.session.shellOwners";
 import { makeTerminalOutputHold } from "./Manager.session.outputHold";
 import { TerminalSearchIndex } from "./Manager.search";
 import { captureTerminalRecovery } from "./Manager.recoveryRpc";
@@ -58,6 +59,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
   return {
     ...makeRemoteTerminalApi(ctx, open, close),
+    ...makeRetainedShellOwnerApi(ctx),
     hasActiveThread: (threadId) =>
       sessionsForThread(threadId).pipe(
         Effect.map((sessions) =>

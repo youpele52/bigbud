@@ -14,6 +14,10 @@ export interface TerminalRpcClient {
   readonly remoteAttach: RpcUnaryMethod<typeof WS_METHODS.terminalRemoteAttach>;
   readonly remoteDetach: RpcUnaryMethod<typeof WS_METHODS.terminalRemoteDetach>;
   readonly remoteStop: RpcUnaryMethod<typeof WS_METHODS.terminalRemoteStop>;
+  readonly retainedShellOwners: RpcUnaryMethod<typeof WS_METHODS.terminalRetainedShellOwners>;
+  readonly forgetRetainedShellOwners: RpcUnaryMethod<
+    typeof WS_METHODS.terminalForgetRetainedShellOwners
+  >;
 
   readonly shellProfiles: RpcUnaryMethod<typeof WS_METHODS.terminalShellProfiles>;
   readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
