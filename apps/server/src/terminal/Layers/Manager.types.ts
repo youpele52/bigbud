@@ -4,6 +4,7 @@ import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type * as Fiber from "effect/Fiber";
 import type { TerminalRecoveryModel } from "./TerminalRecoveryModel";
 import type { TerminalModeTracker } from "./TerminalModeTracker";
+import type { TerminalHistoryRetention } from "./Manager.history.retention";
 
 import type {
   TerminalCwdError,
@@ -84,6 +85,10 @@ export interface TerminalSessionState {
   history: string;
   historyTruncated?: boolean;
   historyUnavailable?: boolean;
+  /** The history begins at a line cut with SGR and modes re-asserted, not at a full baseline. */
+  historyTrimmed?: boolean;
+  /** Boundary scan and visible-text search tail kept by history retention. */
+  historyRetention?: TerminalHistoryRetention | undefined;
   historyBytes?: number;
   historyNewlines?: number;
   historyTail?: string;

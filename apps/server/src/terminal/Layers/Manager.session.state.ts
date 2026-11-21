@@ -9,6 +9,8 @@ export function resetSessionRuntimeState(session: TerminalSessionState): void {
   session.history = "";
   session.historyTruncated = false;
   session.historyUnavailable = false;
+  session.historyTrimmed = false;
+  session.historyRetention = undefined;
   session.historyBytes = 0;
   session.historyNewlines = 0;
   session.historyTail = "";

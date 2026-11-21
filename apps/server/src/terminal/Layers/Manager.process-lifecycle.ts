@@ -122,6 +122,7 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     history: session.history + session.pendingHistoryControlSequence,
     ...(session.historyTruncated ? { historyTruncated: true } : {}),
     ...(session.historyUnavailable ? { historyUnavailable: true } : {}),
+    ...(session.historyTrimmed ? { historyTrimmed: true } : {}),
     ...(session.historyTruncated || session.historyUnavailable
       ? { liveModes: (session.modeTracker ?? new TerminalModeTracker()).snapshot() }
       : {}),
