@@ -1,6 +1,8 @@
 import { ChevronDownIcon } from "lucide-react";
 import type { AnnotationIntent } from "../../stores/composer";
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
+import { ANNOTATION_PANEL_SURFACE_CLASS_NAME } from "./annotationSurface";
 import { useState } from "react";
 
 interface AnnotationComposerPanelProps {
@@ -34,7 +36,10 @@ export function AnnotationComposerPanel({
   return (
     <div
       data-annotation-composer="true"
-      className="rounded-[20px] border border-border bg-card p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]"
+      className={cn(
+        "rounded-[20px] border border-border p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
+        ANNOTATION_PANEL_SURFACE_CLASS_NAME,
+      )}
       style={{ width: fillContainer ? "100%" : "min(420px, calc(100vw - 32px))" }}
     >
       <p id="annotation-composer-title" className="mb-2 text-sm font-medium text-foreground">
@@ -74,7 +79,10 @@ export function AnnotationComposerPanel({
         onChange={(event) => setComment(event.target.value)}
         placeholder={COMMENT_PLACEHOLDER}
         aria-labelledby="annotation-composer-title annotation-composer-target"
-        className="field-sizing-content min-h-[120px] w-full rounded-2xl border border-border bg-card p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45"
+        className={cn(
+          "field-sizing-content min-h-[120px] w-full rounded-2xl border border-border p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45",
+          ANNOTATION_PANEL_SURFACE_CLASS_NAME,
+        )}
       />
       <div className="mt-3 flex justify-end gap-2">
         <Button

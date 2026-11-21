@@ -201,7 +201,7 @@
 }
 
 .chat-markdown .chat-markdown-shiki .shiki {
-  background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
+  background: var(--code-block-background) !important;
 }
 
 .file-preview-code .chat-markdown-shiki .shiki {

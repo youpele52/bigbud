@@ -142,7 +142,7 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
               className={cn(
                 // The viewport has no height of its own: each card must opt out of
                 // window drag regions or its close button is unclickable in Electron.
-                "absolute z-[calc(9999-var(--toast-index))] h-(--toast-calc-height) w-full select-none [-webkit-app-region:no-drag] rounded-lg border bg-(--toast-background) not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+                "absolute z-[calc(9999-var(--toast-index))] h-(--toast-calc-height) w-full select-none [-webkit-app-region:no-drag] rounded-lg border bg-(--popover-solid) not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
                 "min-h-(--toast-min-height) max-h-(--toast-max-height) [--toast-min-height:--spacing(12)] [--toast-max-height:--spacing(30)]",
                 // Severity remains visible even for notifications without an icon.
                 statusSurfaceAccent(toast.type),
