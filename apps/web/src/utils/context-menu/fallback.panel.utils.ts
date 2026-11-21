@@ -1,4 +1,5 @@
 import type { ContextMenuItem } from "@bigbud/contracts";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 
 const ITEM_BASE_CLASS = "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px]";
 const ITEM_CLASS = `${ITEM_BASE_CLASS} text-popover-foreground hover:bg-accent focus:bg-accent focus:outline-none cursor-default`;
@@ -22,8 +23,7 @@ export function createContextMenuPanel<T extends string>(
 ): HTMLElement {
   const panel = document.createElement("div");
   panel.setAttribute("role", "menu");
-  panel.className =
-    "fixed z-[10000] min-w-[140px] rounded-md border border-border bg-popover py-1 shadow-xl animate-in fade-in zoom-in-95";
+  panel.className = `fixed z-[10000] min-w-[140px] rounded-md border border-border ${SOLID_FLOATING_SURFACE_CLASS_NAME} py-1 shadow-xl animate-in fade-in zoom-in-95`;
   const hasChoices = items.some((item) => item.checked !== undefined);
 
   for (const item of items) {

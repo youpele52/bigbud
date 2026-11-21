@@ -2,13 +2,15 @@ import type { ComponentProps } from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 
 /** Shared presentation for terminal find and rename controls; callers own positioning and behavior. */
 export function TerminalInlineBar({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "flex max-w-full items-center gap-1 rounded-xl border border-border bg-popover p-1 shadow-md",
+        "flex max-w-full items-center gap-1 rounded-xl border border-border p-1 shadow-md",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
         className,
       )}
       {...props}

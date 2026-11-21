@@ -20,7 +20,10 @@ vi.mock("~/rpc/nativeApi", () => ({
 import { useCommandPaletteStore, useSearchStore } from "../../stores/ui";
 import { AlertDialog, AlertDialogPopup, AlertDialogTitle } from "../ui/alert-dialog";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { Sheet, SheetPopup, SheetTitle } from "../ui/sheet";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { CommandPaletteDialogContent } from "../layout/CommandPalette.content";
 import { SearchPaletteDialogContent } from "../layout/SearchPalette.content";
 
@@ -102,7 +105,7 @@ describe("window material surfaces", () => {
   });
 });
 
-describe("palettes and dialogs stay opaque in every window material", () => {
+describe("palettes, dialogs, menus, popovers and tooltips stay opaque in every window material", () => {
   afterEach(() => {
     delete html.dataset.desktopShell;
     delete html.dataset.windowMaterial;
@@ -144,6 +147,35 @@ describe("palettes and dialogs stay opaque in every window material", () => {
         );
         try {
           for (const slot of ["dialog-popup", "alert-dialog-popup", "sheet-popup"]) {
+            await vi.waitFor(() => expect(backgroundAlpha(`[data-slot="${slot}"]`)).toBe(1));
+          }
+        } finally {
+          await mounted.unmount();
+        }
+      });
+
+      it(`paints menu, popover and tooltip popups opaque (${mode})`, async () => {
+        setMaterial();
+        const mounted = await render(
+          <>
+            <Menu open>
+              <MenuTrigger>Menu</MenuTrigger>
+              <MenuPopup>
+                <MenuItem>Item</MenuItem>
+              </MenuPopup>
+            </Menu>
+            <Popover open>
+              <PopoverTrigger>Popover</PopoverTrigger>
+              <PopoverPopup>Popover body</PopoverPopup>
+            </Popover>
+            <Tooltip open>
+              <TooltipTrigger>Tooltip</TooltipTrigger>
+              <TooltipPopup>Tooltip body</TooltipPopup>
+            </Tooltip>
+          </>,
+        );
+        try {
+          for (const slot of ["menu-popup", "popover-popup", "tooltip-popup"]) {
             await vi.waitFor(() => expect(backgroundAlpha(`[data-slot="${slot}"]`)).toBe(1));
           }
         } finally {
