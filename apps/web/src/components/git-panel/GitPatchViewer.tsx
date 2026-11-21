@@ -1,9 +1,10 @@
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { FileDiff, Virtualizer } from "@pierre/diffs/react";
 import { useMemo } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
-import { openFileInFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { openRootFileInFilesPanel } from "~/stores/files/filesPanel.open";
 import { DIFF_PANEL_UNSAFE_CSS } from "../diff/DiffPanel.styles";
 import { isDiffFileTitleClick } from "../diff/diffPanelFileOpen.logic";
 import {
@@ -15,9 +16,17 @@ import {
 interface GitPatchViewerProps {
   emptyLabel: string;
   patch: string;
+  /** The folder the patch paths are relative to; files open by absolute path from it. */
+  workspaceRoot: string;
+  executionTargetId?: ExecutionTargetId | undefined;
 }
 
-export function GitPatchViewer({ emptyLabel, patch }: GitPatchViewerProps) {
+export function GitPatchViewer({
+  emptyLabel,
+  patch,
+  workspaceRoot,
+  executionTargetId,
+}: GitPatchViewerProps) {
   const { resolvedTheme } = useTheme();
   const renderablePatch = useMemo(
     () => getRenderablePatch(patch, `git-panel:${resolvedTheme}`),
@@ -60,7 +69,7 @@ export function GitPatchViewer({ emptyLabel, patch }: GitPatchViewerProps) {
               className="overflow-hidden"
               onClickCapture={(event) => {
                 if (!isDiffFileTitleClick(event)) return;
-                openFileInFilesPanel(filePath);
+                openRootFileInFilesPanel(workspaceRoot, filePath, executionTargetId);
               }}
             >
               <FileDiff

@@ -218,6 +218,7 @@ describe("GitPanelContent", () => {
 
     const markup = renderToStaticMarkup(
       <GitPanelHistory
+        workspaceRoot="/repo/project"
         commitDetails={null}
         detailError={null}
         hasMoreHistory={true}
@@ -263,6 +264,7 @@ describe("GitPanelContent", () => {
 
     const markup = renderToStaticMarkup(
       <GitPanelHistory
+        workspaceRoot="/repo/project"
         commitDetails={{
           sha: "abc123",
           shortSha: "abc123",
@@ -299,6 +301,7 @@ describe("GitPanelContent", () => {
   it("shows the history loader only while the empty history query is pending", () => {
     const markup = renderToStaticMarkup(
       <GitPanelHistory
+        workspaceRoot="/repo/project"
         commitDetails={null}
         detailError={null}
         hasMoreHistory={false}
@@ -321,6 +324,7 @@ describe("GitPanelContent", () => {
   it("shows the resolved empty state even if an obsolete detail request is pending", () => {
     const markup = renderToStaticMarkup(
       <GitPanelHistory
+        workspaceRoot="/repo/project"
         commitDetails={null}
         detailError={null}
         hasMoreHistory={false}
@@ -354,6 +358,7 @@ describe("GitPanelContent", () => {
     ];
     const markup = renderToStaticMarkup(
       <GitPanelHistory
+        workspaceRoot="/repo/project"
         commitDetails={null}
         detailError={null}
         hasMoreHistory={false}

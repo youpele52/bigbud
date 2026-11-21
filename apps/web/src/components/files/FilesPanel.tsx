@@ -26,7 +26,11 @@ import {
   useFilesPanelHistory,
   useFilesPanelScrollPersistence,
 } from "./useFilesPanelHistory";
-import { createFilesPanelWorkspaceKey } from "./FilesPanel.workspace";
+import {
+  createFilesPanelWorkspaceKey,
+  resolveFilesPanelWorkspaceRootOverride,
+} from "./FilesPanel.workspace";
+import { FileOpenTargetContext } from "./fileOpenTarget.context";
 import { renderFilesPanelPreviewBody } from "./FilesPanel.previewBody";
 import { pruneRemovedPaths } from "./FilesPanel.pathState";
 
@@ -43,7 +47,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const filesWorkspaceKey = useFilesPanelStore((state) => state.workspaceKey);
   const previewPosition = useFilesPanelStore((state) => state.previewPosition);
   const fileOpenRequest = useFilesPanelStore((state) => state.fileOpenRequest);
-  const workspaceRootOverride = useFilesPanelStore((state) => state.workspaceRootOverride);
+  const requestedWorkspaceRoot = useFilesPanelStore((state) => state.workspaceRootOverride);
   const workspaceExecutionTargetIdOverride = useFilesPanelStore(
     (state) => state.workspaceExecutionTargetIdOverride,
   );
@@ -66,6 +70,12 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     cwd: workspaceRoot,
     executionTargetId: workspaceExecutionTargetId,
   } = useResolvedWorkspace(activeThreadId);
+  const workspaceRootOverride = resolveFilesPanelWorkspaceRootOverride({
+    requestedRoot: requestedWorkspaceRoot,
+    requestedExecutionTargetId: workspaceExecutionTargetIdOverride,
+    workspaceRoot,
+    workspaceExecutionTargetId,
+  });
   const { resolvedTheme } = useTheme();
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
@@ -359,25 +369,27 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   ]);
 
   return (
-    <div ref={panelContainerRef} className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <FilesPanelRefreshCoordinator
-          workspaceRoot={activeWorkspaceRoot}
-          workspaceExecutionTargetId={activeWorkspaceExecutionTargetId}
-          previewPath={previewPath}
-          expandedDirectories={expandedDirectories}
-          directoryStateByPath={directoryStateByPath}
-          loadDirectory={loadDirectory}
-        >
-          {panelBody}
-        </FilesPanelRefreshCoordinator>
+    <FileOpenTargetContext.Provider value={activeWorkspaceExecutionTargetId}>
+      <div ref={panelContainerRef} className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <FilesPanelRefreshCoordinator
+            workspaceRoot={activeWorkspaceRoot}
+            workspaceExecutionTargetId={activeWorkspaceExecutionTargetId}
+            previewPath={previewPath}
+            expandedDirectories={expandedDirectories}
+            directoryStateByPath={directoryStateByPath}
+            loadDirectory={loadDirectory}
+          >
+            {panelBody}
+          </FilesPanelRefreshCoordinator>
+        </div>
+        <FilesPanelContextMenu
+          contextMenuState={contextMenuState}
+          workspaceRoot={activeWorkspaceRoot ?? undefined}
+          threadId={workspaceRootOverride === null ? activeThreadId : null}
+          onClose={closeContextMenu}
+        />
       </div>
-      <FilesPanelContextMenu
-        contextMenuState={contextMenuState}
-        workspaceRoot={activeWorkspaceRoot ?? undefined}
-        threadId={workspaceRootOverride === null ? activeThreadId : null}
-        onClose={closeContextMenu}
-      />
-    </div>
+    </FileOpenTargetContext.Provider>
   );
 });

@@ -122,6 +122,12 @@ describe("createBuildConfig", () => {
         "bigbud uses your microphone for voice input and browser sites you explicitly allow.",
       NSLocationWhenInUseUsageDescription:
         "bigbud shares your location only with browser sites you explicitly allow.",
+      NSDocumentsFolderUsageDescription:
+        "bigbud searches and opens files in Documents only when your File Access setting includes it.",
+      NSDownloadsFolderUsageDescription:
+        "bigbud searches and opens files in Downloads only when your File Access setting includes it.",
+      NSDesktopFolderUsageDescription:
+        "bigbud searches and opens files on the Desktop only when your File Access setting includes it.",
     });
   });
 });

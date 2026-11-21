@@ -1,9 +1,10 @@
 import type { GitStatusResult } from "@bigbud/contracts";
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { cn } from "~/lib/utils";
-import { openFileInFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { openRootFileInFilesPanel } from "~/stores/files/filesPanel.open";
 import { joinWorkspaceEntryPath, writeFilesPanelDragEntry } from "../files/filesPanel.dnd";
 import { showGitChangedFileCopyMenu } from "./GitPanel.copy";
 import { GitPatchViewer } from "./GitPatchViewer";
@@ -17,6 +18,7 @@ interface GitPanelChangesProps {
   onSelectFile: (path: string) => void;
   selectedFilePath: string | null;
   workspaceRoot: string;
+  executionTargetId?: ExecutionTargetId | undefined;
 }
 
 export function GitPanelChanges({
@@ -27,6 +29,7 @@ export function GitPanelChanges({
   onSelectFile,
   selectedFilePath,
   workspaceRoot,
+  executionTargetId,
 }: GitPanelChangesProps) {
   const files = gitStatus.workingTree.files;
   const [visibleCount, setVisibleCount] = useState(20);
@@ -92,7 +95,7 @@ export function GitPanelChanges({
                   onClick={(event) => {
                     onSelectFile(file.path);
                     if ((event.target as HTMLElement).closest("[data-git-file-path]")) {
-                      openFileInFilesPanel(file.path);
+                      openRootFileInFilesPanel(workspaceRoot, file.path, executionTargetId);
                     }
                   }}
                   onContextMenu={(event) => {
@@ -136,7 +139,12 @@ export function GitPanelChanges({
           <BigbudLoader label="Loading diff..." />
         ) : (
           <div className="flex h-full min-h-0 flex-col overflow-hidden">
-            <GitPatchViewer emptyLabel="No diff available for this file." patch={diffPatch} />
+            <GitPatchViewer
+              emptyLabel="No diff available for this file."
+              patch={diffPatch}
+              workspaceRoot={workspaceRoot}
+              executionTargetId={executionTargetId}
+            />
           </div>
         )
       }

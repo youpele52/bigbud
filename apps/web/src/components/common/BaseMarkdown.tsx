@@ -25,6 +25,7 @@ import { openLinkFromClick } from "../../lib/openLink";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../utils/markdown";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
+import { useFileOpenTarget } from "../files/fileOpenTarget.context";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { createSourcePositionPlugin, sourcePositionProps } from "./BaseMarkdown.sourcePositions";
@@ -171,6 +172,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
 }: BaseMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const fileOpenTarget = useFileOpenTarget();
 
   const markdownText = useMemo(
     () => (preserveLineBreaks ? addHardBreaks(text) : text),
@@ -216,7 +218,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
                 onAnchorClick({ href, workspaceRoot: cwd });
                 return;
               }
-              openChatFileTarget(targetPath, cwd);
+              openChatFileTarget(targetPath, cwd, "file", fileOpenTarget);
             }}
             onContextMenu={
               onFileContextMenu
@@ -262,7 +264,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
             onDoubleClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              openChatFileTarget(targetPath, cwd);
+              openChatFileTarget(targetPath, cwd, "file", fileOpenTarget);
             }}
             onContextMenu={
               onFileContextMenu
@@ -332,7 +334,15 @@ export const BaseMarkdown = memo(function BaseMarkdown({
         return <TableCell {...props}>{children}</TableCell>;
       },
     }),
-    [cwd, diffThemeName, isStreaming, onAnchorClick, onFileContextMenu, resolvedTheme],
+    [
+      cwd,
+      diffThemeName,
+      fileOpenTarget,
+      isStreaming,
+      onAnchorClick,
+      onFileContextMenu,
+      resolvedTheme,
+    ],
   );
 
   const rehypePlugins = useMemo(

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { openPathInPreferredApp } from "../../models/editor";
 import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
-import type { ThreadId } from "@bigbud/contracts";
+import { isRemoteExecutionTargetId, type ThreadId } from "@bigbud/contracts";
 import {
   canOpenDirectoryInFilesPanel,
   canOpenPathInBrowserPanel,
@@ -15,6 +15,7 @@ import {
 } from "../../stores/files/filesPanel.open";
 import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { createSharedFileActionItems, type SharedFileActionId } from "./FileActionsMenu.shared";
+import { useFileOpenTarget } from "./fileOpenTarget.context";
 import { dispatchPathCheckpointAction } from "./pathCheckpoint.action";
 import { toastManager } from "../ui/toast";
 import {
@@ -65,6 +66,7 @@ export function FileTargetContextMenu({
   threadId,
 }: FileTargetContextMenuProps) {
   const [open, setOpen] = useState(false);
+  const fileOpenTarget = useFileOpenTarget();
 
   useEffect(() => {
     setOpen(Boolean(targetPath && kind && position));
@@ -101,18 +103,18 @@ export function FileTargetContextMenu({
 
   const handleOpenInBrowser = useCallback(() => {
     if (!targetPath) return;
-    openPathInBrowserPanelIfSupported(targetPath, workspaceRoot);
-  }, [targetPath, workspaceRoot]);
+    openPathInBrowserPanelIfSupported(targetPath, workspaceRoot, fileOpenTarget);
+  }, [fileOpenTarget, targetPath, workspaceRoot]);
 
   const handleOpenInFileViewer = useCallback(() => {
     if (!targetPath) return;
-    openPathInFilesPanelIfSupported(targetPath, workspaceRoot);
-  }, [targetPath, workspaceRoot]);
+    openPathInFilesPanelIfSupported(targetPath, workspaceRoot, fileOpenTarget);
+  }, [fileOpenTarget, targetPath, workspaceRoot]);
 
   const handleOpenDirectoryInternally = useCallback(() => {
     if (!targetPath) return;
-    openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot);
-  }, [targetPath, workspaceRoot]);
+    openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot, fileOpenTarget);
+  }, [fileOpenTarget, targetPath, workspaceRoot]);
 
   const handleSharedAction = useCallback(
     (action: SharedFileActionId) => {
@@ -172,11 +174,13 @@ export function FileTargetContextMenu({
     () =>
       createSharedFileActionItems({
         canSelectAll: false,
-        canOpenExternally: kind === "file" || kind === "directory",
+        // A remote path only exists on its host, never in an app on this computer.
+        canOpenExternally:
+          (kind === "file" || kind === "directory") && !isRemoteExecutionTargetId(fileOpenTarget),
         canCopyRelativePath: Boolean(menuOptions.relativePath),
         canCopyPath: true,
       }),
-    [kind, menuOptions.relativePath],
+    [fileOpenTarget, kind, menuOptions.relativePath],
   );
 
   return (

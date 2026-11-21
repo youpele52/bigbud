@@ -71,13 +71,14 @@ export const ImagePreview = memo(function ImagePreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText: "",
         canSelectAll: false,
       });
     },
-    [absolutePath, relativePath],
+    [absolutePath, executionTargetId, relativePath],
   );
 
   return (

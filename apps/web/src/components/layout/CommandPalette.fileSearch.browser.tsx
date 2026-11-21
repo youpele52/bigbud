@@ -206,6 +206,19 @@ describe("Mod+P file search across sources", () => {
     }
   });
 
+  it("opens another project's file with that project as the Files panel root", async () => {
+    await render(<Harness client={client()} />);
+    await sleep(200);
+    const call = mocks.calls[0]!;
+    emit(call, "otherProjectFiles", ["other.md"]);
+    call.finish();
+    await page.getByText("other.md", { exact: true }).click();
+    // `false`: `/p` is not the current project, so the path never resolves under it.
+    await vi.waitFor(() =>
+      expect(mocks.openPath).toHaveBeenCalledWith("/p/other.md", "/p", "file", "local"),
+    );
+  });
+
   it("searches a remote current project through search.query, never the dialing RPC", async () => {
     await render(<Harness client={client()} target={REMOTE} />);
     await sleep(200);

@@ -68,7 +68,11 @@ export const makeWorkspacePaths = Effect.gen(function* () {
       const local = isLocalExecutionTarget(input.executionTargetId);
       const targetPath = local ? path : posix;
       const normalizedInputPath = input.relativePath;
+      // The root is the explicit absolute folder the client named for this file. A relative root
+      // would resolve against the server's own working directory (never the remote host's).
       if (
+        !targetPath.isAbsolute(input.workspaceRoot) ||
+        input.workspaceRoot.includes("\u0000") ||
         normalizedInputPath.includes("\u0000") ||
         targetPath.isAbsolute(normalizedInputPath) ||
         (local &&

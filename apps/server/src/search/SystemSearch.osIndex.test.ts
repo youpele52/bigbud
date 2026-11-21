@@ -98,6 +98,26 @@ describe("runOsIndexSearch", () => {
     expect(updates.at(-1)).toMatchObject({ tier: "thisComputer", state: "done" });
   });
 
+  it("leaves files inside local project folders to the project tiers", async () => {
+    const agent = fakeOsIndexAgent({
+      hits: [hit("/Users/me/code/app/invoice.ts"), hit("/Users/me/code/application/invoice.ts")],
+    });
+    const { updates, emitter } = collectUpdates("q1", new AbortController().signal);
+    await runOsIndexSearch({
+      gate: GATE,
+      localConnection: async () => agent.connection,
+      home: HOME,
+      projectRoots: ["/Users/me/code/app"],
+      query: "invoice",
+      emitter,
+      signal: new AbortController().signal,
+    });
+    const paths = updates.flatMap((update) =>
+      update.items.map((item) => `${item.root}/${item.path}`),
+    );
+    expect(paths).toEqual(["/Users/me/code/application/invoice.ts"]);
+  });
+
   it("never asks the agent when the server settings turn T5 off", async () => {
     const agent = fakeOsIndexAgent();
     const { updates, running } = run(agent, { ...GATE, fileAccessLevel: "none" });

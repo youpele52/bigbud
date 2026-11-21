@@ -236,6 +236,7 @@ export const FilePreview = memo(function FilePreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText,
@@ -251,7 +252,15 @@ export const FilePreview = memo(function FilePreview({
               },
       });
     },
-    [absolutePath, isMarkdownFile, markdownViewMode, onCreateAnnotation, relativePath, contents],
+    [
+      absolutePath,
+      executionTargetId,
+      isMarkdownFile,
+      markdownViewMode,
+      onCreateAnnotation,
+      relativePath,
+      contents,
+    ],
   );
 
   const handleHeaderContextMenu = useCallback(
@@ -261,13 +270,14 @@ export const FilePreview = memo(function FilePreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText: "",
         canSelectAll: false,
       });
     },
-    [absolutePath, relativePath],
+    [absolutePath, executionTargetId, relativePath],
   );
 
   return (

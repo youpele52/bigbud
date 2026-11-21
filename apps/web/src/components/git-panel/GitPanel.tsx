@@ -203,9 +203,12 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
           onSelectFile={setSelectedFilePath}
           selectedFilePath={selectedFilePath}
           workspaceRoot={cwd}
+          executionTargetId={executionTargetId}
         />
       ) : (
         <GitPanelHistory
+          workspaceRoot={cwd}
+          executionTargetId={executionTargetId}
           commitDetails={commitDetailsQuery.data?.commit ?? null}
           detailError={
             commitDetailsQuery.error instanceof Error

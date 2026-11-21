@@ -16,7 +16,9 @@ import {
 } from "../common/ChatFileTargetContextMenu";
 import { ActivityAccordion } from "../common/ActivityAccordion";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { openChatFileTarget } from "../common/chatFileTargets";
+import { useFileOpenTarget } from "../../files/fileOpenTarget.context";
 
 type UserFileReference = ChatFileAttachment | ChatPathAttachment;
 type UserFileWithSourcePath = ChatFileAttachment & { sourcePath: string };
@@ -65,11 +67,12 @@ export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThr
 function openChatFilePath(
   path: string,
   markdownCwd: string | undefined,
-  kind: "file" | "directory" = "file",
+  kind: "file" | "directory",
+  executionTargetId: ExecutionTargetId | undefined,
 ): void {
   const targetPath = resolveMarkdownFileLinkTarget(path, markdownCwd);
   if (!targetPath) return;
-  openChatFileTarget(targetPath, markdownCwd, kind);
+  openChatFileTarget(targetPath, markdownCwd, kind, executionTargetId);
 }
 
 export function UserFileReferenceChips(props: {
@@ -78,6 +81,7 @@ export function UserFileReferenceChips(props: {
   resolvedTheme: VscodeIconTheme;
 }) {
   const { contextMenuState, hideContextMenu, showContextMenu } = useChatFileTargetContextMenu();
+  const fileOpenTarget = useFileOpenTarget();
 
   if (props.files.length === 0) return null;
 
@@ -104,7 +108,7 @@ export function UserFileReferenceChips(props: {
                   ? (event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      openChatFilePath(fileTargetPath, props.markdownCwd, kind);
+                      openChatFilePath(fileTargetPath, props.markdownCwd, kind, fileOpenTarget);
                     }
                   : undefined
               }
@@ -151,6 +155,7 @@ export function UserFileSourcePaths(props: {
   resolvedTheme: VscodeIconTheme;
 }) {
   const { contextMenuState, hideContextMenu, showContextMenu } = useChatFileTargetContextMenu();
+  const fileOpenTarget = useFileOpenTarget();
 
   if (props.files.length === 0) return null;
 
@@ -172,7 +177,7 @@ export function UserFileSourcePaths(props: {
             onDoubleClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              openChatFilePath(file.sourcePath, props.markdownCwd);
+              openChatFilePath(file.sourcePath, props.markdownCwd, "file", fileOpenTarget);
             }}
             onContextMenu={(event) => {
               event.preventDefault();

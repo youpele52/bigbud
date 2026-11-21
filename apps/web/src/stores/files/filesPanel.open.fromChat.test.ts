@@ -43,21 +43,21 @@ describe("openPathFromChat", () => {
       );
 
       expect(useFilesPanelStore.getState()).toMatchObject({
-        workspaceRootOverride: null,
+        workspaceRootOverride: workspaceRoot,
         workspaceExecutionTargetIdOverride: executionTargetId,
         fileOpenRequest: {
           path: "src/main.ts",
           position: { line: 8, column: 3 },
-          workspaceRootOverride: null,
+          workspaceRootOverride: workspaceRoot,
         },
       });
 
       await openPathFromChat(`${workspaceRoot}/src`, workspaceRoot, "directory", executionTargetId);
 
       expect(useFilesPanelStore.getState()).toMatchObject({
-        workspaceRootOverride: null,
+        workspaceRootOverride: workspaceRoot,
         workspaceExecutionTargetIdOverride: executionTargetId,
-        directoryNavigationRequest: { path: "src", workspaceRootOverride: null },
+        directoryNavigationRequest: { path: "src", workspaceRootOverride: workspaceRoot },
       });
     },
   );
@@ -109,7 +109,7 @@ describe("openPathFromChat", () => {
       "local",
     );
     expect(useFilesPanelStore.getState()).toMatchObject({
-      workspaceRootOverride: null,
+      workspaceRootOverride: "/Users/alice/project",
       workspaceExecutionTargetIdOverride: "local",
       fileOpenRequest: { path: "local.md", requestId: 2 },
     });
@@ -139,11 +139,11 @@ describe("openPathFromChat", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
-      workspaceRootOverride: null,
+      workspaceRootOverride: "/Users/alice/project",
       fileOpenRequest: {
         path: "README.md",
         position: null,
-        workspaceRootOverride: null,
+        workspaceRootOverride: "/Users/alice/project",
         requestId: 1,
       },
     });
@@ -167,6 +167,29 @@ describe("openPathFromChat", () => {
     });
   });
 
+  it("opens another project's search row by absolute path, rooted at that project", async () => {
+    resetFilesPanelState();
+    const otherRoot = "/Users/alice/other-project";
+
+    // Search passes the row's own root; the current project is never consulted.
+    await openPathFromChat(`${otherRoot}/src/a.ts:4`, otherRoot);
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      workspaceRootOverride: otherRoot,
+      fileOpenRequest: {
+        path: "src/a.ts",
+        position: { line: 4, column: null },
+        workspaceRootOverride: otherRoot,
+      },
+    });
+
+    await openPathFromChat(`${otherRoot}/src`, `${otherRoot}/`, "directory", "ssh:vps");
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      workspaceRootOverride: otherRoot,
+      workspaceExecutionTargetIdOverride: "ssh:vps",
+      directoryNavigationRequest: { path: "src", workspaceRootOverride: otherRoot },
+    });
+  });
+
   it("opens workspace directories in the files panel tree", async () => {
     resetFilesPanelState();
 
@@ -178,11 +201,11 @@ describe("openPathFromChat", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
-      workspaceRootOverride: null,
+      workspaceRootOverride: "/Users/alice/project",
       previewPath: null,
       directoryNavigationRequest: {
         path: "src/components",
-        workspaceRootOverride: null,
+        workspaceRootOverride: "/Users/alice/project",
         requestId: 1,
       },
     });

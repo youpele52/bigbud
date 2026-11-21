@@ -1,4 +1,5 @@
 import { type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
+import { useOpenedFileRank } from "./SearchPalette.frecency";
 import type { SystemSearchTier } from "@bigbud/contracts/search/systemSearch.ts";
 import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -147,12 +148,13 @@ export function useSearchPaletteSources(input: {
     [activeFileSearchContext, normalizedQuery],
   );
 
+  const openedRank = useOpenedFileRank();
   const tiers: SearchPaletteTiers = {
     currentThread: { messages: messageTiers.currentThread, terminals: terminalTiers.currentThread },
     currentProject: {
       messages: messageTiers.currentProject,
       threads: threadTiers.currentProject,
-      files: systemSearchTierRows(fastStream.view, "currentProject"),
+      files: systemSearchTierRows(fastStream.view, "currentProject", openedRank),
     },
     bigbudData: {
       messages: messageTiers.other,
@@ -160,10 +162,12 @@ export function useSearchPaletteSources(input: {
       projects: projectResults,
       terminals: terminalTiers.other,
     },
-    otherProjectFiles: { files: systemSearchTierRows(slowStream.view, "otherProjectFiles") },
-    thisComputer: { files: systemSearchTierRows(slowStream.view, "thisComputer") },
+    otherProjectFiles: {
+      files: systemSearchTierRows(slowStream.view, "otherProjectFiles", openedRank),
+    },
+    thisComputer: { files: systemSearchTierRows(slowStream.view, "thisComputer", openedRank) },
     remoteOutsideProjects: {
-      files: systemSearchTierRows(slowStream.view, "remoteOutsideProjects"),
+      files: systemSearchTierRows(slowStream.view, "remoteOutsideProjects", openedRank),
     },
   };
 

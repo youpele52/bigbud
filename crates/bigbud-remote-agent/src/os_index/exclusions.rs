@@ -23,6 +23,9 @@ pub struct Exclusions {
     path_segments: Vec<Vec<String>>,
     /// Glob patterns (`*` only) matched against every component below the search scope.
     file_names: Vec<String>,
+    /// Dependency, build and cache folders (`clutterFolders`): not private, only noise, so
+    /// matching rows are skipped below the scope without counting as excluded.
+    clutter_folders: Vec<Vec<String>>,
 }
 
 impl Exclusions {
@@ -40,20 +43,8 @@ impl Exclusions {
     pub fn parse(json: &str) -> Result<Self, OsIndexError> {
         let value: Value =
             serde_json::from_str(json).map_err(|_| OsIndexError::ExclusionsInvalid)?;
-        let path_segments = string_list(&value, "pathSegments")?
-            .into_iter()
-            .map(|pattern| {
-                let components: Vec<String> = pattern.split('/').map(str::to_owned).collect();
-                let valid = components.iter().all(|component| {
-                    !component.is_empty() && component != "." && component != ".."
-                });
-                if valid {
-                    Ok(components)
-                } else {
-                    Err(OsIndexError::ExclusionsInvalid)
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let path_segments = segment_patterns(string_list(&value, "pathSegments")?)?;
+        let clutter_folders = segment_patterns(string_list(&value, "clutterFolders")?)?;
         let file_names = string_list(&value, "fileNames")?;
         if file_names.iter().any(|name| name.contains('/')) {
             return Err(OsIndexError::ExclusionsInvalid);
@@ -61,6 +52,7 @@ impl Exclusions {
         Ok(Self {
             path_segments,
             file_names,
+            clutter_folders,
         })
     }
 
@@ -74,6 +66,11 @@ impl Exclusions {
                 .any(|component| self.matches_component(component))
     }
 
+    /// Whether a result lies in a dependency, build or cache folder below its scope.
+    pub fn is_clutter(&self, below_scope: &Path) -> bool {
+        segments_match(&self.clutter_folders, below_scope)
+    }
+
     /// Whether a folder may not be used as a search scope at all.
     pub fn excludes_scope(&self, scope: &Path) -> bool {
         self.matches_segments(scope)
@@ -83,21 +80,7 @@ impl Exclusions {
     }
 
     fn matches_segments(&self, path: &Path) -> bool {
-        let names: Vec<&[u8]> = path
-            .components()
-            .filter_map(|component| match component {
-                Component::Normal(name) => Some(name.as_encoded_bytes()),
-                _ => None,
-            })
-            .collect();
-        self.path_segments.iter().any(|pattern| {
-            names.windows(pattern.len()).any(|window| {
-                window
-                    .iter()
-                    .zip(pattern)
-                    .all(|(name, part)| glob_matches(part.as_bytes(), name))
-            })
-        })
+        segments_match(&self.path_segments, path)
     }
 
     fn matches_component(&self, component: Component<'_>) -> bool {
@@ -113,6 +96,43 @@ impl Exclusions {
             .iter()
             .any(|pattern| glob_matches(pattern.as_bytes(), name))
     }
+}
+
+/// Whether any pattern (a run of consecutive components) occurs in `path`.
+fn segments_match(patterns: &[Vec<String>], path: &Path) -> bool {
+    let names: Vec<&[u8]> = path
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.as_encoded_bytes()),
+            _ => None,
+        })
+        .collect();
+    patterns.iter().any(|pattern| {
+        names.windows(pattern.len()).any(|window| {
+            window
+                .iter()
+                .zip(pattern)
+                .all(|(name, part)| glob_matches(part.as_bytes(), name))
+        })
+    })
+}
+
+/// Splits `a/b` patterns into components, rejecting empty, `.` and `..` components.
+fn segment_patterns(patterns: Vec<String>) -> Result<Vec<Vec<String>>, OsIndexError> {
+    patterns
+        .into_iter()
+        .map(|pattern| {
+            let components: Vec<String> = pattern.split('/').map(str::to_owned).collect();
+            let valid = components
+                .iter()
+                .all(|component| !component.is_empty() && component != "." && component != "..");
+            if valid {
+                Ok(components)
+            } else {
+                Err(OsIndexError::ExclusionsInvalid)
+            }
+        })
+        .collect()
 }
 
 fn string_list(value: &Value, key: &str) -> Result<Vec<String>, OsIndexError> {

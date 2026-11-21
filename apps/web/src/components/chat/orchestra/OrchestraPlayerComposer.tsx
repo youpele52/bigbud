@@ -11,7 +11,7 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 
-import { openChatFileTarget } from "../common/chatFileTargets";
+import { openDiscoveredSourcePath } from "../common/chatFileTargets";
 import { ComposerAttachmentMenu } from "../composer/ComposerAttachmentMenu";
 import { ComposerCommandMenu } from "../composer/ComposerCommandMenu";
 import { ComposerListeningBar } from "../composer/ComposerListeningBar";
@@ -110,7 +110,7 @@ export function OrchestraPlayerComposer(props: {
                   const sourcePath =
                     item.type === "agent" ? item.agent.sourcePath : item.skill.sourcePath;
                   if (!sourcePath) return;
-                  openChatFileTarget(sourcePath, props.activeProjectCwd ?? undefined);
+                  openDiscoveredSourcePath(sourcePath);
                 }}
               />
             </div>

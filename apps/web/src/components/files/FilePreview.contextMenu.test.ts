@@ -52,6 +52,18 @@ describe("FilePreview.contextMenu", () => {
     ]);
   });
 
+  it("never offers to open a remote file in an app on this computer", () => {
+    const ids = (canOpenExternally: boolean) =>
+      createFilePreviewContextMenuItems({
+        hasSelectedText: false,
+        canSelectAll: false,
+        canAnnotateSelection: false,
+        canOpenExternally,
+      }).map((item) => item.id);
+    expect(ids(false)).not.toContain("open-externally");
+    expect(ids(true)).toContain("open-externally");
+  });
+
   it("copies the relative path when requested", async () => {
     await runFilePreviewContextMenuAction({
       action: "copy-relative-path",

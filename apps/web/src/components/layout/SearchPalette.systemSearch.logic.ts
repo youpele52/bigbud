@@ -8,6 +8,7 @@ import {
   type SystemSearchTier,
   type SystemSearchTierUpdate,
 } from "@bigbud/contracts/search/systemSearch.ts";
+import { boostOpenedFiles } from "./SearchPalette.frecency.logic";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
 
 import { osIndexWording } from "~/lib/osIndexWording";
@@ -122,8 +123,12 @@ export function applySystemSearchUpdate(
 export function systemSearchTierRows(
   view: SystemSearchView,
   tier: SystemSearchTier,
+  openedRank: ReadonlyMap<string, number> = new Map(),
 ): SystemSearchHit[] {
-  return view.sources.filter((source) => source.tier === tier).flatMap((source) => source.items);
+  const rows = view.sources
+    .filter((source) => source.tier === tier)
+    .flatMap((source) => source.items);
+  return boostOpenedFiles(rows, openedRank);
 }
 
 /** The freshness caveat for a view's T5 rows, from the OS index that answered (`locate`). */

@@ -1,3 +1,4 @@
+import type { ExecutionTargetId } from "@bigbud/contracts";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import type { SelectedLineRange } from "@pierre/diffs";
 import { useEffect, type RefObject } from "react";
@@ -18,6 +19,8 @@ export function useDiffAnnotateContextMenu(input: {
   readonly viewportRef: RefObject<HTMLElement | null>;
   readonly canAnnotate: boolean;
   readonly cwd: string | null | undefined;
+  /** The target `cwd` is on; remote files are never handed to an app on this computer. */
+  readonly executionTargetId?: ExecutionTargetId | undefined;
   readonly fileDiffByPath: ReadonlyMap<string, FileDiffMetadata>;
   readonly pierreLineSelectionsRef: RefObject<ReadonlyMap<string, SelectedLineRange | null>>;
   readonly diffStyle?: "unified" | "split";
@@ -27,6 +30,7 @@ export function useDiffAnnotateContextMenu(input: {
     viewportRef,
     canAnnotate,
     cwd,
+    executionTargetId,
     fileDiffByPath,
     pierreLineSelectionsRef,
     diffStyle,
@@ -88,6 +92,7 @@ export function useDiffAnnotateContextMenu(input: {
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath: buildAbsolutePreviewPath(cwd, target.filePath),
         relativePath: target.filePath,
         selectedText,
@@ -118,6 +123,7 @@ export function useDiffAnnotateContextMenu(input: {
     canAnnotate,
     cwd,
     diffStyle,
+    executionTargetId,
     fileDiffByPath,
     onAnnotateRequest,
     pierreLineSelectionsRef,

@@ -1,4 +1,5 @@
 import { ChatGreeting } from "../common/ChatGreeting";
+import { FileOpenTargetContext } from "../../files/fileOpenTarget.context";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
@@ -310,81 +311,83 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
   return (
     <TimelineThreadIdContext.Provider value={serverThreadId}>
-      <div
-        ref={timelineRootRef}
-        data-timeline-root="true"
-        className={`${CHAT_COLUMN_CLASS_NAME} overflow-x-hidden`}
-      >
-        <OlderMessagesStatusRow status={olderPages.status} onRetry={olderPages.retry} />
-        {virtualizedRowCount > 0 && (
-          <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
-            <VirtualizedMessagesTimelineRows
-              rows={rows}
-              virtualRows={virtualRows}
-              measureElement={rowVirtualizer.measureElement}
-              expandedWorkGroups={expandedWorkGroups}
-              onToggleWorkGroup={onToggleWorkGroup}
-              activityAccordionOpenById={activityAccordionOpenById}
-              onSetActivityAccordionOpen={onSetActivityAccordionOpen}
-              completionSummary={completionSummary}
-              turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-              changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
-              onSetChangedFilesExpanded={onSetChangedFilesExpanded}
-              onOpenTurnDiff={onOpenTurnDiff}
-              revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
-              onRevertUserMessage={onRevertUserMessage}
-              isRevertingCheckpoint={isRevertingCheckpoint}
-              onImageExpand={onImageExpand}
-              markdownCwd={markdownCwd}
-              preferredProvider={preferredProvider}
-              resolvedTheme={resolvedTheme}
-              nowIso={nowIso}
-              timestampFormat={timestampFormat}
-              workspaceRoot={workspaceRoot}
-              onMarkdownAnchorClick={onMarkdownAnchorClick}
-              workspaceExecutionTargetId={workspaceExecutionTargetId}
-              focusedMessageId={focusedMessageId}
-              onReplyToMessage={onReplyToMessage}
-              onOpenReplySource={onOpenReplySource}
-              {...(onBranchThread ? { onBranchThread } : {})}
-              isWorking={isWorking}
-              onTimelineImageLoad={onTimelineImageLoad}
-            />
-          </div>
-        )}
+      <FileOpenTargetContext.Provider value={workspaceExecutionTargetId}>
+        <div
+          ref={timelineRootRef}
+          data-timeline-root="true"
+          className={`${CHAT_COLUMN_CLASS_NAME} overflow-x-hidden`}
+        >
+          <OlderMessagesStatusRow status={olderPages.status} onRetry={olderPages.retry} />
+          {virtualizedRowCount > 0 && (
+            <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+              <VirtualizedMessagesTimelineRows
+                rows={rows}
+                virtualRows={virtualRows}
+                measureElement={rowVirtualizer.measureElement}
+                expandedWorkGroups={expandedWorkGroups}
+                onToggleWorkGroup={onToggleWorkGroup}
+                activityAccordionOpenById={activityAccordionOpenById}
+                onSetActivityAccordionOpen={onSetActivityAccordionOpen}
+                completionSummary={completionSummary}
+                turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+                changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
+                onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+                onOpenTurnDiff={onOpenTurnDiff}
+                revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
+                onRevertUserMessage={onRevertUserMessage}
+                isRevertingCheckpoint={isRevertingCheckpoint}
+                onImageExpand={onImageExpand}
+                markdownCwd={markdownCwd}
+                preferredProvider={preferredProvider}
+                resolvedTheme={resolvedTheme}
+                nowIso={nowIso}
+                timestampFormat={timestampFormat}
+                workspaceRoot={workspaceRoot}
+                onMarkdownAnchorClick={onMarkdownAnchorClick}
+                workspaceExecutionTargetId={workspaceExecutionTargetId}
+                focusedMessageId={focusedMessageId}
+                onReplyToMessage={onReplyToMessage}
+                onOpenReplySource={onOpenReplySource}
+                {...(onBranchThread ? { onBranchThread } : {})}
+                isWorking={isWorking}
+                onTimelineImageLoad={onTimelineImageLoad}
+              />
+            </div>
+          )}
 
-        <NonVirtualizedMessagesTimelineRows
-          rows={nonVirtualizedRows}
-          measurementScopeKey={virtualMeasurementScopeKey}
-          expandedWorkGroups={expandedWorkGroups}
-          onToggleWorkGroup={onToggleWorkGroup}
-          activityAccordionOpenById={activityAccordionOpenById}
-          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
-          completionSummary={completionSummary}
-          turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-          changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
-          onSetChangedFilesExpanded={onSetChangedFilesExpanded}
-          onOpenTurnDiff={onOpenTurnDiff}
-          revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
-          onRevertUserMessage={onRevertUserMessage}
-          isRevertingCheckpoint={isRevertingCheckpoint}
-          onImageExpand={onImageExpand}
-          markdownCwd={markdownCwd}
-          preferredProvider={preferredProvider}
-          resolvedTheme={resolvedTheme}
-          nowIso={nowIso}
-          timestampFormat={timestampFormat}
-          workspaceRoot={workspaceRoot}
-          onMarkdownAnchorClick={onMarkdownAnchorClick}
-          workspaceExecutionTargetId={workspaceExecutionTargetId}
-          focusedMessageId={focusedMessageId}
-          onReplyToMessage={onReplyToMessage}
-          onOpenReplySource={onOpenReplySource}
-          {...(onBranchThread ? { onBranchThread } : {})}
-          isWorking={isWorking}
-          onTimelineImageLoad={onTimelineImageLoad}
-        />
-      </div>
+          <NonVirtualizedMessagesTimelineRows
+            rows={nonVirtualizedRows}
+            measurementScopeKey={virtualMeasurementScopeKey}
+            expandedWorkGroups={expandedWorkGroups}
+            onToggleWorkGroup={onToggleWorkGroup}
+            activityAccordionOpenById={activityAccordionOpenById}
+            onSetActivityAccordionOpen={onSetActivityAccordionOpen}
+            completionSummary={completionSummary}
+            turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+            changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
+            onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+            onOpenTurnDiff={onOpenTurnDiff}
+            revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
+            onRevertUserMessage={onRevertUserMessage}
+            isRevertingCheckpoint={isRevertingCheckpoint}
+            onImageExpand={onImageExpand}
+            markdownCwd={markdownCwd}
+            preferredProvider={preferredProvider}
+            resolvedTheme={resolvedTheme}
+            nowIso={nowIso}
+            timestampFormat={timestampFormat}
+            workspaceRoot={workspaceRoot}
+            onMarkdownAnchorClick={onMarkdownAnchorClick}
+            workspaceExecutionTargetId={workspaceExecutionTargetId}
+            focusedMessageId={focusedMessageId}
+            onReplyToMessage={onReplyToMessage}
+            onOpenReplySource={onOpenReplySource}
+            {...(onBranchThread ? { onBranchThread } : {})}
+            isWorking={isWorking}
+            onTimelineImageLoad={onTimelineImageLoad}
+          />
+        </div>
+      </FileOpenTargetContext.Provider>
     </TimelineThreadIdContext.Provider>
   );
 });

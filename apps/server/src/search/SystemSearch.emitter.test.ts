@@ -41,6 +41,31 @@ describe("SystemSearchEmitter", () => {
     expect(updates.at(-1)).toMatchObject({ truncated: true, state: "partial" });
   });
 
+  it("keeps reserved rows for this computer however much the project tiers fill first", () => {
+    const updates: SystemSearchTierUpdate[] = [];
+    const emitter = new SystemSearchEmitter(
+      "q",
+      new AbortController().signal,
+      (u) => updates.push(u),
+      3,
+      false,
+      { thisComputer: 2 },
+    );
+    expect(emitter.rowsFor({ tier: "currentProject", sourceId: "local", items: rows(3) })).toBe(
+      true,
+    );
+    expect(
+      emitter.rowsFor({ tier: "otherProjectFiles", sourceId: "local", items: rows(1, "o") }),
+    ).toBe(false);
+    expect(
+      emitter.rowsFor({ tier: "thisComputer", sourceId: "spotlight", items: rows(3, "t") }),
+    ).toBe(false);
+    const computerRows = updates
+      .filter((update) => update.tier === "thisComputer")
+      .flatMap((update) => update.items.map((item) => item.id));
+    expect(computerRows).toEqual(["t0", "t1"]);
+  });
+
   it("emits nothing once the query is aborted", () => {
     const updates: SystemSearchTierUpdate[] = [];
     const controller = new AbortController();

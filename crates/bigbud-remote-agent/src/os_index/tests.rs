@@ -7,7 +7,7 @@ use super::error::OsIndexError;
 use super::exclusions::Exclusions;
 use super::predicate::{escape_query_literal, name_predicate};
 use super::request::OsIndexRequest;
-use super::results::{RawOsIndexHit, finish_hits};
+use super::results::{RawOsIndexHit, finish_hits, select_top_paths};
 use crate::search::StopReason;
 
 /// A canonical temporary folder, removed on drop.
@@ -152,6 +152,55 @@ fn excluded_and_out_of_scope_rows_never_leave_the_module() {
     assert_eq!(outcome.out_of_scope, 4);
     assert_eq!(outcome.stop, StopReason::Complete);
     assert!(!outcome.truncated);
+}
+
+#[test]
+fn path_first_selection_filters_clutter_and_ranks_before_reading_attributes() {
+    let fixture = Fixture::new();
+    let request = request(&fixture, "report", 50);
+    let docs = fixture.path().join("Documents");
+    let path = |below: &str| Some(docs.join(below).to_str().unwrap().to_owned());
+    // Index order is Spotlight's recency order; `None` is a row whose path could not be read.
+    let paths = vec![
+        path("app/node_modules/next/report"),
+        path("old/monthly-report-draft.txt"),
+        path("app/target/debug/report"),
+        None,
+        Some("/etc/report".to_owned()),
+        path(".ssh/report"),
+        path("report"),
+        path("Report.pdf"),
+        path("site/.venv/lib/report.py"),
+    ];
+    let exclusions = Exclusions::embedded().unwrap();
+    // Exact names first, then the earlier (more recent) row of equal score; clutter, private,
+    // unreadable and out-of-scope rows are never selected.
+    assert_eq!(
+        select_top_paths(&request, exclusions, &paths, 10),
+        [6, 7, 1]
+    );
+    assert_eq!(select_top_paths(&request, exclusions, &paths, 1), [6]);
+}
+
+#[test]
+fn clutter_rows_never_leave_the_module_and_are_not_counted_as_private() {
+    let fixture = Fixture::new();
+    let request = request(&fixture, "report", 50);
+    let docs = fixture.path().join("Documents");
+    let raw = vec![
+        row(docs.join("web/node_modules/report.js"), 0),
+        row(docs.join("repo/.git/report"), 0),
+        row(docs.join("report.md"), 0),
+    ];
+    let outcome = finish_hits(
+        &request,
+        Exclusions::embedded().unwrap(),
+        raw,
+        StopReason::Complete,
+    );
+    let returned: Vec<&str> = outcome.hits.iter().map(|hit| hit.path.as_str()).collect();
+    assert_eq!(returned, [docs.join("report.md").to_str().unwrap()]);
+    assert_eq!(outcome.excluded, 0);
 }
 
 #[test]
