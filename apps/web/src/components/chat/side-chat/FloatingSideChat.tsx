@@ -20,8 +20,10 @@ import {
   type ThreadComposerSurfaceContext,
 } from "~/components/chat/view/ThreadComposerSurface";
 import { Button } from "~/components/ui/button";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
+import { cn } from "~/lib/utils";
 import { useSideChatStore } from "~/stores/sideChat";
 import type { PendingApproval } from "~/logic/session";
 
@@ -304,7 +306,10 @@ export function FloatingSideChat({
     <div
       ref={panelRef}
       data-chat-focus-scope="true"
-      className="absolute right-3 z-30 flex h-[min(66dvh,var(--side-chat-available-height,66dvh))] min-h-0 max-h-[var(--side-chat-available-height,calc(100dvh-1.5rem))] w-[min(32rem,calc(50%-0.75rem))] resize-y flex-col overflow-hidden rounded-[24px] border border-border/80 bg-background/92 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)] supports-[backdrop-filter]:bg-background/80 supports-[backdrop-filter]:backdrop-blur-md"
+      className={cn(
+        "absolute right-3 z-30 flex h-[min(66dvh,var(--side-chat-available-height,66dvh))] min-h-0 max-h-[var(--side-chat-available-height,calc(100dvh-1.5rem))] w-[min(32rem,calc(50%-0.75rem))] resize-y flex-col overflow-hidden rounded-[24px] border border-border/80 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
+      )}
       style={{ bottom: "calc(var(--side-chat-composer-height, 7rem) + 0.75rem)" }}
     >
       <ThreadComposerSurface threadId={threadId}>

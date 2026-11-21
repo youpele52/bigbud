@@ -2,6 +2,7 @@ import { dismissUnconfirmedTerminalPane } from "./terminalLifecycle.dismiss";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 import { useTerminalLifecycle } from "../../stores/terminal/terminalLifecycle.store";
 
 export function TerminalLifecycleLabel({
@@ -43,7 +44,8 @@ export function TerminalLifecycleStatus({
   return (
     <div
       className={cn(
-        "absolute z-10 flex items-center gap-2 rounded border bg-background/95 px-2 py-1 text-sm shadow-sm",
+        "absolute z-10 flex items-center gap-2 rounded border px-2 py-1 text-sm shadow-sm",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
         !failed
           ? "left-1/2 top-1/2 w-max max-w-[calc(100%-0.5rem)] -translate-x-1/2 -translate-y-1/2"
           : "inset-x-1 top-1",

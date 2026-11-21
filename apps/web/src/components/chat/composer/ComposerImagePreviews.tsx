@@ -1,5 +1,7 @@
 import { CircleAlertIcon, XIcon } from "lucide-react";
 import { Button } from "../../ui/button";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../../ui/solidSurface";
+import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import {
   buildExpandedImagePreview,
@@ -54,7 +56,10 @@ export function ComposerImagePreviews({
                   <span
                     role="img"
                     aria-label="Draft attachment may not persist"
-                    className="absolute left-1 top-1 inline-flex items-center justify-center rounded bg-background/85 p-0.5 text-warning-foreground"
+                    className={cn(
+                      "absolute left-1 top-1 inline-flex items-center justify-center rounded p-0.5 text-warning-foreground",
+                      SOLID_FLOATING_SURFACE_CLASS_NAME,
+                    )}
                   >
                     <CircleAlertIcon className="size-3" />
                   </span>
@@ -68,7 +73,10 @@ export function ComposerImagePreviews({
           <Button
             variant="ghost"
             size="icon-xs"
-            className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
+            className={cn(
+              "absolute right-1 top-1 hover:bg-(--popover-solid)",
+              SOLID_FLOATING_SURFACE_CLASS_NAME,
+            )}
             onClick={() => onRemoveImage(image.id)}
             aria-label={`Remove ${image.name}`}
           >

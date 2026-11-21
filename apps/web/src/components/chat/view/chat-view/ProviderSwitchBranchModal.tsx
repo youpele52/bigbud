@@ -1,7 +1,9 @@
 import { Button } from "../../../ui/button";
 import { Card } from "../../../ui/card";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../../../ui/solidSurface";
 import { Alert, AlertDescription } from "../../../ui/alert";
 import { Loader2Icon } from "lucide-react";
+import { cn } from "~/lib/utils";
 
 export type ProviderSwitchBranchMode = "handoff" | "conversation";
 
@@ -32,7 +34,12 @@ export function ProviderSwitchBranchModal({
         className="absolute inset-0 bg-background/60 backdrop-blur-[1px]"
         onClick={onCancel}
       />
-      <Card className="relative w-full max-w-sm border-border/80 p-5 shadow-lg/10">
+      <Card
+        className={cn(
+          "relative w-full max-w-sm border-border/80 p-5 shadow-lg/10 hover:bg-(--popover-solid)",
+          SOLID_FLOATING_SURFACE_CLASS_NAME,
+        )}
+      >
         <div className="space-y-4">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold">Start a new {targetLabel} branch?</h2>

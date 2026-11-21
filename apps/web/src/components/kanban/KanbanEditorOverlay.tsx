@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
@@ -72,7 +73,8 @@ export function KanbanEditorOverlay({
     >
       <div
         className={cn(
-          "flex overflow-hidden rounded-[20px] border border-border bg-card p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
+          "flex overflow-hidden rounded-[20px] border border-border p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
+          SOLID_FLOATING_SURFACE_CLASS_NAME,
           isExpanded
             ? "h-[85%] w-[85%]"
             : "h-[26rem] min-h-[20rem] w-[min(32rem,calc(50%-1rem))] min-w-[20rem] max-w-[calc(50%-1rem)] max-h-[calc(50%-1.5rem)] resize",

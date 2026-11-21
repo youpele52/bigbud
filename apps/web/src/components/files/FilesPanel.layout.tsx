@@ -1,5 +1,6 @@
 import { useId, useRef, type ReactNode } from "react";
 
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 import { cn } from "~/lib/utils";
 import { useFilesTreeDrawer } from "./FilesPanel.drawer";
 import { FilesPanelHeader } from "./FilesPanel.header";
@@ -138,7 +139,7 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
             !props.hasPreview && "w-full",
             props.hasPreview && "border-l border-border",
             overlay
-              ? "absolute inset-y-0 right-0 z-20 bg-background shadow-xl"
+              ? cn("absolute inset-y-0 right-0 z-20 shadow-xl", SOLID_FLOATING_SURFACE_CLASS_NAME)
               : "bg-[var(--app-shell-pane-fill)]",
             split && "shrink-0",
             !visible && "invisible pointer-events-none",

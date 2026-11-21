@@ -11,6 +11,7 @@ import type { TurnId } from "@bigbud/contracts/core/baseSchemas";
 import { cn } from "~/lib/utils";
 import { formatShortTimestamp } from "../../utils/timestamp";
 import { Button } from "../ui/button";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import type { DiffRenderMode } from "./DiffPanel.logic";
 
@@ -61,7 +62,8 @@ export function DiffPanelHeader({
         <button
           type="button"
           className={cn(
-            "absolute left-0 top-1/2 z-20 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md border bg-background/90 text-muted-foreground transition-colors",
+            "absolute left-0 top-1/2 z-20 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md border text-muted-foreground transition-colors",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
             canScrollTurnStripLeft
               ? "border-border/70 hover:border-border hover:text-foreground"
               : "cursor-not-allowed border-border/40 text-muted-foreground/40",
@@ -75,7 +77,8 @@ export function DiffPanelHeader({
         <button
           type="button"
           className={cn(
-            "absolute right-0 top-1/2 z-20 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md border bg-background/90 text-muted-foreground transition-colors",
+            "absolute right-0 top-1/2 z-20 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-md border text-muted-foreground transition-colors",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
             canScrollTurnStripRight
               ? "border-border/70 hover:border-border hover:text-foreground"
               : "cursor-not-allowed border-border/40 text-muted-foreground/40",

@@ -6,7 +6,7 @@
  * `index.windowMaterial.css` tints.
  */
 
-/** Floating surfaces: toasts, palettes, dialogs, sheets, menus, lists, popovers and tooltips. */
+/** Floating surfaces: toasts, palettes, dialogs, sheets, menus, lists, popovers, tooltips and floating panels. */
 export const SOLID_FLOATING_SURFACE_CLASS_NAME = "bg-(--popover-solid)";
 
 /** Full-window modal surfaces that repaint the page tone, and the expanded image backing. */

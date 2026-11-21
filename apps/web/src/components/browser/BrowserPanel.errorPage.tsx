@@ -1,5 +1,7 @@
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
 import { Button } from "../ui/button";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
+import { cn } from "~/lib/utils";
 import type { BrowserNavigationErrorContent } from "./BrowserPanel.navigationError";
 import { BrowserExternalLink } from "./BrowserPanel.externalLink";
 
@@ -18,7 +20,10 @@ export function BrowserPanelErrorPage({
 }) {
   return (
     <div
-      className="absolute inset-0 z-10 overflow-auto bg-background px-6 py-10 text-foreground sm:px-10"
+      className={cn(
+        "absolute inset-0 z-10 overflow-auto px-6 py-10 text-foreground sm:px-10",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
+      )}
       role="alert"
       aria-live="assertive"
     >

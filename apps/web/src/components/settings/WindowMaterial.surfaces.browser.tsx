@@ -16,6 +16,10 @@ vi.mock("~/rpc/nativeApi", () => ({
   ensureNativeApi: () => ({}),
   readNativeApi: () => undefined,
 }));
+// The sidecar's conversation needs a live thread; only its panel shell is under test here.
+vi.mock("~/components/chat/view/ThreadComposerSurface", () => ({
+  ThreadComposerSurface: () => null,
+}));
 
 import { useCommandPaletteStore, useSearchStore } from "../../stores/ui";
 import { AlertDialog, AlertDialogPopup, AlertDialogTitle } from "../ui/alert-dialog";
@@ -26,6 +30,9 @@ import { Sheet, SheetPopup, SheetTitle } from "../ui/sheet";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { CommandPaletteDialogContent } from "../layout/CommandPalette.content";
 import { SearchPaletteDialogContent } from "../layout/SearchPalette.content";
+import { FloatingPlanCard } from "../chat/plan/FloatingPlanCard";
+import { FloatingSideChat } from "../chat/side-chat/FloatingSideChat";
+import { DrawerHarness } from "../files/FilesPanel.drawer.fixtures";
 
 const html = document.documentElement;
 
@@ -209,5 +216,75 @@ describe("palettes, dialogs, menus, popovers and tooltips stay opaque in every w
         }
       });
     }
+  }
+});
+
+describe("floating panels stay opaque in the translucent window material", () => {
+  afterEach(() => {
+    delete html.dataset.desktopShell;
+    delete html.dataset.windowMaterial;
+    html.classList.remove("dark");
+    document.body.innerHTML = "";
+  });
+
+  for (const dark of [false, true]) {
+    const mode = dark ? "dark" : "light";
+    const setMaterial = () => {
+      html.dataset.desktopShell = "macos";
+      html.dataset.windowMaterial = "translucent";
+      html.classList.toggle("dark", dark);
+    };
+
+    it(`paints the Tasks panel opaque (${mode})`, async () => {
+      setMaterial();
+      const mounted = await render(
+        <FloatingPlanCard
+          activePlan={{
+            createdAt: "2026-11-21T00:00:00.000Z",
+            turnId: null,
+            steps: [{ step: "Ship it", status: "completed" }],
+          }}
+          activeProposedPlan={null}
+          label="Tasks"
+          markdownCwd={undefined}
+          workspaceRoot={undefined}
+          timestampFormat="locale"
+          onClose={() => undefined}
+        />,
+      );
+      try {
+        await vi.waitFor(() => expect(backgroundAlpha('[class*="rounded-[24px]"]')).toBe(1));
+      } finally {
+        await mounted.unmount();
+      }
+    });
+
+    it(`paints the Sidecar panel opaque (${mode})`, async () => {
+      setMaterial();
+      const mounted = await render(
+        <FloatingSideChat
+          mainThreadId={ThreadId.makeUnsafe("material-main")}
+          messageCount={0}
+          onFocusMainComposer={() => undefined}
+          threadId={ThreadId.makeUnsafe("material-sidecar")}
+          workspaceRoot={undefined}
+        />,
+      );
+      try {
+        await vi.waitFor(() => expect(backgroundAlpha("[data-chat-focus-scope]")).toBe(1));
+      } finally {
+        await mounted.unmount();
+      }
+    });
+
+    it(`paints the file tree opaque where it overlays the preview (${mode})`, async () => {
+      setMaterial();
+      const mounted = await render(<DrawerHarness initialPreview="file-1.ts" width={180} />);
+      try {
+        await vi.waitFor(() => expect(backgroundAlpha('[aria-label="Files tree"]')).toBe(1));
+      } finally {
+        await mounted.unmount();
+      }
+    });
   }
 });
