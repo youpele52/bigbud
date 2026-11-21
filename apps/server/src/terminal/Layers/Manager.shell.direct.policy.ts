@@ -43,10 +43,18 @@ export const assertDirectShellCloseAvailable = Effect.fn(
     );
 });
 
-/** Check the durable journal before any bulk-close side effect, including local sessions. */
+/**
+ * Check the durable journal before any bulk-close side effect, including local sessions.
+ * `knownTerminalIds` are the thread's live panes plus panes with retained history (the remote
+ * owner recovery marker); `"unknown"` when they could not be listed, which fails closed.
+ */
 export const assertDirectShellThreadCloseAvailable = Effect.fn(
   "terminal.assertDirectShellThreadCloseAvailable",
-)(function* (store: DirectShellLaunchOwnerStore | undefined, threadId: string) {
+)(function* (
+  store: DirectShellLaunchOwnerStore | undefined,
+  threadId: string,
+  knownTerminalIds: ReadonlyArray<string> | "unknown",
+) {
   if (!store) return;
   const failure = (detail: string) =>
     new TerminalExecutionTargetError({
@@ -60,8 +68,13 @@ export const assertDirectShellThreadCloseAvailable = Effect.fn(
     return yield* failure(
       "Could not verify thread-wide direct shell ownership. Nothing was closed.",
     );
+  const paneKeys =
+    knownTerminalIds === "unknown"
+      ? undefined
+      : new Set(knownTerminalIds.map((terminalId) => directShellOwnerKey(threadId, terminalId)));
   const retained = yield* Effect.tryPromise({
-    try: () => hasOwnersForThread(threadId),
+    try: () =>
+      hasOwnersForThread(threadId, paneKeys ? (ownerKey) => paneKeys.has(ownerKey) : undefined),
     catch: () =>
       failure("Could not verify thread-wide direct shell ownership. Nothing was closed."),
   });

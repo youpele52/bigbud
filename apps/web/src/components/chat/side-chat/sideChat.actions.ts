@@ -13,7 +13,11 @@ import { type RemovedComposerThreadReferenceFiles, useComposerDraftStore } from 
 import { useStore } from "~/stores/main";
 import { isSideChatClosing, useSideChatStore } from "~/stores/sideChat";
 import { toastManager } from "~/components/ui/toast";
-import { getDeletedThreadIds } from "~/logic/orchestration/thread-deletion.logic";
+import {
+  describeThreadDeletionFailure,
+  getDeletedThreadIds,
+  THREAD_DELETION_FAILED_TOAST_ID,
+} from "~/logic/orchestration/thread-deletion.logic";
 
 const detachedReferencesBySidecarId = new Map<ThreadId, RemovedComposerThreadReferenceFiles[]>();
 
@@ -220,23 +224,31 @@ export function completeSideChatClose(threadId: ThreadId): void {
   }
 }
 
+/** Returns whether a closing Sidecar was restored (and its one failure toast shown). */
 export function restoreSideChatAfterDeletionFailure(
   threadId: ThreadId,
   description = "The Sidecar deletion did not complete.",
-): void {
+): boolean {
   if (!isSideChatClosing(useSideChatStore.getState(), threadId)) {
-    return;
+    return false;
   }
   restoreDetachedSidecarReferences(threadId);
   useSideChatStore.getState().failClose(threadId);
+  // Shares the deletion-failure slot so retries replace the notice instead of stacking it.
   toastManager.add({
+    id: THREAD_DELETION_FAILED_TOAST_ID,
     type: "error",
     title: "Could not close Sidecar",
     description,
   });
+  return true;
 }
 
-export function applySideChatLifecycleEvents(events: ReadonlyArray<OrchestrationEvent>): void {
+/** Applies Sidecar lifecycle events; returns Sidecars whose failed close was already notified. */
+export function applySideChatLifecycleEvents(
+  events: ReadonlyArray<OrchestrationEvent>,
+): ReadonlySet<ThreadId> {
+  const notifiedFailures = new Set<ThreadId>();
   for (const event of events) {
     const state = useSideChatStore.getState();
     switch (event.type) {
@@ -249,7 +261,14 @@ export function applySideChatLifecycleEvents(events: ReadonlyArray<Orchestration
         state.markDeletionRequested(event.payload.threadId);
         break;
       case "thread.deletion-failed":
-        restoreSideChatAfterDeletionFailure(event.payload.threadId);
+        if (
+          restoreSideChatAfterDeletionFailure(
+            event.payload.threadId,
+            describeThreadDeletionFailure(event.payload.reason),
+          )
+        ) {
+          notifiedFailures.add(event.payload.threadId);
+        }
         break;
       case "thread.deleted":
         for (const threadId of getDeletedThreadIds(event.payload)) {
@@ -262,6 +281,7 @@ export function applySideChatLifecycleEvents(events: ReadonlyArray<Orchestration
         break;
     }
   }
+  return notifiedFailures;
 }
 
 function reconcileClosingSideChat(
@@ -277,12 +297,16 @@ function reconcileClosingSideChat(
     useSideChatStore.getState().markDeletionRequested(threadId);
     return;
   }
-  const hasCurrentDeletionFailure = thread.activities.some(
+  const currentDeletionFailure = thread.activities.findLast(
     (activity) => activity.kind === "thread.delete.failed" && activity.createdAt >= startedAt,
   );
   const deletionRequested = useSideChatStore.getState().closingThreads[threadId]?.deletionRequested;
-  if (deletionRequested || hasCurrentDeletionFailure) {
-    restoreSideChatAfterDeletionFailure(threadId);
+  if (deletionRequested || currentDeletionFailure) {
+    const detail = (currentDeletionFailure?.payload as { detail?: unknown } | undefined)?.detail;
+    restoreSideChatAfterDeletionFailure(
+      threadId,
+      typeof detail === "string" && detail.length > 0 ? detail : undefined,
+    );
   }
 }
 

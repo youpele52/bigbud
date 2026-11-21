@@ -21,6 +21,10 @@ it("preserves legacy bytes and treats unscoped ownership conservatively", async 
   const original = owner();
   await db.store.reserve(original);
   expect(await db.store.hasOwnersForThread("unrelated")).toBe(true);
+  expect(await db.store.hasOwnersForThread("unrelated", () => false)).toBe(false);
+  expect(
+    await db.store.hasOwnersForThread("owner", (ownerKey) => ownerKey === original.ownerKey),
+  ).toBe(true);
   expect(await db.store.get(original.ownerKey)).toEqual(original);
 });
 

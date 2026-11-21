@@ -103,8 +103,13 @@ export const ThreadDeletionRequestedPayload = Schema.Struct({
   deletingAt: IsoDateTime,
 });
 
+/** Why a deletion was undone, in user-facing words; bounded like the failure activity detail. */
+export const ThreadDeletionFailureReason = TrimmedNonEmptyString.check(Schema.isMaxLength(1_000));
+
 export const ThreadDeletionFailedPayload = Schema.Struct({
   threadId: ThreadId,
+  /** Absent on events recorded before deletions carried their reason. */
+  reason: Schema.optional(ThreadDeletionFailureReason),
   updatedAt: IsoDateTime,
 });
 

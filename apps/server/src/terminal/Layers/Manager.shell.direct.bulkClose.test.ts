@@ -7,6 +7,7 @@ import { fixture, owner } from "../../persistence/Layers/DirectShellLaunchOwners
 import { makeDirectShellLaunchOwners } from "../../persistence/Layers/DirectShellLaunchOwners";
 import { directShellOwnerKey } from "./DirectShellLaunch.owner";
 import { historyPath } from "./Manager.history-io";
+import { assertDirectShellThreadCloseAvailable } from "./Manager.shell.direct.policy";
 import { remoteFixture } from "./Manager.shell.remote.test.helpers";
 import { FakePtyAdapter, openInput } from "./Manager.test.helpers";
 
@@ -81,6 +82,46 @@ it.layer(NodeServices.layer, { excludeTestServices: true })(
         yield* manager.close({ threadId: "thread-1", deleteHistory: true });
         expect(yield* fs.exists(historyPath(logsDir, "thread-1", "default"))).toBe(false);
         expect(yield* Effect.promise(() => db.store.get(saved.ownerKey))).toEqual(saved);
+      }),
+    );
+
+    it.effect("scopes a legacy unscoped owner to the thread whose pane it hashes to", () =>
+      Effect.gen(function* () {
+        const db = yield* Effect.promise(fixture);
+        // Legacy owners carry no pane, only the hash of their pane identity.
+        const saved = { ...owner(), ownerKey: directShellOwnerKey("thread-1", "default") };
+        yield* Effect.promise(() => db.store.reserve(saved));
+        const { manager, logsDir } = yield* remoteFixture(
+          { directShellOwners: db.store },
+          "protected remote output",
+        );
+        const fs = yield* FileSystem.FileSystem;
+        const unrelated = yield* manager
+          .close({ threadId: "sidecar-without-terminals", deleteHistory: true })
+          .pipe(Effect.result);
+        expect(unrelated._tag).toBe("Success");
+        const owning = yield* manager
+          .close({ threadId: "thread-1", deleteHistory: true })
+          .pipe(Effect.result);
+        expect(owning._tag).toBe("Failure");
+        expect(yield* fs.readFileString(historyPath(logsDir, "thread-1", "default"))).toBe(
+          "protected remote output",
+        );
+        expect(yield* Effect.promise(() => db.store.get(saved.ownerKey))).toEqual(saved);
+      }),
+    );
+
+    it.effect("keeps legacy owners blocking every thread when panes cannot be listed", () =>
+      Effect.gen(function* () {
+        const db = yield* Effect.promise(fixture);
+        yield* Effect.promise(() => db.store.reserve(owner()));
+        const result = yield* assertDirectShellThreadCloseAvailable(
+          db.store,
+          "unrelated",
+          "unknown",
+        ).pipe(Effect.result);
+        expect(result._tag).toBe("Failure");
+        yield* assertDirectShellThreadCloseAvailable(db.store, "unrelated", []);
       }),
     );
 

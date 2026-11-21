@@ -127,6 +127,40 @@ const deleteAllHistoryForThreadEffect = Effect.fn("terminal.deleteAllHistoryForT
   );
 });
 
+const listHistoryTerminalIdsEffect = Effect.fn("terminal.listHistoryTerminalIds")(function* (
+  logsDir: string,
+  threadId: string,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const threadPart = toSafeThreadId(threadId);
+  const entries = yield* fileSystem.readDirectory(logsDir, { recursive: false }).pipe(
+    Effect.map((names): ReadonlyArray<string> | "unknown" => names),
+    // No logs directory means no retained history; any other failure proves nothing.
+    Effect.catch((error) =>
+      Effect.succeed(error.reason._tag === "NotFound" ? [] : ("unknown" as const)),
+    ),
+  );
+  if (entries === "unknown") return "unknown" as const;
+  const terminalIds = new Set<string>();
+  for (const name of entries) {
+    if (name === `${threadPart}.log` || name === `${legacySafeThreadId(threadId)}.log`) {
+      terminalIds.add(DEFAULT_TERMINAL_ID);
+    } else if (name.startsWith(`${threadPart}_`) && name.endsWith(".log")) {
+      const encoded = name.slice(threadPart.length + 1, -".log".length);
+      const terminalId = Buffer.from(encoded, "base64url").toString("utf8");
+      // Only exact encodings name a pane; anything else is not this thread's history.
+      if (encoded.length > 0 && toSafeTerminalId(terminalId) === encoded) {
+        terminalIds.add(terminalId);
+      }
+    }
+  }
+  return [...terminalIds];
+});
+
+/** Terminal IDs with retained history for a thread, or `"unknown"` when unreadable. */
+export const listHistoryTerminalIds = (logsDir: string, threadId: string) =>
+  listHistoryTerminalIdsEffect(logsDir, threadId);
+
 // ---------------------------------------------------------------------------
 // Read
 // ---------------------------------------------------------------------------

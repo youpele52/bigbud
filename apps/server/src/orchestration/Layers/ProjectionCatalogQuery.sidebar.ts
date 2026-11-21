@@ -22,6 +22,8 @@ export function makeGetSidebarThreadCatalog(
   sql: SqlClient.SqlClient,
   readProjectionSequence: () => Effect.Effect<number, ProjectionRepositoryError>,
 ): ProjectionCatalogQueryShape["getSidebarThreadCatalog"] {
+  // Sidecars (`purpose = 'side-chat'`) live in their parent's project, so a Sidecar opened from a
+  // chat shares the Chats project; only standard threads belong in the sidebar.
   const readSidebarThreads = SqlSchema.findAll({
     Request: Schema.Void,
     Result: SidebarThreadSummaryDbRow,
@@ -30,6 +32,7 @@ export function makeGetSidebarThreadCatalog(
         SELECT t.thread_id
         FROM projection_threads t
         WHERE t.project_id = ${BUILT_IN_CHATS_PROJECT_ID}
+          AND t.purpose = 'standard'
           AND t.deleted_at IS NULL
           AND t.archived_at IS NULL
           AND t.deleting_at IS NULL
@@ -39,6 +42,7 @@ export function makeGetSidebarThreadCatalog(
         SELECT t.thread_id
         FROM projection_threads t
         WHERE t.project_id = ${BUILT_IN_CHATS_PROJECT_ID}
+          AND t.purpose = 'standard'
           AND t.deleted_at IS NULL
           AND t.archived_at IS NULL
           AND t.deleting_at IS NULL
@@ -48,6 +52,7 @@ export function makeGetSidebarThreadCatalog(
         SELECT t.thread_id
         FROM projection_threads t
         WHERE t.pinned_at IS NOT NULL
+          AND t.purpose = 'standard'
           AND t.deleted_at IS NULL
           AND t.archived_at IS NULL
           AND t.deleting_at IS NULL

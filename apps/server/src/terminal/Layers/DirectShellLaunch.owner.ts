@@ -95,8 +95,16 @@ export function parseDirectShellLaunchOwner(input: unknown): DirectShellLaunchOw
 }
 
 export interface DirectShellLaunchOwnerStore {
-  /** Missing legacy pane metadata blocks bulk cleanup conservatively; never infer ownership. */
-  readonly hasOwnersForThread?: (threadId: string) => Promise<boolean>;
+  /**
+   * Pane-scoped owners match by their validated pane. Legacy owners without pane metadata are
+   * never assigned to a thread by guesswork: they match only when `isThreadPaneKey` recognises
+   * their key as one of this thread's known panes. Omitting it keeps the conservative default
+   * (every legacy owner blocks every thread).
+   */
+  readonly hasOwnersForThread?: (
+    threadId: string,
+    isThreadPaneKey?: (ownerKey: string) => boolean,
+  ) => Promise<boolean>;
   readonly get: (ownerKey: string) => Promise<DirectShellLaunchOwner | undefined>;
   readonly reserve: (owner: DirectShellLaunchOwner) => Promise<{
     readonly created: boolean;

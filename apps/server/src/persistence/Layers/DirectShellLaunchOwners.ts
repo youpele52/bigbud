@@ -67,15 +67,17 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
     return rows.length === 1;
   };
   return {
-    hasOwnersForThread: async (threadId) => {
+    hasOwnersForThread: async (threadId, isThreadPaneKey = () => true) => {
       // The journal is capped at MAX_OWNERS. Validate stored bindings before trusting scope;
-      // old opaque hashes cannot be assigned to a thread and must fail closed.
+      // an old opaque hash matches only a pane the caller proves belongs to this thread.
       const rows =
         await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
         FROM direct_shell_launch_owners`);
       return rows
         .map(decodeRow)
-        .some(({ owner }) => !owner.pane || owner.pane.threadId === threadId);
+        .some(({ owner }) =>
+          owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
+        );
     },
     get: async (key) => (await read(key))?.owner,
     reserve: async (input) => {

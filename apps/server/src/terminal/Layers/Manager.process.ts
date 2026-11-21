@@ -240,12 +240,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       yield* ptyOutputWorker.drainKey(toSessionKey(threadId, terminalId));
     });
 
-    const { readHistory, historyExists, deleteHistory, deleteAllHistoryForThread } =
-      makeHistoryAccessors({
-        logsDir,
-        historyLineLimit,
-        fileSystem,
-      });
+    const history = makeHistoryAccessors({
+      logsDir,
+      historyLineLimit,
+      fileSystem,
+    });
     const assertValidCwd = makeAssertValidCwd(fileSystem);
 
     const evictInactiveSessionsIfNeeded = makeInactiveSessionEviction(
@@ -363,10 +362,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       flushPtyOutput,
       persistHistory,
       flushPersist,
-      readHistory,
-      historyExists,
-      deleteHistory,
-      deleteAllHistoryForThread,
+      ...history,
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,

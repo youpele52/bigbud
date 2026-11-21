@@ -11,6 +11,7 @@ import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestrat
 import type { AppState, ThreadHydration } from "./main.store";
 import { mergeThreadDetail } from "./mappers.lazy.store";
 import { sidebarMembershipFromCatalog } from "./helpers.sidebar.store";
+import { withoutSidecarCatalogThreads } from "../../logic/thread/threadVisibility.logic";
 import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
 import { mergeProjectCatalog } from "./helpers.lazy.projects.store";
 import { pruneProjectDependencies } from "./helpers.projectDependencies.store";
@@ -191,8 +192,9 @@ export function syncBoundedCatalog(
 
 export function syncSidebarCatalog(
   state: AppState,
-  sidebarCatalog: GetSidebarThreadCatalogResult,
+  catalog: GetSidebarThreadCatalogResult,
 ): AppState {
+  const sidebarCatalog = withoutSidecarCatalogThreads(catalog);
   const summaries = sidebarCatalog.threads;
   const previousThreads = new Map(state.threads.map((thread) => [thread.id, thread]));
   const threads = state.threads

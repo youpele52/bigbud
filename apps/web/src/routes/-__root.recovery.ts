@@ -21,7 +21,7 @@ import {
   setThreadHydrationEventApplier,
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
-import { getFailedThreadDeletionToast } from "../logic/orchestration/thread-deletion.logic";
+import { getBatchFailedThreadDeletionToast } from "../logic/orchestration/thread-deletion.logic";
 import { clearPersistedCommandsForCanonicalEvents } from "../lib/orchestrationCommandRecovery";
 import {
   coalesceOrchestrationUiEvents,
@@ -108,7 +108,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     }
 
     input.applyOrchestrationEvents(uiEvents);
-    applySideChatLifecycleEvents(nextEvents);
+    const sidecarDeletionFailureIds = applySideChatLifecycleEvents(nextEvents);
     input.reconcileThinkingActivities(uiEvents);
     if (needsProjectUiSync) {
       const projects = useStore.getState().projects;
@@ -145,9 +145,11 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     for (const threadId of batchEffects.removeTerminalStateThreadIds) {
       input.removeTerminalState(threadId);
     }
-    const failedDeleteToast = getFailedThreadDeletionToast(
-      batchEffects.failedDeleteThreadIds.length,
-    );
+    const failedDeleteToast = getBatchFailedThreadDeletionToast({
+      events: nextEvents,
+      failedThreadIds: batchEffects.failedDeleteThreadIds,
+      alreadyNotifiedThreadIds: sidecarDeletionFailureIds,
+    });
     if (failedDeleteToast) toastManager.add(failedDeleteToast);
   };
 

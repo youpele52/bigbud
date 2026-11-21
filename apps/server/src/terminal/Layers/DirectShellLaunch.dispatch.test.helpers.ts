@@ -82,8 +82,10 @@ export function fixture() {
     return true;
   };
   const store: DirectShellLaunchOwnerStore = {
-    hasOwnersForThread: vi.fn(async (threadId) =>
-      [...entries.values()].some((owner) => !owner.pane || owner.pane.threadId === threadId),
+    hasOwnersForThread: vi.fn(async (threadId, isThreadPaneKey = () => true) =>
+      [...entries.values()].some((owner) =>
+        owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
+      ),
     ),
     get: vi.fn(async (key) => {
       const owner = entries.get(key);

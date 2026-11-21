@@ -9,6 +9,7 @@ import { TerminalCwdError, TerminalSessionLookupError } from "../Services/Manage
 import {
   deleteAllHistoryForThread as ioDeleteAllHistoryForThread,
   deleteHistory as ioDeleteHistory,
+  listHistoryTerminalIds,
   readHistory as ioReadHistory,
   historyPath,
   legacyHistoryPath,
@@ -103,6 +104,10 @@ export const makeHistoryAccessors = (input: {
     ),
   deleteAllHistoryForThread: (threadId: string): Effect.Effect<void> =>
     ioDeleteAllHistoryForThread(input.logsDir, threadId).pipe(
+      Effect.provideService(FileSystem.FileSystem, input.fileSystem),
+    ),
+  historyTerminalIdsForThread: (threadId: string) =>
+    listHistoryTerminalIds(input.logsDir, threadId).pipe(
       Effect.provideService(FileSystem.FileSystem, input.fileSystem),
     ),
 });

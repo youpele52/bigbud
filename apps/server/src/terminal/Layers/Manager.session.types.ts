@@ -57,6 +57,10 @@ export interface SessionApiContext {
   historyExists: (threadId: string, terminalId: string) => Effect.Effect<boolean>;
   deleteHistory: (threadId: string, terminalId: string) => Effect.Effect<void>;
   deleteAllHistoryForThread: (threadId: string) => Effect.Effect<void>;
+  /** Panes with retained history for a thread; `"unknown"` when they cannot be listed. */
+  historyTerminalIdsForThread: (
+    threadId: string,
+  ) => Effect.Effect<ReadonlyArray<string> | "unknown">;
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
   assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>;
   resolveRuntimePathIdentity?:

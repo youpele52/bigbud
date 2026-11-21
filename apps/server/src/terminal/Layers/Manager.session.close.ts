@@ -104,8 +104,15 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
           );
           return;
         }
-        yield* assertDirectShellThreadCloseAvailable(ctx.directShellOwners, input.threadId);
         const sessions = yield* ctx.sessionsForThread(input.threadId);
+        const historyTerminalIds = yield* ctx.historyTerminalIdsForThread(input.threadId);
+        yield* assertDirectShellThreadCloseAvailable(
+          ctx.directShellOwners,
+          input.threadId,
+          historyTerminalIds === "unknown"
+            ? "unknown"
+            : [...sessions.map((session) => session.terminalId), ...historyTerminalIds],
+        );
         yield* Effect.forEach(
           sessions,
           (session) =>

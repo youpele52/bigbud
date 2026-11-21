@@ -10,7 +10,11 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { deriveOrchestrationBatchEffects } from "./event-effects.logic";
-import { getFailedThreadDeletionToast } from "./thread-deletion.logic";
+import {
+  getBatchFailedThreadDeletionToast,
+  getFailedThreadDeletionToast,
+  THREAD_DELETION_FAILED_TOAST_ID,
+} from "./thread-deletion.logic";
 
 function makeEvent<T extends OrchestrationEvent["type"]>(
   type: T,
@@ -204,14 +208,58 @@ describe("deriveOrchestrationBatchEffects", () => {
     expect(effects.failedDeleteThreadIds).toEqual([threadId]);
   });
 
-  it("summarizes restored threads after a failed deletion", () => {
-    expect(getFailedThreadDeletionToast(0)).toBeNull();
-    expect(getFailedThreadDeletionToast(1)).toEqual({
+  it("summarizes restored threads after a failed deletion with the server's reason", () => {
+    const failure = (id: string, reason?: string) => ({
+      threadId: ThreadId.makeUnsafe(id),
+      reason,
+    });
+    expect(getFailedThreadDeletionToast([])).toBeNull();
+    expect(getFailedThreadDeletionToast([failure("a", "Terminal cleanup failed: busy.")])).toEqual({
+      id: THREAD_DELETION_FAILED_TOAST_ID,
       type: "error",
       title: "Thread was not deleted",
-      description:
-        "bigbud restored them after a safety check or cleanup failure. They are still in the sidebar.",
+      description: "Terminal cleanup failed: busy.",
     });
-    expect(getFailedThreadDeletionToast(4)?.title).toBe("4 threads were not deleted");
+    expect(getFailedThreadDeletionToast([failure("legacy")])?.description).toBe(
+      "bigbud kept it after a safety check or cleanup failure.",
+    );
+    const batch = getFailedThreadDeletionToast(
+      ["a", "b", "c", "d"].map((id) => failure(id, "Busy.")),
+    );
+    expect(batch?.title).toBe("4 threads were not deleted");
+    expect(batch?.description).toBe("Busy.");
+    expect(
+      getFailedThreadDeletionToast([failure("a", "One."), failure("b", "Two.")])?.description,
+    ).toBe("bigbud kept them after safety checks or cleanup failures. Open a thread to see why.");
+  });
+
+  it("shows one toast per batch and skips failures a Sidecar already explained", () => {
+    const sidecar = ThreadId.makeUnsafe("sidecar");
+    const other = ThreadId.makeUnsafe("other");
+    const events = [
+      makeEvent("thread.deletion-failed", {
+        threadId: sidecar,
+        reason: "Sidecar reason.",
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      }),
+      makeEvent("thread.deletion-failed", {
+        threadId: other,
+        reason: "Other reason.",
+        updatedAt: "2026-02-27T00:00:02.000Z",
+      }),
+    ];
+    const toast = getBatchFailedThreadDeletionToast({
+      events,
+      failedThreadIds: [sidecar, other],
+      alreadyNotifiedThreadIds: new Set([sidecar]),
+    });
+    expect(toast).toMatchObject({ title: "Thread was not deleted", description: "Other reason." });
+    expect(
+      getBatchFailedThreadDeletionToast({
+        events,
+        failedThreadIds: [sidecar],
+        alreadyNotifiedThreadIds: new Set([sidecar]),
+      }),
+    ).toBeNull();
   });
 });

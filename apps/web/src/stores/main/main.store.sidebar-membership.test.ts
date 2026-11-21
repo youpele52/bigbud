@@ -47,6 +47,26 @@ function makeSummary(
 }
 
 describe("bounded sidebar membership", () => {
+  it("never adds a Sidecar listed by the catalog to the sidebar", () => {
+    const chat = makeSummary(ThreadId.makeUnsafe("chat"), BUILT_IN_CHATS_PROJECT_ID);
+    const sidecar = makeSummary(ThreadId.makeUnsafe("sidecar"), BUILT_IN_CHATS_PROJECT_ID, {
+      purpose: "side-chat",
+      title: "Sidecar",
+      pinnedAt: "2026-07-02T00:00:00.000Z",
+    });
+    const state = reconcileSidebarCatalog(makeState(makeThread()), {
+      projectionSequence: 3,
+      threads: [chat, sidecar],
+      recentThreadIds: [chat.id, sidecar.id],
+      pinnedThreadIds: [sidecar.id],
+    });
+
+    expect(state.sidebarThreadsById[sidecar.id]).toBeUndefined();
+    expect(state.sidebarRecentThreadIds).not.toContain(sidecar.id);
+    expect(state.sidebarPinnedThreadIds).not.toContain(sidecar.id);
+    expect(state.sidebarRecentThreadIds).toContain(chat.id);
+  });
+
   it("keeps multiple threads awaiting answers across catalog refreshes and independent resolution", () => {
     const summaries = ["question-a", "question-b"].map((id) =>
       makeSummary(ThreadId.makeUnsafe(id), BUILT_IN_CHATS_PROJECT_ID, {
