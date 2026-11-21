@@ -265,6 +265,7 @@ fn blocks_takeover_while_a_real_supervisor_owns_an_active_pty() {
             rows: 24,
             environment: Vec::new(),
             profile_launch: false,
+            ..Default::default()
         }),
     );
     let _ = read_until(
@@ -384,6 +385,7 @@ fn serve_helper_connection(mut stream: UnixStream, version: &str, digest: &str) 
             max_frame_bytes: DEFAULT_MAX_FRAME_BYTES as u64,
             max_operation_output_bytes: 1024,
             max_journal_bytes: 1024,
+            ..Default::default()
         })
     };
     write_frame(

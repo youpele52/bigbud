@@ -1,6 +1,12 @@
 import { encodePtyInventoryFrame } from "./remoteAgentProtocol.codec.pty.inventory.ts";
 import { encodePtyInputReconcileFrame } from "./remoteAgentProtocol.codec.pty.input.ts";
 import {
+  encodePtyLifecycleFrame,
+  PTY_CREATE_REQUEST_LIFECYCLE_FIELDS,
+  PTY_CREATE_RESPONSE_LIMIT_FIELDS,
+} from "./remoteAgentProtocol.codec.pty.lifecycle.ts";
+import { encodeTableExtension } from "./remoteAgentProtocol.codec.table.ts";
+import {
   type RemoteAgentFrame,
   type RemoteAgentProcessEnvironment,
   type RemoteAgentPtyAttachRequest,
@@ -43,6 +49,7 @@ function encodeCreate(value: RemoteAgentPtyCreateRequest): Uint8Array {
     writer.fieldMessage(10, encodeEnvironment(environment));
   }
   writer.fieldBool(11, value.profileLaunch ?? false);
+  writer.bytes.push(...encodeTableExtension(PTY_CREATE_REQUEST_LIFECYCLE_FIELDS, value));
   return writer.finish();
 }
 
@@ -55,6 +62,7 @@ function encodeCreateResponse(value: RemoteAgentPtyCreateResponse): Uint8Array {
   writer.fieldString(5, value.errorCode);
   writer.fieldString(6, value.errorMessage);
   writer.fieldString(7, value.launchStatus ?? "");
+  writer.bytes.push(...encodeTableExtension(PTY_CREATE_RESPONSE_LIMIT_FIELDS, value));
   return writer.finish();
 }
 
@@ -224,6 +232,10 @@ export function encodePtyFrame(
     case "ptyOutputAckResponse":
       return { field: 57, value: encodeControlResponse(frame.value) };
     default:
-      return encodePtyInventoryFrame(frame) ?? encodePtyInputReconcileFrame(frame);
+      return (
+        encodePtyInventoryFrame(frame) ??
+        encodePtyInputReconcileFrame(frame) ??
+        encodePtyLifecycleFrame(frame)
+      );
   }
 }

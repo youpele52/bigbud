@@ -255,6 +255,7 @@ fn pty_inventory_matches_shared_typescript_goldens() {
                 first_retained_sequence: 1,
                 verified_exit: false,
                 launch_status: "unconfirmed".to_owned(),
+                ..Default::default()
             }],
             ..Default::default()
         })),

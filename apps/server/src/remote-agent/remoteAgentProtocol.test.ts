@@ -290,7 +290,8 @@ describe("remote agent protocol", () => {
     const payload = encoded.slice(4);
     const withUnknownField = new Uint8Array(payload.length + 3);
     withUnknownField.set(payload);
-    withUnknownField.set([0xd0, 0x05, 0x01], payload.length);
+    // Field 200 (varint) stays unallocated; 80-95 became PTY lifecycle frames in 1.9.
+    withUnknownField.set([0xc0, 0x0c, 0x01], payload.length);
     const framed = new Uint8Array(withUnknownField.length + 4);
     new DataView(framed.buffer).setUint32(0, withUnknownField.length, false);
     framed.set(withUnknownField, 4);

@@ -24,6 +24,10 @@ message AgentHello {
   uint64 max_frame_bytes = 10;
   uint64 max_operation_output_bytes = 11;
   uint64 max_journal_bytes = 12;
+  // Added in 1.9. The agent's own PID and process start time (Unix ms), used
+  // only to verify a PID before signalling it. Zero means unknown.
+  uint64 process_id = 13;
+  uint64 process_start_time_ms = 14;
 }
 
 message Capability {

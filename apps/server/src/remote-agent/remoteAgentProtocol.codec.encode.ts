@@ -12,6 +12,8 @@ import {
   type RemoteAgentProtocolError,
 } from "./remoteAgentProtocol.ts";
 import { WireWriter } from "./remoteAgentProtocol.codec.wire.ts";
+import { AGENT_HELLO_PROCESS_FIELDS } from "./remoteAgentProtocol.codec.pty.lifecycle.ts";
+import { encodeTableExtension } from "./remoteAgentProtocol.codec.table.ts";
 import { encodeWorkspaceFrame } from "./remoteAgentProtocol.codec.workspace.encode.ts";
 import { encodeProcessFrame } from "./remoteAgentProtocol.codec.process.encode.ts";
 import { encodePtyFrame } from "./remoteAgentProtocol.codec.pty.encode.ts";
@@ -56,6 +58,7 @@ function encodeAgentHello(value: RemoteAgentHello): Uint8Array {
   writer.fieldUint(10, value.maxFrameBytes);
   writer.fieldUint(11, value.maxOperationOutputBytes);
   writer.fieldUint(12, value.maxJournalBytes);
+  writer.bytes.push(...encodeTableExtension(AGENT_HELLO_PROCESS_FIELDS, value));
   return writer.finish();
 }
 

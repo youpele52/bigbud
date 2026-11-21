@@ -8,6 +8,9 @@ pub use error::FrameError;
 #[path = "paste_staging.tests.rs"]
 mod paste_staging_tests;
 #[cfg(test)]
+#[path = "pty_lifecycle.tests.rs"]
+mod pty_lifecycle_tests;
+#[cfg(test)]
 #[path = "pty.tests.rs"]
 mod pty_tests;
 #[cfg(test)]

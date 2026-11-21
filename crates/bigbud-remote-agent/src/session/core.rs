@@ -298,6 +298,14 @@ impl AgentSession {
             Some(v1::frame::Payload::PtyInputReconcileRequest(request)) if self.ready => {
                 Ok(self.handle_pty_input_reconcile(request))
             }
+            Some(payload)
+                if self.ready && operation_handlers::is_pty_lifecycle_request(&payload) =>
+            {
+                Ok(operation_handlers::refuse_pty_lifecycle_request(
+                    payload,
+                    &self.agent_epoch,
+                ))
+            }
             _ if self.ready && !self.accepting_work => Err(SessionError::Restarting),
             Some(v1::frame::Payload::WorkspaceOpenRequest(request)) if self.ready => {
                 Ok(self.handle_workspace_open(request))

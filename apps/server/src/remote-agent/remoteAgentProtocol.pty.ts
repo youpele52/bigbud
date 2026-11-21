@@ -1,6 +1,11 @@
 import type { RemoteAgentProcessEnvironment } from "./remoteAgentProtocol.ts";
+import type {
+  RemoteAgentPtyCreateLifecycleFields,
+  RemoteAgentPtyCreateLimitFields,
+  RemoteAgentPtyInventoryLifecycleFields,
+} from "./remoteAgentProtocol.ptyLifecycle.ts";
 
-export interface RemoteAgentPtyCreateRequest {
+export interface RemoteAgentPtyCreateRequest extends RemoteAgentPtyCreateLifecycleFields {
   readonly requestId: string;
   readonly ptyId: string;
   readonly requestDigest: Uint8Array;
@@ -15,7 +20,7 @@ export interface RemoteAgentPtyCreateRequest {
   readonly environment?: ReadonlyArray<RemoteAgentProcessEnvironment>;
 }
 
-export interface RemoteAgentPtyCreateResponse {
+export interface RemoteAgentPtyCreateResponse extends RemoteAgentPtyCreateLimitFields {
   readonly requestId: string;
   readonly ptyId: string;
   readonly accepted: boolean;
@@ -130,7 +135,7 @@ export interface RemoteAgentPtyListRequest {
   readonly snapshotId: string;
 }
 
-export interface RemoteAgentPtyInventoryEntry {
+export interface RemoteAgentPtyInventoryEntry extends RemoteAgentPtyInventoryLifecycleFields {
   readonly ptyId: string;
   readonly requestDigest: Uint8Array;
   readonly state: string;

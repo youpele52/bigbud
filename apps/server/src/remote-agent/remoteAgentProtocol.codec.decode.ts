@@ -17,6 +17,8 @@ import { decodeProcessFrame } from "./remoteAgentProtocol.codec.process.decode.t
 import { decodePtyFrame } from "./remoteAgentProtocol.codec.pty.decode.ts";
 import { decodeResourceCleanupFrame } from "./remoteAgentProtocol.codec.resourceCleanup.ts";
 import { decodeRemoteAgentControlFrame } from "./remoteAgentProtocol.codec.control.ts";
+import { AGENT_HELLO_PROCESS_FIELDS } from "./remoteAgentProtocol.codec.pty.lifecycle.ts";
+import { decodeTableExtension } from "./remoteAgentProtocol.codec.table.ts";
 
 function decodeClientHello(bytes: Uint8Array): RemoteAgentClientHello {
   const value = {
@@ -152,7 +154,7 @@ function decodeAgentHello(bytes: Uint8Array): RemoteAgentHello {
         reader.skip(wireType);
     }
   });
-  return value;
+  return { ...value, ...decodeTableExtension(AGENT_HELLO_PROCESS_FIELDS, bytes) };
 }
 
 function decodeDiagnosticRequest(bytes: Uint8Array): RemoteAgentDiagnosticRequest {
@@ -329,6 +331,7 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
           field === 64 ||
           field === 65 ||
           (field >= 66 && field <= 79) ||
+          (field >= 80 && field <= 95) ||
           (field >= 100 && field <= 107) ||
           (field >= 120 && field <= 127)
         )

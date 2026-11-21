@@ -63,6 +63,8 @@ impl AgentSession {
                 max_frame_bytes: bigbud_protocol::DEFAULT_MAX_FRAME_BYTES as u64,
                 max_operation_output_bytes: 8 * 1024 * 1024,
                 max_journal_bytes: 64 * 1024 * 1024,
+                // Process identity is filled by the terminal host (protocol 1.9, R5).
+                ..Default::default()
             })),
         })
     }

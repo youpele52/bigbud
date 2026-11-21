@@ -198,6 +198,7 @@ pub(super) fn pty_create_response_frame(
                 error_code: String::new(),
                 error_message: String::new(),
                 launch_status: pty_launch_status(handle.launch_outcome()).to_owned(),
+                ..Default::default()
             },
         )),
     }

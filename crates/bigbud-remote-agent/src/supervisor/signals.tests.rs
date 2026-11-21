@@ -53,6 +53,7 @@ fn create_request(id: &str, workspace: &str, shell: &str, script: &str) -> v1::f
         rows: 24,
         environment: vec![],
         profile_launch: false,
+        ..Default::default()
     })
 }
 

@@ -11,7 +11,8 @@ use super::{
 };
 
 enum Input {
-    Frame(v1::Frame),
+    // Boxed: a frame is far larger than the other inputs.
+    Frame(Box<v1::Frame>),
     Eof,
     Failed(String),
 }
@@ -29,7 +30,7 @@ pub(super) fn run(reader: impl Read + Send + 'static, mut writer: impl Write) ->
         loop {
             match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
                 Ok(Some(frame)) => {
-                    if input_tx.send(Input::Frame(frame)).is_err() {
+                    if input_tx.send(Input::Frame(Box::new(frame))).is_err() {
                         return;
                     }
                 }

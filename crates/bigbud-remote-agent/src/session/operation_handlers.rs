@@ -1,4 +1,93 @@
+use bigbud_protocol::pty_lifecycle::UNSUPPORTED;
+
 use super::*;
+
+#[cfg(test)]
+#[path = "operation_handlers.tests.rs"]
+mod tests;
+
+/// Protocol 1.9 lifecycle requests (frames 80-95) that this agent does not yet
+/// implement. Their capabilities are not advertised, so a conforming client never
+/// sends them; a stray one still gets a refusal it can correlate by request id.
+pub(super) fn is_pty_lifecycle_request(payload: &v1::frame::Payload) -> bool {
+    use v1::frame::Payload;
+    matches!(
+        payload,
+        Payload::PtyScreenSnapshotRequest(_)
+            | Payload::HostPolicyUpdateRequest(_)
+            | Payload::PtyViewStateRequest(_)
+            | Payload::PtyKeepOpenRequest(_)
+            | Payload::PtyCloseAllRequest(_)
+            | Payload::HostNoticeReplayRequest(_)
+    )
+}
+
+/// Answers an unsupported lifecycle request with its typed refusal.
+pub(super) fn refuse_pty_lifecycle_request(
+    payload: v1::frame::Payload,
+    agent_epoch: &str,
+) -> v1::Frame {
+    use v1::frame::Payload;
+    let code = UNSUPPORTED.to_owned();
+    let message = "terminal lifecycle is not supported by this agent".to_owned();
+    let payload = match payload {
+        Payload::PtyScreenSnapshotRequest(request) => {
+            Payload::PtyScreenSnapshotHeader(Box::new(v1::PtyScreenSnapshotHeader {
+                request_id: request.request_id,
+                pty_id: request.pty_id,
+                error_code: code,
+                error_message: message,
+                ..Default::default()
+            }))
+        }
+        Payload::HostPolicyUpdateRequest(request) => {
+            Payload::HostPolicyUpdateResponse(Box::new(v1::HostPolicyUpdateResponse {
+                request_id: request.request_id,
+                error_code: code,
+                error_message: message,
+                ..Default::default()
+            }))
+        }
+        Payload::PtyViewStateRequest(request) => {
+            Payload::PtyViewStateResponse(Box::new(v1::PtyViewStateResponse {
+                request_id: request.request_id,
+                pty_id: request.pty_id,
+                accepted: false,
+                error_code: code,
+                error_message: message,
+            }))
+        }
+        Payload::PtyKeepOpenRequest(request) => {
+            Payload::PtyKeepOpenResponse(Box::new(v1::PtyKeepOpenResponse {
+                request_id: request.request_id,
+                pty_id: request.pty_id,
+                accepted: false,
+                error_code: code,
+                error_message: message,
+            }))
+        }
+        Payload::PtyCloseAllRequest(request) => {
+            Payload::PtyCloseAllResponse(Box::new(v1::PtyCloseAllResponse {
+                request_id: request.request_id,
+                error_code: code,
+                error_message: message,
+                ..Default::default()
+            }))
+        }
+        Payload::HostNoticeReplayRequest(request) => {
+            Payload::HostNoticeReplayResponse(Box::new(v1::HostNoticeReplayResponse {
+                request_id: request.request_id,
+                agent_epoch: agent_epoch.to_owned(),
+                error_code: code,
+                ..Default::default()
+            }))
+        }
+        _ => return protocol_error_frame(&SessionError::UnexpectedMessage),
+    };
+    v1::Frame {
+        payload: Some(payload),
+    }
+}
 
 impl AgentSession {
     pub(super) fn handle_diagnostic_request(

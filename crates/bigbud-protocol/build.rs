@@ -4,6 +4,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/process.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/service_lease.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/pty.proto");
+    println!("cargo:rerun-if-changed=../../protocol/remote-agent/pty_lifecycle.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/paste_staging.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/resource_cleanup.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/search.proto");
@@ -28,6 +29,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.boxed(format!(
             ".bigbud.remote_agent.v1.Frame.payload.service_lease_{field}"
         ));
+    }
+    // Protocol 1.9 terminal lifecycle payloads stay off the frame footprint: the
+    // larger ones (snapshot header, policy, view state, reports and replays)
+    // are boxed so `Frame` stays bounded by the pre-1.9 PTY create request.
+    for field in [
+        "pty_screen_snapshot_header",
+        "host_policy_update_request",
+        "host_policy_update_response",
+        "pty_view_state_request",
+        "pty_view_state_response",
+        "pty_keep_open_response",
+        "pty_close_all_response",
+        "host_resource_report",
+        "host_notice_replay_response",
+    ] {
+        config.boxed(format!(".bigbud.remote_agent.v1.Frame.payload.{field}"));
     }
     config
         .compile_protos(
