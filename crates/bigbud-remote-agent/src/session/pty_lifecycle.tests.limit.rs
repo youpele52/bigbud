@@ -74,7 +74,7 @@ fn limit_eviction_is_atomic_and_never_takes_a_visible_or_unmanaged_pty() {
     let admitted = host.create(request);
     assert!(admitted.accepted, "{admitted:?}");
     assert_eq!(admitted.evicted_pty_id, host.id("a"));
-    assert!(host.has_notice("a", kind::LIMIT_CLOSED));
+    assert!(host.wait_notice("a", kind::LIMIT_CLOSED));
     assert!(!host.lifecycle("a").handle().is_running());
     assert!(host.lifecycle("c").handle().is_running());
 }
@@ -115,7 +115,7 @@ fn close_all_with_managed_only_leaves_unmanaged_and_old_client_ptys_running() {
     assert!(matches!(frame.payload,
         Some(v1::frame::Payload::PtyCloseAllResponse(response))
             if response.accepted && response.closed_count == 1));
-    assert!(host.has_notice("managed", kind::QUIT_CLOSED));
+    assert!(host.wait_notice("managed", kind::QUIT_CLOSED));
     assert!(host.lifecycle("unmanaged").handle().is_running());
     assert!(legacy_handle.is_running());
 

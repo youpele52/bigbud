@@ -6,5 +6,6 @@ pub use core::{
     workspace_watch_event_frame,
 };
 pub(crate) use core::{
-    HostLifecycle, PtyLifecycle, SnapshotSource, SnapshotTransfer, produce_snapshot,
+    HostLifecycle, PtyLifecycle, SnapshotSource, SnapshotTransfer, is_blocking_pty_control,
+    produce_snapshot,
 };

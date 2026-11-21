@@ -92,6 +92,15 @@ pub(super) fn serve_connection_loop(
             connection_lifecycle::handle(&sessions, runtime, &writer, frame.payload)?;
             continue;
         }
+        if frame
+            .payload
+            .as_ref()
+            .is_some_and(crate::session::is_blocking_pty_control)
+        {
+            // A terminating close waits for its escalation; keep this read loop free (R8).
+            connection_lifecycle::close_off_loop(&sessions, &writer, frame.payload)?;
+            continue;
+        }
         if frame.payload.as_ref().is_some_and(crate::is_pty_control) {
             let prepared = sessions
                 .lock()

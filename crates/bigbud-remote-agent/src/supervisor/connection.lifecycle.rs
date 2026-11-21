@@ -4,7 +4,10 @@
 use super::host_runtime::HostRuntime;
 use super::job_lifecycle::Completion;
 use super::snapshot_worker::{self, SnapshotJob};
-use super::{Writer, io_helpers::write_responses};
+use super::{
+    Writer,
+    io_helpers::{write_protocol_error, write_responses},
+};
 use crate::AgentSession;
 use bigbud_protocol::v1;
 use std::io;
@@ -59,6 +62,22 @@ fn snapshot(
     }
 }
 
+/// Runs `work` on its own thread under a publication permit, so a close escalation (up to a
+/// few seconds) never stalls the connection's read loop (R8).
+fn off_loop(work: impl FnOnce() -> io::Result<()> + Send + 'static) -> io::Result<()> {
+    let publication = Completion::publication()
+        .ok_or_else(|| io::Error::other("supervisor publication fenced"))?;
+    std::thread::Builder::new()
+        .name("pty-close-request".to_owned())
+        .spawn(move || {
+            let _publication = publication;
+            if let Err(error) = work() {
+                eprintln!("terminal close response not delivered: {error}");
+            }
+        })
+        .map(|_detached| ())
+}
+
 fn close_all(
     sessions: &Arc<Mutex<AgentSession>>,
     writer: &Writer,
@@ -68,14 +87,47 @@ fn close_all(
         .lock()
         .map_err(|_| io::Error::other("agent session lock was poisoned"))?
         .prepare_close_all(request);
-    let (response, closed) = prepared.execute();
-    {
-        let mut session = sessions
-            .lock()
-            .map_err(|_| io::Error::other("agent session lock was poisoned"))?;
-        for pty_id in &closed {
-            session.note_pty_closed(pty_id);
+    let sessions = Arc::clone(sessions);
+    let writer = Arc::clone(writer);
+    off_loop(move || {
+        let (response, closed) = prepared.execute();
+        {
+            let mut session = sessions
+                .lock()
+                .map_err(|_| io::Error::other("agent session lock was poisoned"))?;
+            for pty_id in &closed {
+                session.note_pty_closed(pty_id);
+            }
         }
-    }
-    write_responses(writer, vec![response])
+        write_responses(&writer, vec![response])
+    })
+}
+
+/// A terminating `PtyCloseRequest`: resolved under the session lock, executed off the loop.
+pub(super) fn close_off_loop(
+    sessions: &Arc<Mutex<AgentSession>>,
+    writer: &Writer,
+    payload: Option<v1::frame::Payload>,
+) -> io::Result<()> {
+    let payload = payload.ok_or_else(|| io::Error::other("missing payload"))?;
+    let prepared = sessions
+        .lock()
+        .map_err(|_| io::Error::other("agent session poisoned"))?
+        .prepare_pty_control(payload);
+    let prepared = match prepared {
+        Ok(prepared) => prepared,
+        Err(error) => return write_protocol_error(writer, &error),
+    };
+    let sessions = Arc::clone(sessions);
+    let writer = Arc::clone(writer);
+    off_loop(move || match prepared.execute() {
+        Ok(response) => {
+            sessions
+                .lock()
+                .map_err(|_| io::Error::other("agent session poisoned"))?
+                .retain_closed_pty(&response);
+            write_responses(&writer, vec![response])
+        }
+        Err(error) => write_protocol_error(&writer, &error),
+    })
 }

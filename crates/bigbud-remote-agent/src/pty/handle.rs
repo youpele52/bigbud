@@ -259,7 +259,7 @@ impl PtyHandle {
     #[cfg(unix)]
     pub fn close(&self, terminate: bool) -> Result<(), PtyError> {
         if terminate {
-            self.signal("SIGTERM")?;
+            return self.terminate();
         }
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         state.state = PtyState::Closed;

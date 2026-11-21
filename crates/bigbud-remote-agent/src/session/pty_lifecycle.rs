@@ -306,7 +306,23 @@ impl PtyLifecycle {
         state.closing = true;
         state.responder.stop();
         drop(state);
-        self.host().notice(self.pty_id(), notice, 0);
+        // The notice reports a finished close: it waits for the reap (or the end of the
+        // escalation) on a short-lived thread, so policy ticks and creates never block (R8).
+        let handle = Arc::clone(self.handle());
+        let host = Arc::clone(self.host());
+        let pty_id = self.pty_id().to_owned();
+        let kind = notice.to_owned();
+        let announce = move || {
+            let _outcome = handle.wait_closed(pty::PtyHandle::close_deadline());
+            host.notice(&pty_id, &kind, 0);
+        };
+        if let Err(error) = std::thread::Builder::new()
+            .name("pty-close-notice".to_owned())
+            .spawn(announce)
+        {
+            eprintln!("terminal close notice deferred inline: {error}");
+            self.host().notice(self.pty_id(), notice, 0);
+        }
         true
     }
 

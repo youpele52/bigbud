@@ -8,6 +8,12 @@ pub struct PreparedPtyControl {
     lifecycle: Option<Arc<super::pty_lifecycle::PtyLifecycle>>,
 }
 
+/// A terminating close waits for its escalation (up to a few seconds); the supervisor runs it
+/// off the connection's read loop.
+pub fn is_blocking_pty_control(payload: &v1::frame::Payload) -> bool {
+    matches!(payload, v1::frame::Payload::PtyCloseRequest(value) if value.terminate)
+}
+
 pub fn is_pty_control(payload: &v1::frame::Payload) -> bool {
     matches!(
         payload,
@@ -132,13 +138,21 @@ impl PreparedPtyControl {
                 "PTY_SIGNAL_ERROR",
                 "signal",
             ),
-            v1::frame::Payload::PtyCloseRequest(value) => (
-                value.request_id,
-                value.pty_id,
-                h.close(value.terminate),
-                "PTY_CLOSE_ERROR",
-                "close",
-            ),
+            v1::frame::Payload::PtyCloseRequest(value) => {
+                let result = h.close(value.terminate);
+                if result.is_ok() && value.terminate {
+                    // Answer only once the child is reaped, or the escalation ended; an
+                    // unreaped child is then reported as `outcome-unknown` by inventory.
+                    let _outcome = h.wait_closed(pty::PtyHandle::close_deadline());
+                }
+                (
+                    value.request_id,
+                    value.pty_id,
+                    result,
+                    "PTY_CLOSE_ERROR",
+                    "close",
+                )
+            }
             _ => return Err(SessionError::UnexpectedMessage),
         };
         Ok(pty_control_response_frame(

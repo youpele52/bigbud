@@ -127,6 +127,11 @@ impl AgentSession {
                 entry.first_retained_sequence = snapshot.first_retained_sequence;
                 entry.verified_exit = session.handle.child_reaped()
                     && (snapshot.exit_code.is_some() || snapshot.signal.is_some());
+                if session.handle.close_outcome_unknown() && !session.handle.child_reaped() {
+                    // A terminating close escalated to SIGKILL and the child was still not
+                    // reaped: never claim it closed (R8).
+                    entry.state = "outcome-unknown".to_owned();
+                }
                 if let Some(lifecycle) = &session.lifecycle {
                     lifecycle_facts(lifecycle, &mut entry);
                 }

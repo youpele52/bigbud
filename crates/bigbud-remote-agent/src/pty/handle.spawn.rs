@@ -162,6 +162,8 @@ impl PtyHandle {
                 child,
                 launch_outcome,
                 input,
+                terminating: std::sync::atomic::AtomicBool::new(false),
+                outcome_unknown: std::sync::atomic::AtomicBool::new(false),
                 state: Mutex::new(PtyStateRecord {
                     state: PtyState::Running,
                     next_sequence: 1,

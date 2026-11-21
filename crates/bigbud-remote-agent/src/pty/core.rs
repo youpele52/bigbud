@@ -104,6 +104,10 @@ struct PtyInner {
     launch_outcome: LaunchOutcome,
     input: input::InputWriter,
     state: Mutex<PtyStateRecord>,
+    /// Set by the first terminating close; later closes do not start a second escalation.
+    terminating: std::sync::atomic::AtomicBool,
+    /// The escalation ended without a reap: the outcome is unknown (zombie or unreapable).
+    outcome_unknown: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(unix)]
@@ -144,8 +148,11 @@ pub enum PtyEvent {
 
 #[path = "handle.rs"]
 mod handle;
+#[path = "handle.close.rs"]
+mod handle_close;
 #[path = "handle.lifecycle.rs"]
 mod handle_lifecycle;
+pub use handle_close::{CLOSE_GRACE, CloseOutcome};
 pub use handle_lifecycle::RebuildRing;
 #[cfg(unix)]
 #[path = "launch.rs"]

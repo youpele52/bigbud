@@ -41,7 +41,7 @@ fn idle_close_warns_then_closes_only_managed_hidden_quiet_ptys() {
     host.clock.set(t0 + 90_000);
     let closed = host.tick();
     assert_eq!(closed, vec!["managed".to_owned()]);
-    assert!(host.has_notice("managed", kind::IDLE_CLOSED));
+    assert!(host.wait_notice("managed", kind::IDLE_CLOSED));
     assert!(!host.lifecycle("managed").handle().is_running());
     // The unmanaged PTY never got a warning or a close, however long it stayed quiet.
     host.clock.set(t0 + 10 * 60 * 60 * 1000);
@@ -107,10 +107,11 @@ fn orphan_closes_managed_ptys_in_default_mode_and_never_in_keep_mode() {
         host.clock.set(t1 + 60_000);
         let closed = host.tick();
         assert_eq!(closed.contains(&"managed".to_owned()), expect_closed);
-        assert_eq!(
-            host.has_notice("managed", kind::ORPHAN_CLOSED),
-            expect_closed
-        );
+        if expect_closed {
+            assert!(host.wait_notice("managed", kind::ORPHAN_CLOSED));
+        } else {
+            assert!(!host.has_notice("managed", kind::ORPHAN_CLOSED));
+        }
         assert!(host.lifecycle("unmanaged").handle().is_running());
     }
 }

@@ -208,6 +208,18 @@ impl Host {
             .collect()
     }
 
+    /// Close notices follow the reap (R8), so they arrive shortly after the close.
+    pub fn wait_notice(&self, id: &str, kind: &str) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(6);
+        while Instant::now() < deadline {
+            if self.has_notice(id, kind) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+
     pub fn has_notice(&self, id: &str, kind: &str) -> bool {
         self.notices().iter().any(|(pty, k)| pty == id && k == kind)
     }

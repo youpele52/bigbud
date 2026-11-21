@@ -109,12 +109,12 @@ fn sigterm_removes_socket_and_refuses_new_admission() {
     let mut rig = Rig::new("signal-socket", None);
     let (mut terminal, _) = rig.connect();
     rig.open(&mut terminal);
-    // Ignoring TERM holds the drain in its bounded settle window until the
+    // Ignoring HUP and TERM holds the drain in its bounded settle window until the
     // forced fallback, so admission can be observed while draining.
     rig.pty(
         &mut terminal,
         "stubborn",
-        "trap '' TERM; printf READY; while :; do sleep 1; done",
+        "trap '' HUP TERM; printf READY; while :; do sleep 1; done",
     );
     read_output_until(&mut terminal, b"READY");
     send(&rig, libc::SIGTERM);

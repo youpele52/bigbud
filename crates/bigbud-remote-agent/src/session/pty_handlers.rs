@@ -180,9 +180,13 @@ impl AgentSession {
     pub(super) fn handle_pty_close(&mut self, request: v1::PtyCloseRequest) -> v1::Frame {
         let pty_id = request.pty_id.clone();
         let result = self.pty(&pty_id).and_then(|handle| {
-            handle
+            let result = handle
                 .close(request.terminate)
-                .map_err(|error| SessionError::Pty(error.to_string()))
+                .map_err(|error| SessionError::Pty(error.to_string()));
+            if result.is_ok() && request.terminate {
+                let _outcome = handle.wait_closed(pty::PtyHandle::close_deadline());
+            }
+            result
         });
         if result.is_ok()
             && let Some(session) = self.pty_sessions.get_mut(&pty_id)

@@ -21,6 +21,7 @@ impl PreparedCloseAll {
     /// Returns the response and the ids that were closed (for session retention).
     pub fn execute(self) -> (v1::Frame, Vec<String>) {
         let mut closed = Vec::new();
+        let mut closing = Vec::new();
         for (handle, lifecycle) in self.targets {
             let done = match &lifecycle {
                 Some(lifecycle) => lifecycle.close_if(kind::QUIT_CLOSED, |_, _| true),
@@ -28,7 +29,14 @@ impl PreparedCloseAll {
             };
             if done {
                 closed.push(handle.id.clone());
+                closing.push(handle);
             }
+        }
+        // Every close escalates in parallel; the response waits until each child is reaped
+        // or its escalation ended (R8), never reporting a survivor as closed early.
+        let deadline = pty::PtyHandle::close_deadline();
+        for handle in &closing {
+            let _outcome = handle.wait_closed(deadline);
         }
         let response = v1::PtyCloseAllResponse {
             request_id: self.request_id,

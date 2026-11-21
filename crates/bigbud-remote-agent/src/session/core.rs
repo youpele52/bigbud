@@ -69,6 +69,7 @@ mod search;
 #[cfg(unix)]
 #[path = "service_lease.rs"]
 mod service_lease;
+pub(crate) use pty_controls::is_blocking_pty_control;
 pub use pty_controls::{PreparedPtyControl, is_pty_control};
 use pty_handlers::PtySession;
 pub(crate) use pty_lifecycle::PtyLifecycle;
