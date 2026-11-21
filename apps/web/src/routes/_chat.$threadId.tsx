@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ChatView from "../components/chat/view/ChatView";
 import { ThreadProjectGate } from "../components/chat/view/ThreadProjectGate";
+import { ThreadRemoteTargetGate } from "../components/chat/view/ThreadRemoteTargetGate";
 import { BigbudLogo } from "../components/sidebar/SidebarProjectItem";
 import {
   clearPromotedDraftThread,
@@ -251,7 +252,12 @@ export function ChatThreadRouteView() {
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
       <ThreadProjectGate projectId={routeThread?.projectId ?? draftProjectId}>
-        <ChatView threadId={threadId} />
+        <ThreadRemoteTargetGate
+          threadId={threadId}
+          projectId={routeThread?.projectId ?? draftProjectId}
+        >
+          <ChatView threadId={threadId} />
+        </ThreadRemoteTargetGate>
       </ThreadProjectGate>
     </SidebarInset>
   );

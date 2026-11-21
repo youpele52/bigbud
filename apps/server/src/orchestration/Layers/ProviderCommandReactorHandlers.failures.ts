@@ -1,5 +1,8 @@
 import { EventId, type MessageId, ThreadId, type TurnId } from "@bigbud/contracts";
-import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
+import type {
+  TurnStartFailureClass,
+  TurnStartRemoteTargetFailure,
+} from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
@@ -20,6 +23,8 @@ export type ProviderFailureActivityInput = {
   readonly createdAt: string;
   readonly requestId?: string;
   readonly failureClass?: TurnStartFailureClass;
+  /** Set when the turn failed because its remote (SSH) target was unavailable. */
+  readonly remoteTarget?: TurnStartRemoteTargetFailure;
   /** The user message whose turn start failed; a fork reads only that message's failure. */
   readonly messageId?: MessageId;
   /** Deterministic id so a fork can name the failure it continues from. */
@@ -34,6 +39,8 @@ export type TurnStartFailureInput = {
   readonly createdAt: string;
   readonly messageId?: MessageId;
   readonly activityId?: EventId;
+  /** Activity-payload only (`thread.turn.start.failed` stays unchanged on the wire). */
+  readonly remoteTarget?: TurnStartRemoteTargetFailure;
 };
 
 const normalizeTurnStartFailureDetail = (detail: string): string => {
@@ -56,6 +63,7 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
           detail: input.detail,
           ...(input.requestId ? { requestId: input.requestId } : {}),
           ...(input.failureClass ? { failureClass: input.failureClass } : {}),
+          ...(input.remoteTarget ? { remoteTarget: input.remoteTarget } : {}),
           ...(input.messageId ? { messageId: input.messageId } : {}),
         },
         turnId: input.turnId,
@@ -78,14 +86,16 @@ export function makeProviderFailureHandlers(orchestrationEngine: OrchestrationEn
 
   const recordTurnStartFailure = (input: TurnStartFailureInput) =>
     Effect.gen(function* () {
+      const { remoteTarget, ...failure } = input;
       const detail = normalizeTurnStartFailureDetail(input.detail);
-      yield* emitTurnStartFailure({ ...input, detail });
+      yield* emitTurnStartFailure({ ...failure, detail });
       yield* appendProviderFailureActivity({
         threadId: input.threadId,
         kind: "provider.turn.start.failed",
         summary: "Provider turn start failed",
         detail,
         failureClass: input.failureClass,
+        ...(remoteTarget !== undefined ? { remoteTarget } : {}),
         turnId: null,
         createdAt: input.createdAt,
         ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),

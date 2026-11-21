@@ -154,6 +154,17 @@ describe("deriveThreadRecoveryNotice", () => {
     expect(derive(request("started"), 1_000, { settledAfterMs: 800 }).notice).toBeNull();
     expect(derive(request("failed"), 1_000, { settledAfterMs: 800 }).notice).toBeNull();
   });
+
+  it("never says the session cannot be resumed when the remote target was unavailable", () => {
+    const remote: ServerTurnFailure = {
+      ...failureOf("session-dead"),
+      remoteTarget: { reason: "auth-required", authMode: "password" },
+    };
+    expect(derive(null, 0, { failure: remote }).notice).toBeNull();
+    expect(
+      derive(request("failed"), 600_000, { settledAfterMs: 6_000, failure: remote }).notice,
+    ).toBeNull();
+  });
 });
 
 describe("observeTurnStartRequest", () => {

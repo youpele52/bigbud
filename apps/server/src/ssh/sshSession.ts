@@ -24,6 +24,11 @@ import {
   isSshTargetDisconnected,
   RemoteTargetDisconnectedError,
 } from "./sshTargetDisconnects.ts";
+import {
+  buildSshPasswordRequiredMessage,
+  SSH_PASSWORD_AUTH_REQUIRED_MESSAGE,
+  SshTargetAuthRequiredError,
+} from "./sshTargetUnavailable.ts";
 
 const SSH_PASSWORD_SESSION_DIR_PREFIX = "bbs-";
 const SSH_PASSWORD_ASKPASS_DIR_PREFIX = "bigbud-ssh-password-askpass-";
@@ -158,10 +163,18 @@ async function isPasswordSessionActiveAsync(
 export function formatSshPasswordRequiredMessage(executionTargetId: string): string {
   const target = parseSshExecutionTarget(executionTargetId);
   if (!target) {
-    return "SSH password authentication is required before using this target.";
+    return SSH_PASSWORD_AUTH_REQUIRED_MESSAGE;
   }
 
-  return `SSH password is required for ${buildPasswordSessionDestination(target)}. Re-enter it before using this target.`;
+  return buildSshPasswordRequiredMessage(buildPasswordSessionDestination(target));
+}
+
+function passwordRequiredError(target: SshExecutionTarget): SshTargetAuthRequiredError {
+  return new SshTargetAuthRequiredError(
+    target.executionTargetId,
+    "password",
+    formatSshPasswordRequiredMessage(target.executionTargetId),
+  );
 }
 
 export function assertSshPasswordExecutionTargetReady(
@@ -175,7 +188,7 @@ export function assertSshPasswordExecutionTargetReady(
     return;
   }
   if (!isPasswordSessionActive(target)) {
-    throw new Error(formatSshPasswordRequiredMessage(target.executionTargetId));
+    throw passwordRequiredError(target);
   }
 }
 
@@ -194,7 +207,7 @@ export async function assertSshPasswordExecutionTargetReadyAsync(
   if (
     !(await isPasswordSessionActiveAsync(target, deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS)))
   ) {
-    throw new Error(formatSshPasswordRequiredMessage(target.executionTargetId));
+    throw passwordRequiredError(target);
   }
 }
 

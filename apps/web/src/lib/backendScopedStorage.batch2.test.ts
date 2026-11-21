@@ -27,8 +27,7 @@ describe("backend-scoped stores (batch 2)", () => {
       "bigbud:remote-reconnect-requests": JSON.stringify(local),
     });
     await openBoundWindow(storage);
-    const reconnect =
-      await import("../components/sidebar/Sidebar.projectActions.reconnect.persistence");
+    const reconnect = await import("../stores/remoteAccess/remoteTargetActions.persistence");
     expect(reconnect.readReconnectRequests()).toEqual([]);
     reconnect.saveReconnectRequest({
       requestId: "remote",

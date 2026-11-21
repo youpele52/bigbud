@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createReconnectPoller } from "./Sidebar.projectActions.reconnect.poller";
+import { createReconnectPoller } from "./remoteTargetActions.poller";
 
 const request = { requestId: "persisted-request" };
 afterEach(() => vi.useRealTimers());

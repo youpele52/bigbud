@@ -13,17 +13,18 @@ import type {
   SidebarThreadActionsInput,
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
+import { buildInyosiraMoveMenuItem, runInyosiraMenuAction } from "./Sidebar.inyosira.menu";
 import {
-  buildInyosiraMoveMenuItem,
-  buildInyosiraSnoozeMenuItem,
-  runInyosiraMenuAction,
-} from "./Sidebar.inyosira.menu";
+  buildThreadContextMenuItems,
+  resolveThreadElevatorSummary,
+} from "./Sidebar.threadActions.menu";
+import { useStore } from "../../stores/main";
+import {
+  readRemoteTargetMenuItems,
+  runRemoteTargetMenuAction,
+} from "../../stores/remoteAccess/remoteTargetActions.menu";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import { requestNewThreadTitle } from "./Sidebar.threadActions.generation";
-
-function normalizeSummaryText(value: string | null | undefined): string {
-  return value?.trim().replace(/\s+/g, " ") ?? "";
-}
 
 /** Encapsulates all thread-level actions for the sidebar. */
 export function useSidebarThreadActions({
@@ -214,38 +215,17 @@ export function useSidebarThreadActions({
       if (!api) return;
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
-      const isFavorite = (thread.pinnedAt ?? null) !== null;
-      const normalizedTitle = normalizeSummaryText(thread.title);
-      const normalizedElevatorSummary = normalizeSummaryText(thread.elevatorSummary);
-      const hasElevatorSummary =
-        normalizedElevatorSummary.length > 0 && normalizedElevatorSummary !== normalizedTitle;
+      const elevatorSummary = resolveThreadElevatorSummary(thread);
+      // Same connection controls and handlers as the workspace menu (shared remote actions).
+      const project = useStore.getState().projects.find((entry) => entry.id === thread.projectId);
+      const remoteItems = readRemoteTargetMenuItems(project ?? { ...thread, id: thread.projectId });
       const clicked = await api.contextMenu.show(
-        [
-          { id: "rename", label: "Rename thread" },
-          { id: "generate-title", label: "Generate title…" },
-          { id: "branch", label: "Branch thread" },
-          buildInyosiraMoveMenuItem(thread.organization),
-          buildInyosiraSnoozeMenuItem(thread.organization),
-          {
-            id: "favorite",
-            label: isFavorite ? "Unpin thread" : "Pin thread",
-          },
-          { id: "separator-actions", label: "", separator: true },
-          {
-            id: "copy-elevator-summary",
-            label: "Elevator summary",
-            disabled: !hasElevatorSummary,
-          },
-          { id: "copy-thread-id", label: "Copy Thread ID" },
-          { id: "copy-path", label: "Copy Path" },
-          { id: "archive", label: "Archive thread" },
-          { id: "separator-delete", label: "", separator: true },
-          { id: "delete", label: "Delete", destructive: true },
-        ],
+        buildThreadContextMenuItems({ thread, remoteItems }),
         position,
       );
 
       if (await runInyosiraMenuAction(clicked, [threadId])) return;
+      if (await runRemoteTargetMenuAction(clicked, thread.projectId)) return;
       if (clicked === "generate-title") return requestNewThreadTitle(threadId);
 
       if (clicked === "rename") {
@@ -278,9 +258,8 @@ export function useSidebarThreadActions({
       }
 
       if (clicked === "copy-elevator-summary") {
-        copyElevatorSummaryToClipboard(normalizedElevatorSummary, {
-          summary: normalizedElevatorSummary,
-        });
+        if (!elevatorSummary) return;
+        copyElevatorSummaryToClipboard(elevatorSummary, { summary: elevatorSummary });
         return;
       }
       if (clicked === "copy-path") {

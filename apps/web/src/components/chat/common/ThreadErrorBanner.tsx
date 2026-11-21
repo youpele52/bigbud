@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { ChatBanner } from "./ChatBanner";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
+import { isRemoteTargetErrorText } from "../../../lib/remoteTargetFailure";
 import { useProviderFailureNotice } from "./ThreadErrorBanner.failure";
 
 export const ThreadErrorBanner = memo(function ThreadErrorBanner({
@@ -16,7 +17,8 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "error", [provider]);
   const visibleError =
     failure.message ?? (error !== failure.originalMessage && !dismissed ? error : null);
-  if (!visibleError) return null;
+  // The amber remote-target notice presents SSH auth/disconnect failures with Reconnect.
+  if (!visibleError || isRemoteTargetErrorText(visibleError)) return null;
   return (
     <ChatBanner
       variant="error"

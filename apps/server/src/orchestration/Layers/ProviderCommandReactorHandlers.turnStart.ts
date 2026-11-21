@@ -6,7 +6,10 @@ import {
   type OrchestrationMessage,
   type ThreadId,
 } from "@bigbud/contracts";
-import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
+import type {
+  TurnStartFailureClass,
+  TurnStartRemoteTargetFailure,
+} from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Cause, Effect } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
@@ -18,6 +21,7 @@ import {
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
+import { describeRemoteTargetTurnStartFailure } from "./ProviderTurnFailureClassification.remoteTarget.ts";
 
 type TurnStartRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -32,6 +36,7 @@ type RecordTurnStartFailure = (input: {
   readonly createdAt: string;
   readonly messageId?: MessageId;
   readonly activityId?: EventId;
+  readonly remoteTarget?: TurnStartRemoteTargetFailure;
 }) => Effect.Effect<void, OrchestrationDispatchError>;
 
 type RequestAutomaticFork = (input: {
@@ -135,6 +140,7 @@ export function makeHandleTurnStartFailure(input: {
   }) => {
     const detail = formatProviderServiceCauseDetail(failure.cause);
     const failureClass = classifyTurnStartFailure(failure.cause);
+    const remoteTarget = describeRemoteTargetTurnStartFailure(failure.cause);
     if (
       failureClass !== "busy" ||
       !canQueueTurnStart({ event: failure.event, message: failure.message })
@@ -149,6 +155,7 @@ export function makeHandleTurnStartFailure(input: {
         createdAt: failure.event.payload.createdAt,
         messageId: failure.message.id,
         activityId,
+        ...(remoteTarget !== undefined ? { remoteTarget } : {}),
       });
       // Bounded in-place recovery already ran; still session-dead means it cannot resume (D16).
       const requestAutomaticFork = input.requestAutomaticFork;

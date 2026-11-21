@@ -11,6 +11,10 @@ import type {
 import { formatSshDestination, parseSshExecutionTarget } from "./sshExecutionTarget.ts";
 import { describeSshLocalCommandFailure, runSshLocalCommand } from "./sshLocalCommand.ts";
 import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
+import {
+  buildSshHostTrustRequiredMessage,
+  SshTargetAuthRequiredError,
+} from "./sshTargetUnavailable.ts";
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
 const MAX_CHALLENGES = 128;
@@ -41,7 +45,11 @@ function createChallenge(target: string, prompt: string): never {
     keyType: fingerprint[1]!,
     fingerprint: fingerprint[2]!,
   };
-  throw new Error(`SSH host trust is required: ${JSON.stringify(challenge)}`);
+  throw new SshTargetAuthRequiredError(
+    target,
+    "host-trust",
+    buildSshHostTrustRequiredMessage(JSON.stringify(challenge)),
+  );
 }
 
 /** Lets OpenSSH verify configured known-hosts files, aliases and proxies without sending credentials. */

@@ -45,10 +45,12 @@ import { createAsyncOperationQueue } from "./-__root.recovery.serial";
 import { subscribeGlobalTerminalState } from "./-__root.terminal-events";
 import { emitTerminalWorkActivity } from "../notifications/terminalWorkEvents";
 import {
+  resolveStartupRouteIntent,
   restoreStartupContext,
   runCoalescedStartupFreshChat,
   validateStartupRestorationCandidate,
 } from "./-__root.startup-restoration";
+import { markRestoredThreadRoute } from "../stores/remoteAccess/threadNavigationIntent";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
@@ -110,6 +112,9 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       if (!api) {
         return;
       }
+      // Startup opens threads without a user action: the remote gate never auto-reconnects them.
+      const launchIntent = resolveStartupRouteIntent(launchPathname);
+      if (launchIntent.kind === "explicit-thread") markRestoredThreadRoute(launchIntent.threadId);
       await restoreStartupContext({
         pathname: launchPathname,
         bootstrapProjectId: payload.bootstrapProjectId ?? null,
@@ -121,6 +126,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         isCurrent,
         navigateToThread: async (threadId) => {
           if (!isCurrent()) return;
+          markRestoredThreadRoute(threadId);
           await navigate({ to: "/$threadId", params: { threadId }, replace: true });
         },
         startFreshChat: async () => {

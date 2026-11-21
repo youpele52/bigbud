@@ -1,5 +1,4 @@
 import { projectDeleteConfirmationCopy } from "./Sidebar.projectActions.delete.copy";
-import { describeDisconnectConfirmation } from "./Sidebar.projectActions.connection.logic";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { SettingsSidebarNav } from "../settings/SettingsSidebarNav";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
@@ -12,11 +11,9 @@ import { SidebarProjectEditDialog } from "./SidebarProjectEditDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
 import { useSidebarState } from "./Sidebar.state";
-import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
 export default function Sidebar() {
   const s = useSidebarState();
-  const remoteExecutionAccess = useRemoteExecutionAccessGate();
 
   return (
     <>
@@ -31,47 +28,6 @@ export default function Sidebar() {
 
           <SidebarSeparator />
           <SidebarFooterBar />
-
-          <AlertDialog
-            open={s.pendingReconnect !== null}
-            onOpenChange={(open) => {
-              if (!open) s.dismissReconnect();
-            }}
-          >
-            <AlertDialogPopup className="max-w-sm p-0" bottomStickOnMobile={false}>
-              {s.pendingReconnect ? (
-                <ConfirmationPanel
-                  title={`Reconnect "${s.pendingReconnect.projectName}"?`}
-                  description="Reconnect restarts the bigbud remote service and interrupts the turns and terminals it manages, including other workspaces using this service. Saved workspace settings are kept."
-                  cancelLabel="Cancel"
-                  confirmLabel="Reconnect"
-                  confirmVariant="destructive"
-                  onCancel={s.dismissReconnect}
-                  onConfirm={() => void s.confirmReconnect()}
-                />
-              ) : null}
-            </AlertDialogPopup>
-          </AlertDialog>
-
-          <AlertDialog
-            open={s.pendingDisconnect !== null}
-            onOpenChange={(open) => {
-              if (!open) s.dismissDisconnect();
-            }}
-          >
-            <AlertDialogPopup className="max-w-sm p-0" bottomStickOnMobile={false}>
-              {s.pendingDisconnect ? (
-                <ConfirmationPanel
-                  {...describeDisconnectConfirmation(s.pendingDisconnect)}
-                  cancelLabel="Cancel"
-                  confirmLabel="Disconnect"
-                  confirmVariant="destructive"
-                  onCancel={s.dismissDisconnect}
-                  onConfirm={() => void s.confirmDisconnect()}
-                />
-              ) : null}
-            </AlertDialogPopup>
-          </AlertDialog>
 
           <AlertDialog
             open={s.pendingDeleteConfirmation !== null}
@@ -203,62 +159,6 @@ export default function Sidebar() {
           />
         </>
       )}
-
-      <SidebarUnlockSshKeyDialog
-        open={remoteExecutionAccess.isRemoteExecutionAuthDialogOpen}
-        keyPath={remoteExecutionAccess.remoteExecutionAuthPromptLabel}
-        title={
-          remoteExecutionAccess.remoteExecutionAuthMode === "password"
-            ? "Enter SSH password"
-            : "Unlock SSH key"
-        }
-        fieldLabel={
-          remoteExecutionAccess.remoteExecutionAuthMode === "password"
-            ? "SSH password"
-            : "Key passphrase"
-        }
-        placeholder={
-          remoteExecutionAccess.remoteExecutionAuthMode === "password"
-            ? "Enter the SSH password"
-            : "Enter the SSH key passphrase"
-        }
-        submitLabel={
-          remoteExecutionAccess.remoteExecutionAuthMode === "password"
-            ? "Continue"
-            : "Unlock SSH key"
-        }
-        description={
-          remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
-            <>
-              bigbud needs the SSH password for{" "}
-              <span className="break-all font-light">
-                &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
-              </span>{" "}
-              before it can access this remote workspace.
-            </>
-          ) : (
-            <>
-              bigbud needs the passphrase for{" "}
-              <span className="break-all font-light">
-                &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
-              </span>{" "}
-              before it can access this remote workspace.
-            </>
-          )
-        }
-        secret={remoteExecutionAccess.remoteExecutionAuthSecret}
-        error={remoteExecutionAccess.remoteExecutionAuthError}
-        isSubmitting={remoteExecutionAccess.isAuthenticatingRemoteExecution}
-        onOpenChange={(open) => {
-          if (!open) {
-            remoteExecutionAccess.closeRemoteExecutionAuthDialog();
-          }
-        }}
-        onSecretChange={remoteExecutionAccess.setRemoteExecutionAuthSecret}
-        onSubmit={() => {
-          void remoteExecutionAccess.submitRemoteExecutionAuth();
-        }}
-      />
     </>
   );
 }

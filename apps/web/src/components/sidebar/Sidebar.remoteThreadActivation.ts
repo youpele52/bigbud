@@ -2,17 +2,8 @@ import { useCallback } from "react";
 
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 
-import { DEFAULT_THREAD_TERMINAL_ID } from "../../models/types";
-import { readNativeApi } from "../../rpc/nativeApi";
 import type { SidebarThreadSummary } from "../../models/types";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { useTerminalStateStore } from "../../stores/terminal";
-import {
-  areDisconnectedTargetsLoaded,
-  isExecutionTargetDisconnected,
-} from "../../stores/remoteAccess/remoteAccess.store";
-import { toastManager } from "../ui/toast";
-import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 
 interface PendingRemoteThreadActivation {
@@ -54,89 +45,17 @@ export function resolveRemoteThreadActivation(
   };
 }
 
+/**
+ * Thread clicks navigate directly: the route-level `ThreadRemoteTargetGate` owns reconnecting a
+ * dead remote target for every entry point (sidebar, picker, palettes, links), so the sidebar no
+ * longer runs its own pre-navigation access check.
+ */
 export function useSidebarRemoteThreadActivation({
-  sidebarThreadsById,
-  projectCwdById,
   navigateToThreadRoute,
 }: SidebarRemoteThreadActivationInput): SidebarRemoteThreadActivationOutput {
-  const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
-
-  const reconnectRemoteThreadTerminals = useCallback(
-    async (activation: PendingRemoteThreadActivation) => {
-      if (
-        !activation.cwd ||
-        !areDisconnectedTargetsLoaded() ||
-        isExecutionTargetDisconnected(activation.executionTargetId)
-      ) {
-        return;
-      }
-
-      const api = readNativeApi();
-      if (!api) {
-        return;
-      }
-
-      const terminalState =
-        useTerminalStateStore.getState().terminalStateByThreadId[activation.threadId];
-      if (!terminalState?.terminalOpen) {
-        return;
-      }
-
-      const terminalIds =
-        terminalState.terminalIds.length > 0
-          ? terminalState.terminalIds
-          : [DEFAULT_THREAD_TERMINAL_ID];
-
-      await Promise.all(
-        terminalIds.map((terminalId) =>
-          api.terminal.open({
-            threadId: activation.threadId,
-            executionTargetId: activation.executionTargetId,
-            terminalId,
-            cwd: activation.cwd!,
-            ...(activation.worktreePath ? { worktreePath: activation.worktreePath } : {}),
-          }),
-        ),
-      );
-    },
-    [],
-  );
-
   const navigateToThread = useCallback(
-    (threadId: ThreadId) => {
-      const thread = sidebarThreadsById[threadId];
-      const activation = resolveRemoteThreadActivation(thread, projectCwdById);
-      if (!activation) {
-        navigateToThreadRoute(threadId);
-        return;
-      }
-
-      return beginRemoteExecutionTargetAccessCheck({
-        executionTargetId: activation.executionTargetId,
-        ...(activation.cwd ? { cwd: activation.cwd } : {}),
-        onVerified: async () => {
-          navigateToThreadRoute(threadId);
-          await reconnectRemoteThreadTerminals(activation).catch((error) => {
-            toastManager.add({
-              type: "error",
-              title: "Failed to refresh remote terminal",
-              description:
-                error instanceof Error ? error.message : "An error occurred while reconnecting.",
-            });
-          });
-        },
-      });
-    },
-    [
-      beginRemoteExecutionTargetAccessCheck,
-      navigateToThreadRoute,
-      projectCwdById,
-      reconnectRemoteThreadTerminals,
-      sidebarThreadsById,
-    ],
+    (threadId: ThreadId) => navigateToThreadRoute(threadId),
+    [navigateToThreadRoute],
   );
-
-  return {
-    navigateToThread,
-  };
+  return { navigateToThread };
 }

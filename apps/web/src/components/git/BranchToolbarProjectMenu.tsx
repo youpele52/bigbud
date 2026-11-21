@@ -1,9 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { CheckIcon, ChevronDownIcon, FolderPlusIcon } from "lucide-react";
-import { NewChatIcon } from "../common/NewChatIcon";
 import { BUILT_IN_CHATS_PROJECT_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
-import { cn } from "~/lib/utils";
 
 import {
   getComposerPickerChatRecents,
@@ -18,9 +16,6 @@ import {
   MenuItem,
   MenuPopup,
   MenuSeparator,
-  MenuSub,
-  MenuSubPopup,
-  MenuSubTrigger,
   MenuTrigger,
 } from "../ui/menu";
 import { startSidebarAddProjectFlow } from "../sidebar/SidebarAddProjectBridge";
@@ -31,6 +26,7 @@ import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import type { Project } from "../../models/types";
 import { ProjectLocationIcon } from "../project/ProjectLocationIcon";
+import { BranchToolbarProjectSubmenu } from "./BranchToolbarProjectMenu.projectSubmenu";
 
 interface BranchToolbarProjectMenuProps {
   activeProject: Project | undefined;
@@ -136,59 +132,15 @@ export default function BranchToolbarProjectMenu({
               const isCurrent = project.id === activeProject.id;
               const projectThreads = getProjectThreads(project.id);
               return (
-                <MenuSub key={project.id}>
-                  <MenuSubTrigger
-                    className={cn(
-                      "min-h-7 py-1 text-xs sm:min-h-7",
-                      isCurrent ? "text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    <span className="inline-flex w-2.5 shrink-0 items-center justify-center">
-                      {isCurrent ? <CheckIcon className="size-3" /> : null}
-                    </span>
-                    <ProjectLocationIcon
-                      className={cn("size-3", !isCurrent && "opacity-60")}
-                      project={project}
-                    />
-                    {project.name}
-                  </MenuSubTrigger>
-                  <MenuSubPopup sideOffset={-1} className="min-w-56">
-                    <MenuItem
-                      className="min-h-7 justify-start py-1 text-xs text-muted-foreground sm:min-h-7"
-                      onClick={() => void handleNewThread(project.id)}
-                    >
-                      <NewChatIcon className="size-3 opacity-60" />
-                      New thread
-                    </MenuItem>
-                    <MenuSeparator />
-                    {projectThreads.length > 0 ? (
-                      projectThreads.map((thread) => {
-                        const isThreadCurrent = thread.id === activeThreadId;
-                        return (
-                          <MenuItem
-                            key={thread.id}
-                            onClick={() => handleNavigateToThread(thread.id)}
-                            className={cn(
-                              "min-h-7 py-1 text-xs sm:min-h-7",
-                              isThreadCurrent ? "text-foreground" : "text-muted-foreground",
-                            )}
-                          >
-                            <span className="inline-flex w-2.5 shrink-0 items-center justify-center">
-                              {isThreadCurrent ? <CheckIcon className="size-3" /> : null}
-                            </span>
-                            <span className="min-w-0 truncate">
-                              {truncateThreadName(thread.title)}
-                            </span>
-                          </MenuItem>
-                        );
-                      })
-                    ) : (
-                      <MenuItem disabled className="min-h-7 py-1 text-xs sm:min-h-7">
-                        No recent threads
-                      </MenuItem>
-                    )}
-                  </MenuSubPopup>
-                </MenuSub>
+                <BranchToolbarProjectSubmenu
+                  key={project.id}
+                  project={project}
+                  isCurrent={isCurrent}
+                  activeThreadId={activeThreadId}
+                  threads={projectThreads}
+                  onNewThread={() => void handleNewThread(project.id)}
+                  onNavigateToThread={handleNavigateToThread}
+                />
               );
             })}
           </MenuGroup>

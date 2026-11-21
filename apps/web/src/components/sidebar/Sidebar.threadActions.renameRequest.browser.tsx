@@ -10,8 +10,7 @@ const mocks = vi.hoisted(() => ({
   isMobile: false,
   setOpen: vi.fn(),
   setOpenMobile: vi.fn(),
-  navigate: vi.fn(),
-  accessCheck: vi.fn<(input: { onVerified: () => void | Promise<void> }) => Promise<boolean>>(),
+  navigate: vi.fn<(threadId: string) => void | Promise<boolean>>(),
   setChatsExpanded: vi.fn(),
   setProjectsExpanded: vi.fn(),
   setRemoteWorkspacesExpanded: vi.fn(),
@@ -35,12 +34,6 @@ vi.mock("../../stores/inyosira/inyosira.store", () => ({
 vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => ({}) }));
 vi.mock("../../lib/orchestrationCommandRecovery", () => ({
   dispatchCommandWithOutcomeRecovery: mocks.dispatch,
-}));
-
-vi.mock("../../hooks/useRemoteExecutionAccessGate", () => ({
-  useRemoteExecutionAccessGate: () => ({
-    beginRemoteExecutionTargetAccessCheck: mocks.accessCheck,
-  }),
 }));
 
 import { useSidebarThreadRenameActions } from "./Sidebar.threadActions.rename";
@@ -100,7 +93,6 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   mocks.navigate.mockReset();
-  mocks.accessCheck.mockReset();
 });
 
 it.each([false, true])(
@@ -159,25 +151,31 @@ it.each(["archivedAt", "deletingAt"] as const)(
   },
 );
 
+it("navigates remote threads directly; the route-level gate owns reconnecting", async () => {
+  const remote = {
+    ...thread,
+    workspaceExecutionTargetId: "ssh:host=test&user=test&port=22&auth=ssh-key",
+  };
+  useThreadRenameRequest.getState().request(thread.id);
+  await render(<Harness target={remote} />);
+  await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith(thread.id));
+  expect(useThreadRenameRequest.getState().threadId).toBe(thread.id);
+});
+
 it.each(["refusal", "rejection", "throw"] as const)(
-  "clears remote access %s so a later route cannot open Rename",
+  "clears a navigation %s so a later route cannot open Rename",
   async (outcome) => {
-    const remote = {
-      ...thread,
-      workspaceExecutionTargetId: "ssh:host=test&user=test&port=22&auth=ssh-key",
-    };
-    if (outcome === "refusal") mocks.accessCheck.mockResolvedValue(false);
-    else if (outcome === "rejection")
-      mocks.accessCheck.mockRejectedValue(new Error("Access failed"));
+    if (outcome === "refusal") mocks.navigate.mockResolvedValue(false);
+    else if (outcome === "rejection") mocks.navigate.mockRejectedValue(new Error("Refused"));
     else
-      mocks.accessCheck.mockImplementation(() => {
-        throw new Error("Access failed");
+      mocks.navigate.mockImplementation(() => {
+        throw new Error("Refused");
       });
+    const remote = thread;
     useThreadRenameRequest.getState().request(thread.id);
     const screen = await render(<Harness target={remote} />);
     await vi.waitFor(() => expect(useThreadRenameRequest.getState().threadId).toBeNull());
-    expect(mocks.accessCheck).toHaveBeenCalledOnce();
-    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledOnce();
     mocks.routeThreadId = thread.id;
     await screen.rerender(<Harness target={remote} />);
     expect(document.querySelector("input")).toBeNull();
@@ -199,10 +197,6 @@ it.each(["missing-target", "pending-navigation"] as const)(
 );
 
 it("keeps valid navigation across a sidebar remount without extending its deadline", async () => {
-  mocks.accessCheck.mockImplementation(async ({ onVerified }) => {
-    await onVerified();
-    return true;
-  });
   const remote = {
     ...thread,
     workspaceExecutionTargetId: "ssh:host=test&user=test&port=22&auth=ssh-key",
@@ -218,12 +212,12 @@ it("keeps valid navigation across a sidebar remount without extending its deadli
   await expect.element(second.getByRole("textbox", { name: "Rename thread" })).toBeVisible();
   expect(useThreadRenameRequest.getState().threadId).toBeNull();
   expect(useThreadRenameRequest.getState().expiresAt).toBe(expiresAt);
-  expect(mocks.accessCheck).toHaveBeenCalledOnce();
+  expect(mocks.navigate).toHaveBeenCalledOnce();
 });
 
-it("does not let a stale remote refusal clear a newer same-thread request", async () => {
+it("does not let a stale navigation refusal clear a newer same-thread request", async () => {
   let refuse!: (accepted: boolean) => void;
-  mocks.accessCheck.mockImplementation(
+  mocks.navigate.mockImplementation(
     () =>
       new Promise<boolean>((resolve) => {
         refuse = resolve;
@@ -235,7 +229,7 @@ it("does not let a stale remote refusal clear a newer same-thread request", asyn
   };
   useThreadRenameRequest.getState().request(thread.id);
   const first = await render(<Harness target={remote} />);
-  await vi.waitFor(() => expect(mocks.accessCheck).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(mocks.navigate).toHaveBeenCalledOnce());
   await first.unmount();
   useThreadRenameRequest.getState().request(thread.id);
   const requestId = useThreadRenameRequest.getState().requestId;
