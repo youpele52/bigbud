@@ -11,6 +11,8 @@
  *
  * @module localTerminalHost.launchSpec
  */
+import { realpathSync } from "node:fs";
+
 import type { ShellHostScope } from "@bigbud/contracts/workspace/terminalShell.ts";
 
 import type { RemoteAgentPtyCreateDefaults } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
@@ -26,6 +28,7 @@ import {
 import type { PtySpawnInput } from "../terminal/Services/PTY.ts";
 import { shellIntegrationEnvIsStable } from "../terminal/shellIntegration/shellIntegration.ts";
 import { resolveCommandPath } from "../utils/commandPath.ts";
+import { UNIX_SHELL_NAMES, UNIX_SHELL_ROOTS } from "../terminal/Layers/ShellProfiles.candidates.ts";
 import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
 
 /** Mirrors the R5 local-launch validator (`protocol_helpers.environment.rs`). */
@@ -129,6 +132,36 @@ export function localTerminalHostShellLaunch(
   });
 }
 
+/**
+ * Mirrors the host's exact-profile check (`session/pty_profile.rs`): a known shell name in a
+ * trusted root (or that root's physical spelling), with zsh's fixed arguments only. A custom
+ * shell outside it runs in-process instead of failing on the host (coordinator decision, S6).
+ */
+export function localTerminalHostShellAllowed(
+  executable: string,
+  args: ReadonlyArray<string>,
+  realpath: (path: string) => string | undefined = safeRealpath,
+): boolean {
+  const name = UNIX_SHELL_NAMES.find((candidate) =>
+    UNIX_SHELL_ROOTS.some((root) => {
+      if (executable === `${root}/${candidate}`) return true;
+      const physical = realpath(root);
+      return physical !== undefined && executable === `${physical}/${candidate}`;
+    }),
+  );
+  if (!name) return false;
+  const expected = name === "zsh" ? ["-o", "nopromptsp"] : [];
+  return args.length === expected.length && args.every((arg, index) => arg === expected[index]);
+}
+
+function safeRealpath(path: string): string | undefined {
+  try {
+    return realpathSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
 export interface LocalTerminalHostLaunchSpec {
   readonly shellLaunch: RemoteAgentShellLaunch;
   readonly environment: ReadonlyArray<{ readonly name: string; readonly value: string }>;
@@ -151,8 +184,13 @@ export function localTerminalHostLaunchSpec(
     throw new LocalTerminalHostLaunchSpecError(
       "The terminal hook environment is not under the server state directory.",
     );
+  const shellLaunch = localTerminalHostShellLaunch(input, platform);
+  if (!localTerminalHostShellAllowed(shellLaunch.executable, shellLaunch.args))
+    throw new LocalTerminalHostLaunchSpecError(
+      "The terminal shell is outside the terminal host's trusted shell list.",
+    );
   return {
-    shellLaunch: localTerminalHostShellLaunch(input, platform),
+    shellLaunch,
     environment: localTerminalHostLaunchEnvironment(input.env, input.cwd),
     hostLifecycle: LOCAL_TERMINAL_HOST_LIFECYCLE,
   };

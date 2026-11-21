@@ -7,6 +7,8 @@ import { cleanupProcessHandles, type ProcessLifecycleContext } from "./Manager.p
 import type { PtyProcess } from "../Services/PTY";
 import type { TerminalSessionState } from "./Manager.types";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
+import { tagTerminalHostOutput } from "./Manager.hostScreen.ledger.ts";
+import { terminalHostLostNotice } from "./Manager.hostLifecycle.ts";
 
 export function drainProcessEventsWith(
   ctx: ProcessLifecycleContext,
@@ -73,6 +75,9 @@ export function drainProcessEventsWith(
         }
 
         const process = session.process;
+        // Only host sessions report why they ended; in-process snapshots stay unchanged.
+        const hostLost = session.host !== undefined && process?.interruptionReason !== undefined;
+        if (session.host) session.endedReason ??= hostLost ? "host-lost" : "exited";
         cleanupProcessHandles(session);
         session.process = null;
         session.pid = null;
@@ -105,6 +110,7 @@ export function drainProcessEventsWith(
           exitSignal: session.exitSignal,
           createdAt: session.updatedAt,
           runtimeGeneration: session.runtimeGeneration,
+          hostLost,
         } as const;
       });
 
@@ -116,13 +122,17 @@ export function drainProcessEventsWith(
         if (action.history !== null) {
           yield* ctx.queuePersist(action.threadId, action.terminalId, action.history);
         }
-        yield* ctx.publishEvent({
-          type: "output",
+        const event = {
+          type: "output" as const,
           threadId: action.threadId,
           terminalId: action.terminalId,
           data: action.data,
           createdAt: action.createdAt,
-        });
+        };
+        // Tagged with its offset so a screen subscriber can cut at the snapshot's sequence.
+        const ledger = session.host?.ledger;
+        if (ledger) tagTerminalHostOutput(event, ledger.notePublished(event.data.length));
+        yield* ctx.publishEvent(event);
         continue;
       }
 
@@ -136,6 +146,9 @@ export function drainProcessEventsWith(
         createdAt: action.createdAt,
         runtimeGeneration: action.runtimeGeneration,
       });
+      if (action.hostLost && ctx.hostHub)
+        yield* ctx.hostHub.publishNotice(terminalHostLostNotice(session));
+      ctx.hostHub?.refreshInventory();
       yield* ctx.evictInactiveSessionsIfNeeded();
       return;
     }

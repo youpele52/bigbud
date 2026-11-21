@@ -92,7 +92,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     close,
     subscribe: (listener, options) =>
       subscribeToTerminalEvents(
-        { modifyManagerState, terminalEventListeners, getSession },
+        {
+          modifyManagerState,
+          terminalEventListeners,
+          getSession,
+          hostInventory: ctx.hostInventory,
+        },
         listener,
         options,
       ),

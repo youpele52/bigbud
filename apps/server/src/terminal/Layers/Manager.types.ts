@@ -2,9 +2,15 @@ import type { TerminalWorkSink } from "./Manager.workSignals.ts";
 import type * as Effect from "effect/Effect";
 import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type * as Fiber from "effect/Fiber";
+import type * as Option from "effect/Option";
+import type { TerminalViewRegistry } from "../activity/terminalViewRegistry.ts";
+import type { AppQuitIntentRecord } from "../../lifecycle/AppQuitIntent.ts";
 import type { TerminalRecoveryModel } from "./TerminalRecoveryModel";
 import type { TerminalModeTracker } from "./TerminalModeTracker";
 import type { TerminalHistoryRetention } from "./Manager.history.retention";
+import type { TerminalSessionHostState } from "./Manager.host.types.ts";
+import type { TerminalEndedReason } from "@bigbud/contracts/workspace/terminal.limit.ts";
+import type { RemoteAgentPtyLimitError } from "../../remote-agent/remoteAgentPtyClient.types.ts";
 
 import type {
   TerminalCwdError,
@@ -13,7 +19,12 @@ import type {
   TerminalSessionStatus,
 } from "@bigbud/contracts";
 import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider";
-import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
+import type {
+  PtyAdapterShape,
+  PtyExitEvent,
+  PtyProcess,
+  PtySpawnHostLifecycle,
+} from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
 import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
@@ -113,6 +124,12 @@ export interface TerminalSessionState {
   activeAgent?: TerminalAgentIdentity | null;
   agentIdentityMisses: number;
   runtimeEnv: Record<string, string> | null;
+  /** Host-backed process state (plan S3); absent for in-process terminals. */
+  host?: TerminalSessionHostState | undefined;
+  /** Why the last process ended, when the host or the user ended it (§9.2). */
+  endedReason?: TerminalEndedReason | undefined;
+  /** The host refused the last spawn at its live limit; the open fails with it. */
+  hostLimitRefusal?: RemoteAgentPtyLimitError | undefined;
 }
 
 export interface PersistHistoryRequest {
@@ -157,6 +174,8 @@ export interface TerminalStartInput {
   cols: number;
   rows: number;
   env?: Record<string, string>;
+  /** Host create options for this spawn only (limit eviction). */
+  hostLifecycle?: PtySpawnHostLifecycle | undefined;
 }
 
 export interface TerminalManagerOptions {
@@ -211,6 +230,13 @@ export interface TerminalManagerOptions {
     processId: number;
   }) => Effect.Effect<void>;
   releaseWorktreeLease?: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
+  /** View reports for host view-state pushes; the process-wide registry by default. */
+  views?: TerminalViewRegistry | undefined;
+  /** The "Keep terminals running after quitting" setting (plan §11.4). */
+  keepRunningAfterQuit?: (() => boolean) | undefined;
+  onSettingsChange?: ((listener: () => void) => () => void) | undefined;
+  /** The desktop's acknowledged quit intent, read once on shutdown (plan §14). */
+  resolveQuitIntent?: Effect.Effect<Option.Option<AppQuitIntentRecord>> | undefined;
 }
 
 export interface RuntimePathIdentity {

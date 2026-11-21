@@ -6,7 +6,7 @@ import {
   type TerminalEventsStreamItem,
   type TerminalOutputAckInput,
   TerminalSessionStreamInput,
-  type TerminalSessionStreamItem,
+  type TerminalSessionStreamRpcItem,
 } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalSearchInput } from "@bigbud/contracts/workspace/terminal.search.ts";
 import type { TerminalViewInput } from "@bigbud/contracts/workspace/terminal.activity.ts";
@@ -41,12 +41,18 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
         Stream.callback<TerminalEventsStreamItem>((queue) => {
           const offer = makeBoundedTerminalEventOffer(queue);
           const activity = input.includeWork ? context.terminalActivity : undefined;
+          const lifecycle = input.includeLifecycle ? manager.subscribeLifecycle : undefined;
           return Effect.andThen(
-            activity
-              ? Effect.acquireRelease(activity.subscribe(offer), (unsubscribe) =>
-                  Effect.sync(unsubscribe),
-                )
-              : Effect.void,
+            Effect.all([
+              activity
+                ? Effect.acquireRelease(activity.subscribe(offer), (unsubscribe) =>
+                    Effect.sync(unsubscribe),
+                  )
+                : Effect.void,
+              lifecycle
+                ? Effect.acquireRelease(lifecycle(offer), (unsubscribe) => Effect.sync(unsubscribe))
+                : Effect.void,
+            ]),
             Effect.acquireRelease(
               manager.subscribe(offer, {
                 ...(input.outputScope ? { outputScope: input.outputScope } : {}),
@@ -61,7 +67,7 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
     [WS_METHODS.subscribeTerminalSession]: (input: typeof TerminalSessionStreamInput.Type) =>
       observeRpcStream(
         WS_METHODS.subscribeTerminalSession,
-        Stream.callback<TerminalSessionStreamItem>((queue) =>
+        Stream.callback<TerminalSessionStreamRpcItem>((queue) =>
           Effect.gen(function* () {
             const threadId = input.threadId;
             const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
@@ -81,6 +87,32 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
               // The client resynchronizes from a snapshot when its subscription restarts.
               overflow: () => Queue.endUnsafe(queue),
             });
+            if (manager.subscribeSession) {
+              // Host sessions: the screen first (with `acceptScreen`), live output cut after it,
+              // and the renderer counted as attached for the host's query responder (§8.9).
+              const handle = yield* Effect.acquireRelease(
+                manager.subscribeSession(
+                  { threadId, terminalId, acceptScreen: input.acceptScreen === true },
+                  {
+                    screen: (item) => Queue.offerUnsafe(queue, item),
+                    event: (event) => delivery.push(event),
+                    overflow: () => Queue.endUnsafe(queue),
+                  },
+                ),
+                (handle) =>
+                  Effect.sync(() => {
+                    handle.unsubscribe(delivery.diagnostics.acknowledgedChars);
+                    deliveries.delete(subscriptionId);
+                    delivery.close();
+                  }),
+              );
+              deliveries.set(subscriptionId, delivery);
+              Queue.offerUnsafe(queue, { type: "subscribed", subscriptionId });
+              // Screen items go straight to the queue, ahead of the delivery's first event.
+              delivery.start();
+              handle.start();
+              return;
+            }
             yield* Effect.acquireRelease(
               manager.subscribe((event) =>
                 Effect.sync(() => {

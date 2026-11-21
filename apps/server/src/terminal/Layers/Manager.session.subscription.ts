@@ -6,6 +6,8 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext } from "./Manager.session.types.ts";
 import type { TerminalSubscribeOptions } from "../Services/Manager";
+import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type { TerminalSessionState } from "./Manager.types.ts";
 
 /** Output stays only for sessions whose agent detection runs in the client (non-local targets). */
 function scopeOutput(
@@ -24,14 +26,39 @@ function scopeOutput(
         );
 }
 
+/** Host-owned panes in the inventory and refreshes when host facts change (plan S3). */
+export interface TerminalHostInventorySource {
+  /** The host roster's first load (bounded by the caller). */
+  readonly ready: Effect.Effect<void>;
+  readonly sessions: (
+    sessions: Iterable<TerminalSessionState>,
+  ) => TerminalSessionInventory["sessions"][number][];
+  readonly register: (
+    listener: (inventory: TerminalSessionInventory) => Effect.Effect<void>,
+  ) => () => void;
+}
+
+/** A first inventory waits this long at most for the host roster after a backend restart. */
+const HOST_ROSTER_WAIT_MS = 3_000;
+
 export function subscribeToTerminalEvents(
-  ctx: Pick<SessionApiContext, "modifyManagerState" | "terminalEventListeners" | "getSession">,
+  ctx: Pick<SessionApiContext, "modifyManagerState" | "terminalEventListeners" | "getSession"> & {
+    readonly hostInventory?: TerminalHostInventorySource | undefined;
+  },
   deliver: (event: TerminalEvent) => Effect.Effect<void>,
   options?: TerminalSubscribeOptions,
 ): Effect.Effect<() => void> {
   const listener =
     options?.outputScope === "legacyDetection" ? scopeOutput(ctx.getSession, deliver) : deliver;
   return Effect.gen(function* () {
+    const hostInventory = options?.onInventory ? ctx.hostInventory : undefined;
+    if (hostInventory)
+      yield* hostInventory.ready.pipe(
+        Effect.timeoutOrElse({
+          duration: HOST_ROSTER_WAIT_MS,
+          orElse: () => Effect.void,
+        }),
+      );
     const pending: TerminalEvent[] = [];
     let initializing = true;
     const bufferedListener = (event: TerminalEvent) =>
@@ -101,10 +128,12 @@ export function subscribeToTerminalEvents(
         ? {
             type: "inventory" as const,
             createdAt: new Date().toISOString(),
-            sessions: [...state.sessions.values()].map(({ threadId, terminalId }) => ({
-              threadId,
-              terminalId,
-            })),
+            sessions: hostInventory
+              ? hostInventory.sessions(state.sessions.values())
+              : [...state.sessions.values()].map(({ threadId, terminalId }) => ({
+                  threadId,
+                  terminalId,
+                })),
           }
         : undefined;
       return [{ events, updatedAtByKey, inventory }, state] as const;
@@ -131,8 +160,13 @@ export function subscribeToTerminalEvents(
       }
     }
     initializing = false;
+    const unregisterInventory =
+      hostInventory && options?.onInventory
+        ? hostInventory.register(options.onInventory)
+        : undefined;
     return () => {
       ctx.terminalEventListeners.delete(bufferedListener);
+      unregisterInventory?.();
     };
   });
 }

@@ -1,5 +1,7 @@
 import type { TerminalManagerOptions } from "./Manager.types.ts";
 import type { TerminalWorkSignals } from "./Manager.workSignals.ts";
+import type { TerminalHostHub } from "./Manager.host.types.ts";
+import { terminalHostSnapshotFields } from "./Manager.hostLifecycle.ts";
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
@@ -57,6 +59,8 @@ export interface ProcessLifecycleContext {
   directShellOwners?: DirectShellLaunchOwnerStore | undefined;
   workSignals?: TerminalWorkSignals | undefined;
   shellIntegrationEnv?: TerminalManagerOptions["shellIntegrationEnv"];
+  /** Host-backed session hooks (plan S3); absent in tests that build a bare context. */
+  hostHub?: TerminalHostHub | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +133,7 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     updatedAt: session.updatedAt,
+    ...terminalHostSnapshotFields(session),
   };
 }
 

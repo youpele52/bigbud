@@ -50,7 +50,15 @@ import type {
   TerminalRecoveryInput,
   TerminalRecoveryResult,
 } from "@bigbud/contracts/workspace/terminal.recovery.ts";
-import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalScreenItem,
+  TerminalSessionInventory,
+} from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalCloseDrainingHostsResult,
+  TerminalKeepOpenInput,
+  TerminalLifecycleNotice,
+} from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
 import type {
   TerminalPasteStageError,
   TerminalPasteStageInput,
@@ -98,6 +106,21 @@ export interface ShellCandidate {
 export interface TerminalStartInput extends TerminalOpenInput {
   cols: number;
   rows: number;
+}
+
+/** Receives one session stream's items; `screen` comes first when the subscriber accepts it. */
+export interface TerminalSessionStreamSink {
+  readonly screen: (item: TerminalScreenItem) => void;
+  readonly event: (event: TerminalEvent) => void;
+  /** The subscriber fell too far behind while its screen was fetched; end its stream. */
+  readonly overflow: () => void;
+}
+
+export interface TerminalSessionStreamHandle {
+  /** Call after the `subscribed` item: the screen (if any) and then live events follow. */
+  readonly start: () => void;
+  /** `acknowledgedChars`: output the view parsed, for the host's query cut on detach (§8.9). */
+  readonly unsubscribe: (acknowledgedChars: number) => void;
 }
 
 export interface TerminalSubscribeOptions {
@@ -220,6 +243,35 @@ export interface TerminalManagerShape {
    * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
    * by delivery overflow instead.
    */
+  /**
+   * One terminal's events for a mounted view: with `acceptScreen`, the host screen first and
+   * live output cut at its sequence; the renderer counts as attached until `unsubscribe`.
+   */
+  readonly subscribeSession?: (
+    input: {
+      readonly threadId: string;
+      readonly terminalId: string;
+      readonly acceptScreen: boolean;
+    },
+    sink: TerminalSessionStreamSink,
+  ) => Effect.Effect<TerminalSessionStreamHandle>;
+
+  /** Restart one host terminal's idle timer; terminals without idle close are unchanged. */
+  readonly keepOpen?: (input: TerminalKeepOpenInput) => Effect.Effect<void, TerminalError>;
+
+  /** Lifecycle notices (`includeLifecycle`): idle warnings, host closes, limit refusals. */
+  readonly subscribeLifecycle?: (
+    listener: (notice: TerminalLifecycleNotice) => Effect.Effect<void>,
+  ) => Effect.Effect<() => void>;
+
+  readonly publishLifecycleNotice?: (notice: TerminalLifecycleNotice) => Effect.Effect<void>;
+
+  /** "Close them": stop old-version hosts that can't be reconnected. */
+  readonly closeDrainingHosts?: () => Effect.Effect<
+    TerminalCloseDrainingHostsResult,
+    TerminalError
+  >;
+
   readonly setOutputHold?: (input: {
     readonly threadId: string;
     readonly terminalId: string;

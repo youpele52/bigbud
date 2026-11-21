@@ -334,6 +334,9 @@ export function makeOwnedRemoteAgentPty(
       get launchStatus() {
         return process.launchStatus;
       },
+      get interruptionReason() {
+        return process.interruptionReason;
+      },
       get shellUnconfirmedLaunch() {
         return requestedProfile && process.launchStatus === "unconfirmed"
           ? { status: "unconfirmed" as const, requestedProfile }

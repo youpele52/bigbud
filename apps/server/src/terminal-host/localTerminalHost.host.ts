@@ -50,6 +50,14 @@ export interface LocalTerminalHostController {
   /** The admitted, live generation's binding; never launches (host-wide controls, policy). */
   readonly currentAdmittedBinding: () => Promise<RemoteAgentRuntimeBinding | undefined>;
   readonly knownRuntimes: () => Promise<ReadonlyArray<RemoteAgentRuntime>>;
+  /** Every attached generation's binding (admitted and draining); never launches. */
+  readonly attachedBindings: () => Promise<
+    ReadonlyArray<{
+      readonly generation: number;
+      readonly binding: RemoteAgentRuntimeBinding;
+      readonly admitted: boolean;
+    }>
+  >;
   readonly proxyBinary: () => Promise<string>;
   readonly notices: () => ReadonlyArray<LocalTerminalHostDrainingNotice>;
   /** User-confirmed "Close them": SIGTERM only a start-time-verified PID. */
@@ -171,6 +179,14 @@ export function makeLocalTerminalHostController(
     knownRuntimes: async () => {
       await ready().catch(() => undefined);
       return [...attached.values()].map((entry) => entry.binding.runtime);
+    },
+    attachedBindings: async () => {
+      await ready().catch(() => undefined);
+      return [...attached.values()].map((entry) => ({
+        generation: entry.generation.generation,
+        binding: entry.binding,
+        admitted: entry === admitted,
+      }));
     },
     currentAdmittedBinding: async () => {
       await ready().catch(() => undefined);

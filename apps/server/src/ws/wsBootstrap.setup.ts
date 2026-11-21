@@ -1,5 +1,6 @@
 import { CommandId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { TerminalLimitError } from "@bigbud/contracts/workspace/terminal.limit.ts";
 
 import type { OrchestrationDispatchError } from "../orchestration/Errors.ts";
 import type {
@@ -17,6 +18,18 @@ export type AppendBootstrapSetupActivity = (input: {
   readonly tone: "info" | "error";
 }) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError>;
 
+/**
+ * A refusal at the live limit already raised the setup toast with "Close oldest and run setup";
+ * if it is dismissed or ignored, the activity says why the script didn't run (plan §8.8).
+ */
+const isTerminalLimitError = Schema.is(TerminalLimitError);
+
+export function bootstrapSetupFailureDetail(error: unknown): string {
+  if (isTerminalLimitError(error))
+    return `Setup script didn't run because the terminal limit (${error.limit}) is reached. Close a terminal and run it again.`;
+  return error instanceof Error ? error.message : "Unknown setup failure.";
+}
+
 export function runBootstrapSetupScript(input: {
   readonly parentCommandId: CommandId;
   readonly setup: ProjectSetupScriptRunnerInput & { readonly threadId: ThreadId };
@@ -31,7 +44,7 @@ export function runBootstrapSetupScript(input: {
   return input.runForThread(input.setup).pipe(
     Effect.matchEffect({
       onFailure: (error) => {
-        const detail = error instanceof Error ? error.message : "Unknown setup failure.";
+        const detail = bootstrapSetupFailureDetail(error);
         return input
           .appendActivity({
             ...activity,

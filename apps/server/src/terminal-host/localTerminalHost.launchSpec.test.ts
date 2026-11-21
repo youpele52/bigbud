@@ -9,6 +9,7 @@ import {
   localTerminalHostLaunchEnvironment,
   localTerminalHostLaunchSpec,
   localTerminalHostPlatform,
+  localTerminalHostShellAllowed,
   localTerminalHostShellLaunch,
   planLocalTerminalHostLaunch,
 } from "./localTerminalHost.launchSpec.ts";
@@ -31,6 +32,8 @@ const integrationEnv = (dir: string) => ({
   BIGBUD_CLAUDE_HOOKS: `${dir}/claude-hooks.json`,
   BIGBUD_TERMINAL_AGENT_HOOKS: "1",
 });
+
+const realpath = (path: string) => (path === "/bin" ? "/usr/bin" : path);
 
 const many = (count: number) =>
   Object.fromEntries(Array.from({ length: count }, (_, index) => [`var_${index}`, "v"]));
@@ -151,6 +154,31 @@ describe("local terminal host launch spec", () => {
     expect(orphanHook).toMatchObject({ kind: "in-process" });
     // Without the integration there are no hook paths to keep stable.
     expect(planLocalTerminalHostLaunch(input(), { stateDir: "/state" }).kind).toBe("host");
+  });
+
+  it("mirrors the host's trusted shell list, including a root's physical spelling", () => {
+    expect(localTerminalHostShellAllowed("/bin/zsh", ["-o", "nopromptsp"], realpath)).toBe(true);
+    expect(localTerminalHostShellAllowed("/opt/homebrew/bin/fish", [], realpath)).toBe(true);
+    expect(localTerminalHostShellAllowed("/usr/bin/bash", [], realpath)).toBe(true);
+    // zsh only with its fixed arguments; other shells with none.
+    expect(localTerminalHostShellAllowed("/bin/zsh", [], realpath)).toBe(false);
+    expect(localTerminalHostShellAllowed("/bin/bash", ["-l"], realpath)).toBe(false);
+    expect(localTerminalHostShellAllowed("/Users/me/.cargo/bin/nu", [], realpath)).toBe(false);
+    expect(localTerminalHostShellAllowed("/usr/local/bin/xonsh", [], realpath)).toBe(false);
+  });
+
+  it("runs a custom shell outside the trusted list in-process instead of failing on the host", () => {
+    const custom = planLocalTerminalHostLaunch(input({ shell: "/opt/tools/bin/bash", args: [] }), {
+      stateDir: "/state",
+      platform: "linux",
+    });
+    expect(custom).toMatchObject({ kind: "in-process" });
+    expect(() =>
+      localTerminalHostLaunchSpec(input({ shell: "/bin/bash", args: ["--login"] }), {
+        stateDir: "/state",
+        platform: "linux",
+      }),
+    ).toThrow(LocalTerminalHostLaunchSpecError);
   });
 
   it("still throws launch errors that are not about moving to the host", () => {

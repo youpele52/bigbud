@@ -73,7 +73,10 @@ export function subscribeGlobalTerminalState(input: {
  * notifications, lifecycle toasts. Liveness follows the same ordered pipeline as pane state.
  */
 export function subscribeAppTerminalState(input: {
-  terminal: Pick<NativeApi["terminal"], "onEvent" | "keepOpen" | "retrySetup">;
+  terminal: Pick<
+    NativeApi["terminal"],
+    "onEvent" | "keepOpen" | "retrySetup" | "closeDrainingHosts"
+  >;
   isArchived: (threadId: string) => boolean;
   applyEvents: (events: ReadonlyArray<TerminalEvent>) => void;
   reconcileInventory: (inventory: TerminalSessionInventory) => void;

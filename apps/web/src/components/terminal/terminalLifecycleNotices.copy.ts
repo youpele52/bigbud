@@ -1,4 +1,7 @@
-import type { TerminalLifecycleNotice } from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
+import type {
+  TerminalCloseDrainingHostsResult,
+  TerminalLifecycleNotice,
+} from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
 import { TERMINAL_LIVE_LIMIT_DEFAULT } from "@bigbud/contracts/workspace/terminal.limit.ts";
 
 import type { TerminalNoticeNames } from "./terminalLifecycle.labels";
@@ -74,4 +77,19 @@ export function describeTerminalLifecycleNotice(
     case "spoolDegraded":
       return null;
   }
+}
+
+/** The outcome of "Close them": green when every old host stopped, amber when some remain. */
+export function describeClosedDrainingHosts(result: TerminalCloseDrainingHostsResult): {
+  readonly type: "success" | "warning";
+  readonly title: string;
+  readonly description?: string;
+} {
+  if (result.remaining === 0)
+    return { type: "success", title: "Closed the terminals from the previous bigbud version." };
+  return {
+    type: "warning",
+    title: "Some terminals from the previous bigbud version are still running.",
+    description: "bigbud couldn't safely identify their terminal service, so it was left running.",
+  };
 }

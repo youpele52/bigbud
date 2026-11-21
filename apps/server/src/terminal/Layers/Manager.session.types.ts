@@ -4,6 +4,8 @@ import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/t
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
+import type { TerminalHostInventorySource } from "./Manager.session.subscription.ts";
+import type { TerminalHostLimitContext } from "./Manager.hostLimit.ts";
 
 import {
   type TerminalCwdError,
@@ -83,6 +85,10 @@ export interface SessionApiContext {
   releaseWorktreeLease: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
   terminalEventListeners: Set<(event: TerminalEvent) => Effect.Effect<void>>;
   workSignals?: TerminalWorkSignals | undefined;
+  /** Host-owned panes in inventories, and refreshes when host facts change (plan S3). */
+  hostInventory?: TerminalHostInventorySource | undefined;
+  /** Live-limit candidates and lost panes (plan S3); absent without a host runtime. */
+  hostLimit?: TerminalHostLimitContext | undefined;
 }
 
 export type { TerminalManagerShape };

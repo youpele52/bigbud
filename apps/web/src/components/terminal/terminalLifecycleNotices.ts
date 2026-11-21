@@ -4,12 +4,15 @@ import type { TerminalLifecycleNotice } from "@bigbud/contracts/workspace/termin
 import { TERMINAL_CLOSING_NOTICE_KINDS } from "../../stores/terminal/terminalLiveness.store";
 import type { toastManager } from "../ui/toast.manager";
 import { resolveTerminalNoticeNames, type TerminalNoticeNames } from "./terminalLifecycle.labels";
-import { describeTerminalLifecycleNotice } from "./terminalLifecycleNotices.copy";
+import {
+  describeClosedDrainingHosts,
+  describeTerminalLifecycleNotice,
+} from "./terminalLifecycleNotices.copy";
 
 type ToastOptions = Parameters<typeof toastManager.add>[0];
 
 export interface TerminalLifecycleNoticeDeps {
-  readonly terminal: Pick<NativeApi["terminal"], "keepOpen" | "retrySetup">;
+  readonly terminal: Pick<NativeApi["terminal"], "keepOpen" | "retrySetup" | "closeDrainingHosts">;
   readonly toasts: Pick<typeof toastManager, "add" | "close">;
   readonly names?: (threadId?: string, terminalId?: string) => TerminalNoticeNames;
   readonly now?: () => number;
@@ -93,6 +96,23 @@ export function createTerminalLifecycleNotices(
     }
   };
 
+  const closeDrainingHosts = async (toastId: string) => {
+    deps.toasts.close(toastId);
+    if (!deps.terminal.closeDrainingHosts) return;
+    try {
+      const result = await deps.terminal.closeDrainingHosts();
+      if (disposed) return;
+      add(describeClosedDrainingHosts(result));
+    } catch (error) {
+      if (disposed) return;
+      add({
+        type: "error",
+        title: "Couldn't close the old terminals",
+        description: errorMessage(error),
+      });
+    }
+  };
+
   const handle = (notice: TerminalLifecycleNotice) => {
     if (disposed || seen.has(notice.noticeId)) return;
     seen.add(notice.noticeId);
@@ -132,6 +152,15 @@ export function createTerminalLifecycleNotices(
           children: "Close oldest and run setup",
           onClick: () => void retrySetup(notice, toastId),
         },
+      });
+      return;
+    }
+    if (notice.kind === "legacyHostUnreachable" && deps.terminal.closeDrainingHosts) {
+      let toastId = "";
+      toastId = add({
+        ...copy,
+        timeout: 0,
+        actionProps: { children: "Close them", onClick: () => void closeDrainingHosts(toastId) },
       });
       return;
     }

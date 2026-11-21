@@ -64,6 +64,11 @@ export interface PtyProcess {
   readonly screen?: PtyScreenControl;
   /** Host lifecycle controls (terminal.lifecycle); absent for node-pty. */
   readonly lifecycle?: PtyLifecycleControl;
+  /**
+   * Set when the process ended without a verified exit because its host or connection went
+   * away (for example `remote-service-restarted`); the child's outcome is unknown.
+   */
+  readonly interruptionReason?: string | undefined;
 }
 
 export interface PtySequencedData {

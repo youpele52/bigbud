@@ -78,3 +78,17 @@ export const TerminalRetrySetupResult = Schema.Union([
   }),
 ]);
 export type TerminalRetrySetupResult = typeof TerminalRetrySetupResult.Type;
+
+/**
+ * "Close them" for terminal hosts from a previous bigbud version that can't be reconnected
+ * (`legacyHostUnreachable`). Only hosts whose process identity is verified are closed.
+ */
+export const TerminalCloseDrainingHostsInput = Schema.Struct({});
+export type TerminalCloseDrainingHostsInput = typeof TerminalCloseDrainingHostsInput.Type;
+
+export const TerminalCloseDrainingHostsResult = Schema.Struct({
+  closed: NonNegativeInt,
+  /** Hosts left running because they could not be identified safely or did not stop. */
+  remaining: NonNegativeInt,
+});
+export type TerminalCloseDrainingHostsResult = typeof TerminalCloseDrainingHostsResult.Type;

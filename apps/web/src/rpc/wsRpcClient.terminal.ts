@@ -71,5 +71,7 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
     keepOpen: (input) => transport.request((client) => client[WS_METHODS.terminalKeepOpen](input)),
     retrySetup: (input) =>
       transport.request((client) => client[WS_METHODS.terminalRetrySetup](input)),
+    closeDrainingHosts: () =>
+      transport.request((client) => client[WS_METHODS.terminalCloseDrainingHosts]({})),
   };
 }

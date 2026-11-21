@@ -50,4 +50,5 @@ export interface TerminalRpcClient {
   readonly stagePasteFile: RpcUnaryMethod<typeof WS_METHODS.terminalStagePasteFile>;
   readonly keepOpen: RpcUnaryMethod<typeof WS_METHODS.terminalKeepOpen>;
   readonly retrySetup: RpcUnaryMethod<typeof WS_METHODS.terminalRetrySetup>;
+  readonly closeDrainingHosts: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalCloseDrainingHosts>;
 }

@@ -34,6 +34,7 @@ function setup(input: { owner?: Partial<RemoteAgentOwner>; admitted?: boolean } 
     },
     currentAdmittedBinding: async () => undefined,
     knownRuntimes: async () => [],
+    attachedBindings: async () => [],
     proxyBinary: async () => "/staged/agent",
     notices: () => [],
     closeDrainingHost: async () => {},
@@ -56,6 +57,7 @@ function setup(input: { owner?: Partial<RemoteAgentOwner>; admitted?: boolean } 
 
 const spawnInput = (overrides: Partial<PtySpawnInput> = {}): PtySpawnInput => ({
   shell: "/bin/zsh",
+  args: ["-o", "nopromptsp"],
   cwd: "/tmp",
   cols: 80,
   rows: 24,

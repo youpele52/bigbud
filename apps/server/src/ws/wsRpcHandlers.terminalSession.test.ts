@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type TerminalEvent, WS_METHODS } from "@bigbud/contracts";
 import type {
   TerminalEventsStreamItem,
-  TerminalSessionStreamItem,
+  TerminalSessionStreamRpcItem as TerminalSessionStreamItem,
 } from "@bigbud/contracts/workspace/terminal.stream.ts";
 
 import { TERMINAL_OUTPUT_DELIVERY_LIMITS } from "../terminal/TerminalOutputDelivery";

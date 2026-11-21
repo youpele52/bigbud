@@ -42,5 +42,6 @@ export function createNativeTerminalApi(terminal: TerminalRpcClient): NativeApi[
     stagePasteFile: (input) => terminal.stagePasteFile(input as never),
     keepOpen: (input) => terminal.keepOpen(input),
     retrySetup: (input) => terminal.retrySetup(input),
+    closeDrainingHosts: () => terminal.closeDrainingHosts(),
   };
 }

@@ -7,7 +7,7 @@ import type {
   RemoteAgentPtyActivity,
   RemoteAgentPtyLifecycleNotice,
 } from "../../remote-agent/remoteAgentProtocol.ptyLifecycle.ts";
-import type { PtyHostCapabilities } from "./PTY.ts";
+import type { PtyHostCapabilities, PtyScreenSnapshot, PtyScreenSnapshotInput } from "./PTY.ts";
 
 /** Execution/ownership scope independent of the workspace's user-facing target label. */
 export interface OwnedPtyRuntime {
@@ -19,6 +19,60 @@ export interface OwnedPtyRuntime {
   readonly pidNamespace: "backend-host" | "ssh-host";
   /** Host-wide lifecycle controls (protocol 1.9); absent where the runtime has no Rust host. */
   readonly host?: OwnedPtyHostControls;
+  /** Every generation of a multi-generation host (the local terminal host only). */
+  readonly hostGenerations?: OwnedPtyHostGenerations;
+}
+
+/** One host PTY as its supervisor reports it; absence never proves an exit. */
+export interface OwnedPtyHostInventoryEntry {
+  readonly ptyId: string;
+  /** The owner-row connection binding (generation) that reported it. */
+  readonly connectionId: string;
+  readonly state: string;
+  /** The host lost the PTY (a host crash); only a cold screen remains. */
+  readonly lost: boolean;
+  /** `busy` | `idle` | `idle_warning`, where the host reports activity. */
+  readonly activityState?: string;
+  readonly lastUsedMs?: number;
+  readonly lifecycleManaged: boolean;
+}
+
+/** A host generation that cannot be reconnected and was left running (plan §7.3 item 5). */
+export interface OwnedPtyDrainingHostNotice {
+  readonly generation: number;
+  readonly reason: "unreachable" | "incompatible";
+  /** The one-time toast was never raised for this generation before. */
+  readonly firstTime: boolean;
+  readonly canClose: boolean;
+}
+
+/**
+ * Controls that address every reachable generation, not only the admitted one: quit close-all
+ * and policy must reach draining hosts too. Nothing here launches a host.
+ */
+export interface OwnedPtyHostGenerations {
+  /** Resolves once adoption finished (successfully or not). */
+  readonly ready: () => Promise<void>;
+  /** Changes whenever the admitted host connection changes; undefined with no host. */
+  readonly admittedKey: () => Promise<string | undefined>;
+  readonly inventory: (signal?: AbortSignal) => Promise<ReadonlyArray<OwnedPtyHostInventoryEntry>>;
+  /** Pushes the policy to every reachable lifecycle-capable generation. */
+  readonly updatePolicy: (policy: RemoteAgentHostPolicy, signal?: AbortSignal) => Promise<void>;
+  readonly closeAll: (
+    input: { readonly reason: "quit" | "update"; readonly managedOnly: boolean },
+    signal?: AbortSignal,
+  ) => Promise<{ readonly closed: number; readonly unreachable: number }>;
+  /** A screen copy of a PTY the host still knows (a lost PTY's cold screen). */
+  readonly coldSnapshot: (
+    ptyId: string,
+    input: PtyScreenSnapshotInput,
+  ) => Promise<PtyScreenSnapshot>;
+  readonly drainingNotices: () => ReadonlyArray<OwnedPtyDrainingHostNotice>;
+  /** User-confirmed "Close them": only start-time-verified PIDs are signalled. */
+  readonly closeDrainingHosts: () => Promise<{
+    readonly closed: number;
+    readonly remaining: number;
+  }>;
 }
 
 export type OwnedPtyHostEvent =

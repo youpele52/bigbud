@@ -26,7 +26,9 @@ const notice = (
 
 type AddOptions = { type?: string; title?: string; timeout?: number; actionProps?: unknown };
 
-function fixture(overrides: { keepOpen?: unknown; retrySetup?: unknown } = {}) {
+function fixture(
+  overrides: { keepOpen?: unknown; retrySetup?: unknown; closeDrainingHosts?: unknown } = {},
+) {
   let nextId = 0;
   const add = vi.fn((_options: AddOptions) => `toast-${++nextId}`);
   const close = vi.fn();
@@ -39,6 +41,7 @@ function fixture(overrides: { keepOpen?: unknown; retrySetup?: unknown } = {}) {
       terminalId: "setup-1",
       cwd: "/repo",
     })),
+    closeDrainingHosts: vi.fn(async () => ({ closed: 1, remaining: 0 })),
     ...overrides,
   };
   const notices = createTerminalLifecycleNotices({
@@ -166,6 +169,42 @@ describe("terminal lifecycle notices", () => {
       description:
         "Setup script didn't run because the terminal limit (24) is reached. Close a terminal and run it again.",
     });
+  });
+
+  it("offers Close them for old hosts and reports when every host stopped", async () => {
+    const f = fixture();
+    f.notices.handle(
+      notice("legacyHostUnreachable", { threadId: undefined, terminalId: undefined }),
+    );
+    expect(f.lastOptions()).toMatchObject({
+      type: "warning",
+      title: "Terminals from a previous bigbud version are still running but can't be reconnected.",
+      timeout: 0,
+      actionProps: { children: "Close them" },
+    });
+    f.clickAction();
+    await vi.waitFor(() => expect(f.add).toHaveBeenCalledTimes(2));
+    expect(f.close).toHaveBeenCalledWith("toast-1");
+    expect(f.terminal.closeDrainingHosts).toHaveBeenCalledOnce();
+    expect(f.lastOptions()).toMatchObject({ type: "success" });
+  });
+
+  it("warns when an old host could not be closed safely, and errors in red on failure", async () => {
+    const partial = fixture({
+      closeDrainingHosts: vi.fn(async () => ({ closed: 0, remaining: 1 })),
+    });
+    partial.notices.handle(notice("legacyHostUnreachable"));
+    partial.clickAction();
+    await vi.waitFor(() => expect(partial.add).toHaveBeenCalledTimes(2));
+    expect(partial.lastOptions()).toMatchObject({ type: "warning" });
+
+    const failed = fixture({
+      closeDrainingHosts: vi.fn(async () => Promise.reject(new Error("offline"))),
+    });
+    failed.notices.handle(notice("legacyHostUnreachable"));
+    failed.clickAction();
+    await vi.waitFor(() => expect(failed.add).toHaveBeenCalledTimes(2));
+    expect(failed.lastOptions()).toMatchObject({ type: "error", description: "offline" });
   });
 
   it("stops after dispose", () => {

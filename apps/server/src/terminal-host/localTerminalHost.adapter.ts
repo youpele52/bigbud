@@ -8,6 +8,7 @@ import { makeRemoteAgentHostControls } from "../remote-agent/remoteAgentPtyClien
 import { RemoteAgentPtyError } from "../remote-agent/remoteAgentPtyClient.types.ts";
 import type { OwnedPtyRuntime } from "../terminal/Services/OwnedPtyRuntime.ts";
 import { PtySpawnError, type PtyAdapterShape } from "../terminal/Services/PTY.ts";
+import { makeLocalTerminalHostGenerations } from "./localTerminalHost.generations.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
 import {
   makeLocalTerminalHostOwners,
@@ -70,6 +71,12 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
       if (!binding)
         throw new RemoteAgentPtyError("HOST_UNAVAILABLE", "No local terminal host is running.");
       return pool.getBound(LOCAL_TERMINAL_HOST_TARGET_ID, binding, ["terminal.pty"]);
+    }),
+    // Quit close-all, policy and inventory reach draining generations too.
+    hostGenerations: makeLocalTerminalHostGenerations({
+      controller,
+      pool,
+      ...(options.log ? { log: options.log } : {}),
     }),
   });
   const assertTarget = (target: string) => {

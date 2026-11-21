@@ -4,7 +4,6 @@ import { makeTerminalIdleWorkTracker } from "./Manager.idleWork.ts";
 import { makeTerminalWorkSignals } from "./Manager.workSignals.ts";
 import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
-import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +16,7 @@ import { type PtyProcess } from "../Services/PTY";
 import { scheduleRemoteTerminalInspection } from "./Manager.remote-inspection.schedule.ts";
 import { inspectRemoteTerminalProcesses } from "./Manager.remote-inspection.ts";
 import { defaultTerminalAgentDetector } from "./Manager.agentDetection";
-import { defaultShellResolver, defaultSubprocessChecker, toSessionKey } from "./Manager.shell";
+import { defaultShellResolver, defaultSubprocessChecker } from "./Manager.shell";
 import {
   drainProcessEventsWith,
   startProcessPollingWith,
@@ -26,15 +25,14 @@ import {
 } from "./Manager.process-drain";
 import {
   clearKillFiberWith,
-  enqueueProcessEvent,
-  registerKillFiberWith,
-  runKillEscalationWith,
   snapshot,
   type ProcessLifecycleContext,
 } from "./Manager.process-lifecycle";
+import { makeTerminalPtyOutputQueue, startKillEscalation } from "./Manager.process.output.ts";
 import { buildSessionApi } from "./Manager.session";
 import { makeTerminalPersistence } from "./Manager.process.persistence.ts";
 import { cleanupTerminalSessions } from "./Manager.process.shutdown.ts";
+import { makeTerminalManagerHost } from "./Manager.process.host.ts";
 import {
   DEFAULT_HISTORY_LINE_LIMIT,
   DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS,
@@ -53,35 +51,6 @@ import {
 
 // Re-export for external consumers (tests import this directly)
 export type { TerminalManagerOptions };
-
-const startKillEscalation = Effect.fn("terminal.startKillEscalation")(function* (input: {
-  readonly lifecycleCtx: Pick<ProcessLifecycleContext, "modifyManagerState">;
-  readonly processKillGraceMs: number;
-  readonly workerScope: Scope.Closeable;
-  readonly proc: PtyProcess;
-  readonly threadId: string;
-  readonly terminalId: string;
-}) {
-  const fiber = yield* runKillEscalationWith(
-    input.processKillGraceMs,
-    input.proc,
-    input.threadId,
-    input.terminalId,
-  ).pipe(
-    Effect.ensuring(
-      input.lifecycleCtx.modifyManagerState((state) => {
-        if (!state.killFibers.has(input.proc)) {
-          return [undefined, state] as const;
-        }
-        const killFibers = new Map(state.killFibers);
-        killFibers.delete(input.proc);
-        return [undefined, { ...state, killFibers }] as const;
-      }),
-    ),
-    Effect.forkIn(input.workerScope),
-  );
-  yield* registerKillFiberWith(input.lifecycleCtx.modifyManagerState, input.proc, fiber);
-});
 
 export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWithOptions")(
   function* (options: TerminalManagerOptions) {
@@ -113,6 +82,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     const managerStateRef = yield* SynchronizedRef.make<TerminalManagerState>({
       sessions: new Map(),
       killFibers: new Map(),
+    });
+    const host = makeTerminalManagerHost({
+      options,
+      stateRef: managerStateRef,
+      runFork: (effect) => void runFork(effect),
     });
     const threadLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
     const terminalEventListeners = new Set<(event: TerminalEvent) => Effect.Effect<void>>();
@@ -192,52 +166,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       logsDir,
     });
 
-    const ptyOutputWorker = yield* makeKeyedCoalescingWorker<
-      string,
-      {
-        readonly session: TerminalSessionState;
-        readonly expectedPid: number;
-        readonly data: string;
-      },
-      never,
-      never
-    >({
-      merge: (current, next) => ({
-        session: current.session,
-        expectedPid: current.expectedPid,
-        data: `${current.data}${next.data}`,
-      }),
-      process: (_sessionKey, request) =>
-        Effect.sync(() => {
-          if (
-            !enqueueProcessEvent(request.session, request.expectedPid, {
-              type: "output",
-              data: request.data,
-            })
-          ) {
-            return;
-          }
-          runFork(drainProcessEvents(request.session, request.expectedPid));
-        }),
-    });
-
-    const queuePtyOutput = Effect.fn("terminal.queuePtyOutput")(function* (
-      session: TerminalSessionState,
-      expectedPid: number,
-      data: string,
-    ) {
-      yield* ptyOutputWorker.enqueue(toSessionKey(session.threadId, session.terminalId), {
-        session,
-        expectedPid,
-        data,
-      });
-    });
-
-    const flushPtyOutput = Effect.fn("terminal.flushPtyOutput")(function* (
-      threadId: string,
-      terminalId: string,
-    ) {
-      yield* ptyOutputWorker.drainKey(toSessionKey(threadId, terminalId));
+    const { queuePtyOutput, flushPtyOutput } = yield* makeTerminalPtyOutputQueue({
+      runFork,
+      drain: (session, expectedPid) => drainProcessEvents(session, expectedPid),
     });
 
     const history = makeHistoryAccessors({
@@ -277,6 +208,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       directShellOwners: options.directShellOwners,
       workSignals,
       shellIntegrationEnv: options.shellIntegrationEnv,
+      hostHub: host.hub,
     };
 
     const clearKillFiber = (proc: PtyProcess | null) =>
@@ -327,6 +259,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
+        yield* host.shutdown;
         const sessions = yield* modifyManagerState(
           (state) =>
             [
@@ -363,6 +296,11 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       persistHistory,
       flushPersist,
       ...history,
+      historyTerminalIdsForThread: host.historyTerminalIdsForThread(
+        history.historyTerminalIdsForThread,
+      ),
+      hostInventory: host.hostInventory,
+      hostLimit: host.hostLimit,
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,
@@ -377,8 +315,10 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       terminalEventListeners,
       workSignals,
     });
+    host.start();
     return {
       ...api,
+      ...host.api({ getSession, subscribe: (listener) => api.subscribe(listener) }),
       getThreadIdleWork: (threadId: string) =>
         refreshThreadIdleWork(threadId).pipe(Effect.map(() => idleWork.get(threadId))),
       forgetThreadIdleWork: (threadId: string) => Effect.sync(() => idleWork.forget(threadId)),

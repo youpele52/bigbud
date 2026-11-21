@@ -13,10 +13,11 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
 import { TerminalActivity } from "../Services/TerminalActivity.ts";
-import path from "node:path";
+import { AppQuitIntent } from "../../lifecycle/AppQuitIntent.ts";
 import {
   installShellIntegration,
   shellIntegrationEnv,
+  shellIntegrationRoot,
 } from "../shellIntegration/shellIntegration.ts";
 import { PtyAdapter } from "../Services/PTY";
 import { ShellLaunchPlanner } from "../Services/ShellLaunchPlanner";
@@ -48,6 +49,7 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   const settings = Option.getOrUndefined(yield* Effect.serviceOption(ServerSettingsService));
   const sql = yield* SqlClient.SqlClient;
   const activity = Option.getOrUndefined(yield* Effect.serviceOption(TerminalActivity));
+  const quitIntent = Option.getOrUndefined(yield* Effect.serviceOption(AppQuitIntent));
   yield* reconcileWorktreeRuntimeLeases(sql, "terminal");
   const acquireWorktreeLease = Effect.fn("terminal.acquireWorktreeLease")(function* (input: {
     runtimePathIdentity?: RuntimePathIdentity | undefined;
@@ -133,7 +135,7 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     process.platform === "win32"
       ? undefined
       : yield* Effect.tryPromise(() =>
-          installShellIntegration(path.join(stateDir, "shell-integration")),
+          installShellIntegration(shellIntegrationRoot(stateDir)),
         ).pipe(
           Effect.tapError((cause) =>
             Effect.logWarning("terminal shell integration unavailable", { cause }),
@@ -170,6 +172,12 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     acquireWorktreeLease,
     markWorktreeLeaseStarted,
     releaseWorktreeLease,
+    keepRunningAfterQuit: () =>
+      settings?.currentSnapshot?.()?.settings.terminalsKeepRunningAfterQuit === true,
+    ...(settings?.onSnapshotChange
+      ? { onSettingsChange: (listener: () => void) => settings.onSnapshotChange!(listener) }
+      : {}),
+    ...(quitIntent ? { resolveQuitIntent: quitIntent.resolve } : {}),
   });
   return yield* withTerminalPasteStaging(manager, {
     stateDir,

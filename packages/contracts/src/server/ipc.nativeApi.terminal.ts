@@ -84,4 +84,6 @@ export interface TerminalNativeApi {
   retrySetup?: (
     input: TerminalLifecycle.TerminalRetrySetupInput,
   ) => Promise<TerminalLifecycle.TerminalRetrySetupResult>;
+  /** Stop old-version terminal hosts that can't be reconnected ("Close them"). */
+  closeDrainingHosts?: () => Promise<TerminalLifecycle.TerminalCloseDrainingHostsResult>;
 }
