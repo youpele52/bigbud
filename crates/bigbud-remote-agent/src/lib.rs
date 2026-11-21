@@ -7,6 +7,8 @@ pub mod resource_cleanup;
 pub mod search;
 pub mod state;
 pub mod supervisor;
+pub mod terminal_policy;
+pub mod terminal_spool;
 pub mod workspace;
 
 mod session;
