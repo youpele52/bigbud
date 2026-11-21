@@ -3,10 +3,9 @@ import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/termin
 import { useEffect, useRef, useState } from "react";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useTerminalTheme } from "./TerminalViewport.theme";
-import {
-  createTerminalViewportDelivery,
-  refreshTerminalViewportDelivery,
-} from "./TerminalViewport.delivery";
+import { refreshTerminalViewportDelivery } from "./TerminalViewport.delivery";
+import { makeTerminalViewportDeliveryFactory } from "./TerminalViewport.session.delivery";
+import { isRestorableTerminalSnapshot } from "./TerminalViewport.snapshot";
 import { createTerminalViewportOutput } from "./TerminalViewport.output";
 import { useTerminalTypography } from "./TerminalViewport.typography";
 import type { TerminalFontController } from "./TerminalFontController";
@@ -17,13 +16,13 @@ import { useTerminalViewFind, useTerminalViewSettings } from "./TerminalViewport
 import { makeTerminalLinkRegistrar } from "./TerminalViewport.links";
 import {
   clearSelectionAction,
+  fitAndResizeServerTerminal,
   openTerminalSession,
   releaseTerminalViewRefs,
 } from "./TerminalViewport.session.helpers";
 import { attachTerminalSelection } from "./TerminalViewport.selection";
 import { makeTerminalRestartAction } from "./TerminalViewport.restart";
 import { registerTerminalProfileRestart } from "./TerminalProfilePicker.restart";
-import { TerminalHistoryUnavailableError } from "./TerminalHistoryUnavailableError";
 import { TerminalSetupCleanup } from "./TerminalSetupCleanup";
 import { makeTerminalStartupRecovery } from "./TerminalViewport.startup";
 import { recordTerminalProfileSnapshot } from "./TerminalViewport.profile";
@@ -105,48 +104,12 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     // Failed setup never returns effect cleanup; release resources before the boundary reloads.
     const partialCleanups = new TerminalSetupCleanup();
     try {
-      const createDelivery = () => {
-        const next = createTerminalViewportDelivery({
-          terminalRef,
-          hasHandledExitRef: input.hasHandledExitRef,
-          dropPathModeRef: input.dropPathModeRef,
-          clearSelectionAction: clearSelectionActionState,
-          handleSessionExited: () => latestInputRef.current.onSessionExited(),
-          onSnapshot: (snapshot) => onSnapshot(snapshot),
-          onInputState: (enabled) => {
-            if (!disposed) {
-              setInputEnabled(enabled);
-              if (enabled) setHistoryUnavailable(false);
-            }
-          },
-          onFailure: (error) => {
-            // A stopped lane never acknowledges; release the stream so the PTY is not held.
-            output.unsubscribe();
-            if (!disposed) {
-              setDeliveryError(error.message);
-              if (error instanceof TerminalHistoryUnavailableError) setHistoryUnavailable(true);
-            }
-          },
-          observeOutput: instrumentation.observeOutput,
-          onLiveAttach: () => setLiveAttachCount((count) => count + 1),
-          onCreditReleased: () => output.parsed(),
-          batcherOptions: {
-            ...view.pipeline.batcherOptions,
-            isLatencySensitive: instrumentation.isLatencySensitive,
-            onParsed: () => output.parsed(),
-            onStalled: () => {
-              if (!disposed) setViewEpoch((epoch) => epoch + 1);
-            },
-          },
-        });
-        instrumentation.bindWriteBatcher(next.writeBatcher);
-        return next;
-      };
       const output = createTerminalViewportOutput({
         lifecycle: instrumentation.lifecycle,
         threadId: input.threadId,
         terminalId: input.terminalId,
         receive: (event) => delivery.intake.receive(event),
+        receiveScreen: (screen) => delivery.intake.acceptScreen(screen),
         // Output parked during hydration is not parsed yet; counting it keeps the server window shut.
         outstanding: () =>
           delivery.writeBatcher.outstandingCredit + delivery.intake.pendingOutputChars,
@@ -154,6 +117,33 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       });
       instrumentation.bindStream(output.diagnostics);
       partialCleanups.add(() => output.unsubscribe());
+      const createDelivery = makeTerminalViewportDeliveryFactory({
+        view,
+        terminalRef,
+        input: {
+          hasHandledExitRef: input.hasHandledExitRef,
+          dropPathModeRef: input.dropPathModeRef,
+        },
+        readInput: () => latestInputRef.current,
+        disposed: () => disposed,
+        clearSelectionAction: clearSelectionActionState,
+        onSnapshot: (snapshot) => onSnapshot(snapshot),
+        output,
+        // The screen is painted at the host's grid; fitting now resizes the PTY to this view.
+        onScreenApplied: () =>
+          fitAndResizeServerTerminal({
+            containerRef: input.containerRef,
+            terminalRef,
+            fitAddonRef,
+            threadId: input.threadId,
+            terminalId: input.terminalId,
+          }),
+        setInputEnabled,
+        setHistoryUnavailable,
+        setDeliveryError,
+        onLiveAttach: () => setLiveAttachCount((count) => count + 1),
+        onStalled: () => setViewEpoch((epoch) => epoch + 1),
+      });
       let delivery = createDelivery();
       partialCleanups.add(() => delivery.dispose());
       const writeNotice = (target: Terminal, message: string) => {
@@ -214,6 +204,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       const onSnapshot = (snapshot: TerminalSessionSnapshot) => {
         if (!recordTerminalProfileSnapshot(snapshot)) return false;
         lastSnapshot = snapshot;
+        latestInputRef.current.onRestorableChange?.(isRestorableTerminalSnapshot(snapshot));
         input.dropPathModeRef.current = snapshot.dropPathMode;
         terminalLinksDisposable.dispose();
         terminalLinksDisposable = registerLinks(snapshot);
@@ -250,9 +241,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       );
       partialCleanups.add(unsubscribeRefresh);
       const startup = makeTerminalStartupRecovery({
-        open: (superseded, attachOnly) => {
+        open: (superseded, attachOnly, evict) => {
           const owner = delivery;
           return openTerminalSession({
+            ...(evict ? { evict } : {}),
             disposed: () => disposed || superseded() || delivery !== owner,
             terminalRef: input.terminalRef,
             fitAddonRef: input.fitAddonRef,
@@ -279,6 +271,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           setStartupFailed(!hasRunningSnapshot);
           delivery.intake.pause(err instanceof Error ? err : new Error("Failed to open terminal"));
         },
+        onLimitCancelled: () => latestInputRef.current.onSessionExited(),
       });
       const replaceDelivery = (keepSubscription = false) => {
         startup.invalidate();

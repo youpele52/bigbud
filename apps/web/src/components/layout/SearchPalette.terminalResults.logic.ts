@@ -4,7 +4,7 @@ import type { TerminalSearchHit } from "@bigbud/contracts/workspace/terminal.sea
 import { useTerminalStateStore } from "../../stores/terminal";
 import { openTerminalPanel } from "../../stores/terminal/terminalPanel.coordinator";
 import { useSearchStore } from "../../stores/ui";
-import { buildTerminalLabelMap } from "../terminal/terminalDisplay";
+import { terminalPaneLabel, type TerminalLabelStoreSnapshot } from "../terminal/terminalPaneLabel";
 
 export interface TerminalSearchResult {
   id: string;
@@ -18,25 +18,10 @@ export interface TerminalSearchResult {
   type: "terminal";
 }
 
-type TerminalStoreSnapshot = Pick<
-  ReturnType<typeof useTerminalStateStore.getState>,
-  "terminalStateByThreadId" | "panelTerminalStateByThreadId" | "terminalLabelOverridesByThreadId"
->;
+type TerminalStoreSnapshot = TerminalLabelStoreSnapshot;
 
 /** The label the terminal's tab shows ("Terminal 2", or the user's rename). */
-export function terminalSearchLabel(
-  store: TerminalStoreSnapshot,
-  threadId: ThreadId,
-  terminalId: string,
-): string {
-  const overrides = store.terminalLabelOverridesByThreadId[threadId] ?? {};
-  for (const surface of [store.terminalStateByThreadId, store.panelTerminalStateByThreadId]) {
-    const ids = surface[threadId]?.terminalIds ?? [];
-    if (ids.includes(terminalId))
-      return buildTerminalLabelMap(ids, "Terminal", overrides).get(terminalId) ?? "Terminal";
-  }
-  return overrides[terminalId]?.trim() || "Terminal";
-}
+export const terminalSearchLabel = terminalPaneLabel;
 
 /** Hits of threads the user can see (not archived, deleted or hidden), labelled for display. */
 export function toTerminalSearchResults(

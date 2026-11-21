@@ -46,6 +46,7 @@ import { DesktopRendererReadyCoordinator } from "../components/DesktopRendererRe
 import { DraftOwnershipCoordinator } from "../components/DraftOwnershipCoordinator";
 import { DRAFT_OWNERSHIP_REPAIR_BY_RENDERER } from "../components/DraftOwnershipCoordinator.logic";
 import { ChatFocusShortcutCoordinator } from "../components/chat/ChatFocusShortcutCoordinator";
+import { TerminalViewParkingHost } from "../components/terminal/view-registry/TerminalViewParkingHost";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -132,6 +133,8 @@ export function RootRouteView() {
         <WebSocketConnectionSurface>
           <>
             <div className="relative h-screen overflow-hidden">
+              {/* Before the layout: terminal views live here, above every route and gate. */}
+              <TerminalViewParkingHost />
               <CommandPalette>
                 <AppSidebarLayout>
                   <Outlet />

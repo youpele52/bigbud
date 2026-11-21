@@ -1,10 +1,13 @@
 import type { TerminalEvent } from "@bigbud/contracts/workspace/terminal.ts";
+import type { TerminalScreenItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import { readNativeApi } from "../../rpc/nativeApi";
 import type { TerminalStreamDiagnostics } from "./TerminalDiagnostics";
 import { TerminalSessionStream, type TerminalSessionStreamHandlers } from "./TerminalSessionStream";
 
 export interface TerminalOutputSubscriber {
   readonly onEvent: (event: TerminalEvent) => void;
+  /** The host's screen copy; a view that never restores from screens may omit it. */
+  readonly onScreen?: (screen: TerminalScreenItem) => void;
   /** Credited output this view still has queued or in flight. */
   readonly outstanding?: () => number;
   /** The stream restarted and events may be missing; the view must replay a snapshot. */
@@ -74,6 +77,9 @@ export function subscribeTerminalOutput(
     created.stream = streamFactory(threadId, terminalId, {
       deliver: (event) => {
         for (const current of created.subscribers) current.onEvent(event);
+      },
+      screen: (screen) => {
+        for (const current of created.subscribers) current.onScreen?.(screen);
       },
       outstanding: () =>
         Math.max(0, ...[...created.subscribers].map((current) => current.outstanding?.() ?? 0)),

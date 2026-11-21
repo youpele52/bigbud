@@ -9,7 +9,19 @@ type LifecycleEvent =
   | { type: "visibility"; foreground: boolean }
   | { type: "renderer"; mode: TerminalRendererState["mode"] }
   | { type: "input"; enabled: boolean }
-  | { type: "hydration"; state: "started" | "ready" | "reattached" | "refused" | "paused" }
+  | {
+      type: "hydration";
+      state: "started" | "ready" | "trimmed" | "reattached" | "refused" | "paused" | "screen";
+    }
+  | { type: "view"; state: "attached" | "warm" | "parked" | "restored" | "disposed" }
+  | {
+      type: "screen";
+      cols: number;
+      rows: number;
+      ansiChars: number;
+      fidelity: "full" | "trimmed" | "partial";
+      cold: boolean;
+    }
   | {
       type: "snapshot";
       pid: number | null;
@@ -18,6 +30,8 @@ type LifecycleEvent =
       historyChars: number;
       truncated: boolean;
       unavailable: boolean;
+      /** A line-cut tail, rendered but never a full screen restore. */
+      trimmed: boolean;
     };
 
 export type TerminalLifecycleTrace = Readonly<{
@@ -30,6 +44,8 @@ export type TerminalLifecycleTrace = Readonly<{
 }>;
 
 let enabled = false;
+/** Registry events outlive any one emulator, so they carry no view identity. */
+const REGISTRY_VIEW_ID = 0;
 let nextViewId = 0;
 let sequence = 0;
 const traces: TerminalLifecycleTrace[] = [];
@@ -52,6 +68,29 @@ declare global {
       readonly read: typeof readTerminalLifecycleDiagnostics;
     };
   }
+}
+
+function pushTrace(viewId: number, threadId: string, terminalId: string, event: LifecycleEvent) {
+  if (traces.length === TERMINAL_LIFECYCLE_TRACE_LIMIT) traces.shift();
+  traces.push(
+    Object.freeze({
+      sequence: ++sequence,
+      at: performance.now(),
+      viewId,
+      threadId: threadId.slice(0, 128),
+      terminalId: terminalId.slice(0, 128),
+      event: Object.freeze(event),
+    }),
+  );
+}
+
+/** View registry transitions: attach, release (warm), park, restore and dispose. */
+export function recordTerminalViewRegistryEvent(
+  threadId: string,
+  terminalId: string,
+  state: Extract<LifecycleEvent, { type: "view" }>["state"],
+): void {
+  if (enabled) pushTrace(REGISTRY_VIEW_ID, threadId, terminalId, { type: "view", state });
 }
 
 /** Registers emulator identity separately from its replaceable renderer and delivery lanes. */
@@ -106,6 +145,7 @@ export function attachTerminalLifecycleDiagnostics(input: {
         historyChars: snapshot.history.length,
         truncated: Boolean(snapshot.historyTruncated),
         unavailable: Boolean(snapshot.historyUnavailable),
+        trimmed: Boolean(snapshot.historyTrimmed),
       });
     },
     dispose() {

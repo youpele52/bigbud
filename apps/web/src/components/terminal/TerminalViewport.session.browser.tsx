@@ -66,6 +66,8 @@ vi.mock("../../hooks/useHandleNewThread", () => ({
 vi.mock("../../hooks/useSettings", () => ({
   migrateLocalSettingsToServer: () => undefined,
   persistServerSettings: () => undefined,
+  // Imported through EventRouter's file-access mirror.
+  updateServerSettings: () => undefined,
 }));
 vi.mock("../../routes/-__root.recovery", () => ({
   createEventRouterRecovery: () => ({ cancel: () => undefined }),

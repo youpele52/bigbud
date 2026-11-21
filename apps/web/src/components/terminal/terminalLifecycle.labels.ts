@@ -2,7 +2,7 @@ import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 
 import { useStore } from "../../stores/main";
 import { useTerminalStateStore } from "../../stores/terminal";
-import { terminalSearchLabel } from "../layout/SearchPalette.terminalResults.logic";
+import { terminalPaneLabel } from "./terminalPaneLabel";
 
 export interface TerminalNoticeNames {
   /** The tab label ("Terminal 2", or the user's rename). */
@@ -23,7 +23,7 @@ export function resolveTerminalNoticeNames(
   const title = useStore.getState().sidebarThreadsById[id]?.title?.trim();
   return {
     label: terminalId
-      ? terminalSearchLabel(useTerminalStateStore.getState(), id, terminalId)
+      ? terminalPaneLabel(useTerminalStateStore.getState(), id, terminalId)
       : "Terminal",
     thread: title || UNKNOWN_THREAD_TITLE,
   };

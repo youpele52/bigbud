@@ -43,17 +43,13 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     activeThread,
     activeThreadId,
     activeThreadLastVisitedAt,
-    existingOpenTerminalThreadIds,
     interactionMode,
     isConnecting,
     isRevertingCheckpoint,
     markThreadVisited,
     pendingUserInputAnswersByRequestId,
     pendingUserInputQuestionIndexByRequestId,
-    reconcileMountedTerminalThreadIds,
     serverThread,
-    setMountedTerminalThreadIds,
-    terminalState,
     threadId,
     nowTick,
   } = base;
@@ -87,27 +83,6 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     () => deriveLatestContextWindowSnapshot(activeThread?.activities ?? []),
     [activeThread?.activities],
   );
-
-  useEffect(() => {
-    setMountedTerminalThreadIds((currentThreadIds) => {
-      const nextThreadIds = reconcileMountedTerminalThreadIds({
-        currentThreadIds,
-        openThreadIds: existingOpenTerminalThreadIds,
-        activeThreadId,
-        activeThreadTerminalOpen: Boolean(activeThreadId && terminalState.terminalOpen),
-      });
-      return currentThreadIds.length === nextThreadIds.length &&
-        currentThreadIds.every((nextThreadId, index) => nextThreadId === nextThreadIds[index])
-        ? currentThreadIds
-        : nextThreadIds;
-    });
-  }, [
-    activeThreadId,
-    existingOpenTerminalThreadIds,
-    reconcileMountedTerminalThreadIds,
-    setMountedTerminalThreadIds,
-    terminalState.terminalOpen,
-  ]);
 
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
   const mergedActivities = useMemo(() => {

@@ -2,13 +2,11 @@ import { ThreadId, TurnId, ProjectId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
-  MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
   readBangShellInput,
-  reconcileMountedTerminalThreadIds,
 } from "./ChatView.logic";
 
 describe("deriveComposerSendState", () => {
@@ -106,115 +104,6 @@ describe("readBangShellInput", () => {
   it("requires the bang to be at position 0", () => {
     expect(readBangShellInput(" ! ls")).toBeNull();
     expect(readBangShellInput("please run ls")).toBeNull();
-  });
-});
-
-describe("reconcileMountedTerminalThreadIds", () => {
-  it("keeps previously mounted open threads and adds the active open thread", () => {
-    expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-hidden"),
-          ThreadId.makeUnsafe("thread-stale"),
-        ],
-        openThreadIds: [ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")],
-        activeThreadId: ThreadId.makeUnsafe("thread-active"),
-        activeThreadTerminalOpen: true,
-      }),
-    ).toEqual([ThreadId.makeUnsafe("thread-hidden"), ThreadId.makeUnsafe("thread-active")]);
-  });
-
-  it("drops mounted threads once their terminal drawer is no longer open", () => {
-    expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [ThreadId.makeUnsafe("thread-closed")],
-        openThreadIds: [],
-        activeThreadId: ThreadId.makeUnsafe("thread-closed"),
-        activeThreadTerminalOpen: false,
-      }),
-    ).toEqual([]);
-  });
-
-  it("keeps only the most recently active hidden terminal threads", () => {
-    expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-1"),
-          ThreadId.makeUnsafe("thread-2"),
-          ThreadId.makeUnsafe("thread-3"),
-        ],
-        openThreadIds: [
-          ThreadId.makeUnsafe("thread-1"),
-          ThreadId.makeUnsafe("thread-2"),
-          ThreadId.makeUnsafe("thread-3"),
-          ThreadId.makeUnsafe("thread-4"),
-        ],
-        activeThreadId: ThreadId.makeUnsafe("thread-4"),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
-      }),
-    ).toEqual([
-      ThreadId.makeUnsafe("thread-2"),
-      ThreadId.makeUnsafe("thread-3"),
-      ThreadId.makeUnsafe("thread-4"),
-    ]);
-  });
-
-  it("moves the active thread to the end so it is treated as most recently used", () => {
-    expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds: [
-          ThreadId.makeUnsafe("thread-a"),
-          ThreadId.makeUnsafe("thread-b"),
-          ThreadId.makeUnsafe("thread-c"),
-        ],
-        openThreadIds: [
-          ThreadId.makeUnsafe("thread-a"),
-          ThreadId.makeUnsafe("thread-b"),
-          ThreadId.makeUnsafe("thread-c"),
-        ],
-        activeThreadId: ThreadId.makeUnsafe("thread-a"),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
-      }),
-    ).toEqual([
-      ThreadId.makeUnsafe("thread-b"),
-      ThreadId.makeUnsafe("thread-c"),
-      ThreadId.makeUnsafe("thread-a"),
-    ]);
-  });
-
-  it("evicts the least recently activated thread across a switch sequence, not the first mounted", () => {
-    const id = (n: number) => ThreadId.makeUnsafe(`thread-${n}`);
-    const openThreadIds = [1, 2, 3, 4].map(id);
-    let mounted: ThreadId[] = [];
-    for (const active of [1, 2, 3, 1, 4]) {
-      mounted = reconcileMountedTerminalThreadIds({
-        currentThreadIds: mounted,
-        openThreadIds,
-        activeThreadId: id(active),
-        activeThreadTerminalOpen: true,
-        maxHiddenThreadCount: 2,
-      });
-    }
-    // Thread 1 was the first mounted but was re-activated, so thread 2 is the LRU entry.
-    expect(mounted).toEqual([id(3), id(1), id(4)]);
-  });
-
-  it("defaults to the hidden mounted terminal cap", () => {
-    const currentThreadIds = Array.from(
-      { length: MAX_HIDDEN_MOUNTED_TERMINAL_THREADS + 2 },
-      (_, index) => ThreadId.makeUnsafe(`thread-${index + 1}`),
-    );
-
-    expect(
-      reconcileMountedTerminalThreadIds({
-        currentThreadIds,
-        openThreadIds: currentThreadIds,
-        activeThreadId: null,
-        activeThreadTerminalOpen: false,
-      }),
-    ).toEqual(currentThreadIds.slice(-MAX_HIDDEN_MOUNTED_TERMINAL_THREADS));
   });
 });
 

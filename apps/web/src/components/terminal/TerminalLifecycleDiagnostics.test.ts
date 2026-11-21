@@ -91,6 +91,7 @@ describe("terminal lifecycle diagnostics", () => {
       historyChars: 14,
       truncated: true,
       unavailable: false,
+      trimmed: false,
     });
     expect(Object.isFrozen(traces[1])).toBe(true);
     expect(Object.isFrozen(traces[1]?.event)).toBe(true);
