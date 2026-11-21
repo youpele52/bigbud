@@ -11,6 +11,23 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
 - **[A window that feels all of a piece](#a-window-that-feels-all-of-a-piece):** Let your wallpaper show through the whole window, and browse files beside your code instead of under a drawer.
 
+## v0.4.1 (22 November, 2026)
+
+### Terminals That Stay Where You Left Them
+
+- **Get a terminal only when you ask for one:** New chats no longer start a terminal on their own, and switching chats with the right panel open no longer creates one. Old empty terminals from earlier versions are not brought back.
+- **Keep your terminal while you switch:** The terminal panel stays alive when you move between chats, projects, settings and remote chats, so a running program keeps its screen, scrollback and typed input instead of starting over.
+- **See which chats have running terminals:** The sidebar marks chats with a running terminal, in blue while a program in it is busy.
+- **Decide what happens when you quit:** **Settings → Terminal → Keep terminals running after quitting** is off by default, so quitting bigbud closes your terminals as before. It is not available on Windows yet.
+- **Close remote terminals properly:** Once a host's bigbud remote agent is updated, closing a terminal there ends its shell and the jobs it started, instead of leaving them running unseen.
+
+### Try Terminals That Survive Restarts (Preview)
+
+- **Opt in to the terminal host:** Start bigbud with `BIGBUD_TERMINAL_HOST=1` to run local and Direct SSH terminals in a small background helper. They then survive a backend restart with the same programs and the exact screen, and with **Keep terminals running after quitting** turned on they also survive quitting bigbud. The helper stays off unless you opt in while it finishes testing.
+- **Stay within a sensible limit:** With the helper on, bigbud keeps up to 24 terminals running. Opening another shows a dialog that names the least recently used terminal you aren't looking at, so you can close it or cancel.
+- **Let idle shells tidy themselves up:** With the helper on, a shell left at its prompt in a terminal you can't see shows a warning after 9 minutes and closes after 10, unless you choose **Keep open**. Busy programs, agents and terminals on screen are never closed this way. The sidebar shows an amber countdown before an idle close.
+- **See what closed while bigbud was away:** In keep mode, terminals that closed while bigbud was not running are summed up in one notice the next time you open it.
+
 ## v0.4.0 (21 November, 2026)
 
 ### Run bigbud on Your Own Linux Server

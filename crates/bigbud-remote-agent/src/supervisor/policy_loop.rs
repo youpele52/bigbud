@@ -49,12 +49,41 @@ fn self_exit_after() -> Duration {
     SELF_EXIT_AFTER
 }
 
+/// Diagnostics (any build): with this set to a period in ms (≥ 1000), the loop writes one
+/// `terminal host stats:` line to stderr (`supervisor.log`) per period, for the Q1 soak harness.
+const STATS_ENV: &str = "BIGBUD_DEBUG_TERMINAL_HOST_STATS_MS";
+
+fn stats_every() -> Option<Duration> {
+    std::env::var(STATS_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|ms| *ms >= 1_000)
+        .map(Duration::from_millis)
+}
+
 fn run(sessions: &Mutex<AgentSession>, runtime: &HostRuntime, options: SupervisorOptions) {
     let mut sampler = memory::Sampler::new();
     let exit_after = self_exit_after();
+    let stats = stats_every();
+    let mut stats_at = Instant::now();
     let mut empty_since: Option<Instant> = None;
     loop {
         std::thread::sleep(TICK);
+        if let Some(every) = stats
+            && stats_at.elapsed() >= every
+        {
+            stats_at = Instant::now();
+            let Ok((live, roots)) = sessions
+                .lock()
+                .map(|mut session| (session.live_pty_count(), session.workspace_root_count()))
+            else {
+                return;
+            };
+            eprintln!(
+                "terminal host stats: live_ptys={live} workspace_roots={roots} owners={}",
+                runtime.host.owners()
+            );
+        }
         let Ok(ptys) = sessions.lock().map(|mut session| session.lifecycle_ptys()) else {
             return;
         };

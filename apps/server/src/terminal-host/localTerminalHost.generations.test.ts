@@ -4,6 +4,7 @@ import type { RemoteAgentRuntimeBinding } from "../remote-agent/remoteAgentConne
 import type { RemoteAgentFrame } from "../remote-agent/remoteAgentProtocol.ts";
 import type { RemoteAgentRuntime } from "../remote-agent/remoteAgentRuntime.ts";
 import { terminalHostPolicy } from "../terminal/Layers/Manager.hostPolicy.ts";
+import { reachableHostInventoryEntries } from "../terminal/Services/OwnedPtyRuntime.ts";
 import type { LocalTerminalHostDrainingNotice } from "./localTerminalHost.adopt.ts";
 import { makeLocalTerminalHostGenerations } from "./localTerminalHost.generations.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
@@ -22,6 +23,33 @@ function connection(closed: number, requests: string[]) {
     request: async (frame: RemoteAgentFrame) => {
       requests.push(frame.type);
       const requestId = (frame.value as { requestId: string }).requestId;
+      if (frame.type === "ptyListRequest")
+        return {
+          type: "ptyListResponse",
+          value: {
+            requestId,
+            accepted: true,
+            errorCode: "",
+            errorMessage: "",
+            agentEpoch: frame.value.expectedEpoch,
+            snapshotId: "a".repeat(64),
+            nextAfterPtyId: "",
+            entries: [
+              {
+                ptyId: `pty-${closed}`,
+                requestDigest: "",
+                state: "running",
+                launchStatus: "unconfirmed",
+                pid: 100 + closed,
+                nextSequence: 0,
+                firstRetainedSequence: 0,
+                verifiedExit: false,
+                lost: false,
+                lifecycleManaged: true,
+              },
+            ],
+          },
+        };
       if (frame.type === "ptyCloseAllRequest")
         return {
           type: "ptyCloseAllResponse",
@@ -96,6 +124,25 @@ describe("local terminal host generations", () => {
     expect(requests.get("state-1")).toEqual(["hostPolicyUpdateRequest"]);
     expect(requests.get("state-2")).toEqual(["hostPolicyUpdateRequest"]);
     expect(await generations.admittedKey()).toBe("state-2:epoch-2");
+  });
+
+  it("reports each generation's inventory, an unreachable one as unreachable", async () => {
+    const { generations } = setup();
+    const inventory = await generations.inventory();
+    expect(inventory.map(({ status, connectionId }) => [connectionId, status])).toEqual([
+      ["state-1", "ok"],
+      ["state-2", "ok"],
+      ["state-3", "unreachable"],
+    ]);
+    expect(inventory[0]).toMatchObject({
+      expectedEpoch: "epoch-1",
+      entries: [{ ptyId: "pty-3", connectionId: "state-1", state: "running", lost: false }],
+    });
+    expect(inventory[2]).toMatchObject({ expectedEpoch: "epoch-3", cause: "Error: unreachable" });
+    expect(reachableHostInventoryEntries(inventory).map((entry) => entry.ptyId)).toEqual([
+      "pty-3",
+      "pty-2",
+    ]);
   });
 
   it("closes only old hosts whose process identity is verified", async () => {

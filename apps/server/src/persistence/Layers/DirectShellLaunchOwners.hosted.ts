@@ -11,6 +11,7 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import {
   isHostedDirectShellRecord,
   parseHostedDirectShellOwner,
+  withHostedRemoteShellPid,
   type HostedDirectShellOwnerStore,
 } from "../../terminal/Layers/DirectShellLaunch.hosted";
 
@@ -73,6 +74,15 @@ export function makeHostedDirectShellOwners(
         WHERE owner_key = ${owner.ownerKey} AND reservation_id = ${owner.reservationId}
           AND owner_json = ${JSON.stringify(owner)} RETURNING owner_key`);
       return rows.length === 1;
+    },
+    setHostedRemoteShellPid: async (input, remoteShellPid) => {
+      const owner = parseHostedDirectShellOwner(input);
+      const next = withHostedRemoteShellPid(owner, remoteShellPid);
+      const rows = await run(sql`UPDATE direct_shell_launch_owners
+        SET owner_json = ${JSON.stringify(next)}
+        WHERE owner_key = ${owner.ownerKey} AND reservation_id = ${owner.reservationId}
+          AND owner_json = ${JSON.stringify(owner)} RETURNING owner_key`);
+      return rows.length === 1 ? next : undefined;
     },
     listHostedForThread: async (threadId) => {
       const rows =

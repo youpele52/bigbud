@@ -3,12 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { RemoteAgentRuntimeBinding } from "../remote-agent/remoteAgentConnectionPool.ts";
 import { profileOwner } from "../remote-agent/remoteAgentOwnedPty.profile.testUtils.ts";
 import type { RemoteAgentOwner, RemoteAgentOwnerStore } from "../remote-agent/remoteAgentOwners.ts";
+import type { OwnedPtyHostGenerations } from "../terminal/Services/OwnedPtyRuntime.ts";
 import { makeLocalTerminalHostSshClient } from "./localTerminalHost.directSsh.client.ts";
 import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
 
 type Entry = { ptyId: string; state: string; verifiedExit?: boolean; lost?: boolean };
 
-function setup(input: { entries?: Entry[]; unreachable?: boolean; epoch?: string } = {}) {
+type Generation = Awaited<ReturnType<OwnedPtyHostGenerations["inventory"]>>[number];
+
+function setup(
+  input: { entries?: Entry[]; unreachable?: boolean; epoch?: string; others?: Generation[] } = {},
+) {
   const base = profileOwner();
   const owner: RemoteAgentOwner = {
     ...base,
@@ -50,9 +55,23 @@ function setup(input: { entries?: Entry[]; unreachable?: boolean; epoch?: string
           },
         },
       }) as never,
-    listPtys: vi.fn(async () => {
-      if (input.unreachable) throw new Error("host unreachable");
-      return entries as never;
+    inventory: vi.fn(async () => {
+      const generation = { connectionId: "state-1", expectedEpoch: input.epoch ?? "epoch-1" };
+      if (input.unreachable)
+        return [{ status: "unreachable" as const, ...generation, cause: "host unreachable" }];
+      return [
+        {
+          status: "ok" as const,
+          ...generation,
+          entries: entries.map((entry) => ({
+            ...entry,
+            connectionId: "state-1",
+            lost: entry.lost === true,
+            lifecycleManaged: true,
+          })),
+        },
+        ...(input.others ?? []),
+      ];
     }),
     closePty: vi.fn(async (_binding, ptyId: string) => {
       closed.push(ptyId);
@@ -92,6 +111,20 @@ describe("Direct SSH host PTY liveness", () => {
     expect(await unreaped.client.status(unreaped.owner)).toBe("unknown");
     const f = setup();
     expect(await f.client.status({ ...f.owner, connectionId: "state-9" })).toBe("unknown");
+  });
+
+  it("answers per generation: an unreachable one is unknown even when another is reachable", async () => {
+    const f = setup({
+      others: [
+        { status: "unreachable", connectionId: "state-2", expectedEpoch: "epoch-2", cause: "eof" },
+      ],
+    });
+    expect(await f.client.status(f.owner)).toBe("live");
+    expect(await f.client.status({ ...f.owner, connectionId: "state-2", epoch: "epoch-2" })).toBe(
+      "unknown",
+    );
+    // A PTY on another target never belongs to the local host.
+    expect(await f.client.status({ ...f.owner, target: "ssh:host=x" })).toBe("unknown");
   });
 });
 

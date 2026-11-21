@@ -236,3 +236,13 @@ fn policy_values_are_clamped_and_the_latest_revision_wins() {
     ));
     assert!(!state.current().lifecycle_enabled);
 }
+
+#[test]
+fn a_debug_idle_override_replaces_the_timeout_and_shortens_the_warning() {
+    let policy = HostPolicy::default().clamped();
+    let overridden = policy.clone().with_idle_override(Some(4_000));
+    assert_eq!((overridden.idle_ms, overridden.warning_ms), (4_000, 2_000));
+    // Too short or absent: the pushed values stay.
+    assert_eq!(policy.clone().with_idle_override(Some(999)), policy);
+    assert_eq!(policy.clone().with_idle_override(None), policy);
+}

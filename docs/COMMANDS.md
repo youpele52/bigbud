@@ -414,6 +414,71 @@ Source: [apps/server/package.json](../apps/server/package.json).
 | `bun run --cwd apps/server test:browser:install`                      | `just server-test-browser-install`                      |
 | `bun run --cwd apps/server benchmark:startup-catalog`                 | `just server-benchmark-startup-catalog`                 |
 | `bun run --cwd apps/server benchmark:mobile-recovery-memory`          | `just server-benchmark-mobile-recovery-memory`          |
+| `bun run --cwd apps/server benchmark:terminal-host`                   | `just server-benchmark-terminal-host`                   |
+| `bun run --cwd apps/server soak:terminal-host`                        | `just server-soak-terminal-host`                        |
+
+### Terminal host qualification (Q1)
+
+The local terminal host keeps terminals running across thread switches, backend restarts and
+(in keep mode) app quits. It is **opt-in** until its qualification passes: start the app or
+server with `BIGBUD_TERMINAL_HOST=1` (for example `BIGBUD_TERMINAL_HOST=1 bun run dev:desktop`).
+`BIGBUD_TERMINAL_HOST=0` is the kill switch. The host is the `bigbud-remote-agent` binary;
+build it first with `bun run build:workspace-agent` (debug) or
+`cargo build --release --locked -p bigbud-remote-agent` (release). Set
+`BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to choose a specific binary.
+
+**Soak.** `bun run --cwd apps/server soak:terminal-host -- [options]` runs terminals against the
+real binary and writes a JSON report (default `/tmp/bigbud-terminal-soak-<time>.json`); it exits
+non-zero when a Q1 (b) criterion fails. Options: `--minutes` (default 5; the Q1 run is 1440),
+`--terminals` (12), `--tui` (4 agent-like floods), `--sample-seconds` (15),
+`--restore-seconds` (3), `--warmup-minutes` (60; short runs use a fifth of the duration),
+`--flood-sleep` (0.05 s between TUI redraws), `--seed`, `--out`, and `--release` (use
+`target/release/bigbud-remote-agent`). The report has host RSS, open file descriptors and
+workspace roots per sample (the host writes a `terminal host stats:` line to its
+`supervisor.log` when `BIGBUD_DEBUG_TERMINAL_HOST_STATS_MS` is set, which the soak does), restore
+latency (subscribe to first screen item) p50/p95, cell-identical fidelity of restored prompt
+screens against a reference xterm.js, unexpected closes and `modelInvalid` notices. Every soak
+terminal is reported visible, so any idle or pressure close counts as unexpected.
+
+```sh
+cargo build --release --locked -p bigbud-remote-agent
+bun run --cwd apps/server soak:terminal-host -- --minutes 1440 --release --out ~/soak-macos.json
+```
+
+**Release bench.** `bun run --cwd apps/server benchmark:terminal-host -- [--runs 3] [--out f]
+[--skip-rss]` builds and runs the crate's ignored release benches with a clean `TMPDIR`: the R1
+screen ingest rate (target ≥ 50 MiB/s) and snapshot serialisation, and the R5/R7 host RSS at 24
+PTYs with two snapshots in flight (target ≤ 256 MiB; macOS runs use `MallocMaxMagazines=1` like
+the shipped host). Close other apps first; the report records the load average.
+
+**End-to-end tests** (real binary, opt-in):
+
+```sh
+BIGBUD_TERMINAL_HOST_IT=1 bun run --cwd apps/server vitest run \
+  src/terminal-host/localTerminalHost.e2e.restore.it.test.ts \
+  src/terminal-host/localTerminalHost.e2e.lifecycle.it.test.ts \
+  src/terminal-host/localTerminalHost.e2e.quit.it.test.ts
+```
+
+They use the debug host's test clocks, which release builds ignore and which reach the host
+through the `BIGBUD_DEBUG_TERMINAL_*` environment: `BIGBUD_DEBUG_TERMINAL_IDLE_MS` (idle
+timeout; the warning comes at half of it), `BIGBUD_DEBUG_TERMINAL_HOST_SELF_EXIT_MS` (orphaned
+empty host exit) and `BIGBUD_DEBUG_TERMINAL_PRESSURE` (`normal`, `low` or `critical`).
+
+**Cross-engine fidelity.** `bun run --cwd apps/server vitest run
+src/terminal/Layers/TerminalScreenFidelity.goldens.test.ts` restores every R1 screen golden in
+`@xterm/headless`. To add randomized streams, export them from the crate and point the test at
+them:
+
+```sh
+BIGBUD_SCREEN_EXPORT_RANDOM=/tmp/screen-random BIGBUD_SCREEN_EXPORT_COUNT=1000 \
+  cargo test -p bigbud-remote-agent --locked terminal_screen::tests::goldens::export_random_stream_goldens
+BIGBUD_SCREEN_GOLDENS_RANDOM_DIR=/tmp/screen-random bun run --cwd apps/server vitest run \
+  src/terminal/Layers/TerminalScreenFidelity.goldens.test.ts
+```
+
+The manual checklist is
+[docs/reports/2026-11-22-terminal-host-qualification-checklist.md](reports/2026-11-22-terminal-host-qualification-checklist.md).
 
 ## Workspace: apps/web
 

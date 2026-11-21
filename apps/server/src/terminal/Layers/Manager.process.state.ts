@@ -102,8 +102,11 @@ export const makeHistoryAccessors = (input: {
     ioDeleteHistory(input.logsDir, threadId, terminalId).pipe(
       Effect.provideService(FileSystem.FileSystem, input.fileSystem),
     ),
-  deleteAllHistoryForThread: (threadId: string): Effect.Effect<void> =>
-    ioDeleteAllHistoryForThread(input.logsDir, threadId).pipe(
+  deleteAllHistoryForThread: (
+    threadId: string,
+    retainedTerminalIds?: ReadonlySet<string>,
+  ): Effect.Effect<void> =>
+    ioDeleteAllHistoryForThread(input.logsDir, threadId, retainedTerminalIds).pipe(
       Effect.provideService(FileSystem.FileSystem, input.fileSystem),
     ),
   historyTerminalIdsForThread: (threadId: string) =>

@@ -147,7 +147,14 @@ export class FakeHostGenerations implements OwnedPtyHostGenerations {
   cold: PtyScreenSnapshot | undefined;
   ready = async () => {};
   admittedKey = async () => this.admitted;
-  inventory = async () => this.inventoryEntries;
+  inventory = async () => [
+    {
+      status: "ok" as const,
+      connectionId: "state-1",
+      expectedEpoch: "epoch-1",
+      entries: this.inventoryEntries,
+    },
+  ];
   updatePolicy = async (policy: RemoteAgentHostPolicy) => {
     this.policies.push(policy);
   };

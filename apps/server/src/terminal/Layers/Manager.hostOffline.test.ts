@@ -11,6 +11,7 @@ import type { OwnedPtyHostGenerationReplay } from "../Services/OwnedPtyRuntime.t
 import { FakeHostAdapter, flush, makeHostManager } from "./Manager.host.test.helpers.ts";
 import { makeTerminalHostHub, TERMINAL_HOST_TICK_MS } from "./Manager.hostHub.ts";
 import { offlineClosedNotice } from "./Manager.hostInventory.ts";
+import { openInput } from "./Manager.test.helpers.ts";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -70,6 +71,26 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("offline replay on a
       // A reconnecting renderer gets the same notice id, which the web shows once.
       expect(second.map((notice) => notice.noticeId)).toEqual([first[0]!.noticeId]);
       expect(adapter.generations.replayCalls).toBe(1);
+    }),
+  );
+
+  it.effect("sets the notice cursor of a host first admitted after startup at once", () =>
+    Effect.gen(function* () {
+      const adapter = new FakeHostAdapter();
+      // No host at startup; the first terminal launches one.
+      adapter.generations.admitted = undefined as unknown as string;
+      const { manager } = yield* makeHostManager(adapter);
+      yield* Effect.promise(flush);
+      expect(adapter.generations.replayCalls).toBe(1);
+      adapter.generations.admitted = "state-1:epoch-1";
+      yield* manager.open(openInput());
+      yield* Effect.promise(flush);
+      // Without this the cursor would wait for the next tick, and a keep-mode quit before it
+      // would turn every close while bigbud was closed into an unsummarised baseline.
+      expect(adapter.generations.replayCalls).toBe(2);
+      yield* manager.open(openInput({ terminalId: "second" }));
+      yield* Effect.promise(flush);
+      expect(adapter.generations.replayCalls).toBe(2);
     }),
   );
 });

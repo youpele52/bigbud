@@ -3,6 +3,8 @@
  * host is the supervisor of its PTYs, so a reachable generation answers for them: a PTY it lists
  * as running is live, one it reports exited, closed or lost (or no longer lists, in the same
  * epoch) is gone. An unreachable generation, another epoch, or an unreaped child is `unknown`.
+ * Reachability comes from the host generations' typed inventory (`ok` / `unreachable`), the one
+ * place that lists every attached generation.
  *
  * @module localTerminalHost.directSsh.client
  */
@@ -13,9 +15,9 @@ import type {
 import type { RemoteAgentControl } from "../remote-agent/remoteAgentControl.ts";
 import type { RemoteAgentOwner, RemoteAgentOwnerStore } from "../remote-agent/remoteAgentOwners.ts";
 import { closeRemotePty } from "../remote-agent/remoteAgentPtyClient.request.ts";
-import { RemoteAgentPtyInventory } from "../remote-agent/remoteAgentPtyInventory.ts";
 import type {
   OwnedPtyHostedStatus,
+  OwnedPtyHostGenerations,
   OwnedPtyLocalSshClient,
 } from "../terminal/Services/OwnedPtyRuntime.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
@@ -27,18 +29,13 @@ export const DIRECT_SSH_CLOSE_TIMEOUT_MS = 15_000;
 const connectionIdOf = (binding: RemoteAgentRuntimeBinding) =>
   binding.connectionId ?? binding.runtime.generation;
 
-type PtyEntries = Awaited<ReturnType<RemoteAgentPtyInventory["list"]>>;
-
 export interface LocalTerminalHostSshClientDeps {
   readonly controller: Pick<LocalTerminalHostController, "attachedBindings">;
   readonly pool: Pick<RemoteAgentConnectionPool, "getBound">;
   readonly owners: () => RemoteAgentOwnerStore;
   readonly control: () => Promise<Pick<RemoteAgentControl, "registry">>;
-  /** One generation's PTY inventory; rejects when it cannot be reached. */
-  readonly listPtys?: (
-    binding: RemoteAgentRuntimeBinding,
-    signal?: AbortSignal,
-  ) => Promise<PtyEntries>;
+  /** Every attached generation's inventory, each `ok` or `unreachable`. */
+  readonly inventory: OwnedPtyHostGenerations["inventory"];
   /** `PtyClose { terminate: true }`; answers after the reap or the escalation. */
   readonly closePty?: (
     binding: RemoteAgentRuntimeBinding,
@@ -50,10 +47,6 @@ export interface LocalTerminalHostSshClientDeps {
 export function makeLocalTerminalHostSshClient(
   deps: LocalTerminalHostSshClientDeps,
 ): OwnedPtyLocalSshClient {
-  const listPtys =
-    deps.listPtys ??
-    ((binding: RemoteAgentRuntimeBinding, signal?: AbortSignal) =>
-      new RemoteAgentPtyInventory(deps.pool).list(LOCAL_TERMINAL_HOST_TARGET_ID, binding, signal));
   const closePty =
     deps.closePty ??
     (async (binding: RemoteAgentRuntimeBinding, ptyId: string, signal: AbortSignal) => {
@@ -72,18 +65,14 @@ export function makeLocalTerminalHostSshClient(
     owner: RemoteAgentOwner,
     signal?: AbortSignal,
   ): Promise<OwnedPtyHostedStatus> => {
-    const binding = await bindingOf(owner);
-    if (!binding) return "unknown";
-    let entries: PtyEntries;
-    try {
-      entries = await listPtys(binding, signal);
-    } catch {
-      return "unknown";
-    }
-    const entry = entries.find((candidate) => candidate.ptyId === owner.resourceId);
+    if (owner.target !== LOCAL_TERMINAL_HOST_TARGET_ID) return "unknown";
+    const generations = await deps.inventory(signal).catch(() => []);
+    const generation = generations.find((entry) => entry.connectionId === owner.connectionId);
+    if (!generation || generation.status === "unreachable") return "unknown";
+    const entry = generation.entries.find((candidate) => candidate.ptyId === owner.resourceId);
     // A host that crashed lost the PTY with its master: the client got its hangup.
     if (entry?.lost) return "gone";
-    if (binding.expectedEpoch !== owner.epoch) return "unknown";
+    if (generation.expectedEpoch !== owner.epoch) return "unknown";
     if (!entry) return "gone";
     if (entry.state === "running") return "live";
     if (entry.verifiedExit || entry.state === "exited" || entry.state === "closed") return "gone";

@@ -63,3 +63,19 @@ it("validates the record's pane binding and refuses extra fields", () => {
   ).toThrow(/pane identity/);
   expect(() => parseHostedDirectShellOwner({ ...record, extra: true })).toThrow();
 });
+
+it("stores the remote shell PID across a reopen and validates it", async () => {
+  const db = await fixture();
+  const record = hostedDirectShellOwner({ ...pane, executionTargetId: target });
+  await db.store.reserveHosted!(record);
+  const updated = await db.store.setHostedRemoteShellPid!(record, 4242);
+  expect(updated).toEqual({ ...record, remoteShellPid: 4242 });
+  await db.runtime.dispose();
+  const reopened = await (await db.open()).runPromise(makeDirectShellLaunchOwners());
+  expect((await reopened.getHosted!(record.ownerKey))?.remoteShellPid).toBe(4242);
+  // Only the exact current record is released or updated.
+  expect(await reopened.releaseHosted!(record)).toBe(false);
+  expect(await reopened.releaseHosted!(updated!)).toBe(true);
+  expect(() => parseHostedDirectShellOwner({ ...record, remoteShellPid: 1 })).toThrow();
+  expect(() => parseHostedDirectShellOwner({ ...record, remoteShellPid: 2.5 })).toThrow();
+});

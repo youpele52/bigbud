@@ -8,6 +8,11 @@ pub const MIN_IDLE_MS: u64 = 60_000;
 pub const MIN_ORPHAN_MS: u64 = 60_000;
 pub const MAX_LIVE_PTYS_CEILING: u32 = 40;
 pub const DEFAULT_MAX_LIVE_PTYS: u32 = 24;
+/// Debug builds only: replaces the idle timeout of every applied policy, so real-process tests
+/// can watch the warning and the close (plan Q1). The warning lead becomes at most half of it.
+pub const IDLE_OVERRIDE_ENV: &str = "BIGBUD_DEBUG_TERMINAL_IDLE_MS";
+/// The shortest debug idle timeout honoured.
+pub const MIN_DEBUG_IDLE_MS: u64 = 1_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HostPolicy {
@@ -50,6 +55,18 @@ impl HostPolicy {
         self
     }
 
+    /// The policy with a debug idle timeout, when one is given and at least `MIN_DEBUG_IDLE_MS`.
+    pub fn with_idle_override(self, idle_ms: Option<u64>) -> Self {
+        match idle_ms {
+            Some(idle_ms) if idle_ms >= MIN_DEBUG_IDLE_MS => Self {
+                idle_ms,
+                warning_ms: self.warning_ms.min(idle_ms / 2),
+                ..self
+            },
+            _ => self,
+        }
+    }
+
     pub fn idle_timings(&self) -> IdleTimings {
         IdleTimings {
             idle_ms: self.idle_ms,
@@ -83,7 +100,21 @@ impl PolicyState {
         if update.revision < self.current.revision {
             return PolicyUpdate::Stale(self.current.clone());
         }
-        self.current = update.clamped();
+        self.current = update.clamped().with_idle_override(debug_idle_ms());
         PolicyUpdate::Applied(self.current.clone())
+    }
+}
+
+/// `IDLE_OVERRIDE_ENV` in debug builds; release builds never read it.
+fn debug_idle_ms() -> Option<u64> {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var(IDLE_OVERRIDE_ENV)
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        None
     }
 }

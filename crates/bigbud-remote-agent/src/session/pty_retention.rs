@@ -85,8 +85,7 @@ impl AgentSession {
         }
     }
 
-    /// Test and diagnostics view of the reference count.
-    #[cfg(test)]
+    /// Test and diagnostics view of the reference count (the host stats line, Q1 soak).
     pub(crate) fn workspace_root_count(&self) -> usize {
         self.workspace_roots.len()
     }

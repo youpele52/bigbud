@@ -73,6 +73,28 @@ describe("local terminal host launch", () => {
     });
   });
 
+  it("passes debug terminal clocks through; release hosts ignore them", () => {
+    const env = localTerminalHostEnvironment(
+      {
+        HOME: "/home/u",
+        BIGBUD_DEBUG_TERMINAL_IDLE_MS: "4000",
+        BIGBUD_DEBUG_TERMINAL_PRESSURE: "low",
+        BIGBUD_DEBUG_TERMINAL_HOST_SELF_EXIT_MS: "1500",
+        BIGBUD_DEBUG_TERMINAL_BAD: "$(rm -rf /)",
+        BIGBUD_DEBUG_OTHER: "1",
+      },
+      "/tmp/state",
+      "linux",
+    );
+    expect(env).toMatchObject({
+      BIGBUD_DEBUG_TERMINAL_IDLE_MS: "4000",
+      BIGBUD_DEBUG_TERMINAL_PRESSURE: "low",
+      BIGBUD_DEBUG_TERMINAL_HOST_SELF_EXIT_MS: "1500",
+    });
+    expect(env).not.toHaveProperty("BIGBUD_DEBUG_TERMINAL_BAD");
+    expect(env).not.toHaveProperty("BIGBUD_DEBUG_OTHER");
+  });
+
   it("limits macOS malloc magazines for the host process only", () => {
     const darwin = localTerminalHostEnvironment({ HOME: "/Users/u" }, "/tmp/state", "darwin");
     expect(darwin.MallocMaxMagazines).toBe("1");

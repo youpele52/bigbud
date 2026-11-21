@@ -98,9 +98,23 @@ const deleteHistoryEffect = Effect.fn("terminal.deleteHistory")(function* (
   }
 });
 
+/** The pane a history file name belongs to for this thread, or undefined when it is not one. */
+function historyFileTerminalId(name: string, threadId: string): string | undefined {
+  const threadPart = toSafeThreadId(threadId);
+  if (name === `${threadPart}.log` || name === `${legacySafeThreadId(threadId)}.log`) {
+    return DEFAULT_TERMINAL_ID;
+  }
+  if (!name.startsWith(`${threadPart}_`) || !name.endsWith(".log")) return undefined;
+  const encoded = name.slice(threadPart.length + 1, -".log".length);
+  const terminalId = Buffer.from(encoded, "base64url").toString("utf8");
+  // Only exact encodings name a pane; anything else is not this thread's history.
+  return encoded.length > 0 && toSafeTerminalId(terminalId) === encoded ? terminalId : undefined;
+}
+
 const deleteAllHistoryForThreadEffect = Effect.fn("terminal.deleteAllHistoryForThread")(function* (
   logsDir: string,
   threadId: string,
+  retainedTerminalIds: ReadonlySet<string>,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
   const threadPrefix = `${toSafeThreadId(threadId)}_`;
@@ -108,12 +122,13 @@ const deleteAllHistoryForThreadEffect = Effect.fn("terminal.deleteAllHistoryForT
     .readDirectory(logsDir, { recursive: false })
     .pipe(Effect.catch(() => Effect.succeed([] as Array<string>)));
   yield* Effect.forEach(
-    entries.filter(
-      (name) =>
-        name === `${toSafeThreadId(threadId)}.log` ||
-        name === `${legacySafeThreadId(threadId)}.log` ||
-        name.startsWith(threadPrefix),
-    ),
+    entries.filter((name) => {
+      const terminalId = historyFileTerminalId(name, threadId);
+      // A pane that still has an owner record or a host PTY keeps its history (N8): its file
+      // is how the thread keeps recognising that pane.
+      if (terminalId !== undefined) return !retainedTerminalIds.has(terminalId);
+      return name.startsWith(threadPrefix);
+    }),
     (name) =>
       fileSystem.remove(path.join(logsDir, name), { force: true }).pipe(
         Effect.catch((error) =>
@@ -132,7 +147,6 @@ const listHistoryTerminalIdsEffect = Effect.fn("terminal.listHistoryTerminalIds"
   threadId: string,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
-  const threadPart = toSafeThreadId(threadId);
   const entries = yield* fileSystem.readDirectory(logsDir, { recursive: false }).pipe(
     Effect.map((names): ReadonlyArray<string> | "unknown" => names),
     // No logs directory means no retained history; any other failure proves nothing.
@@ -143,16 +157,8 @@ const listHistoryTerminalIdsEffect = Effect.fn("terminal.listHistoryTerminalIds"
   if (entries === "unknown") return "unknown" as const;
   const terminalIds = new Set<string>();
   for (const name of entries) {
-    if (name === `${threadPart}.log` || name === `${legacySafeThreadId(threadId)}.log`) {
-      terminalIds.add(DEFAULT_TERMINAL_ID);
-    } else if (name.startsWith(`${threadPart}_`) && name.endsWith(".log")) {
-      const encoded = name.slice(threadPart.length + 1, -".log".length);
-      const terminalId = Buffer.from(encoded, "base64url").toString("utf8");
-      // Only exact encodings name a pane; anything else is not this thread's history.
-      if (encoded.length > 0 && toSafeTerminalId(terminalId) === encoded) {
-        terminalIds.add(terminalId);
-      }
-    }
+    const terminalId = historyFileTerminalId(name, threadId);
+    if (terminalId !== undefined) terminalIds.add(terminalId);
   }
   return [...terminalIds];
 });
@@ -184,7 +190,12 @@ export const deleteHistory = (logsDir: string, threadId: string, terminalId: str
     Effect.withSpan("terminal.deleteHistory"),
   );
 
-export const deleteAllHistoryForThread = (logsDir: string, threadId: string) =>
-  deleteAllHistoryForThreadEffect(logsDir, threadId).pipe(
+/** Deletes a thread's history files except those of `retainedTerminalIds` (N8). */
+export const deleteAllHistoryForThread = (
+  logsDir: string,
+  threadId: string,
+  retainedTerminalIds: ReadonlySet<string> = new Set(),
+) =>
+  deleteAllHistoryForThreadEffect(logsDir, threadId, retainedTerminalIds).pipe(
     Effect.withSpan("terminal.deleteAllHistoryForThread"),
   );

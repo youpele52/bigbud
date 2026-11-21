@@ -29,6 +29,11 @@ export const HostedDirectShellOwner = Schema.Struct({
   executionTargetId: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(4096)),
   /** The table's state column; the host owner row tracks the PTY's real state. */
   state: Schema.Literal("may-have-been-sent"),
+  /**
+   * The remote login shell's PID, printed once at launch (`remoteShellStartup`). Kept so a PTY
+   * reattached after a backend restart still gets real owner busy hints (M7 follow-up).
+   */
+  remoteShellPid: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(1))),
 });
 export type HostedDirectShellOwner = typeof HostedDirectShellOwner.Type;
 
@@ -39,6 +44,17 @@ export function parseHostedDirectShellOwner(input: unknown): HostedDirectShellOw
   if (directShellOwnerKey(owner.pane.threadId, owner.pane.terminalId) !== owner.ownerKey)
     throw new Error("Hosted direct shell record pane identity conflict.");
   return structuredClone(owner);
+}
+
+/** The record with its remote shell PID set, or removed when `undefined`. */
+export function withHostedRemoteShellPid(
+  owner: HostedDirectShellOwner,
+  remoteShellPid: number | undefined,
+): HostedDirectShellOwner {
+  const { remoteShellPid: _previous, ...rest } = owner;
+  return parseHostedDirectShellOwner(
+    remoteShellPid === undefined ? rest : { ...rest, remoteShellPid },
+  );
 }
 
 /** The SSH host name a person recognises for a hosted record. */
@@ -82,6 +98,14 @@ export interface HostedDirectShellOwnerStore {
   }>;
   /** Removes exactly this record (unchanged since it was read); false when it changed. */
   readonly releaseHosted: (owner: HostedDirectShellOwner) => Promise<boolean>;
+  /**
+   * Replaces exactly this record (unchanged since it was read) with its remote shell PID set, or
+   * cleared when `undefined`. Returns the stored record, or undefined when it changed meanwhile.
+   */
+  readonly setHostedRemoteShellPid?: (
+    owner: HostedDirectShellOwner,
+    remoteShellPid: number | undefined,
+  ) => Promise<HostedDirectShellOwner | undefined>;
   readonly listHostedForThread: (
     threadId: string,
   ) => Promise<ReadonlyArray<HostedDirectShellOwner>>;

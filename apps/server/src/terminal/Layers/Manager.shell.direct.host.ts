@@ -22,6 +22,7 @@ import type { TerminalSessionState } from "./Manager.types";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner";
 import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve";
 import { hostedDirectShellState } from "./Manager.shell.direct.settle";
+import { trackHostedDirectShellRecord } from "./Manager.shell.direct.hostedPid";
 
 const spawnError = (message: string, cause?: unknown) =>
   new PtySpawnError({
@@ -33,7 +34,10 @@ const spawnError = (message: string, cause?: unknown) =>
 function hostedStore(ctx: Pick<ProcessLifecycleContext, "directShellOwners">) {
   const store = ctx.directShellOwners;
   return store?.getHosted && store.reserveHosted && store.releaseHosted
-    ? (store as Pick<HostedDirectShellOwnerStore, "getHosted" | "reserveHosted" | "releaseHosted">)
+    ? (store as Pick<
+        HostedDirectShellOwnerStore,
+        "getHosted" | "reserveHosted" | "releaseHosted" | "setHostedRemoteShellPid"
+      >)
     : undefined;
 }
 
@@ -113,11 +117,15 @@ const spawnHostedDirectShell = Effect.fn("terminal.spawnHostedDirectShell")(func
   }
   // A reattached PTY whose record was forgotten gets its binding back.
   const record = reserved ?? current ?? (yield* Effect.orElseSucceed(reserve(), () => undefined));
+  // Stores the remote shell PID, restores it on reattach, and releases the record on exit.
   if (record && store) {
     const run = Effect.runForkWith(yield* Effect.services<never>());
-    process.onExit(() => {
-      // An interruption (the host or backend went away) is not an exit: keep the record.
-      if (!process.interruptionReason) run(release(record));
+    trackHostedDirectShellRecord({
+      store,
+      record,
+      process,
+      session,
+      log: (message, detail) => run(Effect.logWarning(message, detail)),
     });
   }
   return process;

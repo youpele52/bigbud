@@ -6,7 +6,10 @@
  *
  * @module Manager.hostRoster
  */
-import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
+import {
+  reachableHostInventoryEntries,
+  type OwnedPtyRuntime,
+} from "../Services/OwnedPtyRuntime.ts";
 import { paneFromOwnerKey } from "./Manager.hostLimit.ts";
 
 export interface TerminalHostRosterEntry {
@@ -85,10 +88,12 @@ export class TerminalHostRoster {
       return;
     }
     try {
-      const [inventory, owners] = await Promise.all([
+      const [generationInventories, owners] = await Promise.all([
         generations.inventory(),
         listTerminalHostOwners(runtime),
       ]);
+      // An unreachable generation lists nothing here, exactly as before; it proves no exit.
+      const inventory = reachableHostInventoryEntries(generationInventories);
       const panes = new Map<string, { threadId: string; terminalId: string }>();
       for (const owner of owners) {
         const pane = owner.state === "terminal" ? undefined : paneFromOwnerKey(owner.ownerKey);

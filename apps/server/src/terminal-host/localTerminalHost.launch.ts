@@ -14,6 +14,8 @@ export class LocalTerminalHostLaunchError extends Error {
   readonly _tag = "LocalTerminalHostLaunchError";
 }
 
+const DEBUG_TERMINAL_ENV = /^BIGBUD_DEBUG_TERMINAL_[A-Z0-9_]{1,48}$/;
+
 /**
  * The host starts with a minimal explicit environment. The user's shell environment reaches
  * each PTY through its launch spec (S6), never through the long-lived host process.
@@ -30,6 +32,11 @@ export function localTerminalHostEnvironment(
   }
   for (const [key, value] of Object.entries(environment))
     if (key.startsWith("LC_") && value !== undefined && value !== "") result[key] = value;
+  // Debug clocks and overrides (idle, pressure, self-exit) for real-process tests; release host
+  // builds ignore them.
+  for (const [key, value] of Object.entries(environment))
+    if (DEBUG_TERMINAL_ENV.test(key) && value !== undefined && /^[\w.-]{1,32}$/.test(value))
+      result[key] = value;
   result.HOME ??= homedir();
   result.PATH = LOCAL_TERMINAL_HOST_MINIMAL_PATH;
   result.BIGBUD_AGENT_STATE_DIR = statePath;

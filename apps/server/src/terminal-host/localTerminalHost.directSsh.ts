@@ -103,6 +103,7 @@ export function makeLocalTerminalHostDirectSsh(options: LocalTerminalHostDirectS
       pool: options.pool,
       owners: base.owners,
       control: base.control,
+      inventory: async (signal) => (await base.hostGenerations?.inventory(signal)) ?? [],
     }),
   });
   const assertTarget = (target: string) => {

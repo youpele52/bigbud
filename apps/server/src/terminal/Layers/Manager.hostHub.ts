@@ -75,6 +75,9 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   let tickKey: string | undefined;
   let ticking = false;
   let disposed = false;
+  /** The admitted host whose notice cursor is set; undefined until the startup summary ran. */
+  let baselineKey: string | undefined;
+  let summaryRaised = false;
 
   const publishNotice = (notice: TerminalLifecycleNotice) =>
     Effect.forEach([...lifecycleListeners], (listener) =>
@@ -171,9 +174,24 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       unsubscribeHostEvents = await runtime.host.subscribe(onHostEvent).catch(() => undefined);
   };
 
+  /**
+   * A host first admitted after startup (launched by the first terminal) gets its notice cursor
+   * now, not at the next tick: otherwise a keep-mode quit within a tick would make the next
+   * launch treat every close while bigbud was closed as a baseline and summarise nothing.
+   */
+  const ensureNoticeBaseline = async () => {
+    const generations = deps.runtime()?.hostGenerations;
+    if (!generations || !summaryRaised || disposed) return;
+    const key = await generations.admittedKey().catch(() => undefined);
+    if (!key || key === baselineKey) return;
+    baselineKey = key;
+    await generations.replayNotices().catch(() => []);
+  };
+
   const ensureHost = () => {
     void policy.ensure();
     void ensureHostEvents();
+    void ensureNoticeBaseline();
   };
 
   const remember = (notice: TerminalLifecycleNotice, expiresAt?: number) => {
@@ -200,6 +218,8 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       if (!key) return;
       if (key !== tickKey) {
         tickKey = key;
+        // The replay below sets this host's cursor; no separate baseline replay.
+        if (summaryRaised) baselineKey = key;
         ensureHost();
       }
       await refreshRoster();
@@ -268,6 +288,12 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       refreshInventory();
       raiseLegacyNotices();
       await raiseOfflineSummary();
+      // The summary's replay set the cursors of every host attached at startup.
+      baselineKey = await deps
+        .runtime()
+        ?.hostGenerations?.admittedKey()
+        .catch(() => undefined);
+      summaryRaised = true;
       ensureHost();
       unsubscribeSettings ??= deps.onSettingsChange?.(ensureHost);
       tickKey = await deps

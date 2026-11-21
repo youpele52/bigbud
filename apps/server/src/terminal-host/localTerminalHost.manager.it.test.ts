@@ -1,8 +1,8 @@
 /**
  * S3 smoke test with the real binary (`BIGBUD_TERMINAL_HOST_IT=1`): the terminal manager opens a
  * host terminal, a backend stop without a quit hint detaches it, a new backend reattaches it and
- * sends its screen first, and a quit with the default setting closes it in the host. No debug
- * idle clock exists in the host, so the 9-minute idle warning is covered by fake-host tests only.
+ * sends its screen first, and a quit with the default setting closes it in the host. The idle
+ * warning and close run against the real host in `localTerminalHost.e2e.lifecycle.it.test.ts`.
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { mkdir } from "node:fs/promises";
@@ -17,6 +17,7 @@ import { TerminalViewRegistry } from "../terminal/activity/terminalViewRegistry.
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager.process.ts";
 import type { TerminalManagerOptions } from "../terminal/Layers/Manager.types.ts";
 import type { PtyAdapterShape } from "../terminal/Services/PTY.ts";
+import { reachableHostInventoryEntries } from "../terminal/Services/OwnedPtyRuntime.ts";
 import { makeLocalTerminalHostPtyAdapter } from "./localTerminalHost.adapter.ts";
 import {
   makeTerminalHostOwnerStore,
@@ -153,7 +154,9 @@ describe.skipIf(!enabled)("S3 manager integration with the real binary", () => {
     // The notice cursor survives adoption, so the next launch summarizes only unseen closes.
     const records = await makeLocalTerminalHostRegistry(root.paths).read();
     expect(records[0]?.noticeCursor?.epoch).toEqual(expect.any(String));
-    const inventory = await second.runtime.hostGenerations!.inventory();
+    const inventory = reachableHostInventoryEntries(
+      await second.runtime.hostGenerations!.inventory(),
+    );
     expect(inventory.filter((candidate) => candidate.state === "running")).toEqual([]);
   }, 60_000);
 });

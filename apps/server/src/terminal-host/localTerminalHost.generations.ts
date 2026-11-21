@@ -14,10 +14,12 @@ import { REMOTE_AGENT_TERMINAL_LIFECYCLE_CAPABILITY } from "../remote-agent/remo
 import { RemoteAgentPtyInventory } from "../remote-agent/remoteAgentPtyInventory.ts";
 import { makeRemoteAgentHostControls } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
 import { requestRemoteAgentScreenSnapshot } from "../remote-agent/remoteAgentPtyClient.screen.ts";
-import type {
-  OwnedPtyHostGenerationReplay,
-  OwnedPtyHostGenerations,
-  OwnedPtyHostInventoryEntry,
+import {
+  reachableHostInventoryEntries,
+  type OwnedPtyHostGenerationInventory,
+  type OwnedPtyHostGenerationReplay,
+  type OwnedPtyHostGenerations,
+  type OwnedPtyHostInventoryEntry,
 } from "../terminal/Services/OwnedPtyRuntime.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
 import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
@@ -53,29 +55,36 @@ export function makeLocalTerminalHostGenerations(input: {
 
   const inventory: OwnedPtyHostGenerations["inventory"] = async (signal) => {
     const reader = new RemoteAgentPtyInventory(pool);
-    const entries: OwnedPtyHostInventoryEntry[] = [];
+    const results: OwnedPtyHostGenerationInventory[] = [];
     for (const { binding } of await controller.attachedBindings()) {
-      const listed = await reader
-        .list(LOCAL_TERMINAL_HOST_TARGET_ID, binding, signal)
-        .catch((cause: unknown) => {
-          input.log?.("A terminal host generation's inventory is unavailable.", {
-            connectionId: connectionIdOf(binding),
-            cause: String(cause),
-          });
-          return [];
+      const connectionId = connectionIdOf(binding);
+      const { expectedEpoch } = binding;
+      let listed: Awaited<ReturnType<RemoteAgentPtyInventory["list"]>>;
+      try {
+        listed = await reader.list(LOCAL_TERMINAL_HOST_TARGET_ID, binding, signal);
+      } catch (cause) {
+        input.log?.("A terminal host generation's inventory is unavailable.", {
+          connectionId,
+          cause: String(cause),
         });
+        results.push({ status: "unreachable", connectionId, expectedEpoch, cause: String(cause) });
+        continue;
+      }
+      const entries: OwnedPtyHostInventoryEntry[] = [];
       for (const entry of listed)
         entries.push({
           ptyId: entry.ptyId,
-          connectionId: connectionIdOf(binding),
+          connectionId,
           state: entry.state,
           lost: entry.lost === true,
           ...(entry.activityState ? { activityState: entry.activityState } : {}),
           ...(entry.lastUsedMs ? { lastUsedMs: entry.lastUsedMs } : {}),
           lifecycleManaged: entry.lifecycleManaged === true,
+          ...(entry.verifiedExit ? { verifiedExit: true } : {}),
         });
+      results.push({ status: "ok", connectionId, expectedEpoch, entries });
     }
-    return entries;
+    return results;
   };
 
   let seenNoticeId = 0;
@@ -138,7 +147,9 @@ export function makeLocalTerminalHostGenerations(input: {
       return { closed, unreachable };
     },
     coldSnapshot: async (ptyId, request) => {
-      const owner = (await inventory(request.signal)).find((entry) => entry.ptyId === ptyId);
+      const owner = reachableHostInventoryEntries(await inventory(request.signal)).find(
+        (entry) => entry.ptyId === ptyId,
+      );
       const bindings = await controller.attachedBindings();
       const binding = bindings.find(
         (entry) => owner && connectionIdOf(entry.binding) === owner.connectionId,

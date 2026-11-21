@@ -17,6 +17,7 @@ import { directShellOwnerKey } from "../terminal/Layers/DirectShellLaunch.owner.
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager.process.ts";
 import type { TerminalManagerOptions } from "../terminal/Layers/Manager.types.ts";
 import type { PtyAdapterShape } from "../terminal/Services/PTY.ts";
+import { reachableHostInventoryEntries } from "../terminal/Services/OwnedPtyRuntime.ts";
 import { makeLocalTerminalHostPtyAdapter } from "./localTerminalHost.adapter.ts";
 import {
   makeTerminalHostOwnerStore,
@@ -167,7 +168,9 @@ describe.skipIf(!enabled)("M7 Direct SSH through the real local terminal host", 
         yield* manager.close({ threadId: pane.threadId, deleteHistory: true });
       }),
     );
-    const inventory = await second.runtime.hostGenerations!.inventory();
+    const inventory = reachableHostInventoryEntries(
+      await second.runtime.hostGenerations!.inventory(),
+    );
     expect(inventory.filter((entry) => entry.state === "running")).toEqual([]);
   }, 60_000);
 });

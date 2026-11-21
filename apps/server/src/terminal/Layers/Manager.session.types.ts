@@ -58,7 +58,11 @@ export interface SessionApiContext {
   readHistory: (threadId: string, terminalId: string) => Effect.Effect<string>;
   historyExists: (threadId: string, terminalId: string) => Effect.Effect<boolean>;
   deleteHistory: (threadId: string, terminalId: string) => Effect.Effect<void>;
-  deleteAllHistoryForThread: (threadId: string) => Effect.Effect<void>;
+  /** Deletes a thread's history files, keeping those of `retainedTerminalIds` (N8). */
+  deleteAllHistoryForThread: (
+    threadId: string,
+    retainedTerminalIds?: ReadonlySet<string>,
+  ) => Effect.Effect<void>;
   /** Panes with retained history for a thread; `"unknown"` when they cannot be listed. */
   historyTerminalIdsForThread: (
     threadId: string,

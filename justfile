@@ -287,6 +287,12 @@ server-benchmark-startup-catalog *args:
 server-benchmark-mobile-recovery-memory *args:
     bun run --cwd apps/server benchmark:mobile-recovery-memory "$@"
 
+server-benchmark-terminal-host *args:
+    bun run --cwd apps/server benchmark:terminal-host "$@"
+
+server-soak-terminal-host *args:
+    bun run --cwd apps/server soak:terminal-host "$@"
+
 web-dev *args:
     bun run --cwd apps/web dev "$@"
 

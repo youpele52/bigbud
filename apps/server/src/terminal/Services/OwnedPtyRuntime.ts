@@ -52,6 +52,35 @@ export interface OwnedPtyHostInventoryEntry {
   readonly activityState?: string;
   readonly lastUsedMs?: number;
   readonly lifecycleManaged: boolean;
+  /** The supervisor reaped the child and recorded its exit. */
+  readonly verifiedExit?: boolean;
+}
+
+/**
+ * One attached generation's inventory. `unreachable` means it could not be listed, which proves
+ * nothing about its PTYs; `ok` lists them, so a PTY absent from it (in that epoch) is gone.
+ */
+export type OwnedPtyHostGenerationInventory =
+  | {
+      readonly status: "ok";
+      readonly connectionId: string;
+      readonly expectedEpoch: string;
+      readonly entries: ReadonlyArray<OwnedPtyHostInventoryEntry>;
+    }
+  | {
+      readonly status: "unreachable";
+      readonly connectionId: string;
+      readonly expectedEpoch: string;
+      readonly cause: string;
+    };
+
+/** Every PTY the reachable generations list; unreachable ones contribute nothing. */
+export function reachableHostInventoryEntries(
+  generations: ReadonlyArray<OwnedPtyHostGenerationInventory>,
+): ReadonlyArray<OwnedPtyHostInventoryEntry> {
+  return generations.flatMap((generation) =>
+    generation.status === "ok" ? generation.entries : [],
+  );
 }
 
 /** One generation's notices after its persisted cursor; the cursor has moved past them. */
@@ -85,7 +114,10 @@ export interface OwnedPtyHostGenerations {
   readonly ready: () => Promise<void>;
   /** Changes whenever the admitted host connection changes; undefined with no host. */
   readonly admittedKey: () => Promise<string | undefined>;
-  readonly inventory: (signal?: AbortSignal) => Promise<ReadonlyArray<OwnedPtyHostInventoryEntry>>;
+  /** Per attached generation, in attach order; an unreachable one is reported, never dropped. */
+  readonly inventory: (
+    signal?: AbortSignal,
+  ) => Promise<ReadonlyArray<OwnedPtyHostGenerationInventory>>;
   /** Pushes the policy to every reachable lifecycle-capable generation. */
   readonly updatePolicy: (policy: RemoteAgentHostPolicy, signal?: AbortSignal) => Promise<void>;
   readonly closeAll: (
