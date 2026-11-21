@@ -1430,3 +1430,9 @@ External facts were checked on 2026-11-21.
   - **Memory:** the live heap is now mostly screen grids (about 160 of 185 MiB at 24×1,050 rows). macOS allocator fragmentation set peak RSS at 255–263 MiB.
   - **Coordinator decision:** the local host launches with `MallocMaxMagazines=1` on macOS (host env only; PTYs never inherit it), which measured 245–252 MiB peak, within the 256 MiB §13 budget.
   - **Q1:** if more headroom is needed, evaluate a fragmentation-resistant allocator (e.g. mimalloc; a new dependency, needs approval) or a compact row format, before reducing scrollback.
+- M7 (committed):
+  - **Records:** Direct SSH PTYs run in the local host with `activity_source = owner-hint`. A v2 "hosted" record in `direct_shell_launch_owners` ties each pane to its SSH target; legacy methods ignore v2 rows.
+  - **Owner hint:** defaults to `unknown` (busy), because Rust clears the hint when it is empty.
+  - **Follow-up:** a reattached Direct SSH PTY has no remote shell PID (the marker is printed only at launch), so its hint stays `unknown` and it is never idle-closed. Store the remote PID in the owner row to fix this.
+  - **Password targets:** they survive a restart only while the backend's ControlMaster lives.
+  - **Stale records:** hosted records left after a default-quit close-all are removed on the next close, delete or open.
