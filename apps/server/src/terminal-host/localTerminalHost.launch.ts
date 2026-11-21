@@ -1,0 +1,132 @@
+import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { closeSync, openSync } from "node:fs";
+import * as fs from "node:fs/promises";
+import { homedir } from "node:os";
+
+import { assertPrivateDirectory, ensurePrivateDirectory } from "./localTerminalHost.fs.ts";
+import type { LocalTerminalHostGenerationPaths } from "./localTerminalHost.paths.ts";
+
+export const LOCAL_TERMINAL_HOST_MINIMAL_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+const SOCKET_WAIT_MS = 5_000;
+const SOCKET_POLL_MS = 50;
+
+export class LocalTerminalHostLaunchError extends Error {
+  readonly _tag = "LocalTerminalHostLaunchError";
+}
+
+/**
+ * The host starts with a minimal explicit environment. The user's shell environment reaches
+ * each PTY through its launch spec (S6), never through the long-lived host process.
+ */
+export function localTerminalHostEnvironment(
+  environment: NodeJS.ProcessEnv,
+  statePath: string,
+): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = {};
+  for (const key of ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG"]) {
+    const value = environment[key];
+    if (value !== undefined && value !== "") result[key] = value;
+  }
+  for (const [key, value] of Object.entries(environment))
+    if (key.startsWith("LC_") && value !== undefined && value !== "") result[key] = value;
+  result.HOME ??= homedir();
+  result.PATH = LOCAL_TERMINAL_HOST_MINIMAL_PATH;
+  result.BIGBUD_AGENT_STATE_DIR = statePath;
+  return result;
+}
+
+export type LocalTerminalHostSpawn = (
+  command: string,
+  args: ReadonlyArray<string>,
+  options: SpawnOptions,
+) => Pick<ChildProcess, "pid" | "unref" | "once" | "exitCode" | "signalCode" | "kill">;
+
+export interface LaunchLocalTerminalHostInput {
+  readonly binaryPath: string;
+  readonly generation: LocalTerminalHostGenerationPaths;
+  readonly environment?: NodeJS.ProcessEnv;
+  readonly spawn?: LocalTerminalHostSpawn;
+  readonly socketWaitMs?: number;
+  readonly pollMs?: number;
+}
+
+export interface LaunchedLocalTerminalHost {
+  readonly pid: number;
+}
+
+/** Creates `state-<n>/` as a private directory under the already-private terminal-host root. */
+export async function prepareLocalTerminalHostGeneration(
+  root: string,
+  generation: LocalTerminalHostGenerationPaths,
+): Promise<void> {
+  await ensurePrivateDirectory(root);
+  try {
+    await fs.mkdir(generation.statePath, { mode: 0o700 });
+    await fs.chmod(generation.statePath, 0o700);
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
+  }
+  await assertPrivateDirectory(generation.statePath);
+}
+
+/**
+ * `<staged> --supervisor` in its own session (`detached` = `setsid`), stdio to `host.log`, so
+ * killing the backend's process group leaves the host running. Before R5 lands the host takes
+ * only `--supervisor`; `--local-desktop-host --exit-when-orphaned-and-empty` come with R5.
+ */
+export async function launchLocalTerminalHost(
+  input: LaunchLocalTerminalHostInput,
+): Promise<LaunchedLocalTerminalHost> {
+  const spawn = input.spawn ?? (nodeSpawn as unknown as LocalTerminalHostSpawn);
+  const log = openSync(input.generation.logPath, "a", 0o600);
+  let child: ReturnType<LocalTerminalHostSpawn>;
+  try {
+    child = spawn(input.binaryPath, ["--supervisor"], {
+      cwd: homedir(),
+      detached: true,
+      stdio: ["ignore", log, log],
+      env: localTerminalHostEnvironment(
+        input.environment ?? process.env,
+        input.generation.statePath,
+      ),
+    });
+  } finally {
+    closeSync(log);
+  }
+  let exited = child.exitCode !== null || child.signalCode !== null;
+  let spawnError: Error | undefined;
+  child.once("exit", () => {
+    exited = true;
+  });
+  child.once("error", (error: Error) => {
+    spawnError = error;
+    exited = true;
+  });
+  child.unref();
+  const deadline = Date.now() + (input.socketWaitMs ?? SOCKET_WAIT_MS);
+  const pollMs = input.pollMs ?? SOCKET_POLL_MS;
+  for (;;) {
+    if (spawnError)
+      throw new LocalTerminalHostLaunchError(
+        `Terminal host failed to start: ${spawnError.message}`,
+      );
+    if (exited)
+      throw new LocalTerminalHostLaunchError(
+        `Terminal host exited during startup; see ${input.generation.logPath}.`,
+      );
+    try {
+      const stat = await fs.lstat(input.generation.socketPath);
+      if (stat.isSocket() && child.pid !== undefined) return { pid: child.pid };
+    } catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+    }
+    if (Date.now() >= deadline) {
+      // Our own fresh host has no terminals yet; never leave a socketless process behind.
+      child.kill("SIGTERM");
+      throw new LocalTerminalHostLaunchError(
+        `Terminal host socket did not appear within ${input.socketWaitMs ?? SOCKET_WAIT_MS} ms.`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}

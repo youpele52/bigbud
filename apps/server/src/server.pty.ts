@@ -3,15 +3,28 @@ import { ServerConfig } from "./startup/config.ts";
 import { PtyAdapter } from "./terminal/Services/PTY.ts";
 import { terminalPtyBackend } from "./terminal/Layers/PTY.backend.ts";
 import { RemoteLocalSupervisorPtyLive } from "./remote-backend/localSupervisorLayer.ts";
+import {
+  localTerminalHostSelection,
+  makeLocalTerminalHostPtyLive,
+} from "./terminal-host/localTerminalHost.layer.ts";
 
+type InProcessPtyLayer =
+  | typeof import("./terminal/Layers/NodePTY").layer
+  | typeof import("./terminal/Layers/BunPTY").layer;
+type LocalTerminalHostPtyLayer = ReturnType<
+  typeof makeLocalTerminalHostPtyLive<
+    Layer.Error<InProcessPtyLayer>,
+    Layer.Services<InProcessPtyLayer>
+  >
+>;
 type ConfiguredPtyLayer = Layer.Layer<
   PtyAdapter,
   | Layer.Error<typeof RemoteLocalSupervisorPtyLive>
-  | Layer.Error<typeof import("./terminal/Layers/NodePTY").layer>
-  | Layer.Error<typeof import("./terminal/Layers/BunPTY").layer>,
+  | Layer.Error<InProcessPtyLayer>
+  | Layer.Error<LocalTerminalHostPtyLayer>,
   | Layer.Services<typeof RemoteLocalSupervisorPtyLive>
-  | Layer.Services<typeof import("./terminal/Layers/NodePTY").layer>
-  | Layer.Services<typeof import("./terminal/Layers/BunPTY").layer>
+  | Layer.Services<InProcessPtyLayer>
+  | Layer.Services<LocalTerminalHostPtyLayer>
 >;
 export const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -20,14 +33,19 @@ export const PtyAdapterLive = Layer.unwrap(
       const selected: ConfiguredPtyLayer = RemoteLocalSupervisorPtyLive;
       return selected;
     }
+    let inProcess: InProcessPtyLayer;
     if (terminalPtyBackend(process.platform, typeof Bun !== "undefined") === "bun") {
       const BunPTY = yield* Effect.promise(() => import("./terminal/Layers/BunPTY"));
-      const selected: ConfiguredPtyLayer = BunPTY.layer;
-      return selected;
+      inProcess = BunPTY.layer;
     } else {
       const NodePTY = yield* Effect.promise(() => import("./terminal/Layers/NodePTY"));
-      const selected: ConfiguredPtyLayer = NodePTY.layer;
-      return selected;
+      inProcess = NodePTY.layer;
     }
+    // Unset flag and no existing host root: exactly the in-process adapter, unchanged.
+    const hostMode = localTerminalHostSelection({ stateDir: config.stateDir });
+    const selected: ConfiguredPtyLayer = hostMode
+      ? makeLocalTerminalHostPtyLive(hostMode, inProcess)
+      : inProcess;
+    return selected;
   }),
 );
