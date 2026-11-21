@@ -6,6 +6,7 @@ import type * as TerminalSearch from "../workspace/terminal.search";
 import type * as TerminalPaste from "../workspace/terminal.paste";
 import type * as TerminalRecovery from "../workspace/terminal.recovery";
 import type * as TerminalActivity from "../workspace/terminal.activity";
+import type * as TerminalLifecycle from "../workspace/terminal.lifecycle";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type {
   TerminalShellProfileInventory,
@@ -52,6 +53,8 @@ export interface TerminalNativeApi {
       onInventory?: (inventory: TerminalStream.TerminalSessionInventory) => void;
       /** Opts in to terminal recency and finished-work items. */
       onWork?: (item: TerminalActivity.TerminalWorkActivity) => void;
+      /** Opts in to lifecycle notices (idle warnings, closes, limit refusals). */
+      onLifecycle?: (notice: TerminalLifecycle.TerminalLifecycleNotice) => void;
     },
   ) => () => void;
   /** Report the open thread and visible panes of this connection. */
@@ -60,7 +63,11 @@ export interface TerminalNativeApi {
   subscribeSession?: (
     input: TerminalStream.TerminalSessionStreamInput,
     callback: (item: TerminalStream.TerminalSessionStreamItem) => void,
-    options?: { onError?: (error: unknown) => void },
+    options?: {
+      onError?: (error: unknown) => void;
+      /** Opts in (`acceptScreen`) to the host screen sent first after `subscribed`. */
+      onScreen?: (item: TerminalStream.TerminalScreenItem) => void;
+    },
   ) => () => void;
   ackOutput?: (input: TerminalStream.TerminalOutputAckInput) => Promise<void>;
   /** Retained output of the server's terminals, newest lines first. */
@@ -71,4 +78,10 @@ export interface TerminalNativeApi {
   stagePasteFile?: (
     input: TerminalPaste.TerminalPasteStageInput,
   ) => Promise<TerminalPaste.TerminalPasteStageResult>;
+  /** Restart one terminal's idle timer ("Keep open"). */
+  keepOpen?: (input: TerminalLifecycle.TerminalKeepOpenInput) => Promise<void>;
+  /** Run a setup script the live limit refused, closing `evict` first. */
+  retrySetup?: (
+    input: TerminalLifecycle.TerminalRetrySetupInput,
+  ) => Promise<TerminalLifecycle.TerminalRetrySetupResult>;
 }

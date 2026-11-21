@@ -95,6 +95,8 @@ export const WS_METHODS = {
   terminalSearch: "terminal.search",
   terminalView: "terminal.view",
   terminalStagePasteFile: "terminal.stagePasteFile",
+  terminalKeepOpen: "terminal.keepOpen",
+  terminalRetrySetup: "terminal.retrySetup",
 
   // Server meta
   serverPing: "server.ping",

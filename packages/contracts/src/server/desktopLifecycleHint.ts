@@ -46,6 +46,36 @@ export const DesktopLifecycleHint = Schema.Struct({
 });
 export type DesktopLifecycleHint = typeof DesktopLifecycleHint.Type;
 
+/** Why Electron main is quitting: a user quit, an update install, or an app restart. */
+export const DesktopQuitReason = Schema.Literals(["quit", "update", "restart"]);
+export type DesktopQuitReason = typeof DesktopQuitReason.Type;
+
+/**
+ * The `quit` hint line: Electron main announces quit intent before it stops the backend, then
+ * waits for a `DesktopLifecycleHintAck` with the same `sequence`. It shares the power hints'
+ * sequence counter. It is a separate record so `DesktopLifecycleHint` consumers keep handling
+ * only power and network kinds; readers that understand quit decode `DesktopLifecycleHintLine`.
+ * An older server rejects the line, which leaves today's quit behavior.
+ */
+export const DesktopQuitHint = Schema.Struct({
+  kind: Schema.Literal("quit"),
+  sequence: NonNegativeInt,
+  occurredAt: Schema.Number,
+  online: Schema.NullOr(Schema.Boolean),
+  reason: Schema.optional(DesktopQuitReason),
+});
+export type DesktopQuitHint = typeof DesktopQuitHint.Type;
+
+/** Every line Electron main may write on the hint pipe. */
+export const DesktopLifecycleHintLine = Schema.Union([DesktopLifecycleHint, DesktopQuitHint]);
+export type DesktopLifecycleHintLine = typeof DesktopLifecycleHintLine.Type;
+
+/** Server-to-main record: the server finished applying the hint with this `sequence`. */
+export const DesktopLifecycleHintAck = Schema.Struct({
+  sequence: NonNegativeInt,
+});
+export type DesktopLifecycleHintAck = typeof DesktopLifecycleHintAck.Type;
+
 /**
  * Why Electron main started this backend, sent as the optional `startReason` of the fd 3
  * bootstrap envelope. Absent on ordinary starts and restarts, which keep today's behavior.

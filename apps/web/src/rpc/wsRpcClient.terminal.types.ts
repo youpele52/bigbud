@@ -1,10 +1,13 @@
 import type { NativeApi } from "@bigbud/contracts";
+import type {
+  TerminalScreenItem,
+  TerminalSessionStreamItem,
+} from "@bigbud/contracts/workspace/terminal.stream.ts";
 import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
 import type { WsRpcProtocolClient } from "./protocol";
 import type {
   RpcUnaryMethod,
   RpcUnaryNoArgMethod,
-  RpcStreamMethod,
   StreamSubscriptionOptions,
 } from "./wsRpcClient.types";
 type RpcInput<T extends keyof WsRpcProtocolClient> = Parameters<WsRpcProtocolClient[T]>[0];
@@ -33,13 +36,18 @@ export interface TerminalRpcClient {
     listener: Parameters<NativeApi["terminal"]["onEvent"]>[0],
     options?: StreamSubscriptionOptions & Parameters<NativeApi["terminal"]["onEvent"]>[1],
   ) => () => void;
+  /** `acceptScreen` is requested exactly when `onScreen` is given; screen items go only there. */
   readonly subscribeSession: (
     input: RpcInput<typeof WS_METHODS.subscribeTerminalSession>,
-    listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalSession>>[0],
-    options?: StreamSubscriptionOptions,
+    listener: (item: TerminalSessionStreamItem) => void,
+    options?: StreamSubscriptionOptions & {
+      readonly onScreen?: (item: TerminalScreenItem) => void;
+    },
   ) => () => void;
   readonly ackOutput: RpcUnaryMethod<typeof WS_METHODS.terminalOutputAck>;
   readonly search: RpcUnaryMethod<typeof WS_METHODS.terminalSearch>;
   readonly view: RpcUnaryMethod<typeof WS_METHODS.terminalView>;
   readonly stagePasteFile: RpcUnaryMethod<typeof WS_METHODS.terminalStagePasteFile>;
+  readonly keepOpen: RpcUnaryMethod<typeof WS_METHODS.terminalKeepOpen>;
+  readonly retrySetup: RpcUnaryMethod<typeof WS_METHODS.terminalRetrySetup>;
 }

@@ -1,6 +1,9 @@
 import { expect, it, vi } from "vitest";
 import { WS_METHODS } from "@bigbud/contracts";
-import type { TerminalEventsStreamItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalEventsStreamItem,
+  TerminalSessionStreamRpcItem,
+} from "@bigbud/contracts/workspace/terminal.stream.ts";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import type { WsTransport } from "./wsTransport";
 
@@ -59,4 +62,109 @@ it("opts in only with an inventory consumer and separates control items from ter
   expect(subscribeRpc).toHaveBeenLastCalledWith({ outputScope: "legacyDetection" });
   deliver(inventory);
   expect(listener).toHaveBeenCalledOnce();
+});
+
+it("routes lifecycle notices only to an opted-in consumer", () => {
+  let deliver!: (item: TerminalEventsStreamItem) => void;
+  const subscribeRpc = vi.fn();
+  const transport = {
+    subscribe: vi.fn(
+      (
+        connect: (client: unknown) => unknown,
+        listener: (item: TerminalEventsStreamItem) => void,
+      ) => {
+        connect({ [WS_METHODS.subscribeTerminalEvents]: subscribeRpc });
+        deliver = listener;
+        return () => undefined;
+      },
+    ),
+  } as unknown as WsTransport;
+  const client = createTerminalRpcClient(transport);
+  const notice = {
+    type: "lifecycleNotice" as const,
+    noticeId: "n-1",
+    kind: "idleWarning" as const,
+    threadId: "t",
+    terminalId: "a",
+    closesAt: "2026-11-21T10:10:00.000Z",
+    createdAt: "2026-11-21T10:09:00.000Z",
+  };
+  const listener = vi.fn();
+  const onLifecycle = vi.fn();
+  client.onEvent(listener, { onLifecycle });
+  expect(subscribeRpc).toHaveBeenLastCalledWith({
+    outputScope: "legacyDetection",
+    includeLifecycle: true,
+  });
+  deliver(notice);
+  expect(onLifecycle).toHaveBeenCalledExactlyOnceWith(notice);
+  expect(listener).not.toHaveBeenCalled();
+});
+
+it("requests screens only with a screen consumer and keeps them out of the event listener", () => {
+  let deliver!: (item: TerminalSessionStreamRpcItem) => void;
+  const subscribeRpc = vi.fn();
+  const transport = {
+    subscribe: vi.fn(
+      (
+        connect: (client: unknown) => unknown,
+        listener: (item: TerminalSessionStreamRpcItem) => void,
+      ) => {
+        connect({ [WS_METHODS.subscribeTerminalSession]: subscribeRpc });
+        deliver = listener;
+        return () => undefined;
+      },
+    ),
+  } as unknown as WsTransport;
+  const client = createTerminalRpcClient(transport);
+  const screen = {
+    type: "screen" as const,
+    threadId: "t",
+    terminalId: "a",
+    runtimeGeneration: "run-1",
+    throughSequence: "42",
+    cols: 80,
+    rows: 24,
+    ansi: "prompt$ ",
+    pendingEscapeTail: "",
+    scrollbackRows: 0,
+    alternateScreen: false,
+    fidelity: "full" as const,
+    cold: false,
+  };
+  const subscribed = { type: "subscribed" as const, subscriptionId: "s-1" };
+  const listener = vi.fn();
+  const onScreen = vi.fn();
+  client.subscribeSession({ threadId: "t", terminalId: "a" }, listener, { onScreen });
+  expect(subscribeRpc).toHaveBeenLastCalledWith({
+    threadId: "t",
+    terminalId: "a",
+    acceptScreen: true,
+  });
+  deliver(subscribed);
+  deliver(screen);
+  expect(listener).toHaveBeenCalledExactlyOnceWith(subscribed);
+  expect(onScreen).toHaveBeenCalledExactlyOnceWith(screen);
+
+  client.subscribeSession({ threadId: "t", terminalId: "a", acceptScreen: true }, listener);
+  expect(subscribeRpc).toHaveBeenLastCalledWith({ threadId: "t", terminalId: "a" });
+});
+
+it("sends keep open and setup retries through their lifecycle endpoints", async () => {
+  const keepOpen = vi.fn(async () => undefined);
+  const retrySetup = vi.fn(async () => ({ status: "no-script" as const }));
+  const transport = {
+    request: vi.fn((connect: (client: unknown) => unknown) =>
+      connect({
+        [WS_METHODS.terminalKeepOpen]: keepOpen,
+        [WS_METHODS.terminalRetrySetup]: retrySetup,
+      }),
+    ),
+  } as unknown as WsTransport;
+  const client = createTerminalRpcClient(transport);
+  await expect(client.keepOpen({ threadId: "t", terminalId: "a" })).resolves.toBeUndefined();
+  expect(keepOpen).toHaveBeenCalledExactlyOnceWith({ threadId: "t", terminalId: "a" });
+  const retry = { threadId: "t", evict: { threadId: "old", terminalId: "b" } };
+  await expect(client.retrySetup(retry)).resolves.toEqual({ status: "no-script" });
+  expect(retrySetup).toHaveBeenCalledExactlyOnceWith(retry);
 });

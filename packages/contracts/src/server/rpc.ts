@@ -10,7 +10,6 @@ import {
   WsServerGetRemoteRuntimeUpdateStatusRpc,
   WsServerRequestRemoteRuntimeUpdateRpc,
 } from "./rpc.remoteBackendUpdate";
-import { TerminalRemoteRpcs } from "./rpc.terminalRemote";
 import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
@@ -23,9 +22,7 @@ import {
 } from "./rpc.worktrees";
 
 import { WS_METHODS } from "../constants/websocket.constant";
-import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
-import { WsTerminalShellProfilesRpc } from "./rpc.terminalShellProfiles";
-import { WsTerminalRecoveryRpc } from "./rpc.terminalRecovery";
+import { TerminalRpcs } from "./rpc.terminalGroup";
 import { WsOrchestrationGetOrganizationThreadSummariesRpc } from "./rpc.organization";
 import {
   WsOrchestrationGetMessageTextChunkRpc,
@@ -36,14 +33,6 @@ import {
   WsOrchestrationGetThreadBranchCopyRpc,
   WsOrchestrationStartThreadBranchRpc,
 } from "./rpc.branchCopy";
-import {
-  WsSubscribeTerminalSessionRpc,
-  WsTerminalOutputAckRpc,
-  WsTerminalSearchRpc,
-  WsTerminalStagePasteFileRpc,
-  WsTerminalViewRpc,
-} from "./rpc.terminalStream";
-import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
   WsKanbanCreateRpc,
   WsKanbanDeleteRpc,
@@ -136,12 +125,6 @@ import {
   WsShellOpenInTerminalRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
-  WsTerminalClearRpc,
-  WsTerminalCloseRpc,
-  WsTerminalOpenRpc,
-  WsTerminalResizeRpc,
-  WsTerminalRestartRpc,
-  WsTerminalWriteRpc,
 } from "./rpc.core";
 import {
   WsServerGetRemoteAgentManualInstallRpc,
@@ -339,22 +322,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitInitRpc,
   WsGitFetchRpc,
   WsGitDiscardChangesRpc,
-  WsTerminalOpenRpc,
-  WsTerminalWriteRpc,
-  WsTerminalSnapshotRpc,
-  ...TerminalRemoteRpcs,
-  WsTerminalRecoveryRpc,
-  WsTerminalOutputAckRpc,
-  WsTerminalSearchRpc,
-  WsTerminalStagePasteFileRpc,
-  WsTerminalViewRpc,
-  WsSubscribeTerminalSessionRpc,
-  WsTerminalWslDistributionsRpc,
-  WsTerminalShellProfilesRpc,
-  WsTerminalResizeRpc,
-  WsTerminalClearRpc,
-  WsTerminalRestartRpc,
-  WsTerminalCloseRpc,
+  ...TerminalRpcs,
   WsSubscribeOrchestrationDomainEventsRpc,
   WsSubscribeThinkingActivityDeltasRpc,
   WsSubscribeTerminalEventsRpc,

@@ -39,18 +39,27 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
             outputScope: "legacyDetection",
             ...(options?.onInventory ? { includeInventory: true } : {}),
             ...(options?.onWork ? { includeWork: true } : {}),
+            ...(options?.onLifecycle ? { includeLifecycle: true } : {}),
           }),
         (item) => {
           if (item.type === "inventory") options?.onInventory?.(item);
           else if (item.type === "workActivity") options?.onWork?.(item);
+          else if (item.type === "lifecycleNotice") options?.onLifecycle?.(item);
           else listener(item);
         },
         options,
       ),
-    subscribeSession: (input, listener, options) =>
+    subscribeSession: ({ acceptScreen: _ignored, ...input }, listener, options) =>
       transport.subscribe(
-        (client) => client[WS_METHODS.subscribeTerminalSession](input),
-        listener,
+        (client) =>
+          client[WS_METHODS.subscribeTerminalSession]({
+            ...input,
+            ...(options?.onScreen ? { acceptScreen: true } : {}),
+          }),
+        (item) => {
+          if (item.type === "screen") options?.onScreen?.(item);
+          else listener(item);
+        },
         options,
       ),
     ackOutput: (input) =>
@@ -59,5 +68,8 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
     view: (input) => transport.request((client) => client[WS_METHODS.terminalView](input)),
     stagePasteFile: (input) =>
       transport.request((client) => client[WS_METHODS.terminalStagePasteFile](input)),
+    keepOpen: (input) => transport.request((client) => client[WS_METHODS.terminalKeepOpen](input)),
+    retrySetup: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRetrySetup](input)),
   };
 }
