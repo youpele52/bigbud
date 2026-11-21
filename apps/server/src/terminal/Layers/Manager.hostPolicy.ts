@@ -10,6 +10,7 @@ import { TERMINAL_LIVE_LIMIT_DEFAULT } from "@bigbud/contracts/workspace/termina
 import type { RemoteAgentHostPolicy } from "../../remote-agent/remoteAgentProtocol.ptyLifecycle.ts";
 import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
 import type { PtyViewState } from "../Services/PTY.ts";
+import type { TerminalSessionHostState } from "./Manager.host.types.ts";
 import type { TerminalSessionState } from "./Manager.types.ts";
 
 /** Plan §23 constants: idle 10 minutes with a 60 s warning, orphan grace 10 minutes. */
@@ -111,12 +112,13 @@ export function terminalHostViewState(input: {
 /** Sends the state unless it equals the last push for this process; failures are logged. */
 export function pushTerminalHostViewState(
   session: TerminalSessionState,
-  state: PtyViewState,
+  view: PtyViewState,
   log: (message: string, detail: Record<string, unknown>) => void,
 ): void {
   const host = session.host;
   const control = session.process?.lifecycle;
   if (!host?.lifecycle || !control || session.status !== "running") return;
+  const state = host.ownerBusyHint ? { ...view, ownerBusyHint: host.ownerBusyHint } : view;
   const key = JSON.stringify(state);
   if (host.lastViewPush === key) return;
   host.lastViewPush = key;
@@ -128,6 +130,21 @@ export function pushTerminalHostViewState(
       cause: String(cause),
     });
   });
+}
+
+/**
+ * Records a Direct SSH owner hint (M7) and re-sends the pane's view state when it changed. Only
+ * host-managed sessions carry it; the push itself is deduplicated like every view push.
+ */
+export function setTerminalOwnerBusyHint(
+  session: TerminalSessionState,
+  hint: NonNullable<TerminalSessionHostState["ownerBusyHint"]>,
+  viewChanged: ((threadId: string, terminalId: string) => void) | undefined,
+): void {
+  const host = session.host;
+  if (!host?.lifecycle || host.ownerBusyHint === hint) return;
+  host.ownerBusyHint = hint;
+  viewChanged?.(session.threadId, session.terminalId);
 }
 
 /** Attached session streams per pane, and the sequence the last one acknowledged. */

@@ -24,6 +24,10 @@ import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/termin
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
 import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
+import {
+  terminalRunsLocalSshClient,
+  terminalShellPidIsInBand,
+} from "./OwnedPtyRuntime.identity.ts";
 import { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 import { startRecoveryModel, feedRecoveryModel } from "./Manager.recovery";
 import { beginTerminalHostSession, bindTerminalHostLifecycle } from "./Manager.hostLifecycle.ts";
@@ -165,18 +169,25 @@ export function startSessionWith(
 
             const processPid = ptyProcess.pid;
             const runtimeEpoch = session.runtimeEpoch;
-            const readRemotePid =
-              !isLocalExecutionTarget(session.executionTargetId) &&
-              !isWslTerminalTargetId(session.executionTargetId) &&
-              ptyProcess.pidDomain !== "remote"
-                ? createRemoteShellPidReader(session.runtimeGeneration, (pid) => {
-                    session.remoteShellPid = pid;
-                  })
-                : (data: string) => data;
+            const readRemotePid = terminalShellPidIsInBand(
+              ctx.ptyAdapter,
+              session.executionTargetId,
+              ptyProcess,
+            )
+              ? createRemoteShellPidReader(session.runtimeGeneration, (pid) => {
+                  session.remoteShellPid = pid;
+                })
+              : (data: string) => data;
             const queryProcess = ptyProcess;
             // Installed before onData: host output is counted for the screen splice (S3).
             const hostSession = beginTerminalHostSession(session, ptyProcess);
             session.host = hostSession?.state;
+            // Direct SSH (M7): the host idles it only on an explicit remote hint (§8.5).
+            if (
+              session.host &&
+              terminalRunsLocalSshClient(ctx.ptyAdapter, session.executionTargetId)
+            )
+              session.host.ownerBusyHint = "unknown";
             // A host query responder and the view answer queries (§8.9); never answer twice.
             const queries =
               ptyProcess.screen?.capabilities().queryResponder !== true &&

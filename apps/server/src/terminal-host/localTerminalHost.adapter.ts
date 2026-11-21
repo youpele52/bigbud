@@ -8,6 +8,10 @@ import { makeRemoteAgentHostControls } from "../remote-agent/remoteAgentPtyClien
 import { RemoteAgentPtyError } from "../remote-agent/remoteAgentPtyClient.types.ts";
 import type { OwnedPtyRuntime } from "../terminal/Services/OwnedPtyRuntime.ts";
 import { PtySpawnError, type PtyAdapterShape } from "../terminal/Services/PTY.ts";
+import {
+  isDirectSshTerminalTarget,
+  makeLocalTerminalHostDirectSsh,
+} from "./localTerminalHost.directSsh.ts";
 import { makeLocalTerminalHostGenerations } from "./localTerminalHost.generations.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
 import {
@@ -101,9 +105,24 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
         localTerminalHostLaunchEnvironment(spawnInput.env, spawnInput.cwd),
     },
   );
+  // Direct SSH panes (M7) run their local ssh client in the same host and owner table.
+  const directSsh = makeLocalTerminalHostDirectSsh({
+    controller,
+    pool,
+    runtime,
+    fallback: options.fallback,
+    isClosed: () => closed,
+    ...(options.log ? { log: options.log } : {}),
+  });
   const adapter: PtyAdapterShape = {
-    ownedRuntimeForTarget: (target) => (isLocalExecutionTarget(target) ? runtime : undefined),
+    ownedRuntimeForTarget: (target) =>
+      isLocalExecutionTarget(target)
+        ? runtime
+        : isDirectSshTerminalTarget(target)
+          ? directSsh.runtime
+          : undefined,
     spawn: Effect.fn("localTerminalHost.spawn")(function* (input) {
+      if (isDirectSshTerminalTarget(input.executionTargetId)) return yield* directSsh.spawn(input);
       if (!isLocalExecutionTarget(input.executionTargetId) || !input.ownerKey)
         return yield* options.fallback.spawn(input);
       let spec: LocalTerminalHostLaunchSpec | undefined;

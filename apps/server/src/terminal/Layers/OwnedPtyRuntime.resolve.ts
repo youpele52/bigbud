@@ -42,3 +42,18 @@ export function sessionOwnedPtyRuntime(
     ? context.resolveOwnedRuntime(target)
     : resolveDefaultOwnedPtyRuntime(target);
 }
+
+/**
+ * The runtime of the target's own execution host: discovery, attach-by-resource, remote stop and
+ * Detach, and paste staging. A local `ssh` client in the local terminal host (M7) is durable, but
+ * it is not the target's host, so it never serves these.
+ */
+export function executionHostOwnedPtyRuntime(
+  context: {
+    readonly resolveOwnedRuntime?: ((target: string) => OwnedPtyRuntime | undefined) | undefined;
+  },
+  target: string,
+) {
+  const runtime = sessionOwnedPtyRuntime(context, target);
+  return runtime?.localSshClient ? undefined : runtime;
+}

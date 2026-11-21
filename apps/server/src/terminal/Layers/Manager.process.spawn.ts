@@ -17,6 +17,7 @@ import type { TerminalSessionState } from "./Manager.types";
 import { LOCAL_SHELL_HOST, shellKind } from "./ShellProfiles.identity";
 
 import { spawnDirectShellProfile } from "./Manager.shell.direct";
+import { spawnTerminalPty } from "./Manager.shell.direct.host";
 import type { RemoteAgentShellLaunch } from "../../remote-agent/remoteAgentShellLaunch.ts";
 
 type LaunchCandidate = ShellCandidate & {
@@ -82,7 +83,7 @@ export function trySpawnWith(
               },
               spawnEnv,
             )
-          : ctx.ptyAdapter.spawn({
+          : spawnTerminalPty(ctx, session, {
               ownerKey: JSON.stringify([session.threadId, session.terminalId]),
               recoverOnly: session.remoteOwnerRecoveryRequired === true,
               expectedRemoteResourceId: session.expectedRemoteResourceId,

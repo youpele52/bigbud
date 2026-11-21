@@ -1,10 +1,17 @@
 import { Effect, Option } from "effect";
 import { invalidateTerminalWorkAssessment } from "./Manager.idleWork.ts";
-import { terminalPidIsOnBackendHost } from "./OwnedPtyRuntime.identity.ts";
+import {
+  terminalPidIsOnBackendHost,
+  terminalRunsLocalSshClient,
+} from "./OwnedPtyRuntime.identity.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { detectTerminalAgentForShell } from "./Manager.agentDetection.ts";
 import { applyAgentIdentitiesWith } from "./Manager.process-drain.identity.ts";
-import { inspectRemoteTerminalProcesses } from "./Manager.remote-inspection.ts";
+import {
+  inspectRemoteTerminalProcesses,
+  remoteOwnerBusyHint,
+} from "./Manager.remote-inspection.ts";
+import { setTerminalOwnerBusyHint } from "./Manager.hostPolicy.ts";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle.ts";
 import type { TerminalSessionState } from "./Manager.types.ts";
 import { toSessionKey } from "./Manager.shell.ts";
@@ -15,30 +22,22 @@ export function pollRemoteProcessesWith(
   runningSessions: ReadonlyArray<TerminalSessionState & { pid: number }>,
 ): Effect.Effect<void> {
   // Copy evidence before awaiting: session objects are mutable and PIDs can be reused on restart.
-  const groups = new Map<
-    string,
-    Array<{
-      threadId: string;
-      terminalId: string;
-      executionTargetId: string;
-      runtimeEpoch: number;
-      runtimeGeneration: string;
-      pid: number;
-      remotePid: number;
-    }>
-  >();
+  const groups = new Map<string, Array<InspectedSession>>();
   for (const session of runningSessions) {
     if (
       terminalPidIsOnBackendHost(ctx.ptyAdapter, session.executionTargetId, session.process) ||
       isWslTerminalTargetId(session.executionTargetId)
     )
       continue;
+    // A local ssh client (M7) is a host PID; its shell and inspection target are the target's.
+    const sshClient = terminalRunsLocalSshClient(ctx.ptyAdapter, session.executionTargetId);
     const remotePid =
-      session.process?.pidDomain === "remote" ? session.pid : session.remoteShellPid;
+      session.process?.pidDomain === "remote" && !sshClient ? session.pid : session.remoteShellPid;
     if (!remotePid || !Number.isSafeInteger(remotePid) || remotePid <= 1) continue;
-    const target =
-      ctx.ptyAdapter?.ownedRuntimeForTarget?.(session.executionTargetId)?.targetId ??
-      session.executionTargetId;
+    const target = sshClient
+      ? session.executionTargetId
+      : (ctx.ptyAdapter?.ownedRuntimeForTarget?.(session.executionTargetId)?.targetId ??
+        session.executionTargetId);
     const group = groups.get(target) ?? [];
     group.push({
       threadId: session.threadId,
@@ -64,10 +63,14 @@ export function pollRemoteProcessesWith(
         // Fail closed for inspection only: keep prior identity and do not interrupt the terminal.
         if (Option.isNone(result)) {
           yield* invalidateTerminalWorkAssessment(ctx, sessions);
+          yield* pushOwnerHints(ctx, sessions, () => "unknown");
           return;
         }
         const processes = result.value;
         const pids = new Set(processes.map((process) => process.pid));
+        yield* pushOwnerHints(ctx, sessions, (session) =>
+          remoteOwnerBusyHint(session.remotePid, processes),
+        );
         for (const session of sessions) {
           // Missing shell is not proof of idle (e.g. a transient remote process visibility failure).
           if (!pids.has(session.remotePid)) {
@@ -109,4 +112,40 @@ export function pollRemoteProcessesWith(
       }),
     { concurrency: 4, discard: true },
   ).pipe(Effect.andThen(ctx.refreshIdleWork ?? Effect.void));
+}
+
+type InspectedSession = {
+  readonly threadId: string;
+  readonly terminalId: string;
+  readonly executionTargetId: string;
+  readonly runtimeEpoch: number;
+  readonly runtimeGeneration: string;
+  readonly pid: number;
+  readonly remotePid: number;
+};
+
+/**
+ * Direct SSH owner hints (plan §8.5, M7): a host that runs the local ssh client cannot see the
+ * remote foreground program, so each inspection pushes it. Sessions without host lifecycle
+ * (in-process, an agent PTY) ignore it.
+ */
+function pushOwnerHints(
+  ctx: ProcessLifecycleContext,
+  sessions: ReadonlyArray<InspectedSession>,
+  hint: (session: InspectedSession) => "busy" | "idle" | "unknown",
+): Effect.Effect<void> {
+  return ctx.modifyManagerState((state) => {
+    for (const session of sessions) {
+      const current = state.sessions.get(toSessionKey(session.threadId, session.terminalId));
+      if (
+        current?.status === "running" &&
+        current.pid === session.pid &&
+        current.runtimeEpoch === session.runtimeEpoch &&
+        current.runtimeGeneration === session.runtimeGeneration &&
+        terminalRunsLocalSshClient(ctx.ptyAdapter, current.executionTargetId)
+      )
+        setTerminalOwnerBusyHint(current, hint(session), ctx.hostHub?.viewChanged);
+    }
+    return [undefined, state] as const;
+  });
 }

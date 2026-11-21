@@ -4,7 +4,7 @@ import {
   DEFAULT_TERMINAL_ID,
   TerminalExecutionTargetError,
 } from "@bigbud/contracts/workspace/terminal.ts";
-import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { executionHostOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalOwnerRouteKey } from "./OwnedPtyRuntime.owner.ts";
 import { RemoteAgentPtyInventory } from "../../remote-agent/remoteAgentPtyInventory.ts";
 import { RemoteAgentTerminalDiscovery } from "../../remote-agent/remoteAgentTerminalDiscovery.ts";
@@ -25,7 +25,7 @@ export function makeRemoteTerminalApi(
   const remoteInventory: NonNullable<TerminalManagerShape["remoteInventory"]> = (input) =>
     Effect.tryPromise({
       try: async (signal) => {
-        const runtime = sessionOwnedPtyRuntime(ctx, input.executionTargetId);
+        const runtime = executionHostOwnedPtyRuntime(ctx, input.executionTargetId);
         if (!runtime) throw new Error("Remote agent transport required.");
         const page = await new RemoteAgentTerminalDiscovery(
           runtime.owners(),
@@ -49,7 +49,7 @@ export function makeRemoteTerminalApi(
         ),
     });
   const remoteAttach: NonNullable<TerminalManagerShape["remoteAttach"]> = (input) =>
-    sessionOwnedPtyRuntime(ctx, input.executionTargetId)
+    executionHostOwnedPtyRuntime(ctx, input.executionTargetId)
       ? open(input, input.resourceId)
       : Effect.fail(
           failure(
@@ -61,7 +61,7 @@ export function makeRemoteTerminalApi(
         );
   const remoteStop: NonNullable<TerminalManagerShape["remoteStop"]> = (input) =>
     Effect.gen(function* () {
-      const runtime = sessionOwnedPtyRuntime(ctx, input.executionTargetId);
+      const runtime = executionHostOwnedPtyRuntime(ctx, input.executionTargetId);
       if (!runtime)
         return yield* failure(
           input.threadId,
@@ -109,7 +109,7 @@ export function makeRemoteTerminalApi(
         const session = found.value;
         yield* assertTerminalGeneration(session, input.expectedGeneration);
         const process = session.process;
-        if (!sessionOwnedPtyRuntime(ctx, session.executionTargetId) || !process?.detachRemote)
+        if (!executionHostOwnedPtyRuntime(ctx, session.executionTargetId) || !process?.detachRemote)
           return yield* failure(
             input.threadId,
             terminalId,

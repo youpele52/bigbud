@@ -7,6 +7,8 @@ import {
 } from "../../terminal/Layers/DirectShellLaunch.owner";
 
 import { verifyDirectShellTermination } from "../../terminal/Layers/DirectShellLaunch.lifecycle";
+import { isHostedDirectShellRecord } from "../../terminal/Layers/DirectShellLaunch.hosted";
+import { makeHostedDirectShellOwners } from "./DirectShellLaunchOwners.hosted";
 
 const MAX_OWNERS = 4096;
 
@@ -26,6 +28,7 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
     state: DirectShellLaunchOwner["state"];
     owner_json: string;
   };
+  const hostedRow = (row: OwnerRow) => isHostedDirectShellRecord(JSON.parse(row.owner_json));
   const decodeRow = (row: OwnerRow) => {
     const owner = parseDirectShellLaunchOwner(JSON.parse(row.owner_json));
     if (
@@ -37,11 +40,15 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
       throw new Error("Direct shell owner storage identity conflict.");
     return { owner, text: row.owner_json };
   };
-  const read = async (key: string) => {
-    const rows =
+  const readRow = async (key: string) =>
+    (
       await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
-       FROM direct_shell_launch_owners WHERE owner_key = ${key}`);
-    return rows[0] ? decodeRow(rows[0]) : undefined;
+       FROM direct_shell_launch_owners WHERE owner_key = ${key}`)
+    )[0];
+  // Legacy members see version 1 owners only; a hosted record is never a legacy owner.
+  const read = async (key: string) => {
+    const row = await readRow(key);
+    return row && !hostedRow(row) ? decodeRow(row) : undefined;
   };
   const transition = async (
     key: string,
@@ -73,6 +80,7 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
       await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
       FROM direct_shell_launch_owners`);
     return rows
+      .filter((row) => !hostedRow(row))
       .map(decodeRow)
       .filter(({ owner }) =>
         owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
@@ -145,5 +153,6 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
     },
     markUnknown: (key, reservationId, controllerId) =>
       transition(key, reservationId, controllerId, "may-have-been-sent", "outcome-unknown"),
+    ...makeHostedDirectShellOwners(run, sql, readRow, MAX_OWNERS),
   } satisfies DirectShellLaunchOwnerStore;
 });

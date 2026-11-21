@@ -1,6 +1,7 @@
 import type { RemoteAgentConnectionPool } from "../../remote-agent/remoteAgentConnectionPool.ts";
 import type { RemoteAgentOwnerStore } from "../../remote-agent/remoteAgentOwners.ts";
 import type { RemoteAgentControl } from "../../remote-agent/remoteAgentControl.ts";
+import type { RemoteAgentOwner } from "../../remote-agent/remoteAgentOwners.ts";
 import type {
   RemoteAgentHostPolicy,
   RemoteAgentHostResourceReport,
@@ -21,6 +22,22 @@ export interface OwnedPtyRuntime {
   readonly host?: OwnedPtyHostControls;
   /** Every generation of a multi-generation host (the local terminal host only). */
   readonly hostGenerations?: OwnedPtyHostGenerations;
+  /**
+   * Direct SSH through the local terminal host (plan M7): the PTY runs a local `ssh` client for a
+   * non-local target. Its PIDs, files and terminal inventory are not the target's, so remote
+   * inspection reads the in-band shell PID, and paste staging and discovery never use this
+   * runtime. Liveness and close address one owner's host PTY directly.
+   */
+  readonly localSshClient?: OwnedPtyLocalSshClient;
+}
+
+/** `unknown`: the host (or the owner's generation) cannot be reached, so nothing is proven. */
+export type OwnedPtyHostedStatus = "live" | "gone" | "unknown";
+
+export interface OwnedPtyLocalSshClient {
+  readonly status: (owner: RemoteAgentOwner, signal?: AbortSignal) => Promise<OwnedPtyHostedStatus>;
+  /** Close with terminate (the host's escalation) and confirm the exit; rejects otherwise. */
+  readonly close: (owner: RemoteAgentOwner, signal?: AbortSignal) => Promise<void>;
 }
 
 /** One host PTY as its supervisor reports it; absence never proves an exit. */

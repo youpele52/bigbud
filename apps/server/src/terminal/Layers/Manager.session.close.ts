@@ -12,6 +12,10 @@ import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types";
 import { assertTerminalGeneration } from "./Manager.session.generation";
 import { knownThreadTerminalIds } from "./Manager.session.shellOwners";
+import {
+  assertHostedDirectShellsReachable,
+  settleHostedDirectShellPane,
+} from "./Manager.shell.direct.settle";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
@@ -87,6 +91,8 @@ export function makeTerminalClose(
       yield* ctx.stopProcess(session.value);
       yield* ctx.persistHistory(threadId, terminalId, session.value.history);
     }
+    // A Direct SSH pane in the local host (M7) is closed there even with no session holding it.
+    yield* settleHostedDirectShellPane(ctx, threadId, terminalId);
     yield* ctx.releaseWorktreeLease({ threadId, terminalId });
     yield* ctx.flushPersist(threadId, terminalId);
     yield* ctx.modifyManagerState((state) => {
@@ -128,12 +134,25 @@ export function makeTerminalClose(
           yield* knownThreadTerminalIds(ctx, input.threadId),
         );
         const sessions = yield* ctx.sessionsForThread(input.threadId);
+        // Hosted Direct SSH panes block only while their host is unreachable; checked first so
+        // nothing is closed when one cannot be.
+        const hosted = yield* assertHostedDirectShellsReachable(
+          ctx,
+          input.threadId,
+          new Set(
+            sessions.filter((session) => session.process).map((session) => session.terminalId),
+          ),
+        );
+        const terminalIds = new Set([
+          ...sessions.map((session) => session.terminalId),
+          ...hosted.map((record) => record.pane.terminalId),
+        ]);
         yield* Effect.forEach(
-          sessions,
-          (session) =>
+          terminalIds,
+          (terminalId) =>
             closeSession(
               input.threadId,
-              session.terminalId,
+              terminalId,
               false,
               reason,
               input.expectedGeneration,

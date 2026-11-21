@@ -17,16 +17,26 @@ export function remoteAgentLegacyTerminalLaunch(environment: NodeJS.ProcessEnv) 
   };
 }
 
+/** A server-built, non-shell command (Direct SSH's local `ssh` client, plan M7). */
+export interface RemoteAgentCommandLaunch {
+  readonly shell: string;
+  readonly args: ReadonlyArray<string>;
+}
+
 /**
  * Native profile preflight is required for this exact executable/argv, with suggestions off.
  * `localEnvironment` (a `local_launch` create on a local terminal host) replaces the remote
- * presentation-only environment with the server's full spawn environment.
+ * presentation-only environment with the server's full spawn environment. A `command` without a
+ * profile runs only as a `local_launch` create: a remote agent never receives one.
  */
 export function remoteAgentTerminalLaunch(
   environment: NodeJS.ProcessEnv,
   launch?: RemoteAgentShellLaunch,
   localEnvironment?: ReadonlyArray<{ readonly name: string; readonly value: string }>,
+  command?: RemoteAgentCommandLaunch,
 ) {
+  if (!launch && command && localEnvironment)
+    return { shell: command.shell, args: [...command.args], environment: localEnvironment };
   if (!launch) return remoteAgentLegacyTerminalLaunch(environment);
   return {
     shell: launch.executable,

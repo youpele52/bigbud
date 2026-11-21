@@ -9,6 +9,7 @@ import {
 } from "./ShellProfiles.launch.metadata";
 import { remoteShellHost } from "./ShellProfiles.remote.identity";
 
+import type { HostedDirectShellOwnerStore } from "./DirectShellLaunch.hosted";
 import {
   DirectShellLifecycleBinding,
   directShellLifecycleDigestFields,
@@ -94,7 +95,11 @@ export function parseDirectShellLaunchOwner(input: unknown): DirectShellLaunchOw
   return structuredClone(owner);
 }
 
-export interface DirectShellLaunchOwnerStore {
+/**
+ * The legacy members below read and write version 1 owners only; Direct SSH panes in the local
+ * terminal host (M7) use the optional hosted members, which legacy and test stores may omit.
+ */
+export interface DirectShellLaunchOwnerStore extends Partial<HostedDirectShellOwnerStore> {
   /**
    * Pane-scoped owners match by their validated pane. Legacy owners without pane metadata are
    * never assigned to a thread by guesswork: they match only when `isThreadPaneKey` recognises

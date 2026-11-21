@@ -21,7 +21,10 @@ import { pinRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.t
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { makeRemotePtyRestartBarrier } from "./remoteAgentOwnedPty.restart.ts";
-import { remoteAgentTerminalLaunch } from "./remoteAgentTerminalLaunch.ts";
+import {
+  remoteAgentTerminalLaunch,
+  type RemoteAgentCommandLaunch,
+} from "./remoteAgentTerminalLaunch.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentColdAttach, RemoteAgentOwnedInput } from "./remoteAgentOwnedPty.input.ts";
 import { REMOTE_PTY_INPUT_RECONCILE } from "./remoteAgentPtyClient.reconcile.ts";
@@ -45,6 +48,8 @@ export interface OwnedRemoteAgentPtyOptions {
   readonly localLaunchEnvironment?: (
     input: PtySpawnInput,
   ) => ReadonlyArray<{ readonly name: string; readonly value: string }>;
+  /** A profile-less command for a `local_launch` create (Direct SSH in the local host, M7). */
+  readonly commandLaunch?: (input: PtySpawnInput) => RemoteAgentCommandLaunch | undefined;
 }
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
@@ -226,7 +231,12 @@ export function makeOwnedRemoteAgentPty(
           requestDigest: Buffer.from(owner.digest, "hex"),
           workspaceHandle,
           cwd: "",
-          ...remoteAgentTerminalLaunch(input.env, owner.shellLaunch, localEnvironment),
+          ...remoteAgentTerminalLaunch(
+            input.env,
+            owner.shellLaunch,
+            localEnvironment,
+            options.commandLaunch?.(input),
+          ),
           cols: input.cols,
           rows: input.rows,
           lifecycle,

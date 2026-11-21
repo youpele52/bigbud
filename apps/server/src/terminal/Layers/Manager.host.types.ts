@@ -24,6 +24,11 @@ export interface TerminalSessionHostState {
   activity?: PtyHostActivity | undefined;
   /** ISO time an idle warning closes this terminal, while one is pending. */
   idleClosesAt?: string | undefined;
+  /**
+   * Direct SSH (M7): the remote foreground program, from remote inspection. It travels with every
+   * view-state push; absent for terminals whose host reads its own foreground facts.
+   */
+  ownerBusyHint?: "busy" | "idle" | "unknown" | undefined;
   /** Last pushed view state, so identical pushes are not repeated. */
   lastViewPush?: string | undefined;
 }

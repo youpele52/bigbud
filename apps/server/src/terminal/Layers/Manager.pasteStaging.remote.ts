@@ -86,7 +86,9 @@ export function makeRemotePasteAgentResolver(
   return (executionTargetId) =>
     Effect.gen(function* () {
       const host = parseSshExecutionTarget(executionTargetId)?.host ?? executionTargetId;
-      const runtime = resolveOwnedPtyRuntime(adapter, executionTargetId);
+      const resolved = resolveOwnedPtyRuntime(adapter, executionTargetId);
+      // A local ssh client in the terminal host (M7) has no agent on the target.
+      const runtime = resolved?.localSshClient ? undefined : resolved;
       if (!runtime)
         return yield* new TerminalPasteStageError({
           code: "remoteAgentRequired",
