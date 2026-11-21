@@ -24,6 +24,9 @@ import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
 
 type Pool = Pick<RemoteAgentConnectionPool, "getBound">;
 
+/** Live notices persist the cursor this long after the first unsaved one. */
+export const LIVE_NOTICE_PERSIST_DELAY_MS = 1_000;
+
 const connectionIdOf = (binding: RemoteAgentRuntimeBinding) =>
   binding.connectionId ?? binding.runtime.generation;
 
@@ -75,7 +78,33 @@ export function makeLocalTerminalHostGenerations(input: {
     return entries;
   };
 
+  let seenNoticeId = 0;
+  let seenTimer: ReturnType<typeof setTimeout> | undefined;
+  const persistSeenNotice = async () => {
+    seenTimer = undefined;
+    const noticeId = seenNoticeId;
+    // Reset per flush: a later host epoch numbers its notices from 1 again.
+    seenNoticeId = 0;
+    const admitted = (await controller.attachedBindings()).find((entry) => entry.admitted);
+    if (!admitted) return;
+    const cursor = await controller.readNoticeCursor(admitted.generation);
+    // Without a cursor in this epoch the replay sets the baseline; never skip unseen notices.
+    if (cursor?.epoch !== admitted.binding.expectedEpoch || noticeId <= cursor.noticeId) return;
+    await controller.writeNoticeCursor(admitted.generation, { epoch: cursor.epoch, noticeId });
+  };
+
   return {
+    recordSeenNotice: (noticeId) => {
+      if (!Number.isSafeInteger(noticeId) || noticeId <= 0) return;
+      seenNoticeId = Math.max(seenNoticeId, noticeId);
+      if (seenTimer) return;
+      seenTimer = setTimeout(() => {
+        void persistSeenNotice().catch((cause: unknown) =>
+          input.log?.("The terminal host notice cursor was not saved.", { cause: String(cause) }),
+        );
+      }, LIVE_NOTICE_PERSIST_DELAY_MS);
+      seenTimer.unref?.();
+    },
     ready: async () => {
       await controller.ready().catch(() => undefined);
     },

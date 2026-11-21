@@ -193,9 +193,17 @@ export function makeLocalTerminalHostController(
       (await deps.registry.read()).find((record) => record.generation === generation)?.noticeCursor,
     writeNoticeCursor: async (generation, cursor) => {
       await deps.registry.update((records) =>
-        records.map((record) =>
-          record.generation === generation ? { ...record, noticeCursor: cursor } : record,
-        ),
+        records.map((record) => {
+          const current = record.noticeCursor;
+          // Within one epoch the cursor only moves forward (live and replay writes may race).
+          const stale =
+            current !== undefined &&
+            current.epoch === cursor.epoch &&
+            current.noticeId > cursor.noticeId;
+          return record.generation === generation && !stale
+            ? { ...record, noticeCursor: cursor }
+            : record;
+        }),
       );
     },
     knownRuntimes: async () => {

@@ -163,6 +163,10 @@ export class FakeHostGenerations implements OwnedPtyHostGenerations {
   /** Returned by the next replay only (the cursor then moves past them). */
   pendingReplays: OwnedPtyHostGenerationReplay[] = [];
   replayCalls = 0;
+  readonly seenNotices: number[] = [];
+  recordSeenNotice = (noticeId: number) => {
+    this.seenNotices.push(noticeId);
+  };
   replayNotices = async () => {
     this.replayCalls += 1;
     const replays = this.pendingReplays;

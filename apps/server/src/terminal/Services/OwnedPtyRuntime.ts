@@ -88,6 +88,11 @@ export interface OwnedPtyHostGenerations {
   readonly replayNotices: (
     signal?: AbortSignal,
   ) => Promise<ReadonlyArray<OwnedPtyHostGenerationReplay>>;
+  /**
+   * A notice the admitted host delivered live: its cursor advances (debounced, monotonic), so a
+   * backend crash before the next replay cannot recount it as an offline close.
+   */
+  readonly recordSeenNotice: (noticeId: number) => void;
   /** User-confirmed "Close them": only start-time-verified PIDs are signalled. */
   readonly closeDrainingHosts: () => Promise<{
     readonly closed: number;

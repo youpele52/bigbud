@@ -132,6 +132,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })(
         ]);
         const snapshot = yield* manager.snapshot({ threadId: "thread-1", terminalId: "default" });
         expect(snapshot.endedReason).toBe("idle");
+        // Live notices advance the offline-replay cursor, not only the 30 s tick.
+        expect(adapter.generations.seenNotices).toEqual([5, 6]);
       }),
     );
 

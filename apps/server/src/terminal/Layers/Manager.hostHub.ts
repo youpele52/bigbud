@@ -139,6 +139,8 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   /** Host-wide notices (no pane, or a pane no session holds yet) from the admitted host. */
   const onHostEvent = (event: OwnedPtyHostEvent) => {
     if (event.type !== "notice") return;
+    // Every live notice, a session's own included, has now been seen by a backend.
+    deps.runtime()?.hostGenerations?.recordSeenNotice(event.value.noticeId);
     deps.runFork(
       Effect.gen(function* () {
         const ptyId = event.value.ptyId;

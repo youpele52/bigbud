@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RemoteAgentRuntimeBinding } from "../remote-agent/remoteAgentConnectionPool.ts";
 import type { RemoteAgentFrame } from "../remote-agent/remoteAgentProtocol.ts";
 import type { RemoteAgentPtyLifecycleNotice } from "../remote-agent/remoteAgentProtocol.ptyLifecycle.ts";
 import type { RemoteAgentRuntime } from "../remote-agent/remoteAgentRuntime.ts";
-import { makeLocalTerminalHostGenerations } from "./localTerminalHost.generations.ts";
+import {
+  LIVE_NOTICE_PERSIST_DELAY_MS,
+  makeLocalTerminalHostGenerations,
+} from "./localTerminalHost.generations.ts";
 import type {
   LocalTerminalHostController,
   LocalTerminalHostNoticeCursor,
@@ -120,5 +123,36 @@ describe("offline notice replay", () => {
     const f = setup({ ring: [notice(1)], cursor: { epoch: "epoch-1", noticeId: 0 }, refuse: true });
     expect(await f.generations.replayNotices()).toEqual([]);
     expect(f.cursor()).toEqual({ epoch: "epoch-1", noticeId: 0 });
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("live notice cursor", () => {
+  it("persists the newest live notice once per debounce window, never moving backwards", async () => {
+    vi.useFakeTimers();
+    const f = setup({ ring: [], cursor: { epoch: "epoch-1", noticeId: 2 } });
+    f.generations.recordSeenNotice(4);
+    f.generations.recordSeenNotice(3);
+    expect(f.cursor()).toEqual({ epoch: "epoch-1", noticeId: 2 });
+    await vi.advanceTimersByTimeAsync(LIVE_NOTICE_PERSIST_DELAY_MS + 10);
+    expect(f.cursor()).toEqual({ epoch: "epoch-1", noticeId: 4 });
+    f.generations.recordSeenNotice(1);
+    await vi.advanceTimersByTimeAsync(LIVE_NOTICE_PERSIST_DELAY_MS + 10);
+    expect(f.cursor()).toEqual({ epoch: "epoch-1", noticeId: 4 });
+  });
+
+  it("leaves the baseline to the replay when no cursor exists in this epoch", async () => {
+    vi.useFakeTimers();
+    const none = setup({ ring: [] });
+    none.generations.recordSeenNotice(7);
+    await vi.advanceTimersByTimeAsync(LIVE_NOTICE_PERSIST_DELAY_MS + 10);
+    expect(none.cursor()).toBeUndefined();
+    const stale = setup({ ring: [], cursor: { epoch: "old-epoch", noticeId: 9 } });
+    stale.generations.recordSeenNotice(3);
+    await vi.advanceTimersByTimeAsync(LIVE_NOTICE_PERSIST_DELAY_MS + 10);
+    expect(stale.cursor()).toEqual({ epoch: "old-epoch", noticeId: 9 });
   });
 });

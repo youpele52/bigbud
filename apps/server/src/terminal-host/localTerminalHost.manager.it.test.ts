@@ -147,16 +147,13 @@ describe.skipIf(!enabled)("S3 manager integration with the real binary", () => {
       }),
     );
 
-    // Quit with the default setting closed the managed terminal through the host: it is no
-    // longer running in the host's inventory. (Known host issue, reported to the Rust owners:
-    // `close(terminate = true)` sends one SIGTERM, which an interactive shell ignores, so the
-    // shell process itself can outlive the close. Not asserted here until the host escalates.)
+    // Quit with the default setting closed the managed terminal through the host: the host
+    // hangs up and escalates, so the shell itself is gone (allow its close grace plus the reap).
+    await until(() => !processes.isAlive(shellPid), "the shell to exit after quit", 3_500);
     // The notice cursor survives adoption, so the next launch summarizes only unseen closes.
     const records = await makeLocalTerminalHostRegistry(root.paths).read();
     expect(records[0]?.noticeCursor?.epoch).toEqual(expect.any(String));
     const inventory = await second.runtime.hostGenerations!.inventory();
-    const entry = inventory.find((candidate) => candidate.state !== "running");
     expect(inventory.filter((candidate) => candidate.state === "running")).toEqual([]);
-    expect(entry).toBeDefined();
   }, 60_000);
 });
