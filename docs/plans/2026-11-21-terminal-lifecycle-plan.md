@@ -1399,3 +1399,12 @@ External facts were checked on 2026-11-21.
   - **Ingest rate:** measured on a machine under heavy load at about 34 MiB/s, against the 50 MiB/s target. Q1 re-runs the release bench on an idle machine; if it is still short, optimise the layer before default-on.
   - **For S4/Q1:** xterm.js master now tracks kitty keyboard state. Re-check whether the kitty exclusion is still needed once the web app's xterm version has it.
   - **Release management:** check whether `bun run licenses:rust` must be regenerated for the dev-only `alacritty_terminal` and its transitive packages.
+- R5 (committed), notes:
+  - **Replay ring:** screen PTYs keep a 256 KiB replay ring (instead of 4 MiB) and a 512 KiB screen-feed queue. Reconnecting after more than 256 KiB of output falls back to a snapshot.
+  - **Lost PTYs:** inventory reports them as `state = "outcome-unknown"` with `lost = true`.
+  - **Session retention:** "retire the oldest delivered exit at 64 sessions" now applies on every supervisor.
+  - **Snapshot size:** the UTF-16 cap limits ASCII-heavy snapshots to about 1 MiB, so tests use the largest snapshot that fits.
+  - **Memory:** release RSS peaks at 244 MiB at 24 PTYs; debug sits at 251–260 MiB. Q1 measures release builds.
+  - **New refusal codes** for S1/S3: `PTY_UNKNOWN`, `PTY_LIFECYCLE_UNAVAILABLE`, `SCREEN_UNAVAILABLE`, `SNAPSHOT_TOO_LARGE`, `SPOOL_UNAVAILABLE`, `INVALID_ARGUMENT`, `PTY_EPOCH_MISMATCH`. `activity_state` is `busy`, `idle` or `idle_warning`.
+  - **Blocking before Q1 (R6):** the PTY reader sleeps a fixed 5 ms when its buffer is empty, which caps output at about 0.2 MB/s on macOS. The fix is a poll-based reader plus backpressure: stop reading when the per-connection window is full instead of dropping the client.
+  - **Test environment:** journal tests fail when `$TMPDIR` holds thousands of old `bigbud-*` entries (about 3,700 locally). This is a test-environment issue, not a regression.
