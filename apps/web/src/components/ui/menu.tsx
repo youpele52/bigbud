@@ -5,6 +5,7 @@ import { ChevronRightIcon } from "lucide-react";
 import type * as React from "react";
 
 import { cn } from "~/lib/utils";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 
 const MenuCreateHandle = MenuPrimitive.createHandle;
 
@@ -49,7 +50,8 @@ function MenuPopup({
       >
         <MenuPrimitive.Popup
           className={cn(
-            "relative flex not-[class*='w-']:min-w-32 origin-(--transform-origin) rounded-lg border bg-popover not-dark:bg-clip-padding shadow-lg/5 outline-none before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus:outline-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)] [-webkit-app-region:no-drag]",
+            "relative flex not-[class*='w-']:min-w-32 origin-(--transform-origin) rounded-lg border not-dark:bg-clip-padding shadow-lg/5 outline-none before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus:outline-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)] [-webkit-app-region:no-drag]",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
             className,
           )}
           data-slot="menu-popup"

@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "~/lib/utils";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 import { Tooltip as RechartsTooltip } from "recharts";
 
 type ChartConfig = Record<
@@ -59,7 +60,12 @@ function ChartTooltipContent({
   const formattedLabel = label && labelFormatter ? labelFormatter(label) : label;
 
   return (
-    <div className="min-w-40 rounded-md border border-border/70 bg-popover px-3 py-2 shadow-sm">
+    <div
+      className={cn(
+        "min-w-40 rounded-md border border-border/70 px-3 py-2 shadow-sm",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
+      )}
+    >
       {formattedLabel ? (
         <div className="mb-2 text-xs font-medium text-foreground">{formattedLabel}</div>
       ) : null}

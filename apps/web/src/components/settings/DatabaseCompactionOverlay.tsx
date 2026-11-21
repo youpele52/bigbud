@@ -1,7 +1,9 @@
 import type { DatabaseCompactionStatus } from "@bigbud/contracts/server/databaseCompaction.ts";
 import { createPortal } from "react-dom";
 
+import { cn } from "~/lib/utils";
 import { BigbudLoader } from "../layout/BigbudLoader";
+import { SOLID_PAGE_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 import { getCompactionLoaderMessage } from "./DatabaseCompaction.logic";
 
 /**
@@ -18,7 +20,7 @@ export function DatabaseCompactionOverlay({
   const message = getCompactionLoaderMessage(status, reconnecting);
   return createPortal(
     <div
-      className="fixed inset-0 z-[1000] flex flex-col bg-background"
+      className={cn("fixed inset-0 z-[1000] flex flex-col", SOLID_PAGE_SURFACE_CLASS_NAME)}
       data-testid="database-compaction-overlay"
       aria-modal="true"
       role="dialog"

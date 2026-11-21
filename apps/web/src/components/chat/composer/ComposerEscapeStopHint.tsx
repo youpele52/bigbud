@@ -1,3 +1,6 @@
+import { cn } from "~/lib/utils";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../../ui/solidSurface";
+
 const HINT_TEXT = "Press Esc again to stop";
 
 /**
@@ -15,7 +18,10 @@ export function ComposerEscapeStopHint({ visible }: { readonly visible: boolean 
         <span
           aria-hidden="true"
           data-testid="composer-escape-stop-hint"
-          className="pointer-events-none absolute right-0 bottom-full z-20 mb-2 whitespace-nowrap rounded-md border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md/5"
+          className={cn(
+            "pointer-events-none absolute right-0 bottom-full z-20 mb-2 whitespace-nowrap rounded-md border px-2 py-1 text-xs text-popover-foreground shadow-md/5",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
+          )}
         >
           {HINT_TEXT}
         </span>

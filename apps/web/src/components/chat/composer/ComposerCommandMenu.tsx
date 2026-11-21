@@ -20,6 +20,7 @@ import {
   CommandList,
 } from "../../ui/command";
 import { Searchbar } from "../../ui/Searchbar";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../../ui/solidSurface";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 
@@ -133,7 +134,10 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
           );
           if (viewport) modelList.onWheel(viewport, event.deltaY);
         }}
-        className="relative overflow-hidden rounded-xl border border-border/80 bg-popover/96 shadow-lg/8 backdrop-blur-xs"
+        className={cn(
+          "relative overflow-hidden rounded-xl border border-border/80 shadow-lg/8",
+          SOLID_FLOATING_SURFACE_CLASS_NAME,
+        )}
       >
         {props.discoverySearch ? (
           <Searchbar
