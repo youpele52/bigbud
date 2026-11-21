@@ -278,3 +278,37 @@ it.each(["success", "failure"] as const)(
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledTimes(4);
   },
 );
+
+it("keeps the previous route subtree mounted, hidden and inert while the next project loads", async () => {
+  const { api, orchestration } = createProjectGateApi();
+  mocks.api = api;
+  await runBoundedBootstrap({ api, selectedThreadId: recentId, disposed: () => false });
+  const nextId = ProjectId.makeUnsafe("next-project");
+  const pending = deferredProjectPage();
+  const original = orchestration.getStartupProjectCatalog.getMockImplementation()!;
+  orchestration.getStartupProjectCatalog.mockImplementation((input) =>
+    input.priorityProjectId === nextId ? pending.promise : original(input),
+  );
+  const screen = await render(
+    <ThreadProjectGate projectId={chatsId}>
+      <Composer />
+    </ThreadProjectGate>,
+  );
+  await expect.element(screen.getByRole("textbox")).toHaveValue("Synthetic follow-up");
+  // ChatView (and every hidden terminal drawer it hosts) must survive a cross-project switch.
+  await screen.rerender(
+    <ThreadProjectGate projectId={nextId}>
+      <Composer />
+    </ThreadProjectGate>,
+  );
+  await expect.element(screen.getByRole("status")).toHaveTextContent("Loading chat project");
+  const retained = screen.container.querySelector("textarea")!;
+  expect(retained.isConnected).toBe(true);
+  expect(retained.closest<HTMLElement>("[inert]")?.hidden).toBe(true);
+  expect(mocks.unmount).not.toHaveBeenCalled();
+  pending.resolve({ ...chatsPage, projects: [{ ...chatsPage.projects[0]!, id: nextId }] });
+  await expect.element(screen.getByRole("textbox")).toBeVisible();
+  expect(screen.container.querySelector("textarea")).toBe(retained);
+  expect(mocks.mount).toHaveBeenCalledTimes(1);
+  expect(mocks.unmount).not.toHaveBeenCalled();
+});

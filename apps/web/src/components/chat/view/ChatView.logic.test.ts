@@ -184,6 +184,23 @@ describe("reconcileMountedTerminalThreadIds", () => {
     ]);
   });
 
+  it("evicts the least recently activated thread across a switch sequence, not the first mounted", () => {
+    const id = (n: number) => ThreadId.makeUnsafe(`thread-${n}`);
+    const openThreadIds = [1, 2, 3, 4].map(id);
+    let mounted: ThreadId[] = [];
+    for (const active of [1, 2, 3, 1, 4]) {
+      mounted = reconcileMountedTerminalThreadIds({
+        currentThreadIds: mounted,
+        openThreadIds,
+        activeThreadId: id(active),
+        activeThreadTerminalOpen: true,
+        maxHiddenThreadCount: 2,
+      });
+    }
+    // Thread 1 was the first mounted but was re-activated, so thread 2 is the LRU entry.
+    expect(mounted).toEqual([id(3), id(1), id(4)]);
+  });
+
   it("defaults to the hidden mounted terminal cap", () => {
     const currentThreadIds = Array.from(
       { length: MAX_HIDDEN_MOUNTED_TERMINAL_THREADS + 2 },

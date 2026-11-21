@@ -1,6 +1,6 @@
 import type { TerminalSplitDirection } from "../../lib/terminalSplitLayout";
-import { LOCAL_EXECUTION_TARGET_ID, type ThreadId } from "@bigbud/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { LOCAL_EXECUTION_TARGET_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
@@ -29,6 +29,7 @@ export interface TerminalLaunchContext {
 }
 
 export interface UseThreadTerminalDrawerResult {
+  projectId: ProjectId | undefined;
   project: ReturnType<typeof useProjectById>;
   terminalState: ReturnType<typeof selectThreadTerminalState>;
   cwd: string | null;
@@ -62,6 +63,24 @@ export function resolveTerminalExecutionTargetId(input: {
       : undefined;
 }
 
+/**
+ * Bounded catalog replacement can evict a hidden thread's project. Mounted terminals keep their
+ * last-known project so cwd, env and labels do not rebind or unmount while it is re-fetched.
+ */
+function useLastKnownProject(
+  projectId: ProjectId | undefined,
+  liveProject: ReturnType<typeof useProjectById>,
+): ReturnType<typeof useProjectById> {
+  // A ref, not state: selectors may return fresh objects, and recording one must not re-render.
+  const lastKnownProject = useRef(liveProject);
+  useEffect(() => {
+    if (liveProject) lastKnownProject.current = liveProject;
+  }, [liveProject]);
+  if (liveProject) return liveProject;
+  const fallback = lastKnownProject.current;
+  return fallback?.id === projectId ? fallback : undefined;
+}
+
 export function useThreadTerminalDrawer(
   threadId: ThreadId,
   launchContext: TerminalLaunchContext | null,
@@ -72,7 +91,8 @@ export function useThreadTerminalDrawer(
   const draftThread = useComposerDraftStore(
     (store) => store.draftThreadsByThreadId[threadId] ?? null,
   );
-  const project = useProjectById(serverThread?.projectId ?? draftThread?.projectId);
+  const projectId = serverThread?.projectId ?? draftThread?.projectId;
+  const project = useLastKnownProject(projectId, useProjectById(projectId));
   // Leave home expansion to the launch target, not to the server's welcome payload.
   const defaultChatCwd = useServerSettings().defaultChatCwd;
   const distribution = useTerminalStateStore(
@@ -285,6 +305,7 @@ export function useThreadTerminalDrawer(
   );
 
   return {
+    projectId,
     project,
     terminalState,
     cwd,
