@@ -142,7 +142,7 @@ impl PtyHandle {
         state.retained_bytes += bytes.len();
         let chunk = PtyOutputChunk { sequence, bytes };
         state.output.push_back(chunk.clone());
-        while state.retained_bytes > MAX_OUTPUT_BYTES || state.output.len() > 4096 {
+        while state.retained_bytes > state.retention_bytes || state.output.len() > 4096 {
             let Some(oldest) = state.output.pop_front() else {
                 break;
             };

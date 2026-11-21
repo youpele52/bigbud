@@ -4,6 +4,10 @@ pub(super) struct PtySession {
     pub(super) handle: Arc<pty::PtyHandle>,
     pub(super) request_digest: Vec<u8>,
     pub(super) expires_at: Option<Instant>,
+    /// Present only for PTYs created by a 1.9 client on a terminal host (plan §8.7 opt-in).
+    pub(super) lifecycle: Option<Arc<super::pty_lifecycle::PtyLifecycle>>,
+    /// The workspace root this session holds a reference on (plan §8.10).
+    pub(super) workspace_handle: String,
 }
 
 impl AgentSession {
@@ -90,10 +94,20 @@ impl AgentSession {
 
     pub(super) fn prune_pty_sessions(&mut self) {
         let now = Instant::now();
-        self.pty_sessions.retain(|_, session| {
-            !session.handle.child_reaped()
-                || session.expires_at.is_none_or(|expires_at| expires_at > now)
-        });
+        let expired = self
+            .pty_sessions
+            .iter()
+            .filter(|(_, session)| {
+                session.handle.child_reaped()
+                    && session
+                        .expires_at
+                        .is_some_and(|expires_at| expires_at <= now)
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        for id in expired {
+            self.retire_pty_session(&id);
+        }
     }
 
     pub(super) fn handle_pty_input(&mut self, request: v1::PtyInput) -> v1::Frame {

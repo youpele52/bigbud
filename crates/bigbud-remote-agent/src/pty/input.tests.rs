@@ -113,6 +113,7 @@ fn queued_work_deadline_is_measured_from_admission_not_worker_start() {
         sequence: 1,
         bytes: b"never".to_vec(),
         deadline: Instant::now(),
+        reply: false,
     };
     let shared = Shared {
         ledger: Mutex::new(Ledger {
@@ -224,6 +225,7 @@ fn final_native_write_is_written_even_if_it_crosses_deadline_and_cancellation() 
             sequence: 1,
             bytes: vec![b'x'],
             deadline: Instant::now() + Duration::from_millis(10),
+            reply: false,
         };
         process(&shared, &work, &mut |bytes| {
             if cancelled {

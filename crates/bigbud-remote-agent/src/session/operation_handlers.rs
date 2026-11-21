@@ -6,9 +6,9 @@ use super::*;
 #[path = "operation_handlers.tests.rs"]
 mod tests;
 
-/// Protocol 1.9 lifecycle requests (frames 80-95) that this agent does not yet
-/// implement. Their capabilities are not advertised, so a conforming client never
-/// sends them; a stray one still gets a refusal it can correlate by request id.
+/// Protocol 1.9 lifecycle requests (frames 80-95). A terminal host answers them; an agent
+/// without one (stdio) does not advertise the capabilities, so a conforming client never sends
+/// them, and a stray one still gets a refusal it can correlate by request id.
 pub(super) fn is_pty_lifecycle_request(payload: &v1::frame::Payload) -> bool {
     use v1::frame::Payload;
     matches!(
@@ -90,6 +90,38 @@ pub(super) fn refuse_pty_lifecycle_request(
 }
 
 impl AgentSession {
+    /// Lifecycle requests that reach the session. The supervisor serves snapshots on its
+    /// snapshot worker and runs close-all outside the session lock before they get here.
+    pub(super) fn handle_pty_lifecycle_request(
+        &mut self,
+        payload: v1::frame::Payload,
+    ) -> v1::Frame {
+        use v1::frame::Payload;
+        let Some(host) = self.terminal_host.clone() else {
+            return refuse_pty_lifecycle_request(payload, &self.agent_epoch);
+        };
+        match payload {
+            Payload::HostPolicyUpdateRequest(request) => {
+                self.handle_host_policy_update(&host, *request)
+            }
+            Payload::PtyViewStateRequest(request) => self.handle_pty_view_state(*request),
+            Payload::PtyKeepOpenRequest(request) => self.handle_pty_keep_open(request),
+            Payload::HostNoticeReplayRequest(request) => v1::Frame {
+                payload: Some(Payload::HostNoticeReplayResponse(Box::new(
+                    host.replay_notices(request),
+                ))),
+            },
+            Payload::PtyCloseAllRequest(request) => {
+                let (response, closed) = self.prepare_close_all(request).execute();
+                for pty_id in closed {
+                    self.note_pty_closed(&pty_id);
+                }
+                response
+            }
+            other => refuse_pty_lifecycle_request(other, &self.agent_epoch),
+        }
+    }
+
     pub(super) fn handle_diagnostic_request(
         &mut self,
         request: v1::DiagnosticRequest,

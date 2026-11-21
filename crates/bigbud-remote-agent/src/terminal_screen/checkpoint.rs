@@ -2,6 +2,7 @@
 //! rebuilds an equivalent model. It carries a full-fidelity snapshot plus the exclusion marks
 //! re-expressed for the restored rows, so a restored model keeps reporting them honestly.
 
+use super::copy::ScreenCopy;
 use super::marks::{Marks, take, take_u8, take_u32};
 use super::model::{ScreenError, ScreenModel};
 use super::scanner::TAIL_CAP;
@@ -28,24 +29,7 @@ pub enum CheckpointError {
 
 impl ScreenModel {
     pub fn checkpoint(&self) -> Result<Vec<u8>, CheckpointError> {
-        let snapshot = self.snapshot(&SnapshotLimits::default())?;
-        let mut out =
-            Vec::with_capacity(snapshot.ansi.len() + snapshot.pending_escape_tail.len() + 128);
-        out.extend_from_slice(MAGIC);
-        out.push(VERSION);
-        out.extend_from_slice(&snapshot.cols.to_be_bytes());
-        out.extend_from_slice(&snapshot.rows.to_be_bytes());
-        let scrollback = u32::try_from(self.scrollback_capacity()).unwrap_or(u32::MAX);
-        out.extend_from_slice(&scrollback.to_be_bytes());
-        out.push(u8::from(self.is_partial()));
-        snapshot.restored_marks.encode(&mut out);
-        for part in [snapshot.ansi.as_bytes(), &snapshot.pending_escape_tail] {
-            out.extend_from_slice(&u32::try_from(part.len()).unwrap_or(u32::MAX).to_be_bytes());
-            out.extend_from_slice(part);
-        }
-        let digest = Sha256::digest(&out);
-        out.extend_from_slice(&digest);
-        Ok(out)
+        self.copy(0).checkpoint(self.scrollback_capacity())
     }
 
     pub fn restore(blob: &[u8]) -> Result<Self, CheckpointError> {
@@ -90,6 +74,32 @@ impl ScreenModel {
         model.tracker.marks = marks;
         model.tracker.partial = partial;
         Ok(model)
+    }
+}
+
+impl ScreenCopy {
+    /// The checkpoint of a fence copy (R5 checkpoints the spool from the actor's copy, so the
+    /// actor never pauses). `scrollback_rows` is the model's scrollback capacity.
+    pub fn checkpoint(self, scrollback_rows: usize) -> Result<Vec<u8>, CheckpointError> {
+        let partial = self.tracker.partial;
+        let snapshot = self.serialize(&SnapshotLimits::default())?;
+        let mut out =
+            Vec::with_capacity(snapshot.ansi.len() + snapshot.pending_escape_tail.len() + 128);
+        out.extend_from_slice(MAGIC);
+        out.push(VERSION);
+        out.extend_from_slice(&snapshot.cols.to_be_bytes());
+        out.extend_from_slice(&snapshot.rows.to_be_bytes());
+        let scrollback = u32::try_from(scrollback_rows).unwrap_or(u32::MAX);
+        out.extend_from_slice(&scrollback.to_be_bytes());
+        out.push(u8::from(partial));
+        snapshot.restored_marks.encode(&mut out);
+        for part in [snapshot.ansi.as_bytes(), &snapshot.pending_escape_tail] {
+            out.extend_from_slice(&u32::try_from(part.len()).unwrap_or(u32::MAX).to_be_bytes());
+            out.extend_from_slice(part);
+        }
+        let digest = Sha256::digest(&out);
+        out.extend_from_slice(&digest);
+        Ok(out)
     }
 }
 

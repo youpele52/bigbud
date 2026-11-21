@@ -109,6 +109,9 @@ struct PtyStateRecord {
     next_sequence: u64,
     first_retained_sequence: u64,
     retained_bytes: usize,
+    /// Replay ring cap: `MAX_OUTPUT_BYTES`, or less for a PTY whose screen model and spool
+    /// serve restores (terminal lifecycle plan §13 host RSS budget).
+    retention_bytes: usize,
     output: VecDeque<PtyOutputChunk>,
     exit_code: Option<i32>,
     signal: Option<i32>,
@@ -138,6 +141,9 @@ pub enum PtyEvent {
 
 #[path = "handle.rs"]
 mod handle;
+#[path = "handle.lifecycle.rs"]
+mod handle_lifecycle;
+pub use handle_lifecycle::RebuildRing;
 #[cfg(unix)]
 #[path = "launch.rs"]
 mod launch;

@@ -10,6 +10,7 @@ impl AgentSession {
             )
         } else if !self.workspace_roots.contains_key(&request.workspace_handle)
             && self.workspace_roots.len() >= MAX_WORKSPACE_ROOTS
+            && !self.reclaim_unused_terminal_root()
         {
             (
                 false,
@@ -18,6 +19,11 @@ impl AgentSession {
             )
         } else {
             match WorkspaceRoot::open(&request.root) {
+                // §8.10: a shared terminal root that live PTYs reference stays as it is; a
+                // reopen of the same handle neither fails nor replaces it.
+                Ok(_) if self.workspace_ref_count(&request.workspace_handle) > 0 => {
+                    (true, String::new(), String::new())
+                }
                 Ok(root) => {
                     self.workspace_roots
                         .insert(request.workspace_handle.clone(), root);

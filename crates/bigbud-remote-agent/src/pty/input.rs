@@ -32,7 +32,13 @@ struct Work {
     sequence: u64,
     bytes: Vec<u8>,
     deadline: Instant,
+    /// A query-responder reply (plan §8.9): written in order with client input, but outside
+    /// the sequenced ledger, because a reply is not client input.
+    reply: bool,
 }
+
+/// Largest single query-responder reply; real replies are a few dozen bytes.
+const MAX_REPLY_BYTES: usize = 4 * 1024;
 impl Drop for Work {
     fn drop(&mut self) {
         let bytes = std::mem::take(&mut self.bytes);
@@ -79,6 +85,7 @@ impl InputWriter {
             .spawn(move || {
                 while !state.cancelled.load(Ordering::Acquire) {
                     match receiver.recv_timeout(Duration::from_millis(100)) {
+                        Ok(work) if work.reply => write_reply(&state, &work, &mut write),
                         Ok(work) => process(&state, &work, &mut write),
                         Err(mpsc::RecvTimeoutError::Timeout) => continue,
                         Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -86,7 +93,9 @@ impl InputWriter {
                 }
                 // Cancellation settles every reserved entry, without emitting further bytes.
                 for work in receiver.try_iter() {
-                    settle(&state, &work, InputOutcome::FailedBeforeWrite);
+                    if !work.reply {
+                        settle(&state, &work, InputOutcome::FailedBeforeWrite);
+                    }
                 }
                 state.finished.store(true, Ordering::Release);
                 let _ = finished.send(()); // Receiver loss only means the owner already detached.
@@ -175,6 +184,7 @@ impl InputWriter {
             sequence,
             bytes: bytes.to_vec(),
             deadline: Instant::now() + Duration::from_secs(5),
+            reply: false,
         };
         if let Err(error) = self.sender.try_send(work) {
             let (mpsc::TrySendError::Full(work) | mpsc::TrySendError::Disconnected(work)) = error;
@@ -183,6 +193,38 @@ impl InputWriter {
             settle(&self.shared, &work, InputOutcome::FailedBeforeWrite);
         }
         Ok(true)
+    }
+
+    /// Queues a query-responder reply behind already admitted input. It never touches the
+    /// sequenced ledger, so client input sequences, digests and reconciliation are unaffected.
+    /// A full queue drops the reply: the host answers best effort, as xterm.js would on a
+    /// saturated write path.
+    pub fn submit_reply(&self, bytes: &[u8]) -> Result<(), super::PtyError> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        if bytes.len() > MAX_REPLY_BYTES {
+            return Err(super::PtyError::InputLimit);
+        }
+        // Held through try_send for the same reason as `submit`: cancellation cannot let the
+        // worker finish draining before this item is enqueued.
+        let ledger = self.shared.ledger.lock().map_err(|_| super::poisoned())?;
+        if self.shared.cancelled.load(Ordering::Acquire) || ledger.fenced {
+            return Err(super::PtyError::InputFenced);
+        }
+        if !reserve(&INPUT_BYTES, bytes.len()) {
+            return Err(super::PtyError::InputLimit);
+        }
+        let work = Work {
+            sequence: 0,
+            bytes: bytes.to_vec(),
+            deadline: Instant::now() + Duration::from_secs(1),
+            reply: true,
+        };
+        let sent = self.sender.try_send(work);
+        drop(ledger);
+        // A rejected item is dropped here, which releases its byte reservation.
+        sent.map_err(|_| super::PtyError::InputLimit)
     }
 
     pub fn status(&self, sequence: u64) -> Result<InputOutcome, super::PtyError> {
@@ -269,6 +311,30 @@ fn settle(shared: &Shared, work: &Work, outcome: InputOutcome) {
         ledger.pending -= 1;
         ledger.bytes -= work.bytes.len();
         shared.changed.notify_all();
+    }
+}
+
+/// Writes one responder reply. A failed or partial reply never fences client input: the
+/// reply is advisory, and client bytes have their own outcome tracking.
+fn write_reply(shared: &Shared, work: &Work, write: &mut impl FnMut(&[u8]) -> io::Result<usize>) {
+    let mut written = 0;
+    while written < work.bytes.len()
+        && !shared.cancelled.load(Ordering::Acquire)
+        && Instant::now() < work.deadline
+    {
+        let Some(remaining) = work.bytes.get(written..) else {
+            return;
+        };
+        match write(remaining) {
+            Ok(0) => return,
+            Ok(size) if size <= remaining.len() => written += size,
+            Ok(_) => return,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(5))
+            }
+            Err(_) => return,
+        }
     }
 }
 

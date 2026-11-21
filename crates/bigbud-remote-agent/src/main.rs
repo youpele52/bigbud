@@ -16,7 +16,7 @@ use bigbud_remote_agent::{
 use bigbud_workspace_watch::WorkspaceWatchRegistry;
 
 #[cfg(unix)]
-use bigbud_remote_agent::supervisor::run_supervisor;
+use bigbud_remote_agent::supervisor::run_supervisor_with;
 
 fn state_root() -> Option<std::path::PathBuf> {
     std::env::var_os("BIGBUD_AGENT_STATE_DIR")
@@ -193,11 +193,45 @@ fn run_check(capabilities: bool) {
     );
 }
 
+/// `--supervisor` flags (terminal lifecycle plan §7.3 items 7 and 9).
+#[derive(Clone, Copy, Default)]
+struct SupervisorFlags {
+    /// The desktop's local terminal host: detach from the launcher, allow `local_launch`.
+    local_desktop_host: bool,
+    /// Exit after 60 s with no live PTY and no connected owner.
+    exit_when_orphaned_and_empty: bool,
+}
+
+fn supervisor_flags(arguments: impl Iterator<Item = String>) -> Result<SupervisorFlags> {
+    let mut flags = SupervisorFlags::default();
+    for argument in arguments {
+        match argument.as_str() {
+            "--local-desktop-host" => flags.local_desktop_host = true,
+            "--exit-when-orphaned-and-empty" => flags.exit_when_orphaned_and_empty = true,
+            other => anyhow::bail!("unknown supervisor flag: {other}"),
+        }
+    }
+    Ok(flags)
+}
+
 #[cfg(unix)]
 fn run_supervisor_mode(
     root: std::path::PathBuf,
     managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
 ) -> Result<()> {
+    run_supervisor_mode_with(root, managed, SupervisorFlags::default())
+}
+
+#[cfg(unix)]
+fn run_supervisor_mode_with(
+    root: std::path::PathBuf,
+    managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+    flags: SupervisorFlags,
+) -> Result<()> {
+    if flags.local_desktop_host {
+        bigbud_remote_agent::supervisor::detach_from_launcher()
+            .context("failed to detach the terminal host from its launcher")?;
+    }
     let state = AgentState::open_for_supervisor(&root)
         .with_context(|| format!("failed to open supervisor state at {}", root.display()))?;
     let logging = bigbud_remote_agent::supervisor::SupervisorLogging::start(&root)
@@ -209,12 +243,17 @@ fn run_supervisor_mode(
         )
         .context("failed to restore the supervisor session journal")?;
         enable_paste_staging(&mut session, &root);
+        // Terminal lifecycle (protocol 1.9): screens, spools, policy; opt-in per PTY.
+        session.enable_terminal_lifecycle(&root, flags.local_desktop_host);
         if let Some(context) = managed {
             session
                 .set_managed_service_account(context)
                 .context("managed service lease unavailable")?;
         }
-        run_supervisor(session, &supervisor_socket_path(root))
+        let options = bigbud_remote_agent::supervisor::SupervisorOptions {
+            exit_when_orphaned_and_empty: flags.exit_when_orphaned_and_empty,
+        };
+        run_supervisor_with(session, &supervisor_socket_path(root), options)
             .context("remote agent supervisor failed")
     })();
     if let Err(error) = &result {
@@ -228,8 +267,17 @@ fn run_supervisor_mode(
 
 #[cfg(not(unix))]
 fn run_supervisor_mode(
+    root: std::path::PathBuf,
+    managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+) -> Result<()> {
+    run_supervisor_mode_with(root, managed, SupervisorFlags::default())
+}
+
+#[cfg(not(unix))]
+fn run_supervisor_mode_with(
     _root: std::path::PathBuf,
     _managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+    _flags: SupervisorFlags,
 ) -> Result<()> {
     anyhow::bail!("the remote agent supervisor requires Unix-domain sockets on this platform")
 }
@@ -257,8 +305,9 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some("--supervisor") => {
+            let flags = supervisor_flags(std::env::args().skip(2))?;
             let root = state_root().context("HOME is required for supervisor mode")?;
-            run_supervisor_mode(root, None)
+            run_supervisor_mode_with(root, None, flags)
         }
         Some("--prepare-supervisor") => {
             let root = state_root().context("HOME is required to prepare the supervisor")?;

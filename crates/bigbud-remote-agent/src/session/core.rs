@@ -16,6 +16,8 @@ use crate::process::{self, ProcessOptions, run_bounded_process};
 use crate::pty;
 use crate::workspace::{WorkspaceError, WorkspaceRoot};
 
+#[path = "dispatch.rs"]
+mod dispatch;
 #[path = "hello.rs"]
 mod hello;
 #[path = "journal_restore.rs"]
@@ -30,6 +32,8 @@ mod paste_staging;
 mod process_attach;
 #[path = "process_handlers.rs"]
 mod process_handlers;
+#[path = "process_identity.rs"]
+mod process_identity;
 #[path = "protocol_helpers.rs"]
 mod protocol_helpers;
 #[path = "pty_controls.rs"]
@@ -42,8 +46,22 @@ mod pty_handlers;
 mod pty_input_reconcile;
 #[path = "pty_inventory.rs"]
 mod pty_inventory;
+#[path = "pty_lifecycle.rs"]
+mod pty_lifecycle;
+#[path = "pty_lifecycle.handlers.rs"]
+mod pty_lifecycle_handlers;
+#[path = "pty_lifecycle.host.rs"]
+mod pty_lifecycle_host;
+#[path = "pty_lifecycle.policy.rs"]
+mod pty_lifecycle_policy;
+#[path = "pty_lifecycle.responder.rs"]
+mod pty_lifecycle_responder;
 #[path = "pty_profile.rs"]
 mod pty_profile;
+#[path = "pty_retention.rs"]
+mod pty_retention;
+#[path = "pty_screen.rs"]
+mod pty_screen;
 #[path = "search.rs"]
 mod search;
 #[cfg(unix)]
@@ -51,6 +69,9 @@ mod search;
 mod service_lease;
 pub use pty_controls::{PreparedPtyControl, is_pty_control};
 use pty_handlers::PtySession;
+pub(crate) use pty_lifecycle::PtyLifecycle;
+pub(crate) use pty_lifecycle_host::{HostLifecycle, HostOptions};
+pub(crate) use pty_screen::{SnapshotSource, SnapshotTransfer, produce as produce_snapshot};
 #[path = "retirement.rs"]
 mod retirement;
 #[path = "workspace_handlers.rs"]
@@ -93,7 +114,7 @@ use protocol_helpers::{
     operation_error, process_attach_response_frame, process_completed_frame, process_environment,
     process_environment_from_entries, process_output_frame, pty_attach_response_frame,
     pty_control_response_frame, pty_create_response_frame, pty_exited_frame, pty_output_frame,
-    workspace_error_code,
+    validate_local_launch_environment, workspace_error_code,
 };
 pub use search::PreparedSearch;
 
@@ -158,6 +179,10 @@ pub struct AgentSession {
     pty_sessions: HashMap<String, PtySession>,
     pty_create_failures: HashMap<String, pty_create::PtyCreateFailure>,
     workspace_roots: HashMap<String, WorkspaceRoot>,
+    /// Explicit workspace-root reference counts (plan §8.10).
+    workspace_refs: HashMap<String, usize>,
+    /// Terminal lifecycle state; only a supervisor (terminal host) enables it.
+    terminal_host: Option<Arc<HostLifecycle>>,
     agent_instance_id: String,
     agent_epoch: String,
     paste_staging: Option<crate::paste_staging::PasteStore>,
@@ -245,6 +270,8 @@ impl AgentSession {
             pty_sessions: HashMap::new(),
             pty_create_failures: HashMap::new(),
             workspace_roots: HashMap::new(),
+            workspace_refs: HashMap::new(),
+            terminal_host: None,
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,
             paste_staging: None,
@@ -255,6 +282,34 @@ impl AgentSession {
             #[cfg(unix)]
             managed_service_lease: None,
         }
+    }
+
+    /// Turns this session into a terminal host (protocol 1.9 lifecycle, plan R5). The spool
+    /// lives under `state_root`; without one, `terminal.spool` is not advertised.
+    pub(crate) fn enable_terminal_host(
+        &mut self,
+        state_root: Option<&std::path::Path>,
+        options: HostOptions,
+    ) -> Arc<HostLifecycle> {
+        let host = HostLifecycle::new(&self.agent_epoch, state_root, options);
+        self.terminal_host = Some(Arc::clone(&host));
+        host
+    }
+
+    /// Enables terminal lifecycle for a supervisor (`--supervisor`): screens, spools under
+    /// `state_root`, policy and notices. `local_desktop_host` adds `terminal.local-launch`.
+    pub fn enable_terminal_lifecycle(
+        &mut self,
+        state_root: &std::path::Path,
+        local_desktop_host: bool,
+    ) {
+        let _host = self.enable_terminal_host(
+            Some(state_root),
+            HostOptions {
+                local_desktop_host,
+                ..HostOptions::default()
+            },
+        );
     }
 
     fn has_managed_service_account(&self) -> bool {
@@ -282,91 +337,6 @@ impl AgentSession {
     #[cfg(unix)]
     pub(crate) fn service_lease_for_retirement(&self) -> Option<Arc<crate::service_lease::Bridge>> {
         self.managed_service_lease.as_ref().map(Arc::clone)
-    }
-    pub fn handle(&mut self, frame: v1::Frame) -> Result<v1::Frame, SessionError> {
-        match frame.payload {
-            Some(v1::frame::Payload::ClientHello(hello)) => self.handle_client_hello(hello),
-            Some(v1::frame::Payload::DiagnosticRequest(request)) if self.ready => {
-                self.handle_diagnostic_request(request)
-            }
-            Some(v1::frame::Payload::CancelRequest(request)) if self.ready => {
-                self.handle_cancel_request(request)
-            }
-            Some(v1::frame::Payload::PtyListRequest(request)) if self.ready => {
-                Ok(self.handle_pty_list(request))
-            }
-            Some(v1::frame::Payload::PtyInputReconcileRequest(request)) if self.ready => {
-                Ok(self.handle_pty_input_reconcile(request))
-            }
-            Some(payload)
-                if self.ready && operation_handlers::is_pty_lifecycle_request(&payload) =>
-            {
-                Ok(operation_handlers::refuse_pty_lifecycle_request(
-                    payload,
-                    &self.agent_epoch,
-                ))
-            }
-            _ if self.ready && !self.accepting_work => Err(SessionError::Restarting),
-            Some(v1::frame::Payload::WorkspaceOpenRequest(request)) if self.ready => {
-                Ok(self.handle_workspace_open(request))
-            }
-            Some(v1::frame::Payload::ReadFileRequest(request)) if self.ready => {
-                self.handle_read_file(request)
-            }
-            Some(v1::frame::Payload::ListDirectoryRequest(request)) if self.ready => {
-                self.handle_list_directory(request)
-            }
-            Some(v1::frame::Payload::FilenameSearchRequest(request)) if self.ready => {
-                self.handle_filename_search(request)
-            }
-            Some(v1::frame::Payload::ContentSearchRequest(request)) if self.ready => {
-                self.handle_content_search(request)
-            }
-            Some(v1::frame::Payload::OsIndexSearchRequest(request)) if self.ready => {
-                Ok(self.refuse_os_index_search(&request))
-            }
-            Some(v1::frame::Payload::WriteFileRequest(request)) if self.ready => {
-                self.handle_write_file(request)
-            }
-            Some(v1::frame::Payload::ProcessRequest(request)) if self.ready => self
-                .handle_process_request(request)
-                .and_then(|mut responses| responses.pop().ok_or(SessionError::UnexpectedMessage)),
-            Some(v1::frame::Payload::ProcessAttachRequest(request)) if self.ready => self
-                .handle_process_attach(request)
-                .and_then(|mut responses| responses.pop().ok_or(SessionError::UnexpectedMessage)),
-            Some(v1::frame::Payload::ProcessOutputAck(request)) if self.ready => {
-                Ok(self.handle_process_output_ack(request))
-            }
-            Some(v1::frame::Payload::PtyInput(request)) if self.ready => {
-                Ok(self.handle_pty_input(request))
-            }
-            Some(v1::frame::Payload::PtyOutputAck(request)) if self.ready => {
-                Ok(self.handle_pty_output_ack(request))
-            }
-            Some(v1::frame::Payload::PtyResizeRequest(request)) if self.ready => {
-                Ok(self.handle_pty_resize(request))
-            }
-            Some(v1::frame::Payload::PtySignalRequest(request)) if self.ready => {
-                Ok(self.handle_pty_signal(request))
-            }
-            Some(v1::frame::Payload::PtyCloseRequest(request)) if self.ready => {
-                Ok(self.handle_pty_close(request))
-            }
-            Some(v1::frame::Payload::PasteStageBeginRequest(request)) if self.ready => {
-                Ok(self.handle_paste_stage_begin(request))
-            }
-            Some(v1::frame::Payload::PasteStageChunkRequest(request)) if self.ready => {
-                Ok(self.handle_paste_stage_chunk(request))
-            }
-            Some(v1::frame::Payload::PasteStageCommitRequest(request)) if self.ready => {
-                Ok(self.handle_paste_stage_commit(request))
-            }
-            Some(v1::frame::Payload::PasteStageDiscardRequest(request)) if self.ready => {
-                Ok(self.handle_paste_stage_discard(request))
-            }
-            _ if !self.ready => Err(SessionError::HelloRequired),
-            _ => Err(SessionError::UnexpectedMessage),
-        }
     }
 }
 

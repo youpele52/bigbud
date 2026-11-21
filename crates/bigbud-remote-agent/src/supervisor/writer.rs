@@ -22,6 +22,8 @@ pub(super) mod budget;
 use budget::EncodedFrame;
 #[path = "writer.lifecycle.rs"]
 mod lifecycle;
+#[path = "writer.snapshot.rs"]
+mod snapshot;
 
 struct Queue {
     frames: VecDeque<(EncodedFrame, bool)>,

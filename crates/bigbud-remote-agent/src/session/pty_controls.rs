@@ -1,8 +1,11 @@
 use super::*;
 
 pub struct PreparedPtyControl {
-    handle: Arc<pty::PtyHandle>,
+    /// `None` only for a close that dismissed a lost PTY's spool (plan §8.3).
+    handle: Option<Arc<pty::PtyHandle>>,
     payload: v1::frame::Payload,
+    /// Lifecycle facts to update after the control runs (input activity, applied resizes).
+    lifecycle: Option<Arc<super::pty_lifecycle::PtyLifecycle>>,
 }
 
 pub fn is_pty_control(payload: &v1::frame::Payload) -> bool {
@@ -33,8 +36,25 @@ impl AgentSession {
             v1::frame::Payload::PtyCloseRequest(value) => &value.pty_id,
             _ => return Err(SessionError::UnexpectedMessage),
         };
-        let handle = self.pty_operation_handle(id)?;
-        Ok(PreparedPtyControl { handle, payload })
+        if let v1::frame::Payload::PtyCloseRequest(close) = &payload
+            && self.dismiss_lost_pty(&close.pty_id)
+        {
+            return Ok(PreparedPtyControl {
+                handle: None,
+                payload,
+                lifecycle: None,
+            });
+        }
+        let handle = Some(self.pty_operation_handle(id)?);
+        let lifecycle = self
+            .pty_sessions
+            .get(id)
+            .and_then(|session| session.lifecycle.clone());
+        Ok(PreparedPtyControl {
+            handle,
+            payload,
+            lifecycle,
+        })
     }
 
     pub fn retain_closed_pty(&mut self, response: &v1::Frame) {
@@ -49,15 +69,36 @@ impl AgentSession {
 
 impl PreparedPtyControl {
     pub fn execute(self) -> Result<v1::Frame, SessionError> {
-        let h = &self.handle;
+        let Some(h) = &self.handle else {
+            // A dismissed lost PTY: its spool is gone; the close is complete.
+            return match self.payload {
+                v1::frame::Payload::PtyCloseRequest(value) => Ok(pty_control_response_frame(
+                    value.request_id,
+                    value.pty_id,
+                    Ok(()),
+                    "PTY_CLOSE_ERROR",
+                    "close",
+                )),
+                _ => Err(SessionError::UnexpectedMessage),
+            };
+        };
+        let lifecycle = self.lifecycle.as_deref();
         let (request_id, id, result, code, kind) = match self.payload {
-            v1::frame::Payload::PtyInput(value) => (
-                value.request_id,
-                value.pty_id,
-                h.write_input(value.sequence, &value.bytes).map(|_| ()),
-                "PTY_INPUT_ERROR",
-                "input",
-            ),
+            v1::frame::Payload::PtyInput(value) => {
+                let result = h.write_input(value.sequence, &value.bytes).map(|_| ());
+                if result.is_ok()
+                    && let Some(lifecycle) = lifecycle
+                {
+                    lifecycle.record_input();
+                }
+                (
+                    value.request_id,
+                    value.pty_id,
+                    result,
+                    "PTY_INPUT_ERROR",
+                    "input",
+                )
+            }
             v1::frame::Payload::PtyOutputAck(value) => (
                 value.request_id,
                 value.pty_id,
@@ -65,16 +106,25 @@ impl PreparedPtyControl {
                 "PTY_ACK_ERROR",
                 "ack",
             ),
-            v1::frame::Payload::PtyResizeRequest(value) => (
-                value.request_id,
-                value.pty_id,
-                h.resize(
+            v1::frame::Payload::PtyResizeRequest(value) => {
+                let (cols, rows) = (
                     value.cols.clamp(1, 500) as u16,
                     value.rows.clamp(1, 500) as u16,
-                ),
-                "PTY_RESIZE_ERROR",
-                "resize",
-            ),
+                );
+                let result = h.resize(cols, rows);
+                if result.is_ok()
+                    && let Some(lifecycle) = lifecycle
+                {
+                    lifecycle.resized(cols, rows);
+                }
+                (
+                    value.request_id,
+                    value.pty_id,
+                    result,
+                    "PTY_RESIZE_ERROR",
+                    "resize",
+                )
+            }
             v1::frame::Payload::PtySignalRequest(value) => (
                 value.request_id,
                 value.pty_id,

@@ -13,6 +13,21 @@ impl PtyHandle {
         rows: u16,
         environment: &[(String, String)],
     ) -> Result<PtyJob, PtyError> {
+        Self::spawn_with_launch(id, cwd, shell, args, (cols, rows), environment, false)
+    }
+
+    /// `local_launch` (only on a `--local-desktop-host` host with a `local_launch` create)
+    /// honours the requested `PATH` and `SHELL`; otherwise the remote environment rule applies.
+    #[cfg(unix)]
+    pub fn spawn_with_launch(
+        id: String,
+        cwd: &Path,
+        shell: &str,
+        args: &[String],
+        (cols, rows): (u16, u16),
+        environment: &[(String, String)],
+        local_launch: bool,
+    ) -> Result<PtyJob, PtyError> {
         if id.is_empty() {
             return Err(PtyError::MissingId);
         }
@@ -52,7 +67,11 @@ impl PtyHandle {
                 "cwd contains NUL",
             ))
         })?;
-        let environment = super::environment::remote_environment(environment)?;
+        let environment = if local_launch {
+            super::environment::local_environment(environment)?
+        } else {
+            super::environment::remote_environment(environment)?
+        };
         let environment = environment
             .iter()
             .map(|(name, value)| {
@@ -148,6 +167,7 @@ impl PtyHandle {
                     next_sequence: 1,
                     first_retained_sequence: 1,
                     retained_bytes: 0,
+                    retention_bytes: MAX_OUTPUT_BYTES,
                     output: VecDeque::new(),
                     exit_code: None,
                     signal: None,
@@ -156,6 +176,19 @@ impl PtyHandle {
         });
         reservation.transfer();
         Ok(PtyJob { handle, reader })
+    }
+
+    #[cfg(not(unix))]
+    pub fn spawn_with_launch(
+        _id: String,
+        _cwd: &Path,
+        _shell: &str,
+        _args: &[String],
+        _size: (u16, u16),
+        _environment: &[(String, String)],
+        _local_launch: bool,
+    ) -> Result<PtyJob, PtyError> {
+        Err(PtyError::Unsupported)
     }
 
     #[cfg(not(unix))]

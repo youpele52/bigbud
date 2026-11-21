@@ -16,6 +16,11 @@ pub(super) fn spawn_pty_job(
     let pty_id = job.handle.id.clone();
     std::thread::spawn(move || {
         let _completion = completion;
+        // Resolved once; lifecycle work runs after the session lock is released (plan §14).
+        let lifecycle = sessions
+            .lock()
+            .ok()
+            .and_then(|mut session| session.pty_lifecycle(&pty_id).ok());
         crate::pty::run_events(job.reader, &job.handle, |event| match event {
             crate::pty::PtyEvent::Output(bytes) => {
                 let response = sessions
@@ -23,10 +28,25 @@ pub(super) fn spawn_pty_job(
                     .ok()
                     .and_then(|mut session| session.record_pty_output(&pty_id, bytes).ok());
                 if let Some(response) = response {
+                    let feed = lifecycle
+                        .as_ref()
+                        .and_then(|lifecycle| match &response.payload {
+                            Some(bigbud_protocol::v1::frame::Payload::PtyOutput(output)) => {
+                                Some((lifecycle, output.sequence, output.bytes.clone()))
+                            }
+                            _ => None,
+                        });
+                    // Delivery first: the screen feed may wait up to 50 ms for actor space.
                     let _ = broadcast_response(&subscribers, &pty_id, response);
+                    if let Some((lifecycle, sequence, bytes)) = feed {
+                        lifecycle.on_output(sequence, bytes);
+                    }
                 }
             }
             crate::pty::PtyEvent::Exited { exit_code, signal } => {
+                if let Some(lifecycle) = &lifecycle {
+                    lifecycle.on_exit();
+                }
                 let response = sessions
                     .lock()
                     .ok()

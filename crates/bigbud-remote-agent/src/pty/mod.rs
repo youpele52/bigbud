@@ -4,5 +4,5 @@ mod core;
 pub use core::{CleanupOwner, InputOutcome, InputReceipt, pending_cleanup_settled, read_events};
 pub use core::{
     LaunchOutcome, LaunchStage, LaunchUnknown, MAX_OUTPUT_BYTES, PtyError, PtyEvent, PtyHandle,
-    PtyJob, PtyOutputChunk, PtySnapshot, PtyState, run_events,
+    PtyJob, PtyOutputChunk, PtySnapshot, PtyState, RebuildRing, run_events,
 };
