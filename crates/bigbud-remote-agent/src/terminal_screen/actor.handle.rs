@@ -46,7 +46,13 @@ pub(super) fn spawn(
 
 impl ScreenActor {
     /// Queues output chunk `sequence`, waiting no later than `deadline` for queue space.
-    pub fn try_feed(&self, sequence: u64, bytes: Vec<u8>, deadline: Instant) -> FeedOutcome {
+    pub fn try_feed(
+        &self,
+        sequence: u64,
+        bytes: impl Into<Arc<[u8]>>,
+        deadline: Instant,
+    ) -> FeedOutcome {
+        let bytes = bytes.into();
         let shared = &self.shared;
         let mut inner = shared.lock();
         if inner.stopping {
@@ -169,9 +175,13 @@ impl ScreenActor {
     pub fn submit_rebuild(
         &self,
         ticket: RebuildTicket,
-        ring: Vec<(u64, Vec<u8>)>,
+        ring: Vec<(u64, impl Into<Arc<[u8]>>)>,
         starts_clean: bool,
     ) -> Result<(), RebuildError> {
+        let ring = ring
+            .into_iter()
+            .map(|(sequence, bytes)| (sequence, bytes.into()))
+            .collect();
         let mut inner = self.shared.lock();
         if inner.stopping {
             return Err(RebuildError::Stopped);

@@ -33,7 +33,8 @@ pub(crate) enum SnapshotSource {
 pub(crate) struct SnapshotTransfer {
     pub(crate) header: v1::PtyScreenSnapshotHeader,
     request_id: String,
-    ansi: Vec<u8>,
+    /// Shared with the snapshot cache (R7).
+    ansi: Arc<Vec<u8>>,
 }
 
 impl SnapshotTransfer {
@@ -52,7 +53,7 @@ impl SnapshotTransfer {
                 ..Default::default()
             },
             request_id: request.request_id.clone(),
-            ansi: Vec::new(),
+            ansi: Arc::new(Vec::new()),
         }
     }
 
@@ -96,7 +97,7 @@ impl SnapshotTransfer {
         model_state: &str,
     ) -> Self {
         let sha256 = snapshot.sha256().to_vec();
-        let ansi = snapshot.ansi.into_bytes();
+        let ansi = Arc::new(snapshot.ansi.into_bytes());
         let chunks = ansi.len().div_ceil(SNAPSHOT_CHUNK_MAX_BYTES);
         let chunk_count = u32::try_from(chunks).unwrap_or(u32::MAX);
         if chunk_count > SNAPSHOT_MAX_CHUNKS {
@@ -147,7 +148,23 @@ impl SnapshotTransfer {
                 ..Default::default()
             },
             request_id: request.request_id.clone(),
-            ansi: Vec::new(),
+            ansi: Arc::new(Vec::new()),
+        }
+    }
+}
+
+impl SnapshotTransfer {
+    /// A cached snapshot answering another request for the same unchanged screen.
+    fn from_cached(
+        request: &v1::PtyScreenSnapshotRequest,
+        mut header: v1::PtyScreenSnapshotHeader,
+        ansi: Arc<Vec<u8>>,
+    ) -> Self {
+        header.request_id.clone_from(&request.request_id);
+        Self {
+            header,
+            request_id: request.request_id.clone(),
+            ansi,
         }
     }
 }
@@ -183,6 +200,27 @@ fn produce_live(
         );
     };
     let attach = request.attach_renderer;
+    let host = lifecycle.host();
+    let epoch = lifecycle.screen_epoch();
+    let wanted = limits(request);
+    let cached = host
+        .snapshot_cache
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&request.pty_id, epoch, &wanted);
+    if let Some((header, ansi)) = cached {
+        // Nothing was fed since: the cached snapshot is exact through its sequence, so it
+        // is also the attach cut.
+        if attach {
+            let handle = Arc::clone(lifecycle.handle());
+            let mut state = lifecycle.lock();
+            state.responder.begin_attach();
+            state
+                .responder
+                .finish_attach(handle.as_ref(), Some(header.through_sequence));
+        }
+        return SnapshotTransfer::from_cached(request, header, ansi);
+    }
     if attach {
         lifecycle.lock().responder.begin_attach();
     }
@@ -205,13 +243,22 @@ fn produce_live(
             return SnapshotTransfer::invalid(request, cols, rows);
         }
     };
-    let host = lifecycle.host();
     let held = copy.estimated_bytes();
     host.copy_bytes.fetch_add(held, Ordering::AcqRel);
-    let serialized = copy.serialize(&limits(request));
+    let serialized = copy.serialize(&wanted);
     host.copy_bytes.fetch_sub(held, Ordering::AcqRel);
     match serialized {
-        Ok(snapshot) => SnapshotTransfer::from_snapshot(request, snapshot, "live"),
+        Ok(snapshot) => {
+            let transfer = SnapshotTransfer::from_snapshot(request, snapshot, "live");
+            // Cached only if no chunk, resize or rebuild raced the fence.
+            if transfer.header.accepted && lifecycle.screen_epoch() == epoch {
+                host.snapshot_cache
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .put(epoch, wanted, &transfer.header, &transfer.ansi);
+            }
+            transfer
+        }
         Err(error) => SnapshotTransfer::refused(request, "SNAPSHOT_TOO_LARGE", error.to_string()),
     }
 }

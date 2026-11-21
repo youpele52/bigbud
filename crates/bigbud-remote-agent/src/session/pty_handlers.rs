@@ -32,9 +32,9 @@ impl AgentSession {
             replay_gap,
         )];
         responses.extend(
-            chunks
-                .into_iter()
-                .map(|chunk| pty_output_frame(&request.pty_id, chunk.sequence, chunk.bytes)),
+            chunks.into_iter().map(|chunk| {
+                pty_output_frame(&request.pty_id, chunk.sequence, chunk.bytes.to_vec())
+            }),
         );
         if snapshot.state != pty::PtyState::Running {
             responses.push(pty_exited_frame(
@@ -46,16 +46,19 @@ impl AgentSession {
         Ok(responses)
     }
 
+    /// Appends one output chunk to the replay ring and returns its frame plus the shared
+    /// chunk (the screen feed and spool take the same allocation, not copies).
     pub fn record_pty_output(
         &mut self,
         pty_id: &str,
-        bytes: Vec<u8>,
-    ) -> Result<v1::Frame, SessionError> {
+        bytes: pty::OutputBytes,
+    ) -> Result<(v1::Frame, pty::PtyOutputChunk), SessionError> {
         let handle = self.pty(pty_id)?;
         let chunk = handle
             .append_output(bytes)
             .map_err(|error| SessionError::Pty(error.to_string()))?;
-        Ok(pty_output_frame(pty_id, chunk.sequence, chunk.bytes))
+        let frame = pty_output_frame(pty_id, chunk.sequence, chunk.bytes.to_vec());
+        Ok((frame, chunk))
     }
 
     pub fn complete_pty(

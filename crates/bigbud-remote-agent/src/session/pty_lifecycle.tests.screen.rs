@@ -226,3 +226,71 @@ fn a_detached_host_answers_a_real_device_status_query_and_an_attached_one_does_n
     assert!(detached.contains("GOT<[0>"), "{detached:?}");
     assert!(attached.contains("GOT<>"), "{attached:?}");
 }
+
+#[test]
+fn an_unchanged_screen_reuses_its_snapshot_and_new_output_or_a_resize_does_not() {
+    let mut host = Host::new(false);
+    host.create(host.request("cached", true, "/bin/sleep", &["60"]));
+    let lifecycle = host.lifecycle("cached");
+    let chunk = lifecycle
+        .handle()
+        .append_output(b"first\r\n".to_vec())
+        .unwrap();
+    lifecycle.on_output(chunk.sequence, chunk.bytes);
+    let request = snapshot_request(&host.id("cached"));
+    let first = produce(SnapshotSource::Live(Arc::clone(&lifecycle)), &request);
+    let epoch = lifecycle.screen_epoch();
+    let mut again_request = request.clone();
+    again_request.request_id = "again".to_owned();
+    let again = produce(SnapshotSource::Live(Arc::clone(&lifecycle)), &again_request);
+    assert_eq!(again.header.request_id, "again");
+    assert_eq!(again.header.sha256, first.header.sha256);
+    assert_eq!(reassemble(&again), reassemble(&first));
+    assert_eq!(lifecycle.screen_epoch(), epoch, "served from the cache");
+    let chunk = lifecycle
+        .handle()
+        .append_output(b"second\r\n".to_vec())
+        .unwrap();
+    lifecycle.on_output(chunk.sequence, chunk.bytes);
+    let fresh = produce(SnapshotSource::Live(Arc::clone(&lifecycle)), &request);
+    assert_eq!(fresh.header.through_sequence, chunk.sequence);
+    assert!(
+        String::from_utf8(reassemble(&fresh))
+            .unwrap()
+            .contains("second")
+    );
+    lifecycle.resized(100, 30);
+    let resized = produce(SnapshotSource::Live(Arc::clone(&lifecycle)), &request);
+    assert_eq!((resized.header.cols, resized.header.rows), (100, 30));
+}
+
+#[test]
+fn a_wanted_checkpoint_waits_for_output_to_pause() {
+    let mut host = Host::new(false);
+    let mut request = host.request("ckpt", true, "/bin/sleep", &["60"]);
+    request.spool = true;
+    host.create(request);
+    let lifecycle = host.lifecycle("ckpt");
+    // Half a 4 MiB segment makes the spool want a checkpoint.
+    for _ in 0..140 {
+        let chunk = lifecycle
+            .handle()
+            .append_output(vec![b'y'; 16 * 1024])
+            .unwrap();
+        lifecycle.on_output(chunk.sequence, chunk.bytes);
+    }
+    let now = host.clock.advance(0);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !lifecycle.checkpoint_due(now + 1_000) {
+        assert!(
+            Instant::now() < deadline,
+            "the spool never wanted a checkpoint"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!lifecycle.checkpoint_due(now), "output just arrived");
+    assert!(
+        lifecycle.checkpoint_due(now + 1_000),
+        "output paused for 1 s"
+    );
+}

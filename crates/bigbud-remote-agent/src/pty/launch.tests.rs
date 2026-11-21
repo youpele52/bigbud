@@ -165,7 +165,7 @@ fn valid_explicit_executable_preserves_argv_and_cwd_but_is_not_attested() {
     let output: Vec<_> = events
         .iter()
         .filter_map(|event| match event {
-            PtyEvent::Output(bytes) => Some(bytes.as_slice()),
+            PtyEvent::Output(bytes) => Some(&bytes[..]),
             _ => None,
         })
         .flatten()

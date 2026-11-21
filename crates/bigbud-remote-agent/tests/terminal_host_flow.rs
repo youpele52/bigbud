@@ -179,6 +179,13 @@ fn a_flood_arrives_complete_in_order_and_fast_for_unmanaged_and_managed_ptys() {
             sha256(&original),
             "every byte, in order"
         );
+        // Batched reads: a 1 KiB-per-read macOS flood must still yield large frames (R7).
+        assert!(
+            output.last_sequence <= (original.len() / (10 * 1024)) as u64,
+            "{} frames for {} bytes",
+            output.last_sequence,
+            original.len()
+        );
         if managed {
             let (header, _) = client.snapshot(id);
             assert_eq!(
@@ -319,6 +326,6 @@ fn a_stalled_connection_does_not_hold_back_another_one_or_other_ptys() {
         shared_bytes > 8 * 1024 * 1024,
         "the stalled connection held the PTY back"
     );
-    assert!(p99 < Duration::from_millis(50), "echo p99 {p99:?}");
+    assert!(p99 < Duration::from_millis(5), "echo p99 {p99:?}");
     let _ = std::fs::remove_dir_all(root);
 }

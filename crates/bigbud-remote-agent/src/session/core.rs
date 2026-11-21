@@ -62,6 +62,8 @@ mod pty_profile;
 mod pty_retention;
 #[path = "pty_screen.rs"]
 mod pty_screen;
+#[path = "pty_screen.cache.rs"]
+mod pty_screen_cache;
 #[path = "search.rs"]
 mod search;
 #[cfg(unix)]

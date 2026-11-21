@@ -29,6 +29,12 @@ pub(crate) const SCREEN_RING_BYTES: usize = 256 * 1024;
 /// Actor feed queue. At the model's ingest rate a full 1 MiB queue drains well inside the
 /// reader's 50 ms bound; a larger one only holds burst copies (24 PTYs x 4 MiB).
 const SCREEN_QUEUE_BYTES: usize = 512 * 1024;
+/// The spool backlog above which the reader pauses (two 64 KiB batches per 128 KiB).
+const SPOOL_BACKLOG_BYTES: usize = 1024 * 1024;
+/// A wanted checkpoint waits for this much output silence...
+const CHECKPOINT_QUIET_MS: u64 = 1_000;
+/// ...unless the previous one is at least this old.
+const CHECKPOINT_MAX_DEFER_MS: u64 = 10_000;
 
 /// What the create request asked for.
 #[derive(Clone, Copy, Debug)]
@@ -50,6 +56,9 @@ impl LifecycleOptions {
     }
 }
 
+#[path = "pty_lifecycle.spool.rs"]
+mod spool_ops;
+
 pub(crate) struct LifeState {
     pub(crate) activity: ActivityTracker,
     pub(crate) responder: Responder,
@@ -61,6 +70,8 @@ pub(crate) struct LifeState {
     /// The last `PtyActivity` sent: (idle_busy, pressure_busy, sidebar_busy).
     pub(crate) reported: Option<(bool, bool, bool)>,
     pub(crate) next_probe_at: u64,
+    /// When the spool last took a checkpoint (or the PTY started).
+    pub(crate) last_checkpoint_ms: u64,
 }
 
 /// What the actor's event sink needs; never owns the actor, so the actor thread can drop it.
@@ -99,6 +110,9 @@ pub(crate) struct PtyLifecycle {
     screen: Option<ScreenActor>,
     spool: Mutex<Option<SpoolWriter>>,
     scrollback_rows: usize,
+    /// Advances on every fed chunk, applied resize and rebuild: a snapshot taken at one epoch
+    /// is exact for as long as the epoch holds (R7 snapshot cache).
+    screen_epoch: std::sync::atomic::AtomicU64,
 }
 
 impl PtyLifecycle {
@@ -123,6 +137,7 @@ impl PtyLifecycle {
                 exited: false,
                 reported: None,
                 next_probe_at: now,
+                last_checkpoint_ms: now,
             }),
         });
         if options.owner_hint_source {
@@ -168,6 +183,7 @@ impl PtyLifecycle {
             screen,
             spool: Mutex::new(spool),
             scrollback_rows: options.screen_scrollback_rows,
+            screen_epoch: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -195,21 +211,32 @@ impl PtyLifecycle {
         self.shared.lock()
     }
 
+    pub(crate) fn screen_epoch(&self) -> u64 {
+        self.screen_epoch.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    fn advance_epoch(&self) {
+        self.screen_epoch
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+    }
+
     fn spool(&self) -> MutexGuard<'_, Option<SpoolWriter>> {
         self.spool.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// One output chunk, in sequence order, on the PTY reader thread (never under the session
     /// lock). Output delivery and the replay ring never depend on the outcome.
-    pub(crate) fn on_output(&self, sequence: u64, bytes: Vec<u8>) {
+    pub(crate) fn on_output(&self, sequence: u64, bytes: pty::OutputBytes) {
         if let Some(spool) = self.spool().as_ref()
-            && spool.append(sequence, &bytes) == AppendOutcome::Degraded
+            && spool.append_shared(sequence, std::sync::Arc::clone(&bytes))
+                == AppendOutcome::Degraded
         {
             self.host().notice(self.pty_id(), kind::SPOOL_DEGRADED, 0);
         }
         if let Some(screen) = &self.screen {
             // A timeout invalidates the model; the actor reports `model_invalid` itself.
             let _outcome = screen.try_feed(sequence, bytes, Instant::now() + FEED_DEADLINE);
+            self.advance_epoch();
         }
         let now = self.host().now_ms();
         self.lock().activity.record_output(now);
@@ -228,6 +255,7 @@ impl PtyLifecycle {
         {
             // The model keeps the old geometry until the next resize; snapshots report it.
         }
+        self.advance_epoch();
         let now = self.host().now_ms();
         let mut state = self.lock();
         state.activity.record_resize_applied(now);
@@ -254,48 +282,6 @@ impl PtyLifecycle {
 
     pub(crate) fn model_state(&self) -> Option<ModelState> {
         self.screen.as_ref().map(ScreenActor::state)
-    }
-
-    /// Checkpoints the spool from a fence copy when the spool wants one, or when `force`.
-    pub(crate) fn checkpoint(&self, force: bool, deadline: Instant) {
-        let wanted = self
-            .spool()
-            .as_ref()
-            .is_some_and(|spool| force || spool.checkpoint_wanted());
-        let Some(screen) = self.screen.as_ref().filter(|_| wanted) else {
-            return;
-        };
-        let Ok(copy) = screen.snapshot_fenced(deadline) else {
-            return;
-        };
-        let through = copy.through_sequence();
-        let Ok(blob) = copy.checkpoint(self.scrollback_rows) else {
-            return;
-        };
-        if let Some(spool) = self.spool().as_ref()
-            && let Err(error) = spool.checkpoint(through, blob)
-        {
-            eprintln!("terminal spool checkpoint skipped: {}", error.code());
-        }
-    }
-
-    /// §14 rebuild: fence the live feed at the ring's newest sequence, then replay the ring.
-    pub(crate) fn try_rebuild(&self) {
-        let Some(screen) = self
-            .screen
-            .as_ref()
-            .filter(|screen| screen.state() == ModelState::Invalid)
-        else {
-            return;
-        };
-        let fenced = self
-            .handle()
-            .rebuild_ring(|newest| screen.begin_rebuild(newest).ok());
-        if let Ok(Some((ticket, (ring, starts_clean)))) = fenced
-            && let Err(error) = screen.submit_rebuild(ticket, ring, starts_clean)
-        {
-            eprintln!("terminal screen rebuild skipped: {error}");
-        }
     }
 
     /// Re-checks `still` under the PTY lock and closes with `terminate = true` (§8.5 close,

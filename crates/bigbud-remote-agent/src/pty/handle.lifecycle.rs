@@ -7,7 +7,7 @@ use crate::terminal_policy::probe::{ProbeSource, ProcessProbe};
 
 /// The replay ring up to the fenced sequence, oldest first, and whether it starts at the first
 /// output chunk (so a rebuild reproduces the whole screen).
-pub type RebuildRing = (Vec<(u64, Vec<u8>)>, bool);
+pub type RebuildRing = (Vec<(u64, OutputBytes)>, bool);
 
 impl PtyHandle {
     /// Writes a query-responder reply in order with client input. Replies are not client input:

@@ -28,14 +28,14 @@ fn spawns_a_shell_and_replays_bounded_output() {
     let output = events
         .iter()
         .filter_map(|event| match event {
-            PtyEvent::Output(bytes) => Some(bytes.as_slice()),
+            PtyEvent::Output(bytes) => Some(&bytes[..]),
             PtyEvent::Exited { .. } => None,
         })
         .flatten()
         .copied()
         .collect::<Vec<_>>();
     let chunk = job.handle.append_output(output).unwrap();
-    assert_eq!(chunk.bytes, b"hello");
+    assert_eq!(&chunk.bytes[..], b"hello");
     assert_eq!(job.handle.replay(0).unwrap().len(), 1);
     job.handle.close(false).unwrap();
     let _ = std::fs::remove_dir_all(root);
@@ -182,7 +182,7 @@ fn pty_wrapper_child_uses_selected_shell_and_workspace_cwd() {
     let output = read_events(job.reader, &job.handle)
         .into_iter()
         .filter_map(|event| match event {
-            PtyEvent::Output(bytes) => Some(bytes),
+            PtyEvent::Output(bytes) => Some(bytes.to_vec()),
             PtyEvent::Exited { .. } => None,
         })
         .flatten()

@@ -83,6 +83,8 @@ pub(crate) struct HostLifecycle {
     /// Bytes held by in-flight snapshot copies (counted in `screen_model_bytes`).
     pub(crate) copy_bytes: AtomicUsize,
     pub(crate) probe: ProcessProbe,
+    /// The last live snapshots, reused while their screen is unchanged (R7).
+    pub(crate) snapshot_cache: Mutex<super::pty_screen_cache::SnapshotCache>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -131,6 +133,7 @@ impl HostLifecycle {
             orphaned_since: Mutex::new(Some(now)),
             copy_bytes: AtomicUsize::new(0),
             probe: ProcessProbe::new(),
+            snapshot_cache: Mutex::new(super::pty_screen_cache::SnapshotCache::default()),
         })
     }
 

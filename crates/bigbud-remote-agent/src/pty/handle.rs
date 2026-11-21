@@ -129,7 +129,8 @@ impl PtyHandle {
     }
 
     #[cfg(unix)]
-    pub fn append_output(&self, bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
+    pub fn append_output(&self, bytes: impl Into<OutputBytes>) -> Result<PtyOutputChunk, PtyError> {
+        let bytes = bytes.into();
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         if state.state == PtyState::Closed {
             return Err(PtyError::Unknown);
@@ -153,7 +154,10 @@ impl PtyHandle {
     }
 
     #[cfg(not(unix))]
-    pub fn append_output(&self, _bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
+    pub fn append_output(
+        &self,
+        _bytes: impl Into<OutputBytes>,
+    ) -> Result<PtyOutputChunk, PtyError> {
         Err(PtyError::Unsupported)
     }
 

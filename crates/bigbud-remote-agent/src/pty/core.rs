@@ -12,12 +12,17 @@ use std::os::fd::AsRawFd;
 
 const MAX_INPUT_BYTES: usize = 64 * 1024;
 pub const MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
-const READ_CHUNK_BYTES: usize = 16 * 1024;
+/// Largest output chunk: one read batch (`reader.rs`) and one `PtyOutput` frame.
+const READ_CHUNK_BYTES: usize = 64 * 1024;
+
+/// One PTY output chunk, shared (not copied) by the replay ring, the screen model's feed
+/// queue and the spool writer's queue (terminal lifecycle R7).
+pub type OutputBytes = Arc<[u8]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PtyOutputChunk {
     pub sequence: u64,
-    pub bytes: Vec<u8>,
+    pub bytes: OutputBytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,7 +135,7 @@ pub struct PtyJob {
 
 #[derive(Debug)]
 pub enum PtyEvent {
-    Output(Vec<u8>),
+    Output(OutputBytes),
     Exited {
         exit_code: Option<i32>,
         signal: Option<i32>,

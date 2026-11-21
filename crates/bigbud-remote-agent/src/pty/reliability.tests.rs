@@ -75,7 +75,7 @@ fn blocked_real_pty_input_does_not_hold_state_or_delay_sibling_and_close() {
     assert!(
         sibling_events
             .iter()
-            .any(|event| matches!(event, PtyEvent::Output(bytes) if bytes == b"sibling"))
+            .any(|event| matches!(event, PtyEvent::Output(bytes) if &bytes[..] == b"sibling"))
     );
     handle.snapshot().unwrap();
     handle.resize(100, 30).unwrap();

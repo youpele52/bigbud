@@ -14,8 +14,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// An encoded 16 KiB `PtyOutput` frame (payload plus id, sequence and framing).
-const FRAME_ROOM: usize = 16 * 1024 + 512;
+/// An encoded 64 KiB `PtyOutput` frame, the reader's largest batch (payload plus id, sequence
+/// and framing).
+const FRAME_ROOM: usize = 64 * 1024 + 512;
 /// One gate check waits at most this long, so the reader keeps polling the child's exit.
 const GATE_WAIT: Duration = Duration::from_millis(50);
 /// A delivery whose room vanished after the gate (another PTY on the same connection) waits
@@ -26,15 +27,22 @@ const STALL: Duration = Duration::from_secs(5);
 pub(super) struct Gate {
     pty_id: String,
     subscribers: Subscribers,
+    /// The PTY's spool backlog also gates reads (R7).
+    lifecycle: Option<Arc<crate::session::PtyLifecycle>>,
     /// Writer address -> (frames written when first seen full, since when).
     stalls: HashMap<usize, (u64, Instant)>,
 }
 
 impl Gate {
-    pub fn new(pty_id: &str, subscribers: &Subscribers) -> Self {
+    pub fn new(
+        pty_id: &str,
+        subscribers: &Subscribers,
+        lifecycle: Option<Arc<crate::session::PtyLifecycle>>,
+    ) -> Self {
         Self {
             pty_id: pty_id.to_owned(),
             subscribers: Arc::clone(subscribers),
+            lifecycle,
             stalls: HashMap::new(),
         }
     }
@@ -53,7 +61,11 @@ impl Gate {
             .collect::<Vec<_>>();
         if blocked.is_empty() {
             self.stalls.clear();
-            return budget::wait_room(FRAME_ROOM, deadline);
+            return budget::wait_room(FRAME_ROOM, deadline)
+                && self
+                    .lifecycle
+                    .as_ref()
+                    .is_none_or(|lifecycle| lifecycle.output_backlog_ready(deadline));
         }
         if blocked.len() < subscriptions.len() {
             let now = Instant::now();

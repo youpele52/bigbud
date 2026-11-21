@@ -23,27 +23,20 @@ pub(super) fn spawn_pty_job(
             .lock()
             .ok()
             .and_then(|mut session| session.pty_lifecycle(&pty_id).ok());
-        let mut gate = backpressure::Gate::new(&pty_id, &subscribers);
+        let mut gate = backpressure::Gate::new(&pty_id, &subscribers, lifecycle.clone());
         let ready = move || gate.ready();
         crate::pty::run_events_gated(job.reader, &job.handle, ready, |event| match event {
             crate::pty::PtyEvent::Output(bytes) => {
-                let response = sessions
+                let recorded = sessions
                     .lock()
                     .ok()
                     .and_then(|mut session| session.record_pty_output(&pty_id, bytes).ok());
-                if let Some(response) = response {
-                    let feed = lifecycle
-                        .as_ref()
-                        .and_then(|lifecycle| match &response.payload {
-                            Some(bigbud_protocol::v1::frame::Payload::PtyOutput(output)) => {
-                                Some((lifecycle, output.sequence, output.bytes.clone()))
-                            }
-                            _ => None,
-                        });
+                if let Some((response, chunk)) = recorded {
                     // Delivery first: the screen feed may wait up to 45 ms for actor space.
                     backpressure::broadcast_paced(&subscribers, &pty_id, &response);
-                    if let Some((lifecycle, sequence, bytes)) = feed {
-                        lifecycle.on_output(sequence, bytes);
+                    drop(response);
+                    if let Some(lifecycle) = &lifecycle {
+                        lifecycle.on_output(chunk.sequence, chunk.bytes);
                     }
                 }
             }

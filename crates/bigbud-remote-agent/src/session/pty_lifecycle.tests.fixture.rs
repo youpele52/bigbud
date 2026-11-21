@@ -143,11 +143,9 @@ impl Host {
             let lifecycle = sessions.lock().unwrap().pty_lifecycle(&pty_id).ok();
             pty::run_events(job.reader, &job.handle, |event| match event {
                 pty::PtyEvent::Output(bytes) => {
-                    let frame = sessions.lock().unwrap().record_pty_output(&pty_id, bytes);
-                    if let (Some(lifecycle), Ok(frame)) = (&lifecycle, frame)
-                        && let Some(v1::frame::Payload::PtyOutput(output)) = frame.payload
-                    {
-                        lifecycle.on_output(output.sequence, output.bytes);
+                    let recorded = sessions.lock().unwrap().record_pty_output(&pty_id, bytes);
+                    if let (Some(lifecycle), Ok((_frame, chunk))) = (&lifecycle, recorded) {
+                        lifecycle.on_output(chunk.sequence, chunk.bytes);
                     }
                 }
                 pty::PtyEvent::Exited { exit_code, signal } => {
@@ -231,7 +229,7 @@ impl Host {
             .replay(0)
             .unwrap()
             .into_iter()
-            .flat_map(|chunk| chunk.bytes)
+            .flat_map(|chunk| chunk.bytes.to_vec())
             .map(char::from)
             .collect()
     }

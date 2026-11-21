@@ -29,7 +29,8 @@ pub enum AppendOutcome {
 pub(super) enum Message {
     Output {
         sequence: u64,
-        bytes: Vec<u8>,
+        /// Shared with the PTY's replay ring and screen feed (R7): queued output is not copied.
+        bytes: Arc<[u8]>,
     },
     Checkpoint {
         through_sequence: u64,
@@ -91,6 +92,11 @@ impl SpoolWriter {
 
     /// Queues one PTY output chunk. Never blocks.
     pub fn append(&self, sequence: u64, bytes: &[u8]) -> AppendOutcome {
+        self.append_shared(sequence, Arc::from(bytes))
+    }
+
+    /// Queues a chunk the caller shares with other consumers (the host's PTY path).
+    pub fn append_shared(&self, sequence: u64, bytes: Arc<[u8]>) -> AppendOutcome {
         if self.shared.degraded.load(Ordering::Acquire) {
             return AppendOutcome::Disabled;
         }
@@ -108,19 +114,13 @@ impl SpoolWriter {
         {
             return self.degrade();
         }
-        self.shared
-            .queued_bytes
-            .fetch_add(bytes.len(), Ordering::AcqRel);
-        let message = Message::Output {
-            sequence,
-            bytes: bytes.to_vec(),
-        };
+        let length = bytes.len();
+        self.shared.queued_bytes.fetch_add(length, Ordering::AcqRel);
+        let message = Message::Output { sequence, bytes };
         match self.sender.try_send(message) {
             Ok(()) => AppendOutcome::Queued,
             Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => {
-                self.shared
-                    .queued_bytes
-                    .fetch_sub(bytes.len(), Ordering::AcqRel);
+                self.shared.queued_bytes.fetch_sub(length, Ordering::AcqRel);
                 self.degrade()
             }
         }
@@ -175,6 +175,11 @@ impl SpoolWriter {
             .elapsed_ms()
             .saturating_sub(self.shared.last_checkpoint_ms.load(Ordering::Acquire));
         self.shared.output_since_checkpoint.load(Ordering::Acquire) && since >= interval
+    }
+
+    /// Output bytes queued for the writer thread (the host gates PTY reads on it, R7).
+    pub fn queued_bytes(&self) -> usize {
+        self.shared.queued_bytes.load(Ordering::Acquire)
     }
 
     pub fn is_degraded(&self) -> bool {

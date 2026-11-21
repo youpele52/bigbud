@@ -142,7 +142,8 @@ pub(crate) type FenceReply = mpsc::SyncSender<Result<ScreenCopy, FenceError>>;
 pub(crate) enum Message {
     Feed {
         sequence: u64,
-        bytes: Vec<u8>,
+        /// Shared with the PTY's replay ring and spool queue (R7): queued output is not copied.
+        bytes: Arc<[u8]>,
     },
     Resize {
         cols: u16,
@@ -151,7 +152,7 @@ pub(crate) enum Message {
     Fence(FenceReply),
     Rebuild {
         ticket: u64,
-        ring: Vec<(u64, Vec<u8>)>,
+        ring: Vec<(u64, Arc<[u8]>)>,
         starts_clean: bool,
     },
     #[cfg(test)]
@@ -168,7 +169,7 @@ impl Message {
 }
 
 pub(crate) enum Buffered {
-    Feed(u64, Vec<u8>),
+    Feed(u64, Arc<[u8]>),
     Resize(u16, u16),
 }
 

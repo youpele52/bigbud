@@ -148,7 +148,7 @@ fn rebuild(
     applied: &mut u64,
     events: &mut Events,
     ticket: u64,
-    ring: &[(u64, Vec<u8>)],
+    ring: &[(u64, std::sync::Arc<[u8]>)],
     starts_clean: bool,
 ) {
     let through = {

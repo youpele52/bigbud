@@ -73,6 +73,15 @@ impl HostLifecycle {
         self.enforce_orphan(&ptys, &policy, now, &mut closed);
         for pty in &ptys {
             pty.try_rebuild();
+        }
+        // At most one spool checkpoint per tick, least recently checkpointed first, and only
+        // once output paused (or a while has passed): each checkpoint clones the whole model,
+        // and clones taken mid-flood were the host's main source of heap fragmentation (R7).
+        let due = ptys
+            .iter()
+            .filter(|pty| pty.checkpoint_due(now))
+            .min_by_key(|pty| pty.lock().last_checkpoint_ms);
+        if let Some(pty) = due {
             pty.checkpoint(false, Instant::now() + CHECKPOINT_FENCE);
         }
         closed
