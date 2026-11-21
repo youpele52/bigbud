@@ -15,6 +15,7 @@ import { RemoteAgentPtyInventory } from "../remote-agent/remoteAgentPtyInventory
 import { makeRemoteAgentHostControls } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
 import { requestRemoteAgentScreenSnapshot } from "../remote-agent/remoteAgentPtyClient.screen.ts";
 import type {
+  OwnedPtyHostGenerationReplay,
   OwnedPtyHostGenerations,
   OwnedPtyHostInventoryEntry,
 } from "../terminal/Services/OwnedPtyRuntime.ts";
@@ -117,6 +118,49 @@ export function makeLocalTerminalHostGenerations(input: {
       return requestRemoteAgentScreenSnapshot(await connect(binding), ptyId, request);
     },
     drainingNotices: () => controller.notices(),
+    replayNotices: async (signal) => {
+      const results: OwnedPtyHostGenerationReplay[] = [];
+      for (const { generation, binding } of await controller.attachedBindings()) {
+        try {
+          const cursor = await controller.readNoticeCursor(generation);
+          const sameEpoch = cursor?.epoch === binding.expectedEpoch;
+          const after = sameEpoch ? cursor.noticeId : 0;
+          const replay = await controls(binding).replayNotices(
+            { expectedEpoch: binding.expectedEpoch, afterNoticeId: after },
+            signal,
+          );
+          // A host on another epoch numbers notices afresh; its ids never compare with ours.
+          const epochChanged = replay.agentEpoch !== binding.expectedEpoch;
+          const notices = epochChanged
+            ? []
+            : replay.notices.filter((notice) => notice.noticeId > after);
+          const lastNoticeId = notices.reduce(
+            (newest, notice) => Math.max(newest, notice.noticeId),
+            epochChanged ? 0 : after,
+          );
+          if (!sameEpoch || lastNoticeId !== after || epochChanged)
+            await controller.writeNoticeCursor(generation, {
+              epoch: replay.agentEpoch,
+              noticeId: lastNoticeId,
+            });
+          results.push({
+            generation,
+            agentEpoch: replay.agentEpoch,
+            notices,
+            gap: replay.gap,
+            baseline: cursor === undefined,
+            lastNoticeId,
+          });
+        } catch (cause) {
+          // An old host (no terminal.lifecycle) or a refused replay: nothing to summarize.
+          input.log?.("A terminal host generation's notice replay is unavailable.", {
+            generation,
+            cause: String(cause),
+          });
+        }
+      }
+      return results;
+    },
     closeDrainingHosts: async () => {
       let closed = 0;
       let remaining = 0;

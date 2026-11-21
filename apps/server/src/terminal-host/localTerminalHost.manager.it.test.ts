@@ -10,20 +10,18 @@ import { join } from "node:path";
 import type { TerminalEvent } from "@bigbud/contracts";
 import type { TerminalScreenItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import { Effect, Option, type Scope } from "effect";
-import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeRemoteAgentRuntimeBindings } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
-import OwnersMigration from "../persistence/Migrations/111_RemoteAgentRuntimeBindings.ts";
-import ReplayMigration from "../persistence/Migrations/112_RemoteAgentReplayFence.ts";
-import * as NodeSqlite from "../persistence/NodeSqliteClient.ts";
 import type { RemoteAgentOwnerStore } from "../remote-agent/remoteAgentOwners.ts";
 import { TerminalViewRegistry } from "../terminal/activity/terminalViewRegistry.ts";
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager.process.ts";
 import type { TerminalManagerOptions } from "../terminal/Layers/Manager.types.ts";
 import type { PtyAdapterShape } from "../terminal/Services/PTY.ts";
 import { makeLocalTerminalHostPtyAdapter } from "./localTerminalHost.adapter.ts";
-import { realLocalTerminalHostController } from "./localTerminalHost.parity.testUtils.ts";
+import {
+  makeTerminalHostOwnerStore,
+  realLocalTerminalHostController,
+} from "./localTerminalHost.parity.testUtils.ts";
 import { localTerminalHostPaths } from "./localTerminalHost.paths.ts";
 import { makeLocalTerminalHostProcesses } from "./localTerminalHost.process.ts";
 import { makeLocalTerminalHostRegistry } from "./localTerminalHost.registry.ts";
@@ -41,10 +39,9 @@ const noFallback: PtyAdapterShape = {
 };
 
 async function ownerStore(stateDir: string) {
-  const runtime = ManagedRuntime.make(NodeSqlite.layer({ filename: join(stateDir, "owners.db") }));
-  cleanups.push(() => runtime.dispose());
-  await runtime.runPromise(Effect.andThen(OwnersMigration, ReplayMigration));
-  return (await runtime.runPromise(makeRemoteAgentRuntimeBindings)) as RemoteAgentOwnerStore;
+  const owners = await makeTerminalHostOwnerStore(stateDir);
+  cleanups.push(owners.dispose);
+  return owners.store;
 }
 
 function backend(stateDir: string, owners: RemoteAgentOwnerStore) {
@@ -154,6 +151,9 @@ describe.skipIf(!enabled)("S3 manager integration with the real binary", () => {
     // longer running in the host's inventory. (Known host issue, reported to the Rust owners:
     // `close(terminate = true)` sends one SIGTERM, which an interactive shell ignores, so the
     // shell process itself can outlive the close. Not asserted here until the host escalates.)
+    // The notice cursor survives adoption, so the next launch summarizes only unseen closes.
+    const records = await makeLocalTerminalHostRegistry(root.paths).read();
+    expect(records[0]?.noticeCursor?.epoch).toEqual(expect.any(String));
     const inventory = await second.runtime.hostGenerations!.inventory();
     const entry = inventory.find((candidate) => candidate.state !== "running");
     expect(inventory.filter((candidate) => candidate.state === "running")).toEqual([]);

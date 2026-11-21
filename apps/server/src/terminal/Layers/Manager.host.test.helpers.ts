@@ -7,6 +7,7 @@ import type { RemoteAgentHostPolicy } from "../../remote-agent/remoteAgentProtoc
 import { TerminalViewRegistry } from "../activity/terminalViewRegistry.ts";
 import type {
   OwnedPtyDrainingHostNotice,
+  OwnedPtyHostGenerationReplay,
   OwnedPtyHostGenerations,
   OwnedPtyHostInventoryEntry,
   OwnedPtyRuntime,
@@ -159,6 +160,15 @@ export class FakeHostGenerations implements OwnedPtyHostGenerations {
     return this.cold;
   };
   drainingNotices = () => this.notices;
+  /** Returned by the next replay only (the cursor then moves past them). */
+  pendingReplays: OwnedPtyHostGenerationReplay[] = [];
+  replayCalls = 0;
+  replayNotices = async () => {
+    this.replayCalls += 1;
+    const replays = this.pendingReplays;
+    this.pendingReplays = [];
+    return replays;
+  };
   closeDrainingHosts = async () => {
     const closed = this.notices.filter((notice) => notice.canClose).length;
     const remaining = this.notices.length - closed;

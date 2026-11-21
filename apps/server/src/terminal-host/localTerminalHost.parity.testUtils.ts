@@ -1,8 +1,15 @@
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import { readFile } from "node:fs/promises";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Layer } from "effect";
 
+import { makeRemoteAgentRuntimeBindings } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
+import OwnersMigration from "../persistence/Migrations/111_RemoteAgentRuntimeBindings.ts";
+import ReplayMigration from "../persistence/Migrations/112_RemoteAgentReplayFence.ts";
+import * as NodeSqlite from "../persistence/NodeSqliteClient.ts";
+import type { RemoteAgentOwnerStore } from "../remote-agent/remoteAgentOwners.ts";
 import { layer as nodePtyLayer } from "../terminal/Layers/NodePTY.ts";
 import { createTerminalSpawnEnv } from "../terminal/Layers/Manager.shell.ts";
 import { withInteractiveTerminalIdentity } from "../terminal/Layers/Manager.shell.identity.ts";
@@ -170,4 +177,12 @@ export async function runCommand(
 
 export async function readEnvFile(path: string): Promise<Record<string, string>> {
   return parseEnvZero(await readFile(path, "utf8"));
+}
+
+/** The real SQLite owner store under `<stateDir>/owners.db`; call `dispose` when done. */
+export async function makeTerminalHostOwnerStore(stateDir: string) {
+  const runtime = ManagedRuntime.make(NodeSqlite.layer({ filename: join(stateDir, "owners.db") }));
+  await runtime.runPromise(Effect.andThen(OwnersMigration, ReplayMigration));
+  const store = (await runtime.runPromise(makeRemoteAgentRuntimeBindings)) as RemoteAgentOwnerStore;
+  return { store, dispose: () => runtime.dispose() };
 }

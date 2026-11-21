@@ -13,7 +13,7 @@ import * as Effect from "effect/Effect";
 import type { TerminalViewRegistry } from "../activity/terminalViewRegistry.ts";
 import type { OwnedPtyHostEvent, OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
 import type { TerminalHostHub } from "./Manager.host.types.ts";
-import { legacyTerminalHostNotice } from "./Manager.hostInventory.ts";
+import { legacyTerminalHostNotice, offlineClosedNotice } from "./Manager.hostInventory.ts";
 import {
   applyTerminalHostNotice,
   terminalLifecycleNoticeFromHost,
@@ -30,6 +30,10 @@ import type { TerminalSessionState } from "./Manager.types.ts";
 
 const INVENTORY_REFRESH_DELAY_MS = 250;
 const MAX_STICKY_NOTICES = 16;
+/** Roster, notice cursor and reconnect check while a host is admitted. */
+export const TERMINAL_HOST_TICK_MS = 30_000;
+/** Startup notices reach renderers that connect a little after the backend, then retire. */
+const STICKY_NOTICE_TTL_MS = 120_000;
 
 export interface TerminalHostHubDeps {
   readonly runtime: () => OwnedPtyRuntime | undefined;
@@ -58,7 +62,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   const inventoryListeners = new Set<
     (inventory: TerminalSessionInventory) => Effect.Effect<void>
   >();
-  let sticky: TerminalLifecycleNotice[] = [];
+  let sticky: Array<TerminalLifecycleNotice & { readonly expiresAt?: number }> = [];
   const renderers = new TerminalRendererRegistry();
   const roster = new TerminalHostRoster(deps.runtime, deps.log);
   const policy = new TerminalHostPolicyPusher(deps.runtime, deps.keepRunningAfterQuit, deps.log);
@@ -67,6 +71,9 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   let hostEventsKey: string | undefined;
   let unsubscribeHostEvents: (() => void) | undefined;
   let unsubscribeSettings: (() => void) | undefined;
+  let tickTimer: ReturnType<typeof setInterval> | undefined;
+  let tickKey: string | undefined;
+  let ticking = false;
   let disposed = false;
 
   const publishNotice = (notice: TerminalLifecycleNotice) =>
@@ -167,15 +174,61 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
     void ensureHostEvents();
   };
 
+  const remember = (notice: TerminalLifecycleNotice, expiresAt?: number) => {
+    if (sticky.some((entry) => entry.noticeId === notice.noticeId)) return false;
+    sticky = [...sticky, { ...notice, ...(expiresAt ? { expiresAt } : {}) }].slice(
+      -MAX_STICKY_NOTICES,
+    );
+    return true;
+  };
+
+  const refreshRoster = async () => {
+    const before = JSON.stringify(roster.entries());
+    await roster.refresh();
+    if (JSON.stringify(roster.entries()) !== before) refreshInventory();
+  };
+
+  /** Keeps the roster and notice cursors current; a new admitted host is a reconnect. */
+  const tick = async () => {
+    const generations = deps.runtime()?.hostGenerations;
+    if (!generations || ticking || disposed) return;
+    ticking = true;
+    try {
+      const key = await generations.admittedKey().catch(() => undefined);
+      if (!key) return;
+      if (key !== tickKey) {
+        tickKey = key;
+        ensureHost();
+      }
+      await refreshRoster();
+      // Advancing the cursors here means only notices from while no backend ran stay unseen.
+      await generations.replayNotices().catch(() => []);
+    } finally {
+      ticking = false;
+    }
+  };
+
+  const raiseOfflineSummary = async () => {
+    const generations = deps.runtime()?.hostGenerations;
+    if (!generations) return;
+    const replays = await generations.replayNotices().catch(() => []);
+    for (const replay of replays)
+      if (replay.gap)
+        deps.log("terminal host notices were evicted before replay; the summary is partial", {
+          generation: replay.generation,
+        });
+    const notice = offlineClosedNotice(replays, new Date().toISOString());
+    if (notice && remember(notice, Date.now() + STICKY_NOTICE_TTL_MS))
+      deps.runFork(publishNotice(notice));
+  };
+
   const raiseLegacyNotices = () => {
     const generations = deps.runtime()?.hostGenerations;
     if (!generations) return;
     const createdAt = new Date().toISOString();
     for (const notice of generations.drainingNotices().filter((entry) => entry.firstTime)) {
       const item = legacyTerminalHostNotice(notice, createdAt);
-      if (sticky.some((entry) => entry.noticeId === item.noticeId)) continue;
-      sticky = [...sticky, item].slice(-MAX_STICKY_NOTICES);
-      deps.runFork(publishNotice(item));
+      if (remember(item)) deps.runFork(publishNotice(item));
     }
   };
 
@@ -187,8 +240,10 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
     subscribeLifecycle: (listener) =>
       Effect.gen(function* () {
         lifecycleListeners.add(listener);
-        // The one-time old-host toast reaches renderers that subscribe after adoption, too.
-        for (const notice of sticky)
+        // One-time startup toasts reach renderers that subscribe after adoption, too.
+        const now = Date.now();
+        sticky = sticky.filter((entry) => entry.expiresAt === undefined || entry.expiresAt > now);
+        for (const { expiresAt: _expiresAt, ...notice } of sticky)
           yield* listener(notice).pipe(Effect.ignoreCause({ log: true }));
         return () => {
           lifecycleListeners.delete(listener);
@@ -210,8 +265,17 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       await roster.ready();
       refreshInventory();
       raiseLegacyNotices();
+      await raiseOfflineSummary();
       ensureHost();
       unsubscribeSettings ??= deps.onSettingsChange?.(ensureHost);
+      tickKey = await deps
+        .runtime()
+        ?.hostGenerations?.admittedKey()
+        .catch(() => undefined);
+      if (!disposed && !tickTimer) {
+        tickTimer = setInterval(() => void tick(), TERMINAL_HOST_TICK_MS);
+        tickTimer.unref?.();
+      }
     },
     closeDrainingHosts: async () => {
       const generations = deps.runtime()?.hostGenerations;
@@ -227,6 +291,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       disposed = true;
       if (refreshTimer) clearTimeout(refreshTimer);
       if (expiryTimer) clearTimeout(expiryTimer);
+      if (tickTimer) clearInterval(tickTimer);
       unsubscribeViews();
       unsubscribeHostEvents?.();
       unsubscribeSettings?.();

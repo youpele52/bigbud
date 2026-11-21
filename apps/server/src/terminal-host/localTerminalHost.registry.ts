@@ -25,6 +25,11 @@ export const LocalTerminalHostRecordSchema = Schema.Struct({
   launchedAt: Schema.Number,
   /** The one-time amber "Close them" notice was already raised for this generation. */
   drainingNoticeRaised: Schema.optional(Schema.Boolean),
+  /**
+   * The newest lifecycle notice a backend has seen from this generation, in its agent epoch.
+   * Replays after it are what happened while no backend watched (plan §11.3 offline summary).
+   */
+  noticeCursor: Schema.optional(Schema.Struct({ epoch: Schema.String, noticeId: Schema.Number })),
 });
 export type LocalTerminalHostRecord = typeof LocalTerminalHostRecordSchema.Type;
 

@@ -35,6 +35,8 @@ function setup(input: { owner?: Partial<RemoteAgentOwner>; admitted?: boolean } 
     currentAdmittedBinding: async () => undefined,
     knownRuntimes: async () => [],
     attachedBindings: async () => [],
+    readNoticeCursor: async () => undefined,
+    writeNoticeCursor: async () => {},
     proxyBinary: async () => "/staged/agent",
     notices: () => [],
     closeDrainingHost: async () => {},

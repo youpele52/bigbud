@@ -37,6 +37,19 @@ export interface OwnedPtyHostInventoryEntry {
   readonly lifecycleManaged: boolean;
 }
 
+/** One generation's notices after its persisted cursor; the cursor has moved past them. */
+export interface OwnedPtyHostGenerationReplay {
+  readonly generation: number;
+  readonly agentEpoch: string;
+  readonly notices: ReadonlyArray<RemoteAgentPtyLifecycleNotice>;
+  /** Notices after the cursor were evicted from the host's ring: the list is incomplete. */
+  readonly gap: boolean;
+  /** No cursor existed (first sight of this generation): notices only set the baseline. */
+  readonly baseline: boolean;
+  /** The newest notice id now recorded for this generation. */
+  readonly lastNoticeId: number;
+}
+
 /** A host generation that cannot be reconnected and was left running (plan §7.3 item 5). */
 export interface OwnedPtyDrainingHostNotice {
   readonly generation: number;
@@ -68,6 +81,13 @@ export interface OwnedPtyHostGenerations {
     input: PtyScreenSnapshotInput,
   ) => Promise<PtyScreenSnapshot>;
   readonly drainingNotices: () => ReadonlyArray<OwnedPtyDrainingHostNotice>;
+  /**
+   * Notices each reachable generation emitted after its persisted cursor (`HostNoticeReplay`),
+   * then the cursor is advanced. An epoch change restarts the cursor at 0 in the new epoch.
+   */
+  readonly replayNotices: (
+    signal?: AbortSignal,
+  ) => Promise<ReadonlyArray<OwnedPtyHostGenerationReplay>>;
   /** User-confirmed "Close them": only start-time-verified PIDs are signalled. */
   readonly closeDrainingHosts: () => Promise<{
     readonly closed: number;

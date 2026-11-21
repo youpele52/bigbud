@@ -15,7 +15,10 @@ import {
   localTerminalHostStagedBinaryPath,
   type LocalTerminalHostMode,
 } from "./localTerminalHost.paths.ts";
-import { removeLocalTerminalHostRecord } from "./localTerminalHost.registry.ts";
+import {
+  removeLocalTerminalHostRecord,
+  type LocalTerminalHostRecord,
+} from "./localTerminalHost.registry.ts";
 
 const LAUNCH_RETRY_COOLDOWN_MS = 30_000;
 const CLOSE_WAIT_MS = 3_000;
@@ -41,6 +44,8 @@ export interface LocalTerminalHostControllerDeps extends Omit<
   ) => Promise<void>;
 }
 
+export type LocalTerminalHostNoticeCursor = NonNullable<LocalTerminalHostRecord["noticeCursor"]>;
+
 export interface LocalTerminalHostController {
   readonly mode: LocalTerminalHostMode;
   /** One adoption pass per backend; never launches. */
@@ -60,6 +65,14 @@ export interface LocalTerminalHostController {
   >;
   readonly proxyBinary: () => Promise<string>;
   readonly notices: () => ReadonlyArray<LocalTerminalHostDrainingNotice>;
+  /** The persisted notice cursor of one generation (offline notice replay). */
+  readonly readNoticeCursor: (
+    generation: number,
+  ) => Promise<LocalTerminalHostNoticeCursor | undefined>;
+  readonly writeNoticeCursor: (
+    generation: number,
+    cursor: LocalTerminalHostNoticeCursor,
+  ) => Promise<void>;
   /** User-confirmed "Close them": SIGTERM only a start-time-verified PID. */
   readonly closeDrainingHost: (generation: number) => Promise<void>;
 }
@@ -176,6 +189,15 @@ export function makeLocalTerminalHostController(
     ready,
     proxyBinary,
     notices: () => notices,
+    readNoticeCursor: async (generation) =>
+      (await deps.registry.read()).find((record) => record.generation === generation)?.noticeCursor,
+    writeNoticeCursor: async (generation, cursor) => {
+      await deps.registry.update((records) =>
+        records.map((record) =>
+          record.generation === generation ? { ...record, noticeCursor: cursor } : record,
+        ),
+      );
+    },
     knownRuntimes: async () => {
       await ready().catch(() => undefined);
       return [...attached.values()].map((entry) => entry.binding.runtime);

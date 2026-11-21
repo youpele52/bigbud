@@ -201,6 +201,8 @@ export async function adoptLocalTerminalHosts(
           epoch: hello.agentEpoch,
           ...identity,
           launchedAt: record?.launchedAt ?? now(),
+          // The offline notice replay resumes after the last notice any backend saw.
+          ...(record?.noticeCursor ? { noticeCursor: record.noticeCursor } : {}),
         };
         const capable = supportsLocalTerminalHostCapabilities(hello, deps.requiredCapabilities);
         attached.push({ generation, hello, binding, capable, record: next });

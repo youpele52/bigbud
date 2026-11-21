@@ -1,6 +1,9 @@
 import type { TerminalLifecycleNotice } from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
 
-import type { OwnedPtyDrainingHostNotice } from "../Services/OwnedPtyRuntime.ts";
+import type {
+  OwnedPtyDrainingHostNotice,
+  OwnedPtyHostGenerationReplay,
+} from "../Services/OwnedPtyRuntime.ts";
 import type { TerminalSessionInventoryEntry } from "./Manager.host.types.ts";
 import type { TerminalHostRosterEntry } from "./Manager.hostRoster.ts";
 import { toSessionKey } from "./Manager.shell";
@@ -58,6 +61,40 @@ export function legacyTerminalHostNotice(
     type: "lifecycleNotice",
     noticeId: `legacy-host:${notice.generation}`,
     kind: "legacyHostUnreachable",
+    createdAt,
+  };
+}
+
+/** Closes that happened because a terminal sat unused (idle, or orphaned in default mode). */
+const OFFLINE_CLOSE_KINDS: ReadonlySet<string> = new Set(["idle_closed", "orphan_closed"]);
+
+/**
+ * The single "While bigbud was closed, n terminals were closed" summary (plan §11.3) from the
+ * replay at adoption. A first sight of a generation only sets its baseline. After a ring gap the
+ * count covers the notices the host still had. Its id names the cursors it covers, so a replay
+ * of the same span never raises a second toast.
+ */
+export function offlineClosedNotice(
+  replays: ReadonlyArray<OwnedPtyHostGenerationReplay>,
+  createdAt: string,
+): TerminalLifecycleNotice | undefined {
+  const counted = replays.filter((replay) => !replay.baseline);
+  const count = counted.reduce(
+    (total, replay) =>
+      total + replay.notices.filter((notice) => OFFLINE_CLOSE_KINDS.has(notice.kind)).length,
+    0,
+  );
+  if (count === 0) return undefined;
+  const span = counted
+    .map(
+      (replay) => `${replay.generation}.${replay.agentEpoch.slice(0, 12)}.${replay.lastNoticeId}`,
+    )
+    .join(",");
+  return {
+    type: "lifecycleNotice",
+    noticeId: `offline:${span}`.slice(0, 128),
+    kind: "offlineClosed",
+    count,
     createdAt,
   };
 }

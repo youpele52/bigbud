@@ -1,13 +1,8 @@
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { makeRemoteAgentRuntimeBindings } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
-import OwnersMigration from "../persistence/Migrations/111_RemoteAgentRuntimeBindings.ts";
-import ReplayMigration from "../persistence/Migrations/112_RemoteAgentReplayFence.ts";
-import * as NodeSqlite from "../persistence/NodeSqliteClient.ts";
 import type { RemoteAgentOwnerStore } from "../remote-agent/remoteAgentOwners.ts";
 import type { PtyAdapterShape, PtyProcess, PtySpawnInput } from "../terminal/Services/PTY.ts";
 import { makeLocalTerminalHostPtyAdapter } from "./localTerminalHost.adapter.ts";
@@ -21,6 +16,7 @@ import {
   managerSpawnEnvironment,
   nodePtyAdapter,
   readEnvFile,
+  makeTerminalHostOwnerStore,
   realLocalTerminalHostController,
   recordPty,
   runCommand,
@@ -54,10 +50,9 @@ function backend(stateDir: string, owners: RemoteAgentOwnerStore) {
 }
 
 async function ownerStore(stateDir: string) {
-  const runtime = ManagedRuntime.make(NodeSqlite.layer({ filename: join(stateDir, "owners.db") }));
-  cleanups.push(() => runtime.dispose());
-  await runtime.runPromise(Effect.andThen(OwnersMigration, ReplayMigration));
-  return (await runtime.runPromise(makeRemoteAgentRuntimeBindings)) as RemoteAgentOwnerStore;
+  const owners = await makeTerminalHostOwnerStore(stateDir);
+  cleanups.push(owners.dispose);
+  return owners.store;
 }
 
 async function stateRoot() {
