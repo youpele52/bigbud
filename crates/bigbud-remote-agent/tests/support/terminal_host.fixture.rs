@@ -117,9 +117,18 @@ impl Client {
         let mut reader = stream.try_clone().unwrap();
         let (sender, frames) = mpsc::channel();
         std::thread::spawn(move || {
-            while let Ok(Some(frame)) = read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
-                if sender.send(frame).is_err() {
-                    return;
+            loop {
+                match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
+                    Ok(Some(frame)) => {
+                        if sender.send(frame).is_err() {
+                            return;
+                        }
+                    }
+                    Ok(None) => return,
+                    Err(error) => {
+                        eprintln!("terminal host client read failed: {error}");
+                        return;
+                    }
                 }
             }
         });

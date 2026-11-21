@@ -9,6 +9,9 @@ use std::time::{Duration, Instant};
 
 const BYTE_LIMIT: usize = 256 * 1024;
 const ITEM_LIMIT: usize = 256;
+/// A frame whose write makes no progress this long means the peer is gone or hung. A peer that
+/// merely reads slowly, or pauses, keeps its connection: PTY output is throttled instead.
+const STALLED_PEER: Duration = Duration::from_secs(60);
 static CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
 static CONTROL_CONNECTIONS: AtomicUsize = AtomicUsize::new(0);
 struct ConnectionPermit(&'static AtomicUsize);
@@ -20,6 +23,8 @@ impl Drop for ConnectionPermit {
 #[path = "writer.budget.rs"]
 pub(super) mod budget;
 use budget::EncodedFrame;
+#[path = "writer.backpressure.rs"]
+mod backpressure;
 #[path = "writer.lifecycle.rs"]
 mod lifecycle;
 #[path = "writer.snapshot.rs"]
@@ -37,6 +42,8 @@ struct Shared {
     changed: Condvar,
     closed: AtomicBool,
     socket: UnixStream,
+    /// Frames fully written so far; PTY backpressure uses it to tell a slow peer from a stuck one.
+    written: std::sync::atomic::AtomicU64,
 }
 
 /// A socket has one FIFO writer; producers only perform bounded, nonblocking admission.
@@ -84,6 +91,7 @@ impl OutboundWriter {
                 changed: Condvar::new(),
                 closed: AtomicBool::new(false),
                 socket: stream.try_clone()?,
+                written: std::sync::atomic::AtomicU64::new(0),
             });
             let state = Arc::clone(&shared);
             let worker = std::thread::Builder::new()
@@ -241,7 +249,7 @@ fn run(shared: &Shared, stream: &mut UnixStream) {
         let Some((frame, streaming)) = frame else {
             continue;
         };
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut deadline = Instant::now() + STALLED_PEER;
         let mut offset = 0;
         while offset < frame.len()
             && !shared.closed.load(Ordering::Acquire)
@@ -252,7 +260,10 @@ fn run(shared: &Shared, stream: &mut UnixStream) {
             };
             match stream.write(bytes) {
                 Ok(0) => break,
-                Ok(count) => offset += count,
+                Ok(count) => {
+                    offset += count;
+                    deadline = Instant::now() + STALLED_PEER;
+                }
                 Err(error)
                     if matches!(
                         error.kind(),
@@ -265,6 +276,9 @@ fn run(shared: &Shared, stream: &mut UnixStream) {
                 }
                 Err(_) => break,
             }
+        }
+        if offset == frame.len() {
+            shared.written.fetch_add(1, Ordering::AcqRel);
         }
         if let Ok(mut queue) = shared.queue.lock() {
             queue.bytes -= frame.len();

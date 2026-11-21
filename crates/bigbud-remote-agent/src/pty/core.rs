@@ -5,8 +5,6 @@ use std::sync::Arc;
 #[cfg(unix)]
 use std::collections::VecDeque;
 #[cfg(unix)]
-use std::io::Read;
-#[cfg(unix)]
 use std::sync::Mutex;
 
 #[cfg(unix)]
@@ -170,6 +168,11 @@ pub use input::{InputOutcome, InputReceipt};
 #[cfg(unix)]
 #[path = "environment.rs"]
 mod environment;
+#[cfg(unix)]
+#[path = "reader.rs"]
+mod reader;
+#[cfg(unix)]
+pub use reader::{run_events, run_events_gated};
 
 #[cfg(all(test, unix))]
 #[path = "reliability.tests.rs"]
@@ -177,53 +180,6 @@ mod reliability_tests;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
-
-#[cfg(unix)]
-#[allow(clippy::indexing_slicing)]
-pub fn run_events(
-    mut reader: std::fs::File,
-    handle: &PtyHandle,
-    mut callback: impl FnMut(PtyEvent),
-) {
-    let mut buffer = [0; READ_CHUNK_BYTES];
-    let mut exit = None;
-    while let Ok(result) = handle.inner.child.poll() {
-        exit = result;
-        match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(size) => callback(PtyEvent::Output(buffer[..size].to_vec())),
-            Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                if exit.is_some() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(5));
-            }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(_) => break,
-        }
-    }
-    // EOF can precede actual child exit. This owned worker polls without holding
-    // state locks; restart escalation can still signal the live leader authority.
-    while exit.is_none() {
-        match handle.inner.child.poll() {
-            Ok(result) => exit = result,
-            Err(_) => return,
-        }
-        if exit.is_none() {
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-    }
-    if let Some(exit) = exit {
-        if handle.inner.input.shutdown().is_err() {
-            return;
-        }
-        callback(PtyEvent::Exited {
-            exit_code: exit.code,
-            signal: exit.signal,
-        });
-    }
-}
 
 #[cfg(not(unix))]
 pub fn run_events(_reader: (), _pid: u32, _callback: impl FnMut(PtyEvent)) {}

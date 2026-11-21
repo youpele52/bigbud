@@ -84,9 +84,10 @@ impl HostRuntime {
             if owner.is_closed() {
                 continue;
             }
-            if owner.enqueue_terminal(frame).is_err() {
-                // An exhausted window already cancelled that connection; it reconnects and
-                // replays notices through HostNoticeReplay.
+            // A window full of PTY output (backpressure) skips this frame instead of dropping
+            // the owner; notices are replayed through HostNoticeReplay by id.
+            if let Err(error) = owner.try_enqueue_stream(frame) {
+                eprintln!("terminal lifecycle frame not delivered: {error}");
             }
         }
     }

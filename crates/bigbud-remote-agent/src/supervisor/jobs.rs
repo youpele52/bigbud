@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+#[path = "jobs.backpressure.rs"]
+mod backpressure;
 #[path = "jobs.output.rs"]
 mod output;
 
@@ -21,7 +23,9 @@ pub(super) fn spawn_pty_job(
             .lock()
             .ok()
             .and_then(|mut session| session.pty_lifecycle(&pty_id).ok());
-        crate::pty::run_events(job.reader, &job.handle, |event| match event {
+        let mut gate = backpressure::Gate::new(&pty_id, &subscribers);
+        let ready = move || gate.ready();
+        crate::pty::run_events_gated(job.reader, &job.handle, ready, |event| match event {
             crate::pty::PtyEvent::Output(bytes) => {
                 let response = sessions
                     .lock()
@@ -36,8 +40,8 @@ pub(super) fn spawn_pty_job(
                             }
                             _ => None,
                         });
-                    // Delivery first: the screen feed may wait up to 50 ms for actor space.
-                    let _ = broadcast_response(&subscribers, &pty_id, response);
+                    // Delivery first: the screen feed may wait up to 45 ms for actor space.
+                    backpressure::broadcast_paced(&subscribers, &pty_id, &response);
                     if let Some((lifecycle, sequence, bytes)) = feed {
                         lifecycle.on_output(sequence, bytes);
                     }
@@ -52,7 +56,7 @@ pub(super) fn spawn_pty_job(
                     .ok()
                     .and_then(|mut session| session.complete_pty(&pty_id, exit_code, signal).ok());
                 if let Some(response) = response {
-                    let _ = broadcast_response(&subscribers, &pty_id, response);
+                    backpressure::broadcast_paced(&subscribers, &pty_id, &response);
                 }
                 remove_all_subscribers(&subscribers, &pty_id);
             }
