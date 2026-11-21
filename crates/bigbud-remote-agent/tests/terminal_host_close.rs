@@ -149,7 +149,7 @@ fn pty_close_escalates_to_sigkill_and_answers_after_the_reap() {
     eprintln!("stubborn close answered after {took:?}");
     assert!(response.accepted);
     assert!(
-        took >= Duration::from_secs(2),
+        took >= Duration::from_millis(1_500),
         "answered before the SIGKILL escalation"
     );
     assert!(!alive(created.pid));

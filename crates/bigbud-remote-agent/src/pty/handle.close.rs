@@ -12,8 +12,9 @@ use super::*;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-/// Time between SIGHUP/SIGTERM and the SIGKILL escalation.
-pub const CLOSE_GRACE: Duration = Duration::from_secs(2);
+/// Time between SIGHUP/SIGTERM and the SIGKILL escalation. With the 1 s reap wait the worst
+/// case stays under the server's 3 s quit deadline.
+pub const CLOSE_GRACE: Duration = Duration::from_millis(1_500);
 /// After the SIGKILL, how long a reap may take before the outcome is unknown.
 const KILL_SETTLE: Duration = Duration::from_secs(1);
 const POLL: Duration = Duration::from_millis(10);
