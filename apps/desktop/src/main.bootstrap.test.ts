@@ -170,6 +170,7 @@ function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
     logHeader: vi.fn(),
     makeWindow: vi.fn() as never,
     prepareForAppQuit: vi.fn(),
+    runQuitHandshake: vi.fn(async () => undefined),
     registerFloatingAssistantIpc: vi.fn(),
     resolveIconPath: () => null,
     resourcesPath: String.raw`C:\Program Files\bigbud\resources`,

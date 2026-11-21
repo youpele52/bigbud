@@ -27,8 +27,6 @@ import { StateDirLockLive } from "./startup/backendInstance";
 import { withOwnershipShutdown } from "./startup/ownershipShutdown";
 import { prepareProviderServicePath } from "./provider-provisioning/servicePath.runtime.ts";
 import { makeRoutesLayer } from "./server.routes.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
-import { withRemoteExecutionTargetDisconnects } from "./persistence/Layers/RemoteExecutionTargetDisconnects.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
@@ -37,15 +35,7 @@ import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEng
 import { WorkspaceModeGateLive } from "./remote-backend/workspaceMode.gate.ts";
 import { ThreadCoordinationGrantsLive } from "./orchestration-tools/Layers/ThreadCoordinationGrants.ts";
 import { CommandGatewayLive } from "./command-gateway/Layers/CommandGateway.ts";
-import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
-import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
-import { OrchestrationCommandReceiptRepositoryLive } from "./persistence/Layers/OrchestrationCommandReceipts";
-import { OrchestrationBootstrapRecipeRepositoryLive } from "./persistence/Layers/OrchestrationBootstrapRecipes.ts";
-import { AutomationScheduleRepositoryLive } from "./persistence/Layers/AutomationScheduleRepository";
 import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
-import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers/ProjectionSnapshotQuery";
-import { ProjectionCatalogQueryLive } from "./orchestration/Layers/ProjectionCatalogQuery";
-import { ProjectionOperationalStateQueryLive } from "./orchestration/Layers/ProjectionOperationalStateQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
 import { makeGitLayerLive } from "./git/Layers/GitComposition.ts";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
@@ -55,17 +45,6 @@ import { ShellLaunchPlannerLive } from "./terminal/Layers/ShellLaunchPlanner.ts"
 import { PtyAdapter } from "./terminal/Services/PTY";
 import { KeybindingsLive } from "./keybindings/keybindings";
 import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
-import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor";
-import {
-  DefaultSchedulerConfigLive,
-  SchedulerReactorLive,
-} from "./orchestration/Layers/SchedulerReactor";
-import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus";
-import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
-import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
-import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
-import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
-import { ThreadOrganizationReactorLive } from "./orchestration/Layers/ThreadOrganizationReactor.ts";
 import { ThreadToolModelSourcesLive } from "./orchestration-tools/ThreadOrchestrationTools.modelSources.ts";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import { ServerSettingsLive } from "./ws/serverSettings";
@@ -76,17 +55,6 @@ import { RemoteAgentLocalControlLive } from "./remote-agent/remoteAgentLocalCont
 import { RemoteBackendDeploymentLive } from "./remote-backend/Layers/RemoteBackendDeployment.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
-import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
-import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
-import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
-import { ProjectionProjectRepositoryLive } from "./persistence/Layers/ProjectionProjects.ts";
-import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/ProjectionThreadWatches";
-import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
-import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
-import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
-import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
-import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
-import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.ts";
 import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
@@ -98,6 +66,14 @@ import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/Direct
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
 import * as Recovery from "./server.recoveryLayers.ts";
+import {
+  OrchestrationInfrastructureLayerLive,
+  OrchestrationProjectionPipelineLayerLive,
+  PersistenceLayerLive,
+  ProjectionPersistenceLayerLive,
+  ReactorLayerLive,
+} from "./server.coreLayers.ts";
+import { AppQuitIntentLive } from "./lifecycle/AppQuitIntent.ts";
 import { ProcessLedgerLive } from "./process-ledger/Layers/ProcessLedger.ts";
 import { makeProviderInfrastructureLayerLive } from "./server.providerLayers.ts";
 import { BackgroundMaintenanceLayerLive } from "./server.maintenanceLayers.ts";
@@ -113,47 +89,6 @@ import {
 import { RemoteTerminalAvailabilityLive } from "./remote-backend/terminalAvailability.ts";
 import { PtyAdapterLive } from "./server.pty.ts";
 import { TerminalActivityLive } from "./terminal/Layers/TerminalActivity.ts";
-
-const ReactorLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(
-    OrchestrationReactorLive.pipe(
-      Layer.provide(LearningReactorLive),
-      Layer.provide(ThreadOrganizationReactorLive),
-    ),
-  ),
-  Layer.provideMerge(ProviderRuntimeIngestionLive),
-  Layer.provideMerge(Recovery.ProviderTurnSupervisorLive),
-  Layer.provideMerge(ProviderCommandReactorLive),
-  Layer.provideMerge(CheckpointReactorLive),
-  Layer.provideMerge(SchedulerReactorLive),
-  Layer.provideMerge(ThreadWatchReactorLive),
-  Layer.provideMerge(RuntimeReceiptBusLive),
-  Layer.provideMerge(DefaultSchedulerConfigLive),
-);
-
-const OrchestrationEventInfrastructureLayerLive = Layer.mergeAll(
-  OrchestrationEventStoreLive,
-  OrchestrationCommandReceiptRepositoryLive,
-  OrchestrationBootstrapRecipeRepositoryLive,
-);
-
-const AutomationInfrastructureLayerLive = AutomationScheduleRepositoryLive;
-
-const OrchestrationProjectionPipelineLayerLive = OrchestrationProjectionPipelineLive.pipe(
-  Layer.provide(OrchestrationEventStoreLive),
-);
-
-const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
-  OrchestrationProjectionSnapshotQueryLive,
-  ProjectionCatalogQueryLive,
-  ProjectionOperationalStateQueryLive,
-  OrchestrationEventInfrastructureLayerLive,
-  AutomationInfrastructureLayerLive,
-  OrchestrationProjectionPipelineLayerLive,
-  ThreadRetentionRepositoryLive,
-  PurgeJobRepositoryLive,
-  Recovery.RecoveryPersistenceLayerLive,
-);
 
 const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
 const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
@@ -219,25 +154,6 @@ const ProviderInfrastructureLayerLive = makeProviderInfrastructureLayerLive(
   configuredRemoteAgentLayers,
 );
 
-// Disconnect flags load before any SqlClient consumer, including remote-agent startup work.
-const PersistenceLayerLive = withRemoteExecutionTargetDisconnects(SqlitePersistenceLayerLive);
-
-const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
-const KanbanPersistenceLayerLive = ProjectionKanbanRepositoryLive;
-const ThreadProjectionPersistenceLayerLive = Layer.mergeAll(
-  ProjectionThreadRepositoryLive,
-  ProjectionProjectRepositoryLive,
-);
-const ProjectionPersistenceLayerLive = Layer.mergeAll(
-  KanbanPersistenceLayerLive,
-  NotesPersistenceLayerLive,
-  ThreadProjectionPersistenceLayerLive,
-  ProjectionThreadWatchRepositoryLive,
-  LearningJobRepositoryLive,
-  SkillChangeProposalRepositoryLive,
-  MemoryStoreLive,
-);
-
 const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
 const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
   Layer.provideMerge(DirectResourceCleanupExecutorLive),
@@ -283,8 +199,13 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   ),
   // One sleep epoch view shared by every evidence source and the recovery coordinator.
   // The process ledger sits below every layer that spawns provider children; it reaps a dead
-  // backend's orphans in the background at startup.
-).pipe(Layer.provideMerge(Recovery.SystemSleepEpochsLive), Layer.provideMerge(ProcessLedgerLive));
+  // backend's orphans in the background at startup. The desktop quit intent sits below the
+  // fd 5 reader that records it and the terminal shutdown path that reads it.
+).pipe(
+  Layer.provideMerge(Recovery.SystemSleepEpochsLive),
+  Layer.provideMerge(AppQuitIntentLive),
+  Layer.provideMerge(ProcessLedgerLive),
+);
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),

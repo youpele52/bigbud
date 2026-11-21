@@ -1,5 +1,6 @@
 import type { Readable } from "node:stream";
 
+import { acknowledgeBackendLifecycleHint } from "./backendLifecycleHintPipe";
 import { recordBackendStartupProgress, recordBackendStartupStatus } from "./backendStartupState";
 import type { DesktopBackendStartupFailureReason } from "@bigbud/contracts/server/ipc.desktop.ts";
 
@@ -12,6 +13,23 @@ const failureReasons = new Set<DesktopBackendStartupFailureReason>([
   "server_runtime_startup_failed",
   "unknown",
 ]);
+
+/**
+ * Key of the server's `DesktopLifecycleHintAck` record on this pipe:
+ * `{"lifecycleHintAck":{"sequence":7}}`. Must equal the server's
+ * `DESKTOP_LIFECYCLE_HINT_ACK_RECORD_KEY`.
+ */
+export const LIFECYCLE_HINT_ACK_RECORD_KEY = "lifecycleHintAck";
+
+/** The acked sequence of an ack record, or null when the record is not a valid ack. */
+export function readLifecycleHintAckSequence(record: object): number | null {
+  const ack: unknown = (record as Record<string, unknown>)[LIFECYCLE_HINT_ACK_RECORD_KEY];
+  if (typeof ack !== "object" || ack === null) return null;
+  const { sequence } = ack as { sequence?: unknown };
+  return typeof sequence === "number" && Number.isInteger(sequence) && sequence >= 0
+    ? sequence
+    : null;
+}
 
 function isFailureReason(value: unknown): value is DesktopBackendStartupFailureReason {
   return (
@@ -59,7 +77,15 @@ export function listenForBackendStartupStatus(
 
       try {
         const payload: unknown = JSON.parse(buffered);
-        if (typeof payload === "object" && payload !== null) {
+        if (
+          typeof payload === "object" &&
+          payload !== null &&
+          LIFECYCLE_HINT_ACK_RECORD_KEY in payload
+        ) {
+          const sequence = readLifecycleHintAckSequence(payload);
+          if (sequence === null) onInvalidRecord?.("malformed lifecycle hint ack");
+          else acknowledgeBackendLifecycleHint(sequence);
+        } else if (typeof payload === "object" && payload !== null) {
           const { progress, reason, status } = payload as {
             progress?: unknown;
             reason?: unknown;

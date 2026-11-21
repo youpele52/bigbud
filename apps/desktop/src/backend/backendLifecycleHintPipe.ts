@@ -3,6 +3,8 @@ import * as FS from "node:fs";
 import type {
   DesktopLifecycleHint,
   DesktopLifecycleHintKind,
+  DesktopQuitHint,
+  DesktopQuitReason,
 } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
 /**
@@ -54,26 +56,37 @@ function nativeFd(stream: LifecycleHintStream): number | null {
  * Writes newline-delimited lifecycle hints for one backend lifetime. The pipe is
  * opened at spawn and owned by Electron main only, so a renderer cannot forge a
  * hint. Sequence numbers restart with each backend.
+ *
+ * A `quit` line shares the sequence counter. The server acknowledges it with a
+ * `DesktopLifecycleHintAck` on the fd 4 status pipe, which `acknowledge` resolves.
  */
 export class BackendLifecycleHintPipe {
   private sequence = 0;
   private closed = false;
+  /** The latest known `net.isOnline()` result, repeated on quit lines. */
+  private online: boolean | null = null;
+  private ackedThrough = 0;
+  private readonly ackWaiters = new Set<{
+    readonly sequence: number;
+    readonly settle: (acked: boolean) => void;
+  }>();
 
   constructor(
     private readonly stream: LifecycleHintStream,
     private readonly deps: LifecycleHintPipeDeps,
   ) {
     stream.on("error", (error) => {
-      this.closed = true;
+      this.close();
       deps.log("hint_fd5_error", `error=${error instanceof Error ? error.message : String(error)}`);
     });
     stream.on("close", () => {
-      this.closed = true;
+      this.close();
     });
   }
 
   write(hint: Omit<DesktopLifecycleHint, "sequence">): boolean {
     if (this.closed || this.stream.destroyed) return false;
+    if (hint.online !== null) this.online = hint.online;
     this.sequence += 1;
     const line = `${JSON.stringify({ ...hint, sequence: this.sequence })}\n`;
     // logind releases its sleep delay lock as soon as the suspend handler
@@ -82,6 +95,55 @@ export class BackendLifecycleHintPipe {
       return true;
     }
     return this.queue(line);
+  }
+
+  /** Writes a quit line and returns its sequence, or null when the pipe is closed. */
+  writeQuit(reason: DesktopQuitReason, occurredAt: number = Date.now()): number | null {
+    if (this.closed || this.stream.destroyed) return null;
+    this.sequence += 1;
+    const hint: DesktopQuitHint = {
+      kind: "quit",
+      sequence: this.sequence,
+      occurredAt,
+      online: this.online,
+      reason,
+    };
+    return this.queue(`${JSON.stringify(hint)}\n`) ? hint.sequence : null;
+  }
+
+  /** Records the server's ack; every waiter at or below `sequence` resolves true. */
+  acknowledge(sequence: number): void {
+    if (sequence <= this.ackedThrough) return;
+    this.ackedThrough = sequence;
+    for (const waiter of this.ackWaiters) {
+      if (waiter.sequence <= sequence) waiter.settle(true);
+    }
+  }
+
+  /**
+   * Resolves true once the server acked `sequence`, or false after `timeoutMs` or when the
+   * backend's pipe closes first. Never rejects.
+   */
+  waitForAck(sequence: number, timeoutMs: number): Promise<boolean> {
+    if (sequence <= this.ackedThrough) return Promise.resolve(true);
+    if (this.closed || this.stream.destroyed) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const waiter = {
+        sequence,
+        settle: (acked: boolean) => {
+          clearTimeout(timer);
+          this.ackWaiters.delete(waiter);
+          resolve(acked);
+        },
+      };
+      const timer = setTimeout(() => waiter.settle(false), timeoutMs);
+      this.ackWaiters.add(waiter);
+    });
+  }
+
+  private close(): void {
+    this.closed = true;
+    for (const waiter of this.ackWaiters) waiter.settle(false);
   }
 
   /** The stream write; a closed or broken pipe (EPIPE) ends this pipe, never the caller. */
@@ -142,4 +204,24 @@ export function detachBackendLifecycleHintPipe(pipe: BackendLifecycleHintPipe): 
 /** Forwards one power or network hint to the running backend, if any. */
 export function writeBackendLifecycleHint(hint: Omit<DesktopLifecycleHint, "sequence">): boolean {
   return activePipe?.write(hint) ?? false;
+}
+
+/** A quit line written to the running backend, with a way to wait for its ack. */
+export interface BackendQuitHint {
+  readonly sequence: number;
+  /** True when the server acked within `timeoutMs`; false on timeout or backend exit. */
+  readonly acknowledged: (timeoutMs: number) => Promise<boolean>;
+}
+
+/** Announces quit intent to the running backend, or returns null when none can hear it. */
+export function writeBackendQuitHint(reason: DesktopQuitReason): BackendQuitHint | null {
+  const pipe = activePipe;
+  const sequence = pipe?.writeQuit(reason) ?? null;
+  if (pipe === null || sequence === null) return null;
+  return { sequence, acknowledged: (timeoutMs) => pipe.waitForAck(sequence, timeoutMs) };
+}
+
+/** Forwards a `DesktopLifecycleHintAck` from the status pipe to the running backend's pipe. */
+export function acknowledgeBackendLifecycleHint(sequence: number): void {
+  activePipe?.acknowledge(sequence);
 }
