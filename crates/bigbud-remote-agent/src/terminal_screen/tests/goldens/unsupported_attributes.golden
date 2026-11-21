@@ -1,0 +1,44 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,7],
+    "cursorHidden": false,
+    "screen": [
+      [["s",1,"default","default",0],["t",1,"default","default",0],["r",1,"default","default",0],["i",1,"default","default",0],["k",1,"default","default",0],["e",1,"default","default",0],["",1,"default","default",0],["o",1,"default","default",0],["k",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["u",1,"default","default",8],["n",1,"default","default",8],["d",1,"default","default",8],["e",1,"default","default",8],["r",1,"default","default",8],["b",1,"default","default",2],["d",1,"default","default",2],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "unsupported_attributes",
+  "geometry": {
+    "cols": 20,
+    "rows": 3,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcstrike ok\r\n\u001b[0;4munder\u001b[0;2mbd\u001b[m\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[2;8H\u001b[?25h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [0,1,2],
+    "exclusions": [
+      {
+        "kind": "unsupported_attributes",
+        "rows": 3
+      }
+    ],
+    "fidelity": "trimmed",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "8471aaf44032cac30d2cb2c9429e83af8364a669714fe65b0e513d837249e3db",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b[9mstrike\u001b[29m ok\r\n\u001b[58;2;255;0;0;4munder\u001b[59;24m\u001b[1;2mbd\u001b[m"
+    }
+  ]
+}

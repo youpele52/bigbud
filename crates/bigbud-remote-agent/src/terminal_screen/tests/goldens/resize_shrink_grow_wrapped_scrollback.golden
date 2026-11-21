@@ -1,0 +1,64 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [4,4],
+    "cursorHidden": false,
+    "screen": [
+      [["l",1,"default","default",0],["3",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["4",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["n",1,"default","default",0],["a",1,"default","default",0],["r",1,"default","default",0],["r",1,"default","default",0],["o",1,"default","default",0],["w",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["a",1,"default","default",0],["f",1,"default","default",0],["t",1,"default","default",0],["e",1,"default","default",0],["r",1,"default","default",0],["",1,"default","default",0],["r",1,"default","default",0],["e",1,"default","default",0],["s",1,"default","default",0],["i",1,"default","default",0],["z",1,"default","default",0],["e",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["a",1,"default","default",0],["s",1,"default","default",0],["t",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": [
+      [["0",1,"default","default",0],["1",1,"default","default",0],["2",1,"default","default",0],["3",1,"default","default",0],["4",1,"default","default",0],["5",1,"default","default",0],["6",1,"default","default",0],["7",1,"default","default",0],["8",1,"default","default",0],["9",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["A",1,"default","default",0],["B",1,"default","default",0],["C",1,"default","default",0],["D",1,"default","default",0],["E",1,"default","default",0],["F",1,"default","default",0],["G",1,"default","default",0],["H",1,"default","default",0],["I",1,"default","default",0],["J",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["s",1,"default","default",0],["h",1,"default","default",0],["o",1,"default","default",0],["r",1,"default","default",0],["t",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["1",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["2",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ]
+  },
+  "fixture": "resize_shrink_grow_wrapped_scrollback",
+  "geometry": {
+    "cols": 10,
+    "rows": 4,
+    "scrollback": 50
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc0123456789\r\nABCDEFGHIJ\r\nshort\r\nl1\r\nl2\r\nl3\r\nl4\r\nnarrow\r\nafter resize\r\nlast\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[5;5H\u001b[?25h",
+    "cols": 14,
+    "excludedAlternate": false,
+    "excludedRows": [0,1,2,3,4,5,6,7,8],
+    "exclusions": [
+      {
+        "kind": "reflow_after_width_change",
+        "rows": 9
+      }
+    ],
+    "fidelity": "trimmed",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 9,
+    "rows": 5,
+    "scrollbackRows": 5,
+    "sha256": "379fefe4b9e57ee18e40dc4069318056bd55b08bb0c3c7ca46efce5435b23b75",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "0123456789ABCDEFGHIJ\r\nshort\r\nl1\r\nl2\r\nl3\r\nl4"
+    },
+    {
+      "resize": [6,4]
+    },
+    {
+      "feed": "\r\nnarrow\r\n"
+    },
+    {
+      "resize": [14,5]
+    },
+    {
+      "feed": "after resize\r\nlast"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,6],
+    "cursorHidden": false,
+    "screen": [
+      [["f",1,"default","default",0],["r",1,"default","default",0],["a",1,"default","default",0],["m",1,"default","default",0],["e",1,"default","default",0],["2",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "dec2026_synchronized_output",
+  "geometry": {
+    "cols": 20,
+    "rows": 2,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcframe2\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;7H\u001b[?25h\u001b[?2026h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 2,
+    "scrollbackRows": 0,
+    "sha256": "3e1396e986223a9093ddcc1affdca0888b033af5dffdaa869a8af072f27f817d",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b[?2026hframe1\u001b[?2026l\u001b[?2026h\rframe2"
+    }
+  ]
+}

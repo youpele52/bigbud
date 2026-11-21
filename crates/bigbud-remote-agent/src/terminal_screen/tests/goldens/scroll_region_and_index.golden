@@ -1,0 +1,42 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,1],
+    "cursorHidden": false,
+    "screen": [
+      [["H",1,"default","default",0],["i",1,"default","default",0],["n",1,"default","default",0],["e",1,"default","default",0],["1",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["Y",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["i",1,"default","default",0],["n",1,"default","default",0],["e",1,"default","default",0],["4",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["i",1,"default","default",0],["n",1,"default","default",0],["e",1,"default","default",0],["5",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["i",1,"default","default",0],["n",1,"default","default",0],["e",1,"default","default",0],["6",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "scroll_region_and_index",
+  "geometry": {
+    "cols": 20,
+    "rows": 6,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcHine1\r\nY\r\nline4\r\nline5\r\n\r\nline6\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[2;5r\u001b[m\u001b[2;2H\u001b[?25h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 6,
+    "scrollbackRows": 0,
+    "sha256": "c6172f5d948a217a3774bfdaeb8858b5e13884410da8c89cbedc7731b2691f74",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "line1\r\nline2\r\nline3\r\nline4\r\nline5\r\nline6\u001b[2;5rH\u001b[5;1H\n\nX\u001b[2;1H\u001bMY"
+    }
+  ]
+}

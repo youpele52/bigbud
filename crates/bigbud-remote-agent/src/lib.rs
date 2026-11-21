@@ -8,6 +8,7 @@ pub mod search;
 pub mod state;
 pub mod supervisor;
 pub mod terminal_policy;
+pub mod terminal_screen;
 pub mod terminal_spool;
 pub mod workspace;
 

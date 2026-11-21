@@ -1,0 +1,40 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [3,3],
+    "cursorHidden": false,
+    "screen": [
+      [["┌",1,"default","default",0],["─",1,"default","default",0],["─",1,"default","default",0],["┐",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["│",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["│",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["└",1,"default","default",0],["─",1,"default","default",0],["─",1,"default","default",0],["┘",1,"default","default",0],["",1,"default","default",0],["o",1,"default","default",0],["k",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["a",1,"default","default",0],["─",1,"default","default",0],["q",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "dec_special_graphics",
+  "geometry": {
+    "cols": 10,
+    "rows": 4,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc┌──┐\r\n│  │\r\n└──┘ ok\r\na─q\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[4;4H\u001b[?25h\u001b(0\u001b)0",
+    "cols": 10,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 4,
+    "scrollbackRows": 0,
+    "sha256": "3db52cd93aafeea22d3c90269089c3882a8fc32cb8401b8bd1ecfff4d28f1e6c",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b(0lqqk\r\nx  x\r\nmqqj\u001b(B ok\r\n\u001b)0a\u000eq\u000fq\u001b(0"
+    }
+  ]
+}

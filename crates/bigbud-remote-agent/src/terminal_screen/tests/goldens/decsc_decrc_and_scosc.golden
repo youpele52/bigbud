@@ -1,0 +1,40 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [3,12],
+    "cursorHidden": false,
+    "screen": [
+      [["a",1,"default","default",0],["b",1,"default","default",0],["c",1,"default","default",0],["d",1,"default","default",0],["e",1,"default","default",0],["f",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["a",1,"default","default",0],["b",1,"default","default",0],["y",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["m",1,1,"default",0],["i",1,1,"default",0],["d",1,1,"default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["x",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["e",1,"default","default",0],["n",1,"default","default",0],["d",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "decsc_decrc_and_scosc",
+  "geometry": {
+    "cols": 20,
+    "rows": 4,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcabcdef\r\naby\r\n\u001b[4C\u001b[0;31mmid\u001b[m\r\n\u001b[3Cx\u001b[5Cend\u001b[m\u001b[2;8H\u001b[0;32m\u001b7\u001b[m\u001b[m\u001b[4;13H\u001b[?25h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 4,
+    "scrollbackRows": 0,
+    "sha256": "7fced10fd43da36de95e8070678cf6630d818817b06d55e0605d5de117c694d0",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "abc\u001b7\u001b[31m\u001b[3;5Hmid\u001b8def\u001b[2;1Hab\u001b[s\u001b[4;4Hx\u001b[uy\u001b[2;8H\u001b[32m\u001b7\u001b[m\u001b[4;10Hend"
+    }
+  ]
+}

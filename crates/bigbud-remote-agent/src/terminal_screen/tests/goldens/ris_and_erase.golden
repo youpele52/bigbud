@@ -1,0 +1,40 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,5],
+    "cursorHidden": false,
+    "screen": [
+      [["a",1,"default","default",0],["f",1,"default","default",0],["t",1,"default","default",0],["e",1,"default","default",0],["r",1,"default","default",0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0]],
+      [["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0]],
+      [["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0]],
+      [["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "ris_and_erase",
+  "geometry": {
+    "cols": 20,
+    "rows": 4,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcafter\u001b[0;44m\u001b[15X\u001b[m\r\n\u001b[0;44m\u001b[20X\u001b[m\r\n\u001b[0;44m\u001b[20X\u001b[m\r\n\u001b[0;44m\u001b[20X\u001b[m\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;6H\u001b[?25h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 4,
+    "scrollbackRows": 0,
+    "sha256": "f17177fa50b21db5a76854556f96b88137ae39cda713bdf7ee80a8294920f33e",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "junk\u001b[31m\u001b[?1004h\u001b[2;3r\u001b(0\u001bca\r\nb\r\nc\r\nd\r\ne\r\nf\r\ng\u001b[44m\u001b[2J\u001b[3J\u001b[m\u001b[Hafter"
+    }
+  ]
+}

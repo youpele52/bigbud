@@ -1,0 +1,43 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,2],
+    "cursorHidden": false,
+    "screen": [
+      [["o",1,"default","default",0],["k",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "focus_1004_and_input_modes",
+  "geometry": {
+    "cols": 20,
+    "rows": 2,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcok\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;3H\u001b[?25h\u001b[4 q\u001b[?1h\u001b=\u001b[?2004h\u001b[?1004h\u001b[4h\u001b[?1002h\u001b[?1006h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [0,1],
+    "exclusions": [
+      {
+        "kind": "unsupported_modes",
+        "rows": 2
+      }
+    ],
+    "fidelity": "trimmed",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 2,
+    "scrollbackRows": 0,
+    "sha256": "e06386ec3532245e53506fd66fd179f4af8bb3742f50ff2c2e9691f6e37abc5d",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b[?1004h\u001b[?1h\u001b=\u001b[?2004h\u001b[?1002h\u001b[?1006h\u001b[4 q\u001b[4hok"
+    }
+  ]
+}
