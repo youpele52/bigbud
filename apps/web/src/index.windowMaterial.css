@@ -3,9 +3,11 @@
  * window background (`windowManager.material.ts`); `useWindowMaterial` sets the `html` data
  * attributes read here. While the resolved material is translucent, every app surface is
  * translucent: the theme surface tokens become tinted mixes of the opaque palette
- * (`--*-solid` in `index.css`). Solid keeps everything opaque as before. Toasts and annotation
- * surfaces (`components/annotations/annotationSurface.ts`) paint the opaque palette directly, so
- * they stay solid in every material: they cover live content and must stay readable.
+ * (`--*-solid` in `index.css`). Solid keeps everything opaque as before. Toasts, annotation
+ * surfaces (`components/annotations/annotationSurface.ts`), the search and command palettes and
+ * every dialog, alert dialog and sheet (`components/ui/solidSurface.ts`) paint the opaque palette
+ * directly, so they always stay solid in every material: they cover live content and must stay
+ * readable.
  *
  * Shell tones, in every material and theme: the left sidebar and the right panel share the side
  * tone (`--app-shell-side-panel-background`); the middle column (chat, headers, terminal) uses the
@@ -34,7 +36,7 @@
 
 html[data-desktop-shell="macos"][data-window-material="translucent"] {
   /* Tints: the middle page surface and the side panels over the window, raised surfaces (cards,
-   * composer) over a page surface, and floating surfaces (menus, dialogs, tooltips) that cover
+   * composer) over a page surface, and floating surfaces (menus, popovers, tooltips) that cover
    * other content. Side panels are lighter than the middle: more white in light theme,
    * less of the dark palette in dark theme. */
   --app-shell-surface-tint: 72%;

@@ -30,6 +30,7 @@ import {
   CommandPanel,
   CommandShortcut,
 } from "../ui/command";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 import { CommandPaletteFileSearch } from "./CommandPalette.fileSearch";
 
 interface PaletteItem {
@@ -300,7 +301,12 @@ export function CommandPaletteDialogContent() {
       >
         <Command value={query} onValueChange={setQuery}>
           <div className="group rounded-[22px] p-px transition-colors duration-200">
-            <div className="rounded-[20px] border border-border bg-card transition-colors duration-200 has-focus-visible:border-ring/45">
+            <div
+              className={cn(
+                "rounded-[20px] border border-border transition-colors duration-200 has-focus-visible:border-ring/45",
+                SOLID_FLOATING_SURFACE_CLASS_NAME,
+              )}
+            >
               <div
                 className={cn(
                   "px-3 py-2 sm:px-4 sm:py-3",
