@@ -13,9 +13,12 @@ import * as Option from "effect/Option";
 import { directShellOwnerKey } from "./DirectShellLaunch.owner";
 import { paneFromOwnerKey } from "./Manager.hostLimit.ts";
 import { listTerminalHostOwners } from "./Manager.hostRoster.ts";
+import { knownThreadTerminalIds } from "./Manager.session.shellOwners";
 import type { SessionApiContext } from "./Manager.session.types";
 
 type RetainedPanesContext = Pick<SessionApiContext, "directShellOwners" | "hostLimit">;
+type ThreadRetainedPanesContext = RetainedPanesContext &
+  Pick<SessionApiContext, "sessionsForThread" | "historyTerminalIdsForThread">;
 
 /**
  * Pane ids whose history must survive, or `"unknown"` when any source cannot be read (the caller
@@ -72,3 +75,20 @@ export const retainedHistoryTerminalIds = Effect.fn("terminal.retainedHistoryTer
     return retained as ReadonlySet<string>;
   },
 );
+
+/**
+ * The retained panes of a whole thread: its known panes (live sessions plus history ids) resolved
+ * through `retainedHistoryTerminalIds`. `"unknown"` when any source cannot be read, so the caller
+ * deletes none of the thread's history. Shared by the terminal close and by thread deletion.
+ */
+export const retainedThreadHistoryTerminalIds = Effect.fn(
+  "terminal.retainedThreadHistoryTerminalIds",
+)(function* (
+  ctx: ThreadRetainedPanesContext,
+  threadId: string,
+  confirmedStopped: ReadonlySet<string> = new Set(),
+) {
+  const known = yield* knownThreadTerminalIds(ctx, threadId);
+  if (known === "unknown") return "unknown" as const;
+  return yield* retainedHistoryTerminalIds(ctx, threadId, known, confirmedStopped);
+});

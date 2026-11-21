@@ -25,6 +25,7 @@ import {
   describeRuntimeCleanupFailures,
   abortUnsafeProjectCascadeThreadDeletion,
   cleanupDeletedThreadTerminalHistory,
+  retainedDeletedThreadTerminalHistory,
   hydrateStoredDirectCleanupResources,
   isSingleDeletionAlreadyFenced,
   makeStoppedDeletionSession,
@@ -164,6 +165,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             const files = yield* orchestrationEngine.threadDeletion!.discoverFiles({
               rootThreadId: thread.id,
               threadIds,
+              retainedTerminalHistory: retainedDeletedThreadTerminalHistory(terminal),
             });
             const operationId = `direct-cleanup:${event.eventId}`;
             preparedOperationId = operationId;

@@ -61,6 +61,7 @@ const SCHEMA_FIELDS = new Set([
   "remoteAgent",
   "supportsDirectoryWatch",
   "supportsPtyReattach",
+  "terminalHost",
   "contextWindow",
   "maxOutputTokens",
   "supportsImages",

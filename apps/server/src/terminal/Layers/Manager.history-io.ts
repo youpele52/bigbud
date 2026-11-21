@@ -99,7 +99,7 @@ const deleteHistoryEffect = Effect.fn("terminal.deleteHistory")(function* (
 });
 
 /** The pane a history file name belongs to for this thread, or undefined when it is not one. */
-function historyFileTerminalId(name: string, threadId: string): string | undefined {
+export function historyFileTerminalId(name: string, threadId: string): string | undefined {
   const threadPart = toSafeThreadId(threadId);
   if (name === `${threadPart}.log` || name === `${legacySafeThreadId(threadId)}.log`) {
     return DEFAULT_TERMINAL_ID;

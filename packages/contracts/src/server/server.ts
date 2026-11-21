@@ -38,6 +38,8 @@ export const ServerWorkspaceCapabilities = Schema.Struct({
     supportsDirectoryWatch: Schema.Boolean,
     supportsPtyReattach: Schema.Boolean,
   }),
+  /** Whether new local terminals run in the background terminal host (absent: older server). */
+  terminalHost: Schema.optional(Schema.Struct({ enabled: Schema.Boolean })),
 });
 export type ServerWorkspaceCapabilities = typeof ServerWorkspaceCapabilities.Type;
 

@@ -95,6 +95,7 @@ it.effect("records ownership for legacy referenced files so thread deletion can 
     const discovered = yield* discoverThreadDeletionFiles({
       rootThreadId: ThreadId.makeUnsafe(THREAD_ID),
       threadIds: [ThreadId.makeUnsafe(THREAD_ID)],
+      retainedTerminalHistory: () => Effect.succeed(new Set<string>()),
     });
     assert.include(
       discovered.directResources.map((resource) => resource.resourceId),

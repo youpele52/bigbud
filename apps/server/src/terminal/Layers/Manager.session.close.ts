@@ -12,7 +12,10 @@ import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types";
 import { assertTerminalGeneration } from "./Manager.session.generation";
 import { knownThreadTerminalIds } from "./Manager.session.shellOwners";
-import { retainedHistoryTerminalIds } from "./Manager.history.retainedPanes";
+import {
+  retainedHistoryTerminalIds,
+  retainedThreadHistoryTerminalIds,
+} from "./Manager.history.retainedPanes";
 import {
   assertHostedDirectShellsReachable,
   settleHostedDirectShellPane,
@@ -60,13 +63,14 @@ export function makeTerminalClose(
     threadId: string,
     confirmedStopped: ReadonlySet<string>,
   ) {
-    const known = yield* knownThreadTerminalIds(ctx, threadId);
-    if (known === "unknown") return;
-    const deletable = yield* historyDeletable(threadId, known, confirmedStopped);
-    yield* ctx.deleteAllHistoryForThread(
-      threadId,
-      new Set(known.filter((terminalId) => !deletable.has(terminalId))),
-    );
+    const retained = yield* retainedThreadHistoryTerminalIds(ctx, threadId, confirmedStopped);
+    if (retained === "unknown") {
+      yield* Effect.logWarning("kept terminal history: its panes could not be resolved", {
+        threadId,
+      });
+      return;
+    }
+    yield* ctx.deleteAllHistoryForThread(threadId, retained);
   });
   const closeSession = Effect.fn("terminal.closeSession")(function* (
     threadId: string,

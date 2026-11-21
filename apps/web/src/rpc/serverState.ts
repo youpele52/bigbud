@@ -73,6 +73,8 @@ const selectDiscoveredSkills = (config: ServerConfig | null) =>
   config?.discovery.skills ?? EMPTY_SERVER_DISCOVERY_SKILLS;
 const selectSettings = (config: ServerConfig | null): ServerSettings =>
   config?.settings ?? DEFAULT_SERVER_SETTINGS;
+const selectTerminalHostEnabled = (config: ServerConfig | null): boolean =>
+  config?.workspaceCapabilities?.terminalHost?.enabled === true;
 
 export const welcomeAtom = makeStateAtom<ServerLifecycleWelcomePayload | null>(
   "server-welcome",
@@ -311,6 +313,11 @@ export function useServerKeybindingsConfigPath(): string | null {
 
 export function useServerObservability(): ServerConfig["observability"] | null {
   return useAtomValue(serverConfigAtom, selectObservability);
+}
+
+/** Whether new local terminals run in the background terminal host; false until known. */
+export function useServerTerminalHostEnabled(): boolean {
+  return useAtomValue(serverConfigAtom, selectTerminalHostEnabled);
 }
 
 export function useDefaultChatCwd(): string | null {

@@ -155,6 +155,13 @@ export interface TerminalManagerShape {
   readonly forgetRetainedShellOwners?: (
     input: TerminalRetainedShellOwnersInput,
   ) => Effect.Effect<TerminalForgetRetainedShellOwnersResult, TerminalError>;
+  /**
+   * Panes of a thread whose history files must survive deletion (plan Q1, N8): they still have a
+   * direct-shell owner record or a host PTY. `"unknown"` when a source cannot be read.
+   */
+  readonly retainedHistoryTerminalIds?: (
+    threadId: string,
+  ) => Effect.Effect<ReadonlySet<string> | "unknown">;
   readonly listShellProfiles: (
     input: TerminalShellProfilesInput,
   ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;

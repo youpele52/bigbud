@@ -90,6 +90,17 @@ export function cleanupDeletedThreadTerminalHistory(
   );
 }
 
+/**
+ * The deleted threads' panes whose terminal history must stay (plan Q1, N8). A terminal manager
+ * that cannot report them keeps all of it; the post-commit close removes what is provably free.
+ */
+export function retainedDeletedThreadTerminalHistory(
+  terminal: Pick<TerminalManagerShape, "retainedHistoryTerminalIds">,
+): (threadId: ThreadId) => Effect.Effect<ReadonlySet<string> | "unknown"> {
+  return (threadId) =>
+    terminal.retainedHistoryTerminalIds?.(threadId) ?? Effect.succeed("unknown" as const);
+}
+
 export function readFinalizeReceiptStatus(sql: SqlClient.SqlClient, commandId: string) {
   return sql<{ readonly status: string }>`
     SELECT status FROM orchestration_command_receipts WHERE command_id = ${commandId}

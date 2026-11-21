@@ -25,6 +25,7 @@ const threadId = ThreadId.makeUnsafe("thread-11111111-1111-4111-8111-11111111111
 const otherThreadId = ThreadId.makeUnsafe("thread-22222222-2222-4222-8222-222222222222");
 const attachmentId = `${threadId}-33333333-3333-4333-8333-333333333333`;
 const relativePath = `${attachmentId}.png`;
+const retainedTerminalHistory = () => Effect.succeed(new Set<string>());
 const attachment = JSON.stringify([
   { type: "image", id: attachmentId, name: "image.png", mimeType: "image/png", sizeBytes: 3 },
 ]);
@@ -61,6 +62,7 @@ layer("thread deletion file provenance", (it) => {
       const discovered = yield* discoverThreadDeletionFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
+        retainedTerminalHistory,
       });
       assert.equal(discovered.retainedExternalWorktrees.length, 1);
       assert.equal(discovered.retainedExternalWorktrees[0]?.recordedPath, "/external/worktree");
@@ -76,6 +78,7 @@ layer("thread deletion file provenance", (it) => {
       const remote = yield* discoverThreadDeletionFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
+        retainedTerminalHistory,
       });
       assert.deepEqual(remote.worktreeResources, []);
       assert.equal(remote.retainedExternalWorktrees[0]?.recordedPath, remotePath);
@@ -89,7 +92,11 @@ layer("thread deletion file provenance", (it) => {
         workspace_execution_target_id = 'ssh:remote'
         WHERE thread_id = ${otherThreadId}`;
       const collision = yield* Effect.exit(
-        discoverThreadDeletionFiles({ rootThreadId: threadId, threadIds: [threadId] }),
+        discoverThreadDeletionFiles({
+          rootThreadId: threadId,
+          threadIds: [threadId],
+          retainedTerminalHistory,
+        }),
       );
       assert.isTrue(Exit.isFailure(collision));
       yield* sql`UPDATE projection_threads SET worktree_path = '/external/worktree'
@@ -105,6 +112,7 @@ layer("thread deletion file provenance", (it) => {
       const shared = yield* discoverThreadDeletionFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
+        retainedTerminalHistory,
       });
       assert.equal(shared.directResources.length, 0);
       assert.deepEqual(
@@ -117,6 +125,7 @@ layer("thread deletion file provenance", (it) => {
       const onlyDeletedReference = yield* discoverThreadDeletionFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
+        retainedTerminalHistory,
       });
       assert.deepEqual(
         onlyDeletedReference.directResources.map((resource) => resource.resourceId),
@@ -129,6 +138,7 @@ layer("thread deletion file provenance", (it) => {
       const changed = yield* discoverThreadDeletionFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
+        retainedTerminalHistory,
       });
       assert.equal(changed.directResources.length, 0);
       assert.deepEqual(
@@ -139,7 +149,11 @@ layer("thread deletion file provenance", (it) => {
       yield* sql`UPDATE projection_threads SET worktree_path = ${`${config.worktreesDir}/../outside`}
         WHERE thread_id = ${threadId}`;
       const unsafe = yield* Effect.exit(
-        discoverThreadDeletionFiles({ rootThreadId: threadId, threadIds: [threadId] }),
+        discoverThreadDeletionFiles({
+          rootThreadId: threadId,
+          threadIds: [threadId],
+          retainedTerminalHistory,
+        }),
       );
       assert.isTrue(Exit.isFailure(unsafe));
 
@@ -159,6 +173,7 @@ layer("thread deletion file provenance", (it) => {
       const unverified = yield* discoverThreadDeletionFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
+        retainedTerminalHistory,
       });
       assert.equal(unverified.directResources.length, 0);
       assert.include(
@@ -174,6 +189,7 @@ layer("thread deletion file provenance", (it) => {
       const finalReference = yield* discoverThreadDeletionFiles({
         rootThreadId: otherThreadId,
         threadIds: [otherThreadId],
+        retainedTerminalHistory,
       });
       assert.deepEqual(
         finalReference.directResources.map((resource) => resource.resourceId),
