@@ -4,12 +4,12 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 ## What's new?
 
-- **[Work across projects from one chat](#work-across-projects-from-one-chat):** Let an agent message and organize chats in your other projects, including remote ones. Attach a chat and ask, and it just happens.
+- **[Orchestrate work from a single thread](#orchestrate-work-from-a-single-thread):** Message, organize and start chats in any project, including ones on your VPS or VM, and get replies back. Hand work to another paired machine when it fits better there.
+- **[Search everything from one place](#search-everything-from-one-place):** **Cmd/Ctrl+F** searches your chats, projects, your computer and connected servers; **Cmd/Ctrl+P** finds any file by name.
 - **[Run bigbud on your own Linux server](#run-bigbud-on-your-own-linux-server):** Keep chats, terminals and agents running on a VPS or VM, and connect from your Mac whenever you like.
-- **[Search everything from one place](#search-everything-from-one-place):** **Mod+F** searches your chats, projects, this computer and connected servers; **Mod+P** finds any file by name.
 - **[Never miss finished terminal work](#never-miss-finished-terminal-work):** Long-running commands move their chat to **Needs you** when they finish, with a red or green terminal icon and a notification.
-- **[A window that feels all of a piece](#a-window-that-feels-all-of-a-piece):** Let your wallpaper show through the whole window, and browse files beside your code instead of under a drawer.
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
+- **[A window that feels all of a piece](#a-window-that-feels-all-of-a-piece):** Let your wallpaper show through the whole window, and browse files beside your code instead of under a drawer.
 
 ## v0.4.0 (21 November, 2026)
 
@@ -38,13 +38,13 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **Open any file by name:** **Mod+P** finds files by name in the current project, your other projects, this computer, and connected remote hosts. Current-project results appear immediately, without waiting for slower sources.
 - **Get the same ranking everywhere:** Local and remote results use the same fuzzy ranking, so a file ranks the same wherever it lives. More results load as you scroll.
 
-### Work Across Projects From One Chat
+### Orchestrate Work From a Single Thread
 
 - **Ask a chat to help in another project:** Have an agent message, rename, move, or snooze chats in any of your projects, including remote ones, or start a new chat there. Checking another chat's status works anywhere, without a prompt.
 - **Point it at a chat and it just happens:** Attach a chat from another project and ask. The agent acts without an extra question. Chats in the same project, and chats the agent started for you, work as before.
 - **Answer only when it matters:** bigbud asks when an agent wants to change a chat you didn't point it to. Click **Allow** or **Deny**, or just reply yes or no. A yes lets that chat work in that project until bigbud restarts; a no stops only that one change.
 - **Stay in control:** bigbud checks your answer itself, so an agent cannot approve on your behalf, even with full access. The other chat keeps its own access settings and approvals.
-- **Keep messages correctly labeled:** A message from another agent that waits while a chat is busy stays marked as coming from that agent, rather than looking like something you typed.
+- **Talk back and forth:** The other chat can reply to the thread that asked, and messages from another agent stay labelled as theirs, never as yours.
 
 ### Mobile Remote Control on Every Release Channel
 
