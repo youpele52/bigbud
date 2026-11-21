@@ -28,7 +28,7 @@ export function useTerminalViewReport(threadId: ThreadId) {
     // No DOM (non-browser rendering such as tests): there is no viewer to report.
     if (typeof document === "undefined" || typeof window === "undefined") return;
     const send = (viewing: boolean) => {
-      const view = readNativeApi()?.terminal.view;
+      const view = readNativeApi()?.terminal?.view;
       if (!view) return;
       void view(
         viewing
