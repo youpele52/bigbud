@@ -4,7 +4,10 @@ import {
 } from "./Manager.shell.direct.policy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
+import {
+  type TerminalCloseInput,
+  TerminalExecutionTargetError,
+} from "@bigbud/contracts/workspace/terminal.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types";
 import { assertTerminalGeneration } from "./Manager.session.generation";
@@ -12,16 +15,29 @@ import { knownThreadTerminalIds } from "./Manager.session.shellOwners";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
+import {
+  annotateTerminalCloseSpan,
+  DEFAULT_TERMINAL_CLOSE_REASON,
+  type TerminalCloseReason,
+} from "./Manager.process.stop";
 
-export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape["close"] {
+/** `reason` is optional so existing callers keep closing as `user-close`. */
+export function makeTerminalClose(
+  ctx: SessionApiContext,
+): (
+  input: TerminalCloseInput,
+  reason?: TerminalCloseReason,
+) => ReturnType<TerminalManagerShape["close"]> {
   const closeSession = Effect.fn("terminal.closeSession")(function* (
     threadId: string,
     terminalId: string,
     deleteHistory: boolean,
+    reason: TerminalCloseReason,
     expectedGeneration?: string,
     onlyIfNotRunning = false,
     executionTargetId?: string,
   ) {
+    yield* annotateTerminalCloseSpan(threadId, terminalId, reason);
     const key = toSessionKey(threadId, terminalId);
     const session = yield* ctx.getSession(threadId, terminalId);
     if (Option.isSome(session)) yield* assertTerminalGeneration(session.value, expectedGeneration);
@@ -81,7 +97,7 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
     });
     if (deleteHistory) yield* ctx.deleteHistory(threadId, terminalId);
   });
-  return (input) =>
+  return (input, reason = DEFAULT_TERMINAL_CLOSE_REASON) =>
     ctx.withThreadLock(
       input.threadId,
       Effect.gen(function* () {
@@ -99,6 +115,7 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
             input.threadId,
             input.terminalId,
             input.deleteHistory === true,
+            reason,
             input.expectedGeneration,
             input.onlyIfNotRunning,
             input.executionTargetId,
@@ -118,6 +135,7 @@ export function makeTerminalClose(ctx: SessionApiContext): TerminalManagerShape[
               input.threadId,
               session.terminalId,
               false,
+              reason,
               input.expectedGeneration,
               input.onlyIfNotRunning,
             ),
