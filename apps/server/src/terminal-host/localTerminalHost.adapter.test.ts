@@ -11,6 +11,7 @@ const inProcess = { pid: 1234 } as PtyProcess;
 
 function setup(input: { owner?: Partial<RemoteAgentOwner>; admitted?: boolean } = {}) {
   const fallbackCalls: Array<PtySpawnInput> = [];
+  const logs: Array<string> = [];
   let resolveCalls = 0;
   const fallback: PtyAdapterShape = {
     spawn: (spawnInput) => {
@@ -31,6 +32,7 @@ function setup(input: { owner?: Partial<RemoteAgentOwner>; admitted?: boolean } 
       resolveCalls += 1;
       return undefined;
     },
+    currentAdmittedBinding: async () => undefined,
     knownRuntimes: async () => [],
     proxyBinary: async () => "/staged/agent",
     notices: () => [],
@@ -42,8 +44,14 @@ function setup(input: { owner?: Partial<RemoteAgentOwner>; admitted?: boolean } 
         ? ({ target: LOCAL_TERMINAL_HOST_TARGET_ID, ...input.owner } as RemoteAgentOwner)
         : undefined,
   } as unknown as RemoteAgentOwnerStore;
-  const local = makeLocalTerminalHostPtyAdapter({ controller, owners, fallback });
-  return { local, fallbackCalls, resolveCalls: () => resolveCalls };
+  const local = makeLocalTerminalHostPtyAdapter({
+    controller,
+    owners,
+    fallback,
+    stateDir: "/state",
+    log: (message) => logs.push(message),
+  });
+  return { local, fallbackCalls, logs, resolveCalls: () => resolveCalls };
 }
 
 const spawnInput = (overrides: Partial<PtySpawnInput> = {}): PtySpawnInput => ({
@@ -84,6 +92,26 @@ describe("local terminal host PTY adapter", () => {
     expect(process).toBe(inProcess);
     expect(fallbackCalls).toHaveLength(1);
     expect(resolveCalls()).toBe(1);
+    local.close();
+  });
+
+  it("host-wide controls address only a running host and never launch one", async () => {
+    const { local, resolveCalls } = setup({ admitted: true });
+    const host = local.adapter.ownedRuntimeForTarget?.("local")?.host;
+    expect(host).toBeDefined();
+    await expect(host!.capabilities()).rejects.toMatchObject({ code: "HOST_UNAVAILABLE" });
+    expect(resolveCalls()).toBe(0);
+    local.close();
+  });
+
+  it("keeps a terminal in-process when its hook environment is not under the state directory", async () => {
+    const { local, fallbackCalls, logs, resolveCalls } = setup({ admitted: true });
+    const env = { BIGBUD_SHELL_INTEGRATION_DIR: "/tmp/elsewhere/abc" };
+    await Effect.runPromise(local.adapter.spawn(spawnInput({ env })));
+    expect(fallbackCalls).toHaveLength(1);
+    // Decided before any host binding is resolved, so no host is launched for it.
+    expect(resolveCalls()).toBe(0);
+    expect(logs).toHaveLength(1);
     local.close();
   });
 

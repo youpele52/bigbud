@@ -47,6 +47,8 @@ export interface LocalTerminalHostController {
   readonly ready: () => Promise<LocalTerminalHostAdoption>;
   /** The admitted generation's binding, launching a fresh generation when needed (enabled mode). */
   readonly resolveAdmittedBinding: () => Promise<RemoteAgentRuntimeBinding | undefined>;
+  /** The admitted, live generation's binding; never launches (host-wide controls, policy). */
+  readonly currentAdmittedBinding: () => Promise<RemoteAgentRuntimeBinding | undefined>;
   readonly knownRuntimes: () => Promise<ReadonlyArray<RemoteAgentRuntime>>;
   readonly proxyBinary: () => Promise<string>;
   readonly notices: () => ReadonlyArray<LocalTerminalHostDrainingNotice>;
@@ -169,6 +171,11 @@ export function makeLocalTerminalHostController(
     knownRuntimes: async () => {
       await ready().catch(() => undefined);
       return [...attached.values()].map((entry) => entry.binding.runtime);
+    },
+    currentAdmittedBinding: async () => {
+      await ready().catch(() => undefined);
+      const current = admitted;
+      return current && (await admittedAlive(current)) ? current.binding : undefined;
     },
     resolveAdmittedBinding: async () => {
       if (deps.mode !== "enabled") return undefined;

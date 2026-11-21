@@ -70,9 +70,19 @@ export async function prepareLocalTerminalHostGeneration(
 }
 
 /**
- * `<staged> --supervisor` in its own session (`detached` = `setsid`), stdio to `host.log`, so
- * killing the backend's process group leaves the host running. Before R5 lands the host takes
- * only `--supervisor`; `--local-desktop-host --exit-when-orphaned-and-empty` come with R5.
+ * The plan §7.3 item 7 command line. `--local-desktop-host` allows `local_launch` creates (the
+ * login environment, S6) and makes the host lead its own session; `--exit-when-orphaned-and-empty`
+ * lets it exit 60 s after its last PTY and owner are gone.
+ */
+export const LOCAL_TERMINAL_HOST_ARGS: ReadonlyArray<string> = [
+  "--supervisor",
+  "--local-desktop-host",
+  "--exit-when-orphaned-and-empty",
+];
+
+/**
+ * `<staged> --supervisor ...` in its own session (`detached` = `setsid`), stdio to `host.log`, so
+ * killing the backend's process group leaves the host running.
  */
 export async function launchLocalTerminalHost(
   input: LaunchLocalTerminalHostInput,
@@ -81,7 +91,7 @@ export async function launchLocalTerminalHost(
   const log = openSync(input.generation.logPath, "a", 0o600);
   let child: ReturnType<LocalTerminalHostSpawn>;
   try {
-    child = spawn(input.binaryPath, ["--supervisor"], {
+    child = spawn(input.binaryPath, LOCAL_TERMINAL_HOST_ARGS, {
       cwd: homedir(),
       detached: true,
       stdio: ["ignore", log, log],

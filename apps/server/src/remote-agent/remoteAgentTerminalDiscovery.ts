@@ -74,7 +74,11 @@ export class RemoteAgentTerminalDiscovery {
         continue;
       }
       const remote = observed.find((entry) => entry.ptyId === owner.resourceId);
-      if (!remote || Buffer.from(remote.requestDigest).toString("hex") !== owner.digest) {
+      if (remote?.lost) {
+        // The PTY died with a crashed host (1.9 `lost`, state "outcome-unknown", no digest);
+        // only its spooled screen survives. Never report it as running or as a conflict.
+        sessions.push({ ...base, status: "unknown", reason: "host-lost" });
+      } else if (!remote || Buffer.from(remote.requestDigest).toString("hex") !== owner.digest) {
         sessions.push({
           ...base,
           status: "unknown",

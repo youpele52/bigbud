@@ -131,19 +131,21 @@ export function makeLocalTerminalHostPinRegistry(
   const withBuilds = async () => {
     const runtimes = await knownRuntimes();
     const builds = new Map(state.builds.map((build) => [build.id, build]));
+    let promotionSequence = state.promotionSequence;
     for (const runtime of runtimes) {
       const id = remoteAgentBuildId(runtime);
+      // The registry validator requires every healthy build to carry a positive promotion.
       if (!builds.has(id))
         builds.set(id, {
           id,
           runtime,
           health: "healthy",
-          promotion: 0,
+          promotion: ++promotionSequence,
           binary: "present",
           authenticated: false,
         });
     }
-    state = { ...state, builds: [...builds.values()] };
+    state = { ...state, promotionSequence, builds: [...builds.values()] };
     return state;
   };
   const serialized = <A>(run: () => Promise<A>): Promise<A> => {

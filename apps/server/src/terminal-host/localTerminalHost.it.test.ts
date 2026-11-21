@@ -1,26 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { RemoteAgentConnectionPool } from "../remote-agent/remoteAgentConnectionPool.ts";
-import {
-  collectLocalTerminalHostRuntimes,
-  resolveLocalTerminalHostSource,
-  stageLocalTerminalHostBinary,
-  verifyStagedLocalTerminalHostBinary,
-} from "./localTerminalHost.binary.ts";
-import { makeLocalTerminalHostController } from "./localTerminalHost.host.ts";
-import {
-  launchLocalTerminalHost,
-  prepareLocalTerminalHostGeneration,
-} from "./localTerminalHost.launch.ts";
+import { realLocalTerminalHostController } from "./localTerminalHost.parity.testUtils.ts";
 import {
   LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES,
   LOCAL_TERMINAL_HOST_TARGET_ID,
   type LocalTerminalHostPaths,
 } from "./localTerminalHost.paths.ts";
-import {
-  assertSecureLocalTerminalHostSocket,
-  probeLocalTerminalHost,
-} from "./localTerminalHost.probe.ts";
+import { assertSecureLocalTerminalHostSocket } from "./localTerminalHost.probe.ts";
 import { makeLocalTerminalHostProcesses, runProcessCommand } from "./localTerminalHost.process.ts";
 import { makeLocalTerminalHostRegistry } from "./localTerminalHost.registry.ts";
 import { makeShortTerminalHostRoot } from "./localTerminalHost.testUtils.ts";
@@ -33,23 +20,8 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).toReversed()) await cleanup();
 });
 
-function realController(paths: LocalTerminalHostPaths) {
-  return makeLocalTerminalHostController({
-    mode: "enabled",
-    paths,
-    registry: makeLocalTerminalHostRegistry(paths),
-    processes,
-    requiredCapabilities: LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES,
-    generationHasOwners: async () => false,
-    log: () => {},
-    stage: async () => stageLocalTerminalHostBinary(paths, resolveLocalTerminalHostSource()),
-    verifyStaged: (staged) => verifyStagedLocalTerminalHostBinary(paths, staged),
-    collectRuntimes: (keep) => collectLocalTerminalHostRuntimes(paths, keep),
-    probe: (generation, proxyBinary) => probeLocalTerminalHost({ generation, proxyBinary }),
-    prepareGeneration: (generation) => prepareLocalTerminalHostGeneration(paths.root, generation),
-    launch: (input) => launchLocalTerminalHost(input),
-  });
-}
+const realController = (paths: LocalTerminalHostPaths) =>
+  realLocalTerminalHostController(paths, processes);
 
 async function processGroup(pid: number): Promise<number> {
   const result = await runProcessCommand("ps", ["-o", "pgid=", "-p", String(pid)]);
@@ -84,10 +56,15 @@ describe.skipIf(!enabled)("local terminal host with the real binary", () => {
         assertSocket: assertSecureLocalTerminalHostSocket,
       }),
     );
-    const connection = await pool.getBound(LOCAL_TERMINAL_HOST_TARGET_ID, binding!, [
-      "terminal.pty",
-    ]);
-    expect(connection.supportsCapability("terminal.pty")).toBe(true);
+    // Launched with --local-desktop-host, the host advertises every required 1.9 capability.
+    const connection = await pool.getBound(
+      LOCAL_TERMINAL_HOST_TARGET_ID,
+      binding!,
+      LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES,
+    );
+    expect(connection.supportsCapability("terminal.local-launch")).toBe(true);
+    // The 1.9 hello names the host's own PID and start time.
+    expect(record.pidStartTime).toBeGreaterThan(0);
     pool.closeAll();
 
     // A new backend adopts the same host: same generation, epoch and PID; nothing launched.

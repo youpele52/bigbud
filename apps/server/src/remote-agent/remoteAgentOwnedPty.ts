@@ -41,6 +41,10 @@ export interface OwnedRemoteAgentPtyOptions {
    * `PtySpawnInput.hostLifecycle` overrides them per spawn; each is sent only when advertised.
    */
   readonly hostLifecycle?: RemoteAgentPtyCreateDefaults;
+  /** The full spawn environment, used only when the create carries `local_launch` (S6). */
+  readonly localLaunchEnvironment?: (
+    input: PtySpawnInput,
+  ) => ReadonlyArray<{ readonly name: string; readonly value: string }>;
 }
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
@@ -192,6 +196,15 @@ export function makeOwnedRemoteAgentPty(
           throw cause;
         }
       } else {
+        // Resolved before dispatch can begin, so an unusable environment never strands an owner.
+        const lifecycle = remoteAgentPtyCreateLifecycleFields(connection, {
+          ...options.hostLifecycle,
+          ...input.hostLifecycle,
+        });
+        const localEnvironment =
+          lifecycle.localLaunch && options.localLaunchEnvironment
+            ? options.localLaunchEnvironment(input)
+            : undefined;
         owner = await update((current) => ({ ...current, state: "may-have-been-sent" }));
         const workspaceHandle = remoteAgentPtyWorkspaceHandle(connection, {
           target: owner.target,
@@ -213,13 +226,10 @@ export function makeOwnedRemoteAgentPty(
           requestDigest: Buffer.from(owner.digest, "hex"),
           workspaceHandle,
           cwd: "",
-          ...remoteAgentTerminalLaunch(input.env, owner.shellLaunch),
+          ...remoteAgentTerminalLaunch(input.env, owner.shellLaunch, localEnvironment),
           cols: input.cols,
           rows: input.rows,
-          lifecycle: remoteAgentPtyCreateLifecycleFields(connection, {
-            ...options.hostLifecycle,
-            ...input.hostLifecycle,
-          }),
+          lifecycle,
           onRejected: releaseDefinitiveFailure,
         });
       }

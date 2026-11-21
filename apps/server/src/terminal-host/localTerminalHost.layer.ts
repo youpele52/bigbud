@@ -93,7 +93,13 @@ export const makeLocalTerminalHostPtyLive = <E, R>(
       });
       const local = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          makeLocalTerminalHostPtyAdapter({ controller, owners, fallback: inProcess }),
+          makeLocalTerminalHostPtyAdapter({
+            controller,
+            owners,
+            fallback: inProcess,
+            stateDir: config.stateDir,
+            log,
+          }),
         ),
         (local) => Effect.sync(local.close),
       );

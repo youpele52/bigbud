@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
 import type { RemoteAgentOwner, RemoteAgentOwnerStore } from "./remoteAgentOwners.ts";
-import { profileOwner, spawnInput, target } from "./remoteAgentOwnedPty.profile.testUtils.ts";
+import {
+  profileLaunch,
+  profileOwner,
+  spawnInput,
+  target,
+} from "./remoteAgentOwnedPty.profile.testUtils.ts";
 import { remoteAgentTerminalWorkspaceHandle } from "./remoteAgentPtyClient.lifecycle.ts";
 
 const f = vi.hoisted(() => ({
@@ -122,6 +127,28 @@ describe("owned PTY protocol 1.9 create", () => {
       activitySource: "owner-hint",
       evictPtyId: "oldest",
     });
+  });
+
+  it("sends the full environment only for a local launch the host advertises (S6)", async () => {
+    const full = [
+      { name: "SECRET_KEY", value: "private" },
+      { name: "http_proxy", value: "http://proxy" },
+    ];
+    const options = {
+      hostLifecycle: { lifecycleManaged: true, localLaunch: true },
+      localLaunchEnvironment: () => full,
+    };
+    await spawn(options)(spawnInput(profileLaunch()));
+    // Without terminal.local-launch the remote presentation-only environment still applies.
+    expect(f.create.mock.calls[0]![0].environment).toEqual([
+      { name: "TERM", value: "xterm-256color" },
+    ]);
+    f.owner = undefined;
+    f.capabilities = new Set([...f.capabilities, "terminal.lifecycle", "terminal.local-launch"]);
+    await spawn(options)(spawnInput(profileLaunch()));
+    const request = f.create.mock.calls[1]![0];
+    expect(request.environment).toEqual(full);
+    expect(request.lifecycle).toEqual({ lifecycleManaged: true, localLaunch: true });
   });
 
   it("exposes sequenced output, screen copies and lifecycle controls", async () => {

@@ -82,6 +82,22 @@ describe("local terminal host transport", () => {
     });
     await expect(factory.create("ssh:host", binding1)).rejects.toThrow("another target");
     await expect(factory.create(LOCAL_TERMINAL_HOST_TARGET_ID)).rejects.toThrow("generation");
+    await expect(
+      factory.create(LOCAL_TERMINAL_HOST_TARGET_ID, { ...binding1, connectionId: "state-2" }),
+    ).rejects.toThrow("another generation");
+  });
+
+  it("dials an owner-row binding without a connection id through its runtime generation", async () => {
+    const { connect, dialed } = fakeConnect({ [generation1.statePath]: hello1 });
+    const factory = makeLocalTerminalHostTransportFactory({
+      resolveBinding: async () => binding1,
+      proxyBinary: async () => "/staged/agent",
+      assertSocket: async () => {},
+      connect,
+    });
+    const { connectionId: _connectionId, ...ownerBinding } = binding1;
+    await factory.create(LOCAL_TERMINAL_HOST_TARGET_ID, ownerBinding);
+    expect(dialed[0]).toMatchObject({ env: { BIGBUD_AGENT_STATE_DIR: generation1.statePath } });
   });
 
   it("dials through the currently staged proxy and refuses insecure sockets", async () => {

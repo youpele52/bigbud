@@ -26,6 +26,46 @@ export const CODEX_NOTIFY_SCRIPT = `#!/bin/sh
 printf '\\033]777;bigbud;done\\007' > /dev/tty 2>/dev/null || true
 `;
 
+/** Directory under the server state directory that holds every installed integration version. */
+export const SHELL_INTEGRATION_DIRECTORY = "shell-integration";
+
+/**
+ * The stable integration root. Versions are content-addressed and never removed, so a terminal
+ * that outlives its backend (the local terminal host) keeps working hook paths after restarts.
+ */
+export function shellIntegrationRoot(stateDir: string): string {
+  return path.join(stateDir, SHELL_INTEGRATION_DIRECTORY);
+}
+
+/** Variables naming integration files; each must stay inside the integration directory. */
+const INTEGRATION_PATH_KEYS = [
+  "BIGBUD_SHELL_INTEGRATION_DIR",
+  "BIGBUD_FISH_DATA_DIR",
+  "BIGBUD_CLAUDE_HOOKS",
+] as const;
+
+/**
+ * Whether an environment's integration and hook paths live under `<stateDir>/shell-integration`.
+ * An environment without the integration is trivially stable.
+ */
+export function shellIntegrationEnvIsStable(
+  env: Readonly<Record<string, string | undefined>>,
+  stateDir: string,
+): boolean {
+  const dir = env.BIGBUD_SHELL_INTEGRATION_DIR;
+  if (dir === undefined) return !INTEGRATION_PATH_KEYS.some((key) => env[key] !== undefined);
+  const root = shellIntegrationRoot(path.resolve(stateDir));
+  const inside = (candidate: string, parent: string) => {
+    const relative = path.relative(parent, path.resolve(candidate));
+    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+  };
+  if (!path.isAbsolute(dir) || !inside(dir, root)) return false;
+  return INTEGRATION_PATH_KEYS.every((key) => {
+    const value = env[key];
+    return value === undefined || key === "BIGBUD_SHELL_INTEGRATION_DIR" || inside(value, dir);
+  });
+}
+
 export interface ShellIntegrationFiles {
   readonly dir: string;
   readonly bootstrap: string;

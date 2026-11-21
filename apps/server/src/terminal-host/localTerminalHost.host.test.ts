@@ -8,6 +8,7 @@ import {
   type LocalTerminalHostControllerDeps,
 } from "./localTerminalHost.host.ts";
 import {
+  LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES,
   localTerminalHostGenerationPaths,
   localTerminalHostPaths,
   type LocalTerminalHostGenerationPaths,
@@ -59,10 +60,12 @@ function controllerFor(
     readonly processes?: FakeProcesses;
     readonly owners?: Record<string, boolean | undefined>;
     readonly launchFails?: boolean;
+    readonly requiredCapabilities?: ReadonlyArray<string>;
   },
 ) {
   const base = adoptionDeps(paths, {
     probes: input.probes ?? {},
+    ...(input.requiredCapabilities ? { requiredCapabilities: input.requiredCapabilities } : {}),
     ...(input.processes ? { processes: input.processes } : {}),
     ...(input.owners ? { owners: input.owners } : {}),
   });
@@ -150,6 +153,30 @@ describe("local terminal host controller", () => {
     expect((await controller.knownRuntimes()).map((runtime) => runtime.generation)).toEqual([
       "state-3",
       "state-4",
+    ]);
+  });
+
+  it("an S1-era host without the 1.9 capabilities drains while state-<n+1> takes new terminals", async () => {
+    const { paths } = await root();
+    await mkdir(localTerminalHostGenerationPaths(paths.root, 1).statePath, { mode: 0o700 });
+    const { controller, launches, registry } = controllerFor(paths, {
+      requiredCapabilities: LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES,
+      probes: { 1: { kind: "hello", hello: fakeHostHello() } },
+      owners: { "state-1": true },
+      freshHello: fakeHostHello({
+        agentEpoch: "fresh-2",
+        capabilityNames: LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES,
+      }),
+      processes: fakeProcesses({ 9002: { status: "verified" } }),
+    });
+    // Nothing is admitted and nothing launches until a new terminal needs a host.
+    expect(await controller.currentAdmittedBinding()).toBeUndefined();
+    expect(launches).toEqual([]);
+    expect((await controller.resolveAdmittedBinding())?.connectionId).toBe("state-2");
+    expect((await controller.currentAdmittedBinding())?.connectionId).toBe("state-2");
+    expect((await registry.read()).map((record) => [record.generation, record.state])).toEqual([
+      [1, "draining"],
+      [2, "running"],
     ]);
   });
 

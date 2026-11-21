@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
+import {
+  REMOTE_AGENT_TERMINAL_LIFECYCLE_CAPABILITY,
+  REMOTE_AGENT_TERMINAL_LOCAL_LAUNCH_CAPABILITY,
+  REMOTE_AGENT_TERMINAL_QUERY_RESPONDER_CAPABILITY,
+  REMOTE_AGENT_TERMINAL_SCREEN_CAPABILITY,
+} from "../remote-agent/remoteAgentProtocol.ptyLifecycle.ts";
+
 /** One pool target for every local host generation; each generation is its own binding (F2). */
 export const LOCAL_TERMINAL_HOST_TARGET_ID = "local-terminal-host";
 
@@ -11,14 +18,18 @@ export const LOCAL_TERMINAL_HOST_MAX_SOCKET_PATH_BYTES = 100;
 export const LOCAL_TERMINAL_HOST_QUALIFIED = false;
 
 /**
- * Capabilities a host must advertise before it receives new terminals. S1 uses existing frames
- * only; S2/S3 append `terminal.screen`, `terminal.lifecycle`, `terminal.local-launch` and
- * `terminal.query-responder` once protocol 1.9 (R4/R5) lands.
+ * Capabilities a host must advertise before it receives new terminals (plan §7.3 item 6). A host
+ * lacking any of them (a pre-1.9 host, or one started without `--local-desktop-host`) keeps its
+ * own terminals but drains, and new terminals go to a fresh `state-<n+1>` host.
  */
 export const LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES: ReadonlyArray<string> = [
   "terminal.pty",
   "terminal.pty-inventory",
   "workspace.files",
+  REMOTE_AGENT_TERMINAL_SCREEN_CAPABILITY,
+  REMOTE_AGENT_TERMINAL_LIFECYCLE_CAPABILITY,
+  REMOTE_AGENT_TERMINAL_LOCAL_LAUNCH_CAPABILITY,
+  REMOTE_AGENT_TERMINAL_QUERY_RESPONDER_CAPABILITY,
 ];
 
 /**

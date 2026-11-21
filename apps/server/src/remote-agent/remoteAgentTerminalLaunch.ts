@@ -17,16 +17,21 @@ export function remoteAgentLegacyTerminalLaunch(environment: NodeJS.ProcessEnv) 
   };
 }
 
-/** Native profile preflight is required for this exact executable/argv, with suggestions off. */
+/**
+ * Native profile preflight is required for this exact executable/argv, with suggestions off.
+ * `localEnvironment` (a `local_launch` create on a local terminal host) replaces the remote
+ * presentation-only environment with the server's full spawn environment.
+ */
 export function remoteAgentTerminalLaunch(
   environment: NodeJS.ProcessEnv,
   launch?: RemoteAgentShellLaunch,
+  localEnvironment?: ReadonlyArray<{ readonly name: string; readonly value: string }>,
 ) {
   if (!launch) return remoteAgentLegacyTerminalLaunch(environment);
   return {
     shell: launch.executable,
     args: [...launch.args],
     profileLaunch: true,
-    environment: remoteAgentTerminalEnvironment(environment),
+    environment: localEnvironment ?? remoteAgentTerminalEnvironment(environment),
   };
 }

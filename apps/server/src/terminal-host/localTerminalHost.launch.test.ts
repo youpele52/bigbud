@@ -100,7 +100,11 @@ describe("local terminal host launch", () => {
     });
     cleanups.push(() => new Promise<void>((resolve) => server?.close(() => resolve())));
     expect(launched.pid).toBe(4242);
-    expect(args).toEqual(["--supervisor"]);
+    expect(args).toEqual([
+      "--supervisor",
+      "--local-desktop-host",
+      "--exit-when-orphaned-and-empty",
+    ]);
     expect(options?.detached).toBe(true);
     expect(options?.stdio?.[0]).toBe("ignore");
     expect(options?.env?.SECRET).toBeUndefined();

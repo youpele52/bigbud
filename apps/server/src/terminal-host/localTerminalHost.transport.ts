@@ -23,13 +23,11 @@ import {
 export const LOCAL_TERMINAL_HOST_PROXY_PATH = "/usr/local/bin:/usr/bin:/bin";
 
 /**
- * Hello fields protocol 1.9 (R4) adds. Until the codec decodes them they are absent and the
- * registry falls back to `LC_ALL=C ps -o lstart=` verification.
+ * The host's hello. Protocol 1.9 hosts fill `processId`/`processStartTimeMs` (R4/R5), which name
+ * the PID to verify; an older host omits them and the registry falls back to its own record plus
+ * `LC_ALL=C ps -o lstart=` verification.
  */
-export type LocalTerminalHostHello = RemoteAgentHello & {
-  readonly processId?: number;
-  readonly processStartTimeMs?: number;
-};
+export type LocalTerminalHostHello = RemoteAgentHello;
 
 const POOL_TRIPLES: Readonly<Record<string, RemoteAgentRuntime["targetTriple"]>> = {
   aarch64: "aarch64-unknown-linux-musl",
@@ -166,9 +164,11 @@ export function makeLocalTerminalHostTransportFactory(
     },
     create: async (target, binding) => {
       assertTarget(target);
-      if (!binding?.expectedEpoch || !binding.connectionId)
+      if (!binding?.expectedEpoch)
         throw new Error("A local terminal host connection requires a generation binding.");
-      if (binding.connectionId !== binding.runtime.generation)
+      // Owner rows bind `{ runtime, expectedEpoch }`; the runtime's generation is the connection
+      // id by construction (F2), so an explicit connection id must agree with it.
+      if (binding.connectionId !== undefined && binding.connectionId !== binding.runtime.generation)
         throw new Error("A local terminal host binding names another generation.");
       await options.assertSocket(binding.runtime.socketPath);
       const connection = connectLocalTerminalHostProxy(
