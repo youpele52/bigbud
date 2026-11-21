@@ -8,9 +8,20 @@ import {
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
   shouldShowThreadStatusLabel,
+  hasPendingIdleWarning,
+  livenessForThreadPanes,
   terminalStatusFromFinished,
-  terminalStatusFromRunningIds,
+  terminalStatusFromLiveness,
 } from "./SidebarThreadRow.status";
+
+const finishedItem = (exitCode: number | null, finishedAt: string) =>
+  ({
+    paneId: "p",
+    command: "sleep 70; false",
+    exitCode,
+    finishedAt,
+    source: "shell-integration",
+  }) as never;
 
 describe("SidebarThreadRow.status", () => {
   it("uses a steady amber provider icon while awaiting an answer", () => {
@@ -35,26 +46,56 @@ describe("SidebarThreadRow.status", () => {
     ).toEqual(["default", "panel-terminal-1"]);
   });
 
-  it("shows a running terminal indicator when either terminal surface is active", () => {
-    expect(
-      terminalStatusFromRunningIds(mergeRunningTerminalIds([], ["panel-terminal-1"])),
-    ).toMatchObject({
-      label: "Terminal process running",
+  it("shows live terminals muted, blue with a pulse when busy, and amber with a pending warning", () => {
+    const now = Date.parse("2026-11-21T10:00:00.000Z");
+    const quiet = { busy: false, idleClosesAt: null };
+    expect(terminalStatusFromLiveness({}, now)).toBeNull();
+    expect(terminalStatusFromLiveness({ a: quiet }, now)).toEqual({
+      label: "1 terminal running",
+      colorClass: "text-muted-foreground",
+      pulse: false,
+    });
+    expect(terminalStatusFromLiveness({ a: { ...quiet, busy: true } }, now)).toMatchObject({
+      label: "1 terminal running (busy)",
       colorClass: "text-info-foreground",
       pulse: true,
     });
+    expect(
+      terminalStatusFromLiveness({ a: { ...quiet, busy: true }, b: quiet, c: quiet }, now),
+    ).toMatchObject({ label: "3 terminals running (1 busy)", pulse: true });
+    const warned = {
+      a: { ...quiet, busy: true },
+      b: { busy: false, idleClosesAt: "2026-11-21T10:00:50.000Z" },
+    };
+    expect(hasPendingIdleWarning(warned, now)).toBe(true);
+    expect(terminalStatusFromLiveness(warned, now)).toEqual({
+      label: "Terminal closes in 1 minute (idle)",
+      colorClass: "text-warning",
+      pulse: false,
+    });
+    expect(
+      terminalStatusFromLiveness(
+        { b: { busy: false, idleClosesAt: "2026-11-21T10:02:30.000Z" } },
+        now,
+      )?.label,
+    ).toBe("Terminal closes in 3 minutes (idle)");
+    // A passed deadline is stale: the close notice or the next inventory removes the terminal.
+    const stale = { b: { busy: false, idleClosesAt: "2026-11-21T09:59:00.000Z" } };
+    expect(hasPendingIdleWarning(stale, now)).toBe(false);
+    expect(terminalStatusFromLiveness(stale, now)?.label).toBe("1 terminal running");
+  });
+
+  it("counts only the thread's panes when it has any, and every live terminal otherwise", () => {
+    const quiet = { busy: false, idleClosesAt: null };
+    const liveness = { a: quiet, b: { ...quiet, busy: true } };
+    expect(livenessForThreadPanes(liveness, [])).toBe(liveness);
+    expect(livenessForThreadPanes(liveness, ["a", "b", "c"])).toBe(liveness);
+    expect(livenessForThreadPanes(liveness, ["b"])).toEqual({ b: { ...quiet, busy: true } });
+    expect(livenessForThreadPanes(liveness, ["z"])).toEqual({});
   });
 
   it("shows finished terminal work as a red icon on failure and green otherwise, without the exit code", () => {
-    const item = (exitCode: number | null, finishedAt: string) =>
-      ({
-        paneId: "p",
-        command: "sleep 70; false",
-        exitCode,
-        finishedAt,
-        source: "shell-integration",
-      }) as never;
-    const failed = terminalStatusFromFinished([item(1, "2026-01-01T10:00:00.000Z")]);
+    const failed = terminalStatusFromFinished([finishedItem(1, "2026-01-01T10:00:00.000Z")]);
     expect(failed).toEqual({
       label: "Terminal command failed: sleep 70; false",
       colorClass: "text-destructive",
@@ -63,8 +104,8 @@ describe("SidebarThreadRow.status", () => {
     expect(failed?.label).not.toContain("exit");
     expect(
       terminalStatusFromFinished([
-        item(1, "2026-01-01T10:00:00.000Z"),
-        item(0, "2026-01-01T11:00:00.000Z"),
+        finishedItem(1, "2026-01-01T10:00:00.000Z"),
+        finishedItem(0, "2026-01-01T11:00:00.000Z"),
       ]),
     ).toMatchObject({ colorClass: "text-success" });
     expect(terminalStatusFromFinished([])).toBeNull();

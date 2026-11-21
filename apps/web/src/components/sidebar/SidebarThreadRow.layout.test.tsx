@@ -11,6 +11,10 @@ import {
   makeTerminalEvent,
   resetTerminalStore,
 } from "../../stores/terminal/terminal.store.test.helpers";
+import {
+  useTerminalLivenessStore,
+  type TerminalLivenessState,
+} from "../../stores/terminal/terminalLiveness.store";
 
 const state = vi.hoisted(() => ({
   connecting: false,
@@ -44,6 +48,19 @@ vi.mock("../../stores/terminal/terminal.store", async (importOriginal) => {
       <T,>(selector: (state: TerminalStateStoreState) => T) =>
         selector(actual.useTerminalStateStore.getState()),
       actual.useTerminalStateStore,
+    ),
+  };
+});
+// Static rendering reads a store's initial state; read the live state instead.
+vi.mock("../../stores/terminal/terminalLiveness.store", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../stores/terminal/terminalLiveness.store")>();
+  return {
+    ...actual,
+    useTerminalLivenessStore: Object.assign(
+      <T,>(selector: (state: TerminalLivenessState) => T) =>
+        selector(actual.useTerminalLivenessStore.getState()),
+      actual.useTerminalLivenessStore,
     ),
   };
 });
@@ -122,6 +139,9 @@ const props: SidebarThreadRowProps = {
 
 beforeEach(() => {
   resetTerminalStore();
+  useTerminalLivenessStore.setState({
+    byThreadId: { thread: { terminal: { busy: true, idleClosesAt: null } } },
+  });
   state.connecting = false;
   state.status = true;
   state.chatProvider = "codex";
@@ -159,7 +179,7 @@ it("keeps only the provider before the title, with PR first in the right-side in
   const providerIndex = html.indexOf('data-slot="thread-provider-icon"');
   const prIndex = html.indexOf('aria-label="#42 PR open: Change"');
   const statusIndex = html.indexOf("Pending Approval");
-  const terminalIndex = html.indexOf('aria-label="Terminal process running"');
+  const terminalIndex = html.indexOf('aria-label="1 terminal running (busy)"');
   expect(providerIndex).toBeGreaterThan(-1);
   expect(titleIndex).toBeGreaterThan(providerIndex);
   expect(prIndex).toBeGreaterThan(titleIndex);

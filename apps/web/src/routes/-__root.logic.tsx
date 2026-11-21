@@ -42,7 +42,8 @@ import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 import { createAsyncOperationQueue } from "./-__root.recovery.serial";
-import { subscribeGlobalTerminalState } from "./-__root.terminal-events";
+import { subscribeAppTerminalState } from "./-__root.terminal-events";
+import { TerminalLimitDialog } from "../components/terminal/TerminalLimitDialog";
 import { emitTerminalWorkActivity } from "../notifications/terminalWorkEvents";
 import {
   resolveStartupRouteIntent,
@@ -52,7 +53,7 @@ import {
 } from "./-__root.startup-restoration";
 import { markRestoredThreadRoute } from "../stores/remoteAccess/threadNavigationIntent";
 
-/** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
+/** Subscribes to orchestration/terminal events and applies them to the client store; renders only the terminal limit dialog. */
 export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
   const applyOrchestrationEvents = useStore((store) => store.applyOrchestrationEvents);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
@@ -338,8 +339,9 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         onResubscribe: () => undefined,
       },
     );
-    const unsubTerminalEvent = subscribeGlobalTerminalState({
+    const unsubTerminalEvent = subscribeAppTerminalState({
       terminal: api.terminal,
+      showLifecycleNotices: !ownsThread,
       isArchived: (threadId) => {
         const thread = useStore.getState().threads.find((entry) => entry.id === threadId);
         return thread !== undefined && thread.archivedAt !== null;
@@ -381,5 +383,6 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
   useServerWelcomeSubscription(handleWelcome);
   useServerConfigUpdatedSubscription(handleServerConfigUpdated);
 
-  return null;
+  // Hosts `promptTerminalLimit` for this renderer.
+  return <TerminalLimitDialog />;
 }
