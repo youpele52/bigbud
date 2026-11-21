@@ -1,3 +1,4 @@
+import { GITHUB_RELEASES_URL } from "../src/constants/app";
 import {
   parseDownloadRef,
   remoteAgentDownloadLocation,
@@ -47,6 +48,16 @@ function noReleaseMessage(channel: DownloadChannel): string {
     return `No stable bigbud release ships the remote agent script yet. Use ${BETA_DOWNLOAD_URL} instead.`;
   }
   return `No bigbud ${channel} release ships the remote agent script yet.`;
+}
+
+/** Plain text for a channel lookup that neither source could answer and nothing cached. */
+function lookupFailedMessage(channel: DownloadChannel): string {
+  const lines = [
+    `Could not look up the newest bigbud ${channel} release. Retry shortly or use a pinned link such as /download/v<version>/remote-agent.`,
+  ];
+  if (channel === "stable") lines.push(`Stable releases: ${GITHUB_RELEASES_URL}/latest`);
+  lines.push(`Beta and prereleases: ${GITHUB_RELEASES_URL}`);
+  return lines.join("\n");
 }
 
 function cacheKeys(channel: DownloadChannel) {
@@ -113,8 +124,5 @@ export async function handleRemoteAgentDownload(
 
   const lastGood = await readCached(deps, keys.lastGood);
   if (lastGood) return resolutionResponse(ref.channel, lastGood);
-  return textResponse(
-    503,
-    `Could not look up the newest bigbud ${ref.channel} release. Retry shortly or use a pinned link such as /download/v<version>/remote-agent.`,
-  );
+  return textResponse(503, lookupFailedMessage(ref.channel));
 }

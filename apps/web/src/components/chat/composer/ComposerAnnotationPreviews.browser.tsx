@@ -3,6 +3,7 @@ import "../../../index.css";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { ANNOTATION_CHIP_SURFACE_CLASS_NAME } from "../../annotations/annotationSurface";
 import { ComposerAnnotationPreviews } from "./ComposerAnnotationPreviews";
 import type {
   ComposerAnnotationAttachment,
@@ -77,7 +78,7 @@ describe("ComposerAnnotationPreviews", () => {
         throw new Error("Unable to find annotation chip wrapper.");
       }
       expect(chip.className).toContain("border-border/80");
-      expect(chip.className).toContain("bg-background");
+      expect(chip.className).toContain(ANNOTATION_CHIP_SURFACE_CLASS_NAME);
       expect(chip.className).not.toContain("bg-info/10");
 
       const icon = trigger.querySelector("svg");

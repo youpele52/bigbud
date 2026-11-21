@@ -301,9 +301,8 @@ function backgroundAlpha(element: Element): number {
   return rgba ? Number(rgba[1]) : 1;
 }
 
-it("follows the window material: translucent fill, opaque when solid or with Reduce transparency", async () => {
+it("stays opaque in every window material and theme, keeping the severity edge", async () => {
   const root = document.documentElement;
-  const input: CDPSession = cdp();
   const screen = await render(<ToastProvider />);
   try {
     toastManager.add({ title: "Material card", type: "success", timeout: 0 });
@@ -314,23 +313,14 @@ it("follows the window material: translucent fill, opaque when solid or with Red
     expect(backgroundAlpha(card)).toBe(1);
 
     root.dataset.desktopShell = "macos";
-    root.dataset.windowMaterial = "translucent";
-    await vi.waitFor(() => expect(backgroundAlpha(card)).toBeLessThan(1));
-    root.classList.add("dark");
-    await vi.waitFor(() => expect(backgroundAlpha(card)).toBeLessThan(1));
-    root.classList.remove("dark");
-
-    await input.send("Emulation.setEmulatedMedia", {
-      features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
-    });
-    await vi.waitFor(() => expect(backgroundAlpha(card)).toBe(1));
-    await input.send("Emulation.setEmulatedMedia", { features: [] });
-    await vi.waitFor(() => expect(backgroundAlpha(card)).toBeLessThan(1));
-
-    root.dataset.windowMaterial = "solid";
-    await vi.waitFor(() => expect(backgroundAlpha(card)).toBe(1));
+    for (const material of ["translucent", "solid"]) {
+      root.dataset.windowMaterial = material;
+      for (const dark of [false, true]) {
+        root.classList.toggle("dark", dark);
+        expect(backgroundAlpha(card)).toBe(1);
+      }
+    }
   } finally {
-    await input.send("Emulation.setEmulatedMedia", { features: [] });
     delete root.dataset.desktopShell;
     delete root.dataset.windowMaterial;
     root.classList.remove("dark");
