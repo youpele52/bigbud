@@ -21,6 +21,7 @@ export class LocalTerminalHostLaunchError extends Error {
 export function localTerminalHostEnvironment(
   environment: NodeJS.ProcessEnv,
   statePath: string,
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = {};
   for (const key of ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG"]) {
@@ -32,6 +33,10 @@ export function localTerminalHostEnvironment(
   result.HOME ??= homedir();
   result.PATH = LOCAL_TERMINAL_HOST_MINIMAL_PATH;
   result.BIGBUD_AGENT_STATE_DIR = statePath;
+  // One malloc magazine keeps the host's peak RSS inside the 256 MiB budget on macOS (R7: peaks
+  // 255–263 MiB → 245–252 MiB at 24 PTYs). PTYs get their environment from the launch spec, so
+  // user shells never inherit this.
+  if (platform === "darwin") result.MallocMaxMagazines = "1";
   return result;
 }
 

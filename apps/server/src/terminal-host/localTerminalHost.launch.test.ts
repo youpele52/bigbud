@@ -59,6 +59,7 @@ describe("local terminal host launch", () => {
         NODE_OPTIONS: "--inspect",
       },
       "/tmp/bbth-x/terminal-host/state-1",
+      "linux",
     );
     expect(env).toEqual({
       HOME: "/home/u",
@@ -70,6 +71,13 @@ describe("local terminal host launch", () => {
       PATH: LOCAL_TERMINAL_HOST_MINIMAL_PATH,
       BIGBUD_AGENT_STATE_DIR: "/tmp/bbth-x/terminal-host/state-1",
     });
+  });
+
+  it("limits macOS malloc magazines for the host process only", () => {
+    const darwin = localTerminalHostEnvironment({ HOME: "/Users/u" }, "/tmp/state", "darwin");
+    expect(darwin.MallocMaxMagazines).toBe("1");
+    const linux = localTerminalHostEnvironment({ HOME: "/home/u" }, "/tmp/state", "linux");
+    expect(linux).not.toHaveProperty("MallocMaxMagazines");
   });
 
   it("creates the generation directory as 0700", async () => {

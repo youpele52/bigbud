@@ -1426,3 +1426,7 @@ External facts were checked on 2026-11-21.
     - Mark lost PTYs `host-lost` and request cold snapshots.
     - `Manager.shell.profile.ts:40` must accept `local-terminal-host`.
   - **Old opt-in owners:** S1 owner rows from opt-in dev builds recorded `platform: "linux"`. Recovery is unaffected; a fresh spawn against a live one reports a launch-intent conflict.
+- R7 (committed b95b2afb70): one shared allocation per output chunk, batched reads (64× fewer flood frames), 123 MB/s for unmanaged PTYs and 35 MB/s for managed ones, echo p99 4.1 ms during a flood, cached quiet snapshots, deferred flood checkpoints, and a spool backlog gate.
+  - **Memory:** the live heap is now mostly screen grids (about 160 of 185 MiB at 24×1,050 rows). macOS allocator fragmentation set peak RSS at 255–263 MiB.
+  - **Coordinator decision:** the local host launches with `MallocMaxMagazines=1` on macOS (host env only; PTYs never inherit it), which measured 245–252 MiB peak, within the 256 MiB §13 budget.
+  - **Q1:** if more headroom is needed, evaluate a fragmentation-resistant allocator (e.g. mimalloc; a new dependency, needs approval) or a compact row format, before reducing scrollback.
