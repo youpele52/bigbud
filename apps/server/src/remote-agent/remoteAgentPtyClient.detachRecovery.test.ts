@@ -48,7 +48,8 @@ it.each([false, true])(
     const connection = {
       request,
       close,
-      supportsCapability: () => true,
+      // terminal.lifecycle adds the connection's lifecycle-event router, a second listener.
+      supportsCapability: (name: string) => name !== "terminal.lifecycle",
       onFrame: (listener: (frame: RemoteAgentFrame) => unknown) => {
         frames.add(listener);
         return () => frames.delete(listener);

@@ -26,11 +26,21 @@ import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentColdAttach, RemoteAgentOwnedInput } from "./remoteAgentOwnedPty.input.ts";
 import { REMOTE_PTY_INPUT_RECONCILE } from "./remoteAgentPtyClient.reconcile.ts";
 import type { ShellHostScope } from "@bigbud/contracts/workspace/terminalShell.ts";
+import {
+  remoteAgentPtyCreateLifecycleFields,
+  remoteAgentPtyWorkspaceHandle,
+  type RemoteAgentPtyCreateDefaults,
+} from "./remoteAgentPtyClient.lifecycle.ts";
 
 export interface OwnedRemoteAgentPtyOptions {
   /** Local supervisor callers share durable ownership without resolving an SSH control endpoint. */
   readonly openControl?: (target: string) => Promise<Pick<RemoteAgentControl, "registry">>;
   readonly resolveShellHost?: (target: string) => ShellHostScope;
+  /**
+   * Protocol 1.9 create defaults (`lifecycle_managed`, `activity_source`, `local_launch`, ...).
+   * `PtySpawnInput.hostLifecycle` overrides them per spawn; each is sent only when advertised.
+   */
+  readonly hostLifecycle?: RemoteAgentPtyCreateDefaults;
 }
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
@@ -183,7 +193,11 @@ export function makeOwnedRemoteAgentPty(
         }
       } else {
         owner = await update((current) => ({ ...current, state: "may-have-been-sent" }));
-        const workspaceHandle = `terminal-${owner.resourceId}`;
+        const workspaceHandle = remoteAgentPtyWorkspaceHandle(connection, {
+          target: owner.target,
+          cwd: input.remoteCwd,
+          resourceId: owner.resourceId,
+        });
         try {
           await new RemoteAgentWorkspaceClient(connection).openWorkspace(
             workspaceHandle,
@@ -202,6 +216,10 @@ export function makeOwnedRemoteAgentPty(
           ...remoteAgentTerminalLaunch(input.env, owner.shellLaunch),
           cols: input.cols,
           rows: input.rows,
+          lifecycle: remoteAgentPtyCreateLifecycleFields(connection, {
+            ...options.hostLifecycle,
+            ...input.hostLifecycle,
+          }),
           onRejected: releaseDefinitiveFailure,
         });
       }
@@ -310,6 +328,21 @@ export function makeOwnedRemoteAgentPty(
         return requestedProfile && process.launchStatus === "unconfirmed"
           ? { status: "unconfirmed" as const, requestedProfile }
           : undefined;
+      },
+      onSequencedData: (callback) => process.onSequencedData(callback),
+      screen: {
+        capabilities: () => process.lifecycle.capabilities(),
+        snapshot: (snapshotInput) => process.screenSnapshot(snapshotInput),
+      },
+      lifecycle: {
+        capabilities: () => process.lifecycle.capabilities(),
+        get evictedPtyId() {
+          return process.lifecycle.evictedPtyId;
+        },
+        setViewState: (state, signal) => process.lifecycle.setViewState(state, signal),
+        keepOpen: (signal) => process.lifecycle.keepOpen(signal),
+        onActivity: (callback) => process.lifecycle.onActivity(callback),
+        onNotice: (callback) => process.lifecycle.onNotice(callback),
       },
       write: (data) => process.write(data),
       resize: (cols, rows) => process.resize(cols, rows),

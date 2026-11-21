@@ -58,6 +58,103 @@ export interface PtyProcess {
   /** Fatal I/O failure is not exit evidence; implementations may replay a latched failure. */
   readonly onError?: (callback: (error: Error) => void) => () => void;
   onExit(callback: (event: PtyExitEvent) => void): () => void;
+  /** Host output with its per-PTY sequence; every applied sequence is reported, even empty text. */
+  readonly onSequencedData?: (callback: (event: PtySequencedData) => void) => () => void;
+  /** Host screen copies (terminal.screen); absent for node-pty. */
+  readonly screen?: PtyScreenControl;
+  /** Host lifecycle controls (terminal.lifecycle); absent for node-pty. */
+  readonly lifecycle?: PtyLifecycleControl;
+}
+
+export interface PtySequencedData {
+  readonly sequence: number;
+  /** Text decoded through `sequence`; a split UTF-8 character completes with a later sequence. */
+  readonly data: string;
+}
+
+/** Capabilities of the connection that currently carries this PTY; they can change on reconnect. */
+export interface PtyHostCapabilities {
+  readonly screen: boolean;
+  readonly lifecycle: boolean;
+  readonly spool: boolean;
+  readonly queryResponder: boolean;
+  readonly localLaunch: boolean;
+}
+
+export interface PtyScreenSnapshotInput {
+  /** Atomically moves the host query-responder cut to this snapshot (§8.9). */
+  readonly attachRenderer: boolean;
+  readonly maxAnsiUnits?: number;
+  readonly maxUtf8Bytes?: number;
+  /** 0 or absent means the model's full retained scrollback. */
+  readonly maxScrollbackRows?: number;
+  readonly signal?: AbortSignal;
+}
+
+/** A verified, fully reassembled host screen copy. */
+export interface PtyScreenSnapshot {
+  readonly throughSequence: number;
+  readonly cols: number;
+  readonly rows: number;
+  readonly scrollbackRows: number;
+  readonly alternateScreen: boolean;
+  readonly fidelity: "full" | "trimmed" | "partial";
+  readonly modelState: "live" | "cold" | "invalid";
+  readonly trimmedRows: number;
+  readonly ansi: Uint8Array;
+  readonly pendingEscapeTail: Uint8Array;
+}
+
+export interface PtyScreenControl {
+  readonly capabilities: () => PtyHostCapabilities;
+  /** Rejects with code `UNSUPPORTED` when the host lacks terminal.screen. */
+  readonly snapshot: (input: PtyScreenSnapshotInput) => Promise<PtyScreenSnapshot>;
+}
+
+export interface PtyViewState {
+  readonly viewState: "visible" | "hidden";
+  readonly rendererAttached: boolean;
+  readonly ownerBusyHint?: "busy" | "idle" | "unknown";
+  readonly themeFg?: string;
+  readonly themeBg?: string;
+  /** With `rendererAttached = false`: the last output sequence the view parsed (§8.9). */
+  readonly ackedSequence?: number;
+}
+
+export interface PtyHostActivity {
+  readonly idleBusy: boolean;
+  readonly pressureBusy: boolean;
+  readonly sidebarBusy: boolean;
+  readonly reasons: ReadonlyArray<string>;
+  readonly lastInputMs: number;
+  readonly lastOutputMs: number;
+  readonly quietSinceMs: number;
+}
+
+export interface PtyHostLifecycleNotice {
+  readonly noticeId: number;
+  readonly kind: string;
+  readonly closesAtMs: number;
+  readonly occurredAtMs: number;
+}
+
+export interface PtyLifecycleControl {
+  readonly capabilities: () => PtyHostCapabilities;
+  /** The PTY the host closed to admit this one (limit eviction), when it reported one. */
+  readonly evictedPtyId?: string | undefined;
+  /** Full state, latest wins; superseded pushes settle with the push that replaced them. */
+  readonly setViewState: (state: PtyViewState, signal?: AbortSignal) => Promise<void>;
+  readonly keepOpen: (signal?: AbortSignal) => Promise<void>;
+  readonly onActivity: (callback: (activity: PtyHostActivity) => void) => () => void;
+  readonly onNotice: (callback: (notice: PtyHostLifecycleNotice) => void) => () => void;
+}
+
+/** Additive host create options; ignored where the host lacks the capability. */
+export interface PtySpawnHostLifecycle {
+  readonly lifecycleManaged?: boolean;
+  readonly activitySource?: "host" | "owner-hint";
+  /** Host `pty_id` to close atomically before admitting this one (limit eviction). */
+  readonly evictPtyId?: string;
 }
 
 export interface PtySpawnInput {
@@ -78,6 +175,7 @@ export interface PtySpawnInput {
   env: NodeJS.ProcessEnv;
   readonly executionTargetId?: string;
   readonly remoteCwd?: string;
+  readonly hostLifecycle?: PtySpawnHostLifecycle;
 }
 
 /**
