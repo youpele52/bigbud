@@ -16,6 +16,7 @@ import {
 import { cn } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { Button } from "../ui/button";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { BrowserPageMetadata } from "./BrowserPanel.viewport";
 import { BrowserFaviconIcon } from "./BrowserPanel.faviconIcon";
@@ -304,7 +305,12 @@ export const BrowserToolbar = memo(function BrowserToolbar({
           </Tooltip>
         ) : null}
         {suggestions.length > 0 && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
+          <div
+            className={cn(
+              "absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border py-1 shadow-lg",
+              SOLID_FLOATING_SURFACE_CLASS_NAME,
+            )}
+          >
             {suggestions.map((suggestion, index) => (
               <button
                 key={`${suggestion.kind}:${suggestion.url}`}

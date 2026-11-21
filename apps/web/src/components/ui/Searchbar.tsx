@@ -4,6 +4,7 @@ import { ArrowLeftIcon, SearchIcon, XIcon } from "lucide-react";
 import type * as React from "react";
 
 import { cn } from "~/lib/utils";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 
 type SearchbarProps = {
   readonly children: React.ReactNode;
@@ -41,7 +42,8 @@ export function Searchbar({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 border-b bg-popover px-2 py-1.5",
+        "flex items-center gap-1 border-b px-2 py-1.5",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
         sticky && "sticky top-0 z-10",
         hideDivider && "border-b-0",
         className,

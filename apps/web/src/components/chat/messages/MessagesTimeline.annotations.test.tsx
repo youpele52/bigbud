@@ -2,6 +2,8 @@ import { MessageId } from "@bigbud/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ANNOTATION_CHIP_SURFACE_CLASS_NAME } from "../../annotations/annotationSurface";
+
 vi.mock("../common/ChatMarkdown", () => ({
   default: ({ text, className }: { text: string; className?: string }) => (
     <div className={className}>{text}</div>
@@ -122,7 +124,8 @@ describe("MessagesTimeline annotations", () => {
     expect(markup).toContain("2 annotations");
     expect(markup).toContain("Please inspect");
     expect(markup).toContain("Fix this button");
-    expect(markup).toContain("border-border/80 bg-background");
+    expect(markup).toContain("border-border/80");
+    expect(markup).toContain(ANNOTATION_CHIP_SURFACE_CLASS_NAME);
     expect(markup).toContain("text-info");
     expect(markup).not.toContain("bg-info/10");
     expect(markup.indexOf("Please inspect")).toBeGreaterThan(markup.indexOf("Browser annotation"));

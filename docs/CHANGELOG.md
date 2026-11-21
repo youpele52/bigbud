@@ -120,7 +120,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 - **Trust task-completion notifications:** **Task completed** appears only after a turn has truly finished with nothing left to do. Agent updates have their own notifications.
 - **Close every notification:** Notifications close reliably in the desktop app and dismiss themselves after a time based on severity. A dismissed warning stays away for five minutes unless it gets worse.
-- **Read notifications and comments clearly:** Notifications and comment boxes, including **Comment on selection** and saved annotations, stay solid even with a translucent **Window Material**, so text behind them never shows through. Notifications keep their severity colour.
+- **Read notifications, comments, dialogs and menus clearly:** Notifications, comment boxes (including **Comment on selection** and saved annotations), the **Cmd/Ctrl+F** and **Cmd/Ctrl+P** palettes, dialogs, menus, popovers and tooltips stay solid even with a translucent **Window Material**, so text behind them never shows through. Notifications keep their severity colour.
 
 ### Small Changes That Remove Friction
 

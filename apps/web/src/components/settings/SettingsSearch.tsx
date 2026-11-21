@@ -2,7 +2,9 @@ import { SearchIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 
+import { cn } from "~/lib/utils";
 import { Input } from "../ui/input";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../ui/solidSurface";
 import { getSettingsSearchResults, normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
 import type { SETTINGS_SEARCH_ITEMS } from "./SettingsSidebarNav.items";
 
@@ -65,7 +67,10 @@ export function SettingsSearch({
       {showResults ? (
         <div
           id="settings-search-results"
-          className="absolute top-[calc(100%+0.25rem)] left-0 z-50 w-full overflow-hidden rounded-lg border bg-popover py-1 shadow-lg/5"
+          className={cn(
+            "absolute top-[calc(100%+0.25rem)] left-0 z-50 w-full overflow-hidden rounded-lg border py-1 shadow-lg/5",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
+          )}
         >
           {results.length > 0 ? (
             results.map((result) => (

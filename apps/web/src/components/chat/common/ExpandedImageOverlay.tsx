@@ -1,5 +1,7 @@
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import { cn } from "~/lib/utils";
 import { Button } from "../../ui/button";
+import { SOLID_PAGE_SURFACE_CLASS_NAME } from "../../ui/solidSurface";
 import type { ExpandedImagePreview } from "./ExpandedImagePreview";
 
 interface ExpandedImageOverlayProps {
@@ -55,7 +57,10 @@ export function ExpandedImageOverlay({
         <img
           src={expandedImageItem.src}
           alt={expandedImageItem.name}
-          className="max-h-[86vh] max-w-[92vw] select-none rounded-lg border border-border/70 bg-background object-contain shadow-2xl"
+          className={cn(
+            "max-h-[86vh] max-w-[92vw] select-none rounded-lg border border-border/70 object-contain shadow-2xl",
+            SOLID_PAGE_SURFACE_CLASS_NAME,
+          )}
           draggable={false}
         />
         <p className="mt-2 max-w-[92vw] truncate text-center text-xs text-muted-foreground/80">
