@@ -1408,3 +1408,9 @@ External facts were checked on 2026-11-21.
   - **New refusal codes** for S1/S3: `PTY_UNKNOWN`, `PTY_LIFECYCLE_UNAVAILABLE`, `SCREEN_UNAVAILABLE`, `SNAPSHOT_TOO_LARGE`, `SPOOL_UNAVAILABLE`, `INVALID_ARGUMENT`, `PTY_EPOCH_MISMATCH`. `activity_state` is `busy`, `idle` or `idle_warning`.
   - **Blocking before Q1 (R6):** the PTY reader sleeps a fixed 5 ms when its buffer is empty, which caps output at about 0.2 MB/s on macOS. The fix is a poll-based reader plus backpressure: stop reading when the per-connection window is full instead of dropping the client.
   - **Test environment:** journal tests fail when `$TMPDIR` holds thousands of old `bigbud-*` entries (about 3,700 locally). This is a test-environment issue, not a regression.
+- R6 (committed): output now runs at about 79 MB/s end to end on macOS (32 MB/s for managed PTYs, paced by the screen model). A paused client throttles its PTY instead of being dropped, and echo p99 is about 0.6 ms during maximal snapshots.
+  - **Blocking before Q1 (R7):** peak host RSS at 24 PTYs is now 250–259 MiB against the 256 MiB budget, because full-speed bursts fill the spool and screen queues at once. Two fixes:
+    - share one copy of each output chunk between the replay ring, the screen model and the spool, instead of copying it three times (touches R1 and R2);
+    - batch the macOS PTY reads, which come in about 1 KiB pieces (about 50,000 frames per 51 MB), to cut per-frame overhead.
+  - **Known limit:** the global writer budget (8 MiB) can still couple PTYs once about 32 connections are stalled at once.
+  - **Diagnostics:** supervisor stderr goes to `<state>/supervisor.log`. Surface it in diagnostics.
