@@ -5,11 +5,11 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 ## What's new?
 
 - **[Work across projects from one chat](#work-across-projects-from-one-chat):** Let an agent message and organize chats in your other projects, including remote ones. Attach a chat and ask, and it just happens.
+- **[Run bigbud on your own Linux server](#run-bigbud-on-your-own-linux-server):** Keep chats, terminals and agents running on a VPS or VM, and connect from your Mac whenever you like.
+- **[Search everything from one place](#search-everything-from-one-place):** **Mod+F** searches your chats, projects, this computer and connected servers; **Mod+P** finds any file by name.
+- **[Never miss finished terminal work](#never-miss-finished-terminal-work):** Long-running commands move their chat to **Needs you** when they finish, with a red or green terminal icon and a notification.
+- **[A window that feels all of a piece](#a-window-that-feels-all-of-a-piece):** Let your wallpaper show through the whole window, and browse files beside your code instead of under a drawer.
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
-- **[See how your computer and servers are performing](#resource-warnings-without-watching-the-monitor):** Get warnings when CPU or memory use stays high or disk space runs low on your computer, and view live resource usage on connected Linux servers.
-- **[Start your project your way](#start-a-project-with-just-a-name):** Start with a folder or just a name—bigbud makes room for your ideas and handles the workspace setup.
-- **[Edit files without leaving bigbud](#edit-files-without-leaving-bigbud):** Update code, Markdown, and text files directly in the Files panel, with automatic saving and clear feedback when something needs your attention.
-- **[Move swiftly, browse easily](#lighter-loading-for-larger-chat-histories):** Browse large chat histories with less memory use. Older messages load as you scroll, and long replies expand when you need them.
 
 ## v0.4.0 (21 November, 2026)
 
@@ -83,7 +83,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 ### A Window That Feels All of a Piece
 
-- **See your desktop through the whole window:** When **Window Material** is translucent, the chat, headers, composer, terminal, right panel, and **Settings** all let your wallpaper show through, not just the sidebar. **Solid** keeps every surface opaque.
+- **See your desktop through the whole window:** When **Window Material** is translucent, the chat, headers, composer, terminal, right panel, **Files** previews, including notebooks and the editor, and **Settings** all let your wallpaper show through, not just the sidebar. **Solid** keeps every surface opaque.
 - **Read the layout at a glance:** The sidebar and right panel share one tone, and the chat and terminal sit a shade deeper, in both translucent and solid modes.
 - **Resize with a quiet edge:** Both panel edges show the same thin line when you hover or drag them, and light mode no longer shows a dark line beside the sidebar.
 - **Browse files beside your code:** In **Files**, the file tree sits next to the open file instead of covering it. Hover the **Files** icon or the file's right edge to open it, or click the icon to keep it open until you click again.
@@ -93,6 +93,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **Find every terminal option on one page:** **Settings → Terminal** has its own page, grouped by task. Settings are ordered from setup to workspace tools, preferences, and data.
 - **Split the way you work:** **Mod+D** splits the focused terminal to the right and **Mod+Shift+D** splits it down, so you can mix layouts. A compact **Terminal actions** menu offers search, rename, refresh, and new or different shells.
 - **Choose your default shell:** Pick the shell new local terminals use. Saved choices that are no longer available stay visible, and existing terminals keep running unchanged.
+- **Start remote terminals after switching to the agent:** A chat's terminal on a host that moved from Direct SSH to the bigbud remote agent starts a fresh shell instead of failing, and **Retry terminal startup** and **Close** work again.
 - **Recover an uncertain terminal:** When bigbud can't confirm a remote shell started, you can dismiss its pane or open a fresh terminal in the same place. bigbud warns that the remote process may still be running.
 
 ### More Reliable Sessions and Cleanup
