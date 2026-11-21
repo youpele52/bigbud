@@ -17,6 +17,16 @@ import { RemoteAgentProtocolDecodeError, type RemoteAgentFrame } from "./remoteA
 /** Frames kept for a later request before the connection fails as a protocol error. */
 export const REMOTE_AGENT_UNCLAIMED_FRAME_CAPACITY = 1_024;
 
+/** Frame types that are discarded, never kept, when no listener or waiter claims them. */
+const DROPPED_WHEN_UNCLAIMED: ReadonlySet<RemoteAgentFrame["type"]> = new Set([
+  "ptyOutput",
+  "ptyExited",
+  "ptyAttachResponse",
+  "hostResourceReport",
+  "ptyActivity",
+  "ptyLifecycleNotice",
+]);
+
 export type FrameListener = (frame: RemoteAgentFrame) => boolean | void;
 
 export class RemoteAgentFrameInbox {
@@ -54,12 +64,10 @@ export class RemoteAgentFrameInbox {
     if (consumed) return undefined;
     // PTY consumers install listeners/waiters before dispatch. Unclaimed late frames
     // belong to retired observations; output/exit are recovered from agent replay.
-    if (
-      frame.type === "ptyOutput" ||
-      frame.type === "ptyExited" ||
-      frame.type === "ptyAttachResponse"
-    )
-      return undefined;
+    // Unsolicited 1.9 lifecycle frames are advisory: notices are replayable from the host ring,
+    // activity and resource reports are superseded by the next one. Nobody requests them, so
+    // keeping them could only fill the unclaimed set and close the connection.
+    if (DROPPED_WHEN_UNCLAIMED.has(frame.type)) return undefined;
     if (this.unclaimed.length >= this.capacity) {
       return new RemoteAgentProtocolDecodeError(
         `more than ${this.capacity} unclaimed frames are waiting; the connection was closed`,
