@@ -6,8 +6,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   appendTerminalEventEntry,
-  selectTerminalEventLastId,
-  createDefaultThreadTerminalState,
   newThreadTerminal,
   normalizeThreadTerminalState,
   selectThreadTerminalState,
@@ -25,31 +23,37 @@ import {
   applyTerminalEventsToState,
   ensurePanelTerminalInState,
 } from "./terminal.store.panel";
-import { removeTerminalTransientState } from "./terminal.store.cleanup";
 import { closeTerminalPaneInState } from "./terminal.store.close";
 import { hydrateTerminalAgentFromSnapshot } from "./terminal.store.snapshot";
 import { markTerminalAgentActive } from "./terminal.store.recentAgent";
 import {
   clearTerminalLabelOverrideByThreadId,
-  removeOrphanedTerminalLabelOverrides,
-  removeTerminalLabelOverridesForThread,
   setTerminalLabelOverrideByThreadId,
 } from "./terminal.store.labels";
 import { type TerminalStateStoreState } from "./terminal.store.types";
-import { removeTerminalLayouts, resetClosedTerminalLayout } from "./terminal.store.layout";
-import { terminalWslSelectionPatch, removeOrphanedWslSelections } from "./terminal.store.wsl";
+import { resetClosedTerminalLayout } from "./terminal.store.layout";
+import { terminalWslSelectionPatch } from "./terminal.store.wsl";
 import { terminalPersistenceOptions } from "./terminal.store.persistence";
 import { rehydrateOnBackendStorageReady } from "../../lib/backendScopedStorage";
-import { reconcileTerminalInventory } from "./terminal.store.inventory";
+import { reconcileTerminalInventory, rememberTerminalInventory } from "./terminal.store.inventory";
 import {
-  createProfileTerminal,
-  removeTerminalProfileLaunches,
-} from "./terminal.store.profileLaunch";
+  createTerminalPaneId,
+  createUserTerminalPane,
+  surfaceHasPanes,
+} from "./terminal.store.create";
+import {
+  clearTerminalStateInState,
+  removeOrphanedTerminalStatesInState,
+  removeTerminalStateInState,
+} from "./terminal.store.removal";
 
 export type { TerminalEventEntry, ThreadTerminalLaunchContext, ThreadTerminalState };
+export type { TerminalPaneOrigin } from "./helpers.store";
 export {
   selectTerminalEventEntries,
   selectTerminalEventLastId,
+  selectTerminalPaneOrigin,
+  selectThreadSurfacePanes,
   selectThreadTerminalState,
 } from "./helpers.store";
 
@@ -121,16 +125,25 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       terminalAgentVersionByKey: {},
       terminalEventLastIdsByKey: {},
       nextTerminalEventId: 1,
-      setTerminalOpen: (threadId, open) =>
-        updateTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
+      restoredPanesAwaitingInventory: false,
+      setTerminalOpen: (threadId, open) => {
+        // Opening an empty drawer creates one user-created pane; nothing else ever does.
+        if (open && !surfaceHasPanes(get(), threadId, false)) {
+          set((state) =>
+            createUserTerminalPane(state, threadId, createTerminalPaneId(), false, false),
+          );
+          return;
+        }
+        updateTerminal(threadId, (state) => setThreadTerminalOpen(state, open));
+      },
       setTerminalHeight: (threadId, height) =>
         updateTerminal(threadId, (state) => setThreadTerminalHeight(state, height)),
       splitTerminal: (threadId, terminalId, profile, direction) =>
         set((state) =>
-          createProfileTerminal(state, threadId, terminalId, false, true, profile, direction),
+          createUserTerminalPane(state, threadId, terminalId, false, true, profile, direction),
         ),
       newTerminal: (threadId, terminalId, profile) =>
-        set((state) => createProfileTerminal(state, threadId, terminalId, false, false, profile)),
+        set((state) => createUserTerminalPane(state, threadId, terminalId, false, false, profile)),
       ensureTerminal: (threadId, terminalId, options) =>
         updateTerminal(threadId, (state) => {
           let nextState = state;
@@ -191,10 +204,10 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         updatePanelTerminal(threadId, (state) => setThreadTerminalHeight(state, height)),
       splitPanelTerminal: (threadId, terminalId, profile, direction) =>
         set((state) =>
-          createProfileTerminal(state, threadId, terminalId, true, true, profile, direction),
+          createUserTerminalPane(state, threadId, terminalId, true, true, profile, direction),
         ),
       newPanelTerminal: (threadId, terminalId, profile) =>
-        set((state) => createProfileTerminal(state, threadId, terminalId, true, false, profile)),
+        set((state) => createUserTerminalPane(state, threadId, terminalId, true, false, profile)),
       ensurePanelTerminal: (threadId, terminalId, options) =>
         set((state) => ensurePanelTerminalInState(state, threadId, terminalId, options)),
       setPanelActiveTerminal: (threadId, terminalId) =>
@@ -235,165 +248,17 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         ),
       applyTerminalEvent: (event) => set((state) => applyTerminalEventToState(state, event)),
       applyTerminalEvents: (events) => set((state) => applyTerminalEventsToState(state, events)),
-      reconcileTerminalInventory: (inventory) =>
-        set((state) => reconcileTerminalInventory(state, inventory)),
+      reconcileTerminalInventory: (inventory) => {
+        rememberTerminalInventory(inventory);
+        set((state) => reconcileTerminalInventory(state, inventory));
+      },
       hydrateTerminalAgentFromSnapshot: (snapshot) =>
         set((state) => hydrateTerminalAgentFromSnapshot(state, snapshot)),
-      clearTerminalState: (threadId) =>
-        set((state) => {
-          const profiles = removeTerminalProfileLaunches(state, (id) => id === threadId);
-          const layouts = removeTerminalLayouts(state, (id) => id === threadId);
-          const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
-            state.terminalStateByThreadId,
-            threadId,
-            () => createDefaultThreadTerminalState(),
-          );
-          const nextPanelTerminalStateByThreadId = updateTerminalStateByThreadId(
-            state.panelTerminalStateByThreadId,
-            threadId,
-            () => createDefaultThreadTerminalState(),
-          );
-          const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
-          const hadLabelOverrides = state.terminalLabelOverridesByThreadId[threadId] !== undefined;
-          const { [threadId]: _removed, ...remainingLaunchContexts } =
-            state.terminalLaunchContextByThreadId;
-          const remainingLabelOverrides = removeTerminalLabelOverridesForThread(
-            state.terminalLabelOverridesByThreadId,
-            threadId,
-          );
-          const transient = removeTerminalTransientState(state, (key) =>
-            key.startsWith(`${threadId}\u0000`),
-          );
-          if (
-            nextTerminalStateByThreadId === state.terminalStateByThreadId &&
-            nextPanelTerminalStateByThreadId === state.panelTerminalStateByThreadId &&
-            !hadLaunchContext &&
-            !hadLabelOverrides &&
-            !transient.removed &&
-            profiles.terminalProfileLaunches === state.terminalProfileLaunches &&
-            layouts.terminalLayoutByThreadId === state.terminalLayoutByThreadId
-          ) {
-            return state;
-          }
-          return {
-            ...layouts,
-            ...profiles,
-            terminalStateByThreadId: nextTerminalStateByThreadId,
-            panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
-            terminalLabelOverridesByThreadId: remainingLabelOverrides,
-            terminalLaunchContextByThreadId: remainingLaunchContexts,
-            ...transient.state,
-          };
-        }),
+      clearTerminalState: (threadId) => set((state) => clearTerminalStateInState(state, threadId)),
       removeTerminalState: (threadId) =>
-        set((state) => {
-          const profiles = removeTerminalProfileLaunches(state, (id) => id === threadId);
-          const layouts = removeTerminalLayouts(state, (id) => id === threadId);
-          const hadTerminalState = state.terminalStateByThreadId[threadId] !== undefined;
-          const hadPanelTerminalState = state.panelTerminalStateByThreadId[threadId] !== undefined;
-          const hadLabelOverrides = state.terminalLabelOverridesByThreadId[threadId] !== undefined;
-          const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
-          const transient = removeTerminalTransientState(state, (key) =>
-            key.startsWith(`${threadId}\u0000`),
-          );
-          if (
-            !hadTerminalState &&
-            !hadPanelTerminalState &&
-            !hadLabelOverrides &&
-            !hadLaunchContext &&
-            state.terminalWslDistributionByThreadId[threadId] === undefined &&
-            !transient.removed &&
-            profiles.terminalProfileLaunches === state.terminalProfileLaunches &&
-            layouts.terminalLayoutByThreadId === state.terminalLayoutByThreadId
-          ) {
-            return state;
-          }
-          const nextTerminalStateByThreadId = { ...state.terminalStateByThreadId };
-          delete nextTerminalStateByThreadId[threadId];
-          const nextPanelTerminalStateByThreadId = { ...state.panelTerminalStateByThreadId };
-          delete nextPanelTerminalStateByThreadId[threadId];
-          const nextLabelOverridesByThreadId = removeTerminalLabelOverridesForThread(
-            state.terminalLabelOverridesByThreadId,
-            threadId,
-          );
-          const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
-          delete nextLaunchContexts[threadId];
-          return {
-            ...layouts,
-            ...profiles,
-            ...terminalWslSelectionPatch(state, threadId, null),
-            terminalStateByThreadId: nextTerminalStateByThreadId,
-            panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
-            terminalLabelOverridesByThreadId: nextLabelOverridesByThreadId,
-            terminalLaunchContextByThreadId: nextLaunchContexts,
-            ...transient.state,
-          };
-        }),
+        set((state) => removeTerminalStateInState(state, threadId)),
       removeOrphanedTerminalStates: (activeThreadIds) =>
-        set((state) => {
-          const layouts = removeTerminalLayouts(
-            state,
-            (id) => !activeThreadIds.has(id as ThreadId),
-          );
-          const profiles = removeTerminalProfileLaunches(
-            state,
-            (id) => !activeThreadIds.has(id as ThreadId),
-          );
-          const wslSelections = removeOrphanedWslSelections(state, activeThreadIds);
-          const orphanedIds = Object.keys(state.terminalStateByThreadId).filter(
-            (id) => !activeThreadIds.has(id as ThreadId),
-          );
-          const orphanedPanelIds = Object.keys(state.panelTerminalStateByThreadId).filter(
-            (id) => !activeThreadIds.has(id as ThreadId),
-          );
-          const orphanedLaunchContextIds = Object.keys(
-            state.terminalLaunchContextByThreadId,
-          ).filter((id) => !activeThreadIds.has(id as ThreadId));
-          const { orphanedThreadIds: orphanedLabelOverrideIds, nextOverridesByThreadId } =
-            removeOrphanedTerminalLabelOverrides(
-              state.terminalLabelOverridesByThreadId,
-              activeThreadIds,
-            );
-          const transient = removeTerminalTransientState(state, (key) => {
-            const [threadId] = key.split("\u0000");
-            return Boolean(threadId && !activeThreadIds.has(threadId as ThreadId));
-          });
-          if (
-            orphanedIds.length === 0 &&
-            orphanedPanelIds.length === 0 &&
-            orphanedLabelOverrideIds.length === 0 &&
-            orphanedLaunchContextIds.length === 0 &&
-            wslSelections.terminalWslDistributionByThreadId ===
-              state.terminalWslDistributionByThreadId &&
-            !transient.removed &&
-            profiles.terminalProfileLaunches === state.terminalProfileLaunches &&
-            layouts.terminalLayoutByThreadId === state.terminalLayoutByThreadId
-          ) {
-            return state;
-          }
-          const next = { ...state.terminalStateByThreadId };
-          for (const id of orphanedIds) {
-            delete next[id as ThreadId];
-          }
-          const nextPanel = { ...state.panelTerminalStateByThreadId };
-          for (const id of orphanedPanelIds) {
-            delete nextPanel[id as ThreadId];
-          }
-          const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
-          for (const id of orphanedLaunchContextIds) {
-            delete nextLaunchContexts[id as ThreadId];
-          }
-          return {
-            ...layouts,
-            ...profiles,
-            ...wslSelections,
-            terminalStateByThreadId: next,
-            panelTerminalStateByThreadId: nextPanel,
-            terminalLabelOverridesByThreadId: nextOverridesByThreadId,
-            terminalLaunchContextByThreadId: nextLaunchContexts,
-            ...transient.state,
-          };
-        }),
+        set((state) => removeOrphanedTerminalStatesInState(state, activeThreadIds)),
     };
   }, terminalPersistenceOptions),
 );

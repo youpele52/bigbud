@@ -70,8 +70,10 @@ it("dismisses only presentation, persists across reload, and never reuses the or
   expect(confirmed).not.toHaveBeenCalled();
   expect(readTerminalLaunch(threadId, terminalId)?.runtimeGeneration).toBe("original");
   const state = useTerminalStateStore.getState();
-  expect(state.terminalStateByThreadId[threadId]?.terminalIds).not.toContain(terminalId);
-  expect(state.terminalStateByThreadId[threadId]?.terminalOpen).toBe(false);
+  // Dismissing the only pane leaves both surfaces empty; no replacement terminal is created.
+  expect(state.terminalStateByThreadId[threadId]?.terminalIds ?? []).toEqual([]);
+  expect(state.terminalStateByThreadId[threadId]?.terminalOpen ?? false).toBe(false);
+  expect(state.panelTerminalStateByThreadId[threadId]?.terminalIds ?? []).toEqual([]);
   expect(state.panelTerminalStateByThreadId[threadId]?.terminalIds).not.toContain(terminalId);
   const saved = terminalPersistenceOptions.partialize(state);
   const hydrated = terminalPersistenceOptions.merge(saved, useTerminalStateStore.getInitialState());
@@ -84,10 +86,10 @@ it("dismisses only presentation, persists across reload, and never reuses the or
       { type: "started", threadId, terminalId, snapshot, createdAt: snapshot.updatedAt },
     ]);
   expect(
-    useTerminalStateStore.getState().terminalStateByThreadId[threadId]?.terminalIds,
+    useTerminalStateStore.getState().terminalStateByThreadId[threadId]?.terminalIds ?? [],
   ).not.toContain(terminalId);
   expect(
-    useTerminalStateStore.getState().panelTerminalStateByThreadId[threadId]?.terminalIds,
+    useTerminalStateStore.getState().panelTerminalStateByThreadId[threadId]?.terminalIds ?? [],
   ).not.toContain(terminalId);
 });
 it("generic close failures cannot dismiss an uncertain managed process", async () => {
@@ -145,7 +147,7 @@ it("dismisses one split pane while preserving its neighbor and retained launch r
   store.ensureTerminal(threadId, terminalId);
   store.splitTerminal(threadId, "neighbor");
   const before = useTerminalStateStore.getState();
-  const patch = dismissTerminalPaneInState(before, threadId, terminalId, "unused-replacement");
+  const patch = dismissTerminalPaneInState(before, threadId, terminalId);
   expect(patch.terminalStateByThreadId?.[threadId]?.terminalIds).toEqual(["neighbor"]);
   expect(patch).not.toHaveProperty("terminalProfileLaunches");
   expect(patch).not.toHaveProperty("terminalAgentVersionByKey");

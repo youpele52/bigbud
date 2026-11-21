@@ -1,16 +1,17 @@
 import { type ThreadId } from "@bigbud/contracts";
-import { memo, useCallback, useEffect } from "react";
+import { memo, useCallback } from "react";
 
-import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { isElectron } from "~/config/env";
 import { cn, randomUUID } from "~/lib/utils";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useTerminalStateStore } from "../../stores/terminal";
+import { createTerminalPaneId } from "../../stores/terminal/terminal.store.create";
 import { useTerminalPanelStore } from "../../stores/terminal/terminalPanel.store";
 import { normalizeTerminalContextSelection } from "../../lib/terminalContext";
 import { useThreadTerminalDrawer } from "./useThreadTerminalDrawer";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
+import { Button } from "../ui/button";
 
 interface TerminalPanelProps {
   activeThreadId?: ThreadId | null;
@@ -23,16 +24,21 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
 }: TerminalPanelProps) {
   const open = useTerminalPanelStore((state) => state.open);
   const keybindings = useServerKeybindings();
-  const hasPanelTerminalState = useTerminalStateStore((state) =>
-    activeThreadId ? state.panelTerminalStateByThreadId[activeThreadId] !== undefined : false,
+  // Showing the panel or switching threads never creates a terminal (plan D1, §11.1).
+  const hasPanelTerminals = useTerminalStateStore((state) =>
+    activeThreadId
+      ? (state.panelTerminalStateByThreadId[activeThreadId]?.terminalIds.length ?? 0) > 0
+      : false,
   );
-  const ensurePanelTerminal = useTerminalStateStore((state) => state.ensurePanelTerminal);
+  const newPanelTerminal = useTerminalStateStore((state) => state.newPanelTerminal);
   const drawer = useThreadTerminalDrawer(activeThreadId ?? ("" as ThreadId), null, open, "panel");
+  const { bumpFocusRequestId } = drawer;
 
-  useEffect(() => {
-    if (!open || !activeThreadId || !drawer.cwd || hasPanelTerminalState) return;
-    ensurePanelTerminal(activeThreadId, `terminal-${randomUUID()}`, { active: true });
-  }, [activeThreadId, drawer.cwd, ensurePanelTerminal, hasPanelTerminalState, open]);
+  const handleNewTerminal = useCallback(() => {
+    if (!activeThreadId) return;
+    newPanelTerminal(activeThreadId, createTerminalPaneId());
+    bumpFocusRequestId();
+  }, [activeThreadId, bumpFocusRequestId, newPanelTerminal]);
 
   const handleAddTerminalContext = useCallback(
     (selection: Parameters<typeof normalizeTerminalContextSelection>[0]) => {
@@ -62,9 +68,16 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
         Select a project with a workspace before opening the terminal.
       </div>
     );
-  } else if (activeThreadId && drawer.cwd && !hasPanelTerminalState) {
-    body = <BigbudLoader label="Initializing terminal..." />;
-  } else if (activeThreadId && drawer.project && drawer.cwd && hasPanelTerminalState) {
+  } else if (activeThreadId && drawer.project && drawer.cwd && !hasPanelTerminals) {
+    body = (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-3 py-2 text-center">
+        <p className="text-sm text-muted-foreground/70">No terminal in this thread.</p>
+        <Button variant="outline" size="sm" onClick={handleNewTerminal}>
+          New terminal
+        </Button>
+      </div>
+    );
+  } else if (activeThreadId && drawer.project && drawer.cwd && hasPanelTerminals) {
     body = (
       <ThreadTerminalDrawer
         mode="panel"

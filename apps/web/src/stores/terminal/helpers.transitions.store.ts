@@ -12,7 +12,7 @@ import {
  * @module helpers.transitions.store
  */
 
-import { DEFAULT_THREAD_TERMINAL_ID, MAX_TERMINALS_PER_GROUP } from "../../models/types";
+import { MAX_TERMINALS_PER_GROUP } from "../../models/types";
 
 import type { ThreadTerminalState } from "./helpers.store";
 import {
@@ -35,6 +35,8 @@ export function setThreadTerminalOpen(
 ): ThreadTerminalState {
   const normalized = normalizeThreadTerminalState(state);
   if (normalized.terminalOpen === open) return normalized;
+  // Opening never invents a pane; callers create a user-created pane for an empty surface.
+  if (open && normalized.terminalIds.length === 0) return normalized;
   return { ...normalized, terminalOpen: open };
 }
 
@@ -76,7 +78,8 @@ export function upsertTerminalIntoGroups(
     }
   }
 
-  if (mode === "new") {
+  // Splitting an empty surface has no anchor pane: it creates the first pane instead.
+  if (mode === "new" || normalized.terminalIds.length === 0) {
     const usedGroupIds = new Set(terminalGroups.map((group) => group.id));
     const nextGroupId = assignUniqueGroupId(fallbackGroupId(terminalId), usedGroupIds);
     terminalGroups.push({ id: nextGroupId, terminalIds: [terminalId] });
@@ -193,6 +196,7 @@ export function closeThreadTerminal(
   }
 
   const remainingTerminalIds = normalized.terminalIds.filter((id) => id !== terminalId);
+  // Closing the last pane closes the surface and leaves the thread with no terminal.
   if (remainingTerminalIds.length === 0) {
     return createDefaultThreadTerminalState();
   }
@@ -202,7 +206,7 @@ export function closeThreadTerminal(
     normalized.activeTerminalId === terminalId
       ? (remainingTerminalIds[Math.min(closedTerminalIndex, remainingTerminalIds.length - 1)] ??
         remainingTerminalIds[0] ??
-        DEFAULT_THREAD_TERMINAL_ID)
+        "")
       : normalized.activeTerminalId;
 
   const terminalGroups = normalized.terminalGroups
@@ -225,6 +229,9 @@ export function closeThreadTerminal(
     activeTerminalId: nextActiveTerminalId,
     terminalGroups,
     activeTerminalGroupId: nextActiveTerminalGroupId,
+    ...(normalized.restoredTerminalIds
+      ? { restoredTerminalIds: normalized.restoredTerminalIds }
+      : {}),
   });
 }
 

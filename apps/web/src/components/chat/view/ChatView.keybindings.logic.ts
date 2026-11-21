@@ -27,6 +27,25 @@ export interface UseChatKeybindingsInput {
   createNewTerminal: () => void;
   onToggleDiff: () => void;
   runProjectScript: (script: Project["scripts"][number]) => void;
+  /** Overrides the default visibility check with a precise one for this ChatView's surface. */
+  isSurfaceActive?: () => boolean;
+}
+
+/**
+ * True unless every mounted ChatView is hidden or inert. W0 keeps the previous ready ChatView
+ * mounted, hidden and inert while another project loads; its window-level handler must not act.
+ * With no ChatView root in the document (isolated harnesses) the caller is the only surface.
+ */
+export function isChatKeybindingSurfaceActive(
+  doc: Pick<Document, "querySelectorAll"> | undefined = globalThis.document,
+): boolean {
+  if (!doc) return true;
+  const roots = doc.querySelectorAll("[data-chat-view-root]");
+  if (roots.length === 0) return true;
+  for (const root of roots) {
+    if (!root.closest("[inert], [hidden]")) return true;
+  }
+  return false;
 }
 
 /** Registers global keydown handler for all ChatView keyboard shortcuts. */
@@ -44,6 +63,7 @@ export function useChatKeybindings({
   createNewTerminal,
   onToggleDiff,
   runProjectScript,
+  isSurfaceActive = isChatKeybindingSurfaceActive,
 }: UseChatKeybindingsInput): void {
   useEffect(() => {
     if (!enabled) {
@@ -60,6 +80,8 @@ export function useChatKeybindings({
         context: shortcutContext,
       });
       if (!command) return;
+      // Only the active, visible surface handles shortcuts; a hidden one must not open terminals.
+      if (!isSurfaceActive()) return;
 
       if (command === "terminal.toggle") {
         event.preventDefault();
@@ -138,6 +160,7 @@ export function useChatKeybindings({
   }, [
     activeProject,
     enabled,
+    isSurfaceActive,
     terminalState.terminalOpen,
     terminalState.activeTerminalId,
     activeThreadId,

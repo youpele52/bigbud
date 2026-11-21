@@ -28,6 +28,8 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   terminalAgentVersionByKey: Record<string, TerminalAgentVersion>;
   terminalEventLastIdsByKey: Record<string, number>;
   nextTerminalEventId: number;
+  /** Set by hydration: the next authoritative inventory drops restored panes it lacks. */
+  restoredPanesAwaitingInventory?: boolean;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
   setTerminalHeight: (threadId: ThreadId, height: number) => void;
   splitTerminal: (

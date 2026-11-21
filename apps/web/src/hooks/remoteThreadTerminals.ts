@@ -1,13 +1,13 @@
 import type { ThreadId } from "@bigbud/contracts";
 
 import { toastManager } from "../components/ui/toast";
-import { DEFAULT_THREAD_TERMINAL_ID } from "../models/types";
 import { readNativeApi } from "../rpc/nativeApi";
 import {
   areDisconnectedTargetsLoaded,
   isExecutionTargetDisconnected,
 } from "../stores/remoteAccess/remoteAccess.store";
 import { useTerminalStateStore } from "../stores/terminal";
+import { terminalPaneOpenOptions } from "../stores/terminal/terminal.store.paneOrigin";
 
 export interface RemoteThreadTerminalTarget {
   readonly threadId: ThreadId;
@@ -28,12 +28,13 @@ export async function reconnectRemoteThreadTerminals(target: RemoteThreadTermina
   const api = readNativeApi();
   if (!api) return;
   const terminalState = useTerminalStateStore.getState().terminalStateByThreadId[target.threadId];
+  // An open surface always has panes; there is no implicit terminal to reopen.
   if (!terminalState?.terminalOpen) return;
-  const terminalIds =
-    terminalState.terminalIds.length > 0 ? terminalState.terminalIds : [DEFAULT_THREAD_TERMINAL_ID];
   await Promise.all(
-    terminalIds.map((terminalId) =>
+    terminalState.terminalIds.map((terminalId) =>
       api.terminal.open({
+        // Restored panes only reattach (`attachOnly`); they are never respawned.
+        ...terminalPaneOpenOptions(target.threadId, terminalId),
         threadId: target.threadId,
         executionTargetId: target.executionTargetId,
         terminalId,

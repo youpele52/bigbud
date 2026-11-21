@@ -19,6 +19,7 @@ import { closeTerminalConfirmed } from "./terminalLifecycle.operations";
 import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
 import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import { canCreateProfileTerminal } from "./TerminalProfilePicker.launch";
+import { inheritsNothing } from "../../stores/terminal/terminal.store.create";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
@@ -219,15 +220,22 @@ export function useThreadTerminalDrawer(
     [storeSetTerminalHeight, threadId],
   );
 
+  // A first pane has no source pane to inherit from: it starts this thread's default target.
+  const isEmptySurface = terminalState.terminalIds.length === 0;
   const splitTerminal = useCallback(
     (direction: TerminalSplitDirection = "right") => {
       const profile = { newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID };
-      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)) return;
+      if (
+        !isEmptySurface &&
+        !canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)
+      )
+        return;
       storeSplitTerminal(threadId, `terminal-${randomUUID()}`, profile, direction);
       bumpFocusRequestId();
     },
     [
       bumpFocusRequestId,
+      isEmptySurface,
       storeSplitTerminal,
       threadId,
       terminalState.activeTerminalId,
@@ -240,12 +248,18 @@ export function useThreadTerminalDrawer(
       const requested = profile ?? {
         newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
       };
-      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, requested)) return;
+      // A target-only request needs no source pane; an explicit shell profile still does.
+      if (
+        !(isEmptySurface && inheritsNothing(requested)) &&
+        !canCreateProfileTerminal(threadId, terminalState.activeTerminalId, requested)
+      )
+        return;
       storeNewTerminal(threadId, `terminal-${randomUUID()}`, requested);
       bumpFocusRequestId();
     },
     [
       bumpFocusRequestId,
+      isEmptySurface,
       storeNewTerminal,
       threadId,
       terminalState.activeTerminalId,

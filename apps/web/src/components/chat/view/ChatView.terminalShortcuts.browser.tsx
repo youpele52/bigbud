@@ -74,3 +74,47 @@ it.each(["MacIntel", "Win32", "Linux"])(
     }
   },
 );
+
+it.each([
+  ["hidden and inert during a project load", true, 0],
+  ["active and visible", false, 1],
+] as const)(
+  "handles window shortcuts only when the ChatView is %s",
+  async (_label, hidden, calls) => {
+    const input: UseChatKeybindingsInput = {
+      activeThreadId: "thread",
+      activeProject: null,
+      terminalState: { terminalOpen: false, activeTerminalId: "" },
+      keybindings: DEFAULT_BINDINGS,
+      toggleTerminalVisibility: vi.fn(),
+      toggleTerminalPanel: vi.fn(),
+      setTerminalOpen: vi.fn(),
+      splitTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      createNewTerminal: vi.fn(),
+      onToggleDiff: vi.fn(),
+      runProjectScript: vi.fn(),
+    };
+    const screen = await render(
+      <div hidden={hidden} inert={hidden}>
+        <div data-chat-view-root>
+          <Harness input={input} />
+        </div>
+      </div>,
+    );
+    try {
+      const event = new KeyboardEvent("keydown", {
+        key: "j",
+        bubbles: true,
+        cancelable: true,
+        metaKey: navigator.platform.startsWith("Mac"),
+        ctrlKey: !navigator.platform.startsWith("Mac"),
+      });
+      window.dispatchEvent(event);
+      expect(input.toggleTerminalVisibility).toHaveBeenCalledTimes(calls);
+      expect(event.defaultPrevented).toBe(calls === 1);
+    } finally {
+      await screen.unmount();
+    }
+  },
+);

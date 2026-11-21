@@ -68,6 +68,10 @@ afterEach(() => {
 it.each(["drawer", "panel"] as const)(
   "%s split/new launch contexts follow the shared selection without starting AI",
   async (mode) => {
+    // Threads have no implicit terminal: start from the bound "default" source pane.
+    const store = useTerminalStateStore.getState();
+    if (mode === "panel") store.newPanelTerminal(threadId, "default");
+    else store.newTerminal(threadId, "default");
     const hook = await renderHook(() => useThreadTerminalDrawer(threadId, null, true, mode));
     try {
       useTerminalStateStore.getState().setTerminalWslDistribution(threadId, "Ubuntu dev");

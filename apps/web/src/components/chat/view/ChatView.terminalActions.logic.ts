@@ -4,7 +4,7 @@ import { canCreateProfileTerminal } from "../../terminal/TerminalProfilePicker.l
 import { type ProjectScript, type ThreadId, TerminalOpenInput } from "@bigbud/contracts";
 import { useCallback } from "react";
 import { projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
-import { DEFAULT_THREAD_TERMINAL_ID, MAX_TERMINALS_PER_GROUP } from "../../../models/types";
+import { MAX_TERMINALS_PER_GROUP } from "../../../models/types";
 import { randomUUID } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { ensureThreadMaterialized } from "../../../lib/threadMaterialization";
@@ -225,11 +225,10 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       if (!verified) {
         return;
       }
-      const baseTerminalId =
-        terminalState.activeTerminalId ||
-        terminalState.terminalIds[0] ||
-        DEFAULT_THREAD_TERMINAL_ID;
-      const isBaseTerminalBusy = terminalState.runningTerminalIds.includes(baseTerminalId);
+      // A thread with no terminal gets a new user-created one; there is no implicit default.
+      const baseTerminalId = terminalState.activeTerminalId || terminalState.terminalIds[0] || "";
+      const isBaseTerminalBusy =
+        baseTerminalId.length > 0 && terminalState.runningTerminalIds.includes(baseTerminalId);
       const targetWorktreePath =
         options?.worktreePath !== undefined
           ? options.worktreePath
@@ -245,7 +244,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       const openTerminalInput: TerminalOpenInput = {
         threadId: activeThreadId,
         executionTargetId: resolveWorkspaceExecutionTargetId(activeProject),
-        terminalId: baseTerminalId,
+        ...(baseTerminalId ? { terminalId: baseTerminalId } : {}),
         cwd: targetCwd,
         worktreePath: targetWorktreePath,
         env: runtimeEnv,
@@ -256,7 +255,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         await runBoundTerminalCommand(api.terminal, {
           openInput: openTerminalInput,
           command: trimmedCommand,
-          preferNewTerminal: Boolean(options?.preferNewTerminal),
+          preferNewTerminal: Boolean(options?.preferNewTerminal) || !baseTerminalId,
           baseTerminalBusy: isBaseTerminalBusy,
           newTerminalDimensions: { cols: SCRIPT_TERMINAL_COLS, rows: SCRIPT_TERMINAL_ROWS },
           createTerminalId: () => `terminal-${randomUUID()}`,
@@ -266,12 +265,13 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
               cwd: targetCwd,
               worktreePath: targetWorktreePath,
             });
-            setTerminalOpen(true);
+            // Add the pane before opening, so opening an empty drawer never adds a second pane.
             if (isNew) {
               storeNewTerminal(activeThreadId, selected.terminalId);
             } else {
               storeSetActiveTerminal(activeThreadId, selected.terminalId);
             }
+            setTerminalOpen(true);
             setTerminalFocusRequestId((value) => value + 1);
           },
         });

@@ -46,6 +46,8 @@ export function PersistentThreadTerminalDrawer({
   const projectId = drawer.projectId;
   const liveCwd = drawer.project ? drawer.cwd : null;
   const drawerOpen = drawer.terminalState.terminalOpen;
+  // No panes means no terminal: never render a body, even mid close animation.
+  const hasPanes = drawer.terminalState.terminalIds.length > 0;
   // Bind the cwd once renderable: losing catalog data must never unmount mounted emulators.
   const [boundCwd, setBoundCwd] = useState(liveCwd);
   if (liveCwd !== null && liveCwd !== boundCwd) setBoundCwd(liveCwd);
@@ -77,7 +79,9 @@ export function PersistentThreadTerminalDrawer({
       };
     }
     setIsTransitionVisible(false);
-  }, [drawerOpen, canRenderDrawer]);
+    // Closing the last pane skips the exit animation, so release the render slot directly.
+    if (!hasPanes) setShouldRender(false);
+  }, [drawerOpen, canRenderDrawer, hasPanes]);
 
   const handleAddTerminalContext = useCallback(
     (selection: TerminalContextSelection) => {
@@ -89,7 +93,7 @@ export function PersistentThreadTerminalDrawer({
     [onAddTerminalContext, visible],
   );
 
-  if (cwd === null || !shouldRender) {
+  if (cwd === null || !shouldRender || !hasPanes) {
     return null;
   }
 

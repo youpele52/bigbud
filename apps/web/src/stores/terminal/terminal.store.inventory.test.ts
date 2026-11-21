@@ -38,7 +38,7 @@ describe("authoritative subscription inventory", () => {
     const after = useTerminalStateStore.getState();
     expect(after.terminalStateByThreadId[THREAD_ID]?.runningTerminalIds).toEqual([]);
     expect(after.panelTerminalStateByThreadId[THREAD_ID]?.runningTerminalIds).toEqual([]);
-    expect(after.terminalStateByThreadId[THREAD_ID]?.terminalIds).toEqual(["default", "drawer"]);
+    expect(after.terminalStateByThreadId[THREAD_ID]?.terminalIds).toEqual(["drawer"]);
     expect(after.panelTerminalStateByThreadId[THREAD_ID]?.terminalIds).toEqual(["panel"]);
     expect(after.terminalStateByThreadId[THREAD_ID]?.terminalOpen).toBe(true);
     expect(after.terminalAgentProviderByKey).toEqual({});

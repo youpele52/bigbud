@@ -44,7 +44,8 @@ it.each(["drawer", "panel"] as const)(
     });
     try {
       await waitForComposerEditor();
-      useTerminalStateStore.getState().setTerminalOpen(THREAD_ID, true);
+      // Threads have no implicit terminal: open the drawer with an explicit pane.
+      useTerminalStateStore.getState().newTerminal(THREAD_ID, "default");
       useTerminalStateStore
         .getState()
         .ensurePanelTerminal(THREAD_ID, "independent-panel", { open: true });

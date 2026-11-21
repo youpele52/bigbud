@@ -29,6 +29,7 @@ vi.mock("../../stores/ui", () => ({ useUiStateStore: () => undefined }));
 vi.mock("../../stores/terminal", () => ({
   useTerminalStateStore: () => [],
   selectThreadTerminalState: vi.fn(),
+  selectThreadSurfacePanes: () => [],
 }));
 vi.mock("./SidebarThreadTerminalProviderIcon", () => ({
   SidebarThreadTerminalProviderIcon: () =>

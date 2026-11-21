@@ -80,6 +80,7 @@ describe("saved terminal presentation", () => {
 
   it("preserves layout when closing a split or panel, resets after closing the last drawer pane", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.splitTerminal(THREAD_ID, "second");
     store.ensurePanelTerminal(THREAD_ID, "panel");
     store.setTerminalLayout(THREAD_ID, "terminal-only");

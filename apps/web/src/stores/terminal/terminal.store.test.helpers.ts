@@ -2,6 +2,7 @@ import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
 
 import { useTerminalStateStore } from "./terminal.store";
 import { forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { rememberTerminalInventory } from "./terminal.store.inventory";
 
 export const THREAD_ID = ThreadId.makeUnsafe("thread-1");
 
@@ -93,5 +94,7 @@ export function resetTerminalStore(): void {
     terminalAgentVersionByKey: {},
     terminalEventLastIdsByKey: {},
     nextTerminalEventId: 1,
+    restoredPanesAwaitingInventory: false,
   });
+  rememberTerminalInventory(null);
 }

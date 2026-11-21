@@ -7,7 +7,7 @@ import { resetTerminalStore, THREAD_ID } from "./terminal.store.test.helpers";
 describe("terminalStateStore actions", () => {
   beforeEach(resetTerminalStore);
 
-  it("returns a closed default terminal state for unknown threads", () => {
+  it("returns a closed, empty terminal state for unknown threads", () => {
     const terminalState = selectThreadTerminalState(
       useTerminalStateStore.getState().terminalStateByThreadId,
       THREAD_ID,
@@ -15,16 +15,17 @@ describe("terminalStateStore actions", () => {
     expect(terminalState).toEqual({
       terminalOpen: false,
       terminalHeight: 280,
-      terminalIds: ["default"],
+      terminalIds: [],
       runningTerminalIds: [],
-      activeTerminalId: "default",
-      terminalGroups: [{ id: "group-default", terminalIds: ["default"] }],
-      activeTerminalGroupId: "group-default",
+      activeTerminalId: "",
+      terminalGroups: [],
+      activeTerminalGroupId: "",
     });
   });
 
   it("opens and splits terminals into the active group", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.setTerminalOpen(THREAD_ID, true);
     store.splitTerminal(THREAD_ID, "terminal-2");
 
@@ -42,6 +43,7 @@ describe("terminalStateStore actions", () => {
 
   it("caps splits at four terminals per group", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.splitTerminal(THREAD_ID, "terminal-2");
     store.splitTerminal(THREAD_ID, "terminal-3");
     store.splitTerminal(THREAD_ID, "terminal-4");
@@ -65,6 +67,7 @@ describe("terminalStateStore actions", () => {
   });
 
   it("creates new terminals in a separate group", () => {
+    useTerminalStateStore.getState().newTerminal(THREAD_ID, "default");
     useTerminalStateStore.getState().newTerminal(THREAD_ID, "terminal-2");
 
     const terminalState = selectThreadTerminalState(
@@ -84,6 +87,7 @@ describe("terminalStateStore actions", () => {
 
   it("ensures unknown server terminals are registered, opened, and activated", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.ensureTerminal(THREAD_ID, "setup-setup", { open: true, active: true });
 
     const terminalState = selectThreadTerminalState(
@@ -101,8 +105,9 @@ describe("terminalStateStore actions", () => {
     ]);
   });
 
-  it("initializes panel terminals without sharing the default drawer terminal", () => {
+  it("initializes panel terminals without sharing the drawer terminal", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.ensurePanelTerminal(THREAD_ID, "panel-terminal-1", { active: true });
 
     const panelTerminalState = selectThreadTerminalState(
@@ -121,6 +126,7 @@ describe("terminalStateStore actions", () => {
 
   it("allows unlimited groups while keeping each group capped at four terminals", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.splitTerminal(THREAD_ID, "terminal-2");
     store.splitTerminal(THREAD_ID, "terminal-3");
     store.splitTerminal(THREAD_ID, "terminal-4");
@@ -164,19 +170,23 @@ describe("terminalStateStore actions", () => {
     ).toEqual([]);
   });
 
-  it("resets to default and clears persisted entry when closing the last terminal", () => {
+  it("empties and closes the surface and clears its persisted entry when closing the last terminal", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.closeTerminal(THREAD_ID, "default");
 
     expect(useTerminalStateStore.getState().terminalStateByThreadId[THREAD_ID]).toBeUndefined();
-    expect(
-      selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID)
-        .terminalIds,
-    ).toEqual(["default"]);
+    const terminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().terminalStateByThreadId,
+      THREAD_ID,
+    );
+    expect(terminalState.terminalIds).toEqual([]);
+    expect(terminalState.terminalOpen).toBe(false);
   });
 
   it("keeps a valid active terminal after closing an active split terminal", () => {
     const store = useTerminalStateStore.getState();
+    store.newTerminal(THREAD_ID, "default");
     store.splitTerminal(THREAD_ID, "terminal-2");
     store.splitTerminal(THREAD_ID, "terminal-3");
     store.closeTerminal(THREAD_ID, "terminal-3");

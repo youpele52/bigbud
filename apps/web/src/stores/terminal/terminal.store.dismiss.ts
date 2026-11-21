@@ -1,16 +1,14 @@
 import { ThreadId } from "@bigbud/contracts";
 import {
   closeThreadTerminal,
-  createSingleThreadTerminalState,
+  createDefaultThreadTerminalState,
   type ThreadTerminalState,
 } from "./helpers.store";
 import type { TerminalStateStoreState } from "./terminal.store.types";
 import { resetClosedTerminalLayout } from "./terminal.store.layout";
 
-export type DismissedTerminalPanes = Record<
-  string,
-  { threadId: string; terminalId: string; replacementId: string }
->;
+/** Older saved entries also carry a `replacementId`; it is ignored (no replacement pane). */
+export type DismissedTerminalPanes = Record<string, { threadId: string; terminalId: string }>;
 export const dismissedPaneKey = (threadId: string, terminalId: string) =>
   JSON.stringify([threadId, terminalId]);
 
@@ -23,13 +21,10 @@ export function excludeDismissedPanes(
   let next = pane;
   for (const entry of Object.values(state.dismissedTerminalPanes ?? {})) {
     if (entry.threadId !== threadId || !next.terminalIds.includes(entry.terminalId)) continue;
+    // Dismissing the last pane leaves the surface empty: no replacement terminal is created.
     next =
       next.terminalIds.length === 1
-        ? {
-            ...createSingleThreadTerminalState(entry.replacementId),
-            terminalOpen: false,
-            terminalHeight: next.terminalHeight,
-          }
+        ? { ...createDefaultThreadTerminalState(), terminalHeight: next.terminalHeight }
         : closeThreadTerminal(next, entry.terminalId);
   }
   return next;
@@ -39,11 +34,10 @@ export function dismissTerminalPaneInState(
   state: TerminalStateStoreState,
   threadId: ThreadId,
   terminalId: string,
-  replacementId: string,
 ): Partial<TerminalStateStoreState> {
   const dismissedTerminalPanes = {
     ...state.dismissedTerminalPanes,
-    [dismissedPaneKey(threadId, terminalId)]: { threadId, terminalId, replacementId },
+    [dismissedPaneKey(threadId, terminalId)]: { threadId, terminalId },
   };
   const next = { ...state, dismissedTerminalPanes };
   const drawer = state.terminalStateByThreadId[threadId];
