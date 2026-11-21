@@ -4,7 +4,7 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import { MessageCirclePlus, MinusIcon, XIcon } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { MessagesTimeline } from "~/components/chat/messages/MessagesTimeline";
 import type { MarkdownAnchorClick } from "~/components/common/BaseMarkdown";
@@ -14,6 +14,7 @@ import {
   ThreadActivityIndicator,
   threadActivityLabel,
 } from "~/components/chat/common/threadActivityIndicator";
+import { useChatFloatingPanelLayer } from "~/components/chat/common/chatFloatingPanel.order";
 import { ChatViewComposer } from "~/components/chat/view/chat-view/ChatViewComposer";
 import {
   ThreadComposerSurface,
@@ -28,6 +29,11 @@ import { useSideChatStore } from "~/stores/sideChat";
 import type { PendingApproval } from "~/logic/session";
 
 import { attachSidecarToComposer, closeSideChat } from "./sideChat.actions";
+import {
+  SIDE_CHAT_PANEL_POSITION_CLASS_NAME,
+  SIDE_CHAT_PANEL_POSITION_STYLE,
+  useSideChatLayoutVariables,
+} from "./sideChat.layout.hooks";
 import { useSideChatAutoScroll } from "./sideChat.scroll.hooks";
 
 function SidecarHeaderAction(props: {
@@ -271,46 +277,21 @@ export function FloatingSideChat({
   const panelRef = useRef<HTMLDivElement>(null);
   const minimize = useSideChatStore((state) => state.minimize);
 
-  useLayoutEffect(() => {
-    const panel = panelRef.current;
-    const root = panel?.closest<HTMLElement>("[data-chat-view-root]");
-    const composer = root?.querySelector<HTMLElement>("[data-chat-composer-form]");
-    if (!root || !composer) return;
-
-    const updateComposerHeight = () => {
-      const composerHeight = composer.offsetHeight;
-      root.style.setProperty("--side-chat-composer-height", `${composerHeight}px`);
-      root.style.setProperty(
-        "--side-chat-available-height",
-        `${Math.max(0, root.clientHeight - composerHeight - 24)}px`,
-      );
-    };
-    updateComposerHeight();
-    const clearLayoutVariables = () => {
-      root.style.removeProperty("--side-chat-composer-height");
-      root.style.removeProperty("--side-chat-available-height");
-    };
-    if (typeof ResizeObserver === "undefined") {
-      return clearLayoutVariables;
-    }
-    const observer = new ResizeObserver(updateComposerHeight);
-    observer.observe(composer);
-    observer.observe(root);
-    return () => {
-      observer.disconnect();
-      clearLayoutVariables();
-    };
-  }, []);
+  useSideChatLayoutVariables(panelRef);
+  const { style: layerStyle, ...layerHandlers } = useChatFloatingPanelLayer("sidecar");
 
   return (
     <div
       ref={panelRef}
       data-chat-focus-scope="true"
+      data-chat-floating-panel="sidecar"
+      {...layerHandlers}
       className={cn(
-        "absolute right-3 z-30 flex h-[min(66dvh,var(--side-chat-available-height,66dvh))] min-h-0 max-h-[var(--side-chat-available-height,calc(100dvh-1.5rem))] w-[min(32rem,calc(50%-0.75rem))] resize-y flex-col overflow-hidden rounded-[24px] border border-border/80 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
+        SIDE_CHAT_PANEL_POSITION_CLASS_NAME,
+        "flex w-[min(32rem,calc(50%-0.75rem))] flex-col overflow-hidden rounded-[24px] border border-border/80 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
         SOLID_FLOATING_SURFACE_CLASS_NAME,
       )}
-      style={{ bottom: "calc(var(--side-chat-composer-height, 7rem) + 0.75rem)" }}
+      style={{ ...SIDE_CHAT_PANEL_POSITION_STYLE, ...layerStyle }}
     >
       <ThreadComposerSurface threadId={threadId}>
         {(context) => (
