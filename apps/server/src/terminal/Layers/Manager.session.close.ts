@@ -20,6 +20,11 @@ import {
   assertHostedDirectShellsReachable,
   settleHostedDirectShellPane,
 } from "./Manager.shell.direct.settle";
+import {
+  assertHostRosterPanesReachable,
+  hostRosterPanesForThread,
+  settleHostRosterPane,
+} from "./Manager.session.close.hostRoster";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
@@ -114,6 +119,7 @@ export function makeTerminalClose(
           "Previous terminal ownership has not been recovered. Reconnect to its original target before closing it; its history was retained.",
       });
     }
+    const heldLive = Option.isSome(session) && session.value.process !== null;
     if (Option.isSome(session)) {
       if (
         session.value.remoteOwnerRecoveryRequired ||
@@ -133,6 +139,8 @@ export function makeTerminalClose(
     }
     // A Direct SSH pane in the local host (M7) is closed there even with no session holding it.
     yield* settleHostedDirectShellPane(ctx, threadId, terminalId);
+    // A host pane no live session holds (kept across a backend restart) is ended there too.
+    if (!heldLive) yield* settleHostRosterPane(ctx, threadId, terminalId);
     yield* ctx.releaseWorktreeLease({ threadId, terminalId });
     yield* ctx.flushPersist(threadId, terminalId);
     yield* ctx.modifyManagerState((state) => {
@@ -176,18 +184,18 @@ export function makeTerminalClose(
           yield* knownThreadTerminalIds(ctx, input.threadId),
         );
         const sessions = yield* ctx.sessionsForThread(input.threadId);
-        // Hosted Direct SSH panes block only while their host is unreachable; checked first so
-        // nothing is closed when one cannot be.
-        const hosted = yield* assertHostedDirectShellsReachable(
-          ctx,
-          input.threadId,
-          new Set(
-            sessions.filter((session) => session.process).map((session) => session.terminalId),
-          ),
+        const livePanes = new Set(
+          sessions.filter((session) => session.process).map((session) => session.terminalId),
         );
+        // Hosted Direct SSH panes and kept host panes block only while their host is
+        // unreachable; checked first so nothing is closed when one cannot be.
+        const hosted = yield* assertHostedDirectShellsReachable(ctx, input.threadId, livePanes);
+        const roster = hostRosterPanesForThread(ctx, input.threadId, livePanes);
+        yield* assertHostRosterPanesReachable(ctx, input.threadId, roster);
         const terminalIds = new Set([
           ...sessions.map((session) => session.terminalId),
           ...hosted.map((record) => record.pane.terminalId),
+          ...roster,
         ]);
         yield* Effect.forEach(
           terminalIds,

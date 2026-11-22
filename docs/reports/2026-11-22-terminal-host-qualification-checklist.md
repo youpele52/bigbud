@@ -39,6 +39,10 @@ Every item lists its steps and the expected result. "Toast colours" follow the U
 
 **Expected:** the restored screen matches what the program shows (no stale rows, cursor in place). The OSC 11 query is answered while parked: the shell prints no garbage and the program does not hang.
 
+5. Debug build only: start with `BIGBUD_DEBUG_TERMINAL_IDLE_MS=60000`, leave a terminal at a prompt **on screen**, and minimize bigbud for 2 minutes.
+
+**Expected (step 5):** a minimized window counts as not visible, so the on-screen prompt is idle-closed while minimized (intended). Restoring the window shows the closing toast and the pane is gone; nothing respawns.
+
 ## 3. Backend kill keeps every terminal
 
 1. Open 3 terminals: a prompt, `claude`, and `sleep 900`. Note each PID (`echo $$` in each shell before starting the program).
@@ -62,7 +66,9 @@ Every item lists its steps and the expected result. "Toast colours" follow the U
 2. Open a terminal, run `echo kept-$$`, quit bigbud, wait 10 seconds and relaunch.
 3. Open a second terminal at a prompt. Quit bigbud and leave it closed for 11 minutes, then relaunch.
 
-**Expected:** step 2 reattaches with the exact screen (the `kept-…` line, same PID). In step 3 the idle prompt is gone on relaunch and one notice says how many terminals closed while bigbud was closed.
+4. Still in keep mode: open a terminal in a thread, quit, relaunch, and archive (or delete) that thread **without** opening its terminal. Check the shell PID with `ps -p <pid>`.
+
+**Expected:** step 2 reattaches with the exact screen (the `kept-…` line, same PID). In step 3 the idle prompt is gone on relaunch and one notice says how many terminals closed while bigbud was closed. In step 4 the archive ends the kept shell.
 
 ## 6. Idle warning, Keep open and idle close
 
@@ -72,7 +78,7 @@ Every item lists its steps and the expected result. "Toast colours" follow the U
 4. Leave each of these hidden for 15 minutes: an agent TUI waiting at its own prompt; `exec sleep 900`; a shell running `(while :; do date; sleep 300; done) &` and then left at its prompt (a background job printing every 5 minutes).
 5. Leave a p10k (powerlevel10k) prompt, whose `gitstatusd` helper runs silently, hidden for 10 minutes.
 
-**Expected:** **Keep open** resets the timer and the warning disappears. The expiry closes the terminal with a toast, and the pane shows it ended because it was idle. The three terminals in step 4 are never closed: the TUI and `sleep` are foreground programs, and the background job's output restarts the idle timer every 5 minutes. The p10k prompt **does** close, because silent helpers never count as activity. A terminal visible on screen is never idle-closed.
+**Expected:** **Keep open** resets the timer and the warning disappears. The expiry closes the terminal with a toast and removes its pane, and the sidebar indicator goes away. Returning to the thread (its view was parked) starts no new shell; only **New terminal** does. The three terminals in step 4 are never closed: the TUI and `sleep` are foreground programs, and the background job's output restarts the idle timer every 5 minutes. The p10k prompt **does** close, because silent helpers never count as activity. A terminal visible on screen is never idle-closed, but a minimized window counts as not visible (item 2, step 5).
 
 Fast variant (debug build only): start with `BIGBUD_DEBUG_TERMINAL_IDLE_MS=60000` for a warning at 30 seconds and a close at 60 seconds.
 
@@ -84,7 +90,7 @@ Fast variant (debug build only): start with `BIGBUD_DEBUG_TERMINAL_IDLE_MS=60000
 4. With 24 terminals open, create a worktree whose project has a setup script.
 5. Retry from the setup toast; repeat and dismiss the toast instead.
 
-**Expected:** the dialog names the least recently used terminal that is **not** visible. Cancel opens nothing and closes nothing. Confirm closes exactly the named terminal (its pane shows it was closed for the limit) and opens the new one. The setup script shows the setup toast at the limit; retry closes the named terminal and runs the script; dismissing marks the setup as failed.
+**Expected:** the dialog names the least recently used terminal that is **not** visible. Cancel opens nothing and closes nothing. Confirm closes exactly the named terminal (its pane is removed with a toast saying it was closed for the limit) and opens the new one. The setup script shows the setup toast at the limit; retry closes the named terminal and runs the script; dismissing marks the setup as failed.
 
 ## 8. Memory pressure closes only hidden, idle terminals
 
@@ -122,10 +128,12 @@ macOS only.
 
 ## 12. Remote-agent targets
 
-1. Repeat items 1, 2, 3 and 6 with a remote workspace that uses the bigbud remote agent (agent updated to the version with protocol 1.9).
+1. Repeat items 1, 2, 3, 4, 6 and 7 with a remote workspace that uses the bigbud remote agent (agent updated to the version with protocol 1.9).
 2. On a container with a cgroup memory limit, run `stress-ng --vm 1 --vm-bytes 90%` (or similar) next to hidden idle terminals.
+3. Quit with the default setting while the remote host is unreachable (block SSH first), then check the remote shells after 11 minutes.
+4. Start bigbud without `BIGBUD_TERMINAL_HOST=1` and repeat item 6 on the remote workspace.
 
-**Expected:** the same results as on the local host. Memory pressure follows the container's cgroup limit, not the machine's total memory.
+**Expected:** the same results as on the local host, including the quit close in item 4 (the remote host gets the close-all within the 3-second quit budget). Memory pressure follows the container's cgroup limit, not the machine's total memory. In step 3 the remote host closes its managed terminals itself after its 10-minute orphan timer. In step 4 nothing is idle-closed: without the flag remote terminals behave as before. An agent older than protocol 1.9 also behaves as before.
 
 ## 13. Direct SSH terminals
 

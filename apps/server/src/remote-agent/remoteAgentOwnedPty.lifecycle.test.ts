@@ -36,6 +36,7 @@ function fakeProcess() {
       keepOpen: vi.fn(async () => undefined),
       onActivity: vi.fn(() => () => undefined),
       onNotice: vi.fn(() => () => undefined),
+      currentConnection: () => ({ supportsCapability: () => false }),
     },
     detach: vi.fn(),
   };
@@ -169,5 +170,12 @@ describe("owned PTY protocol 1.9 create", () => {
     expect(process.lifecycle.keepOpen).toHaveBeenCalledOnce();
     expect(process.lifecycle.onNotice).toHaveBeenCalledWith(listener);
     expect(process.lifecycle.onActivity).toHaveBeenCalledWith(listener);
+  });
+
+  it("exposes host-wide controls only for remote-agent terminals that ask for them", async () => {
+    expect((await spawn()(spawnInput())).lifecycle?.hostWide).toBeUndefined();
+    f.owner = undefined;
+    const remote = await spawn({ remoteHostControls: true })(spawnInput());
+    expect(remote.lifecycle?.hostWide?.connectionKey()).toMatch(/^remote-connection-/);
   });
 });

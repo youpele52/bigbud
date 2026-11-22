@@ -5,7 +5,10 @@
  *
  * @module Manager.hostLifecycle
  */
-import type { TerminalEndedReason } from "@bigbud/contracts/workspace/terminal.limit.ts";
+import {
+  TERMINAL_HOST_CLOSED_REASONS,
+  type TerminalEndedReason,
+} from "@bigbud/contracts/workspace/terminal.limit.ts";
 import type {
   TerminalLifecycleNotice,
   TerminalLifecycleNoticeKind,
@@ -143,6 +146,16 @@ export function terminalHostLostNotice(session: TerminalSessionState): TerminalL
     terminalId: session.terminalId,
     createdAt: new Date().toISOString(),
   };
+}
+
+/** The host closed this ended session (idle, memory, limit, orphan); it must never respawn. */
+export function terminalHostClosedSession(session: TerminalSessionState): boolean {
+  return (
+    !session.process &&
+    session.status !== "running" &&
+    session.endedReason !== undefined &&
+    TERMINAL_HOST_CLOSED_REASONS.includes(session.endedReason)
+  );
 }
 
 /** Snapshot fields for host sessions; in-process sessions keep today's snapshot unchanged. */

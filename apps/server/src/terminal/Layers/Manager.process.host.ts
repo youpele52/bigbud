@@ -61,6 +61,7 @@ export function makeTerminalManagerHost(input: {
     sessions: () => Effect.sync(() => [...sessions()]),
     roster: () => hub.roster.entries(),
     runtime: runtime(),
+    refreshRoster: () => void hub.roster.refresh().then(hub.refreshInventory),
   };
   return {
     hub,
@@ -101,6 +102,7 @@ export function makeTerminalManagerHost(input: {
       resolveIntent: options.resolveQuitIntent,
       keepRunningAfterQuit,
       runtime,
+      remote: hub.remote,
     }).pipe(Effect.ensuring(Effect.sync(() => hub.dispose())), Effect.ignoreCause({ log: true })),
   };
 }

@@ -7,7 +7,6 @@ import {
   isExecutionTargetDisconnected,
 } from "../stores/remoteAccess/remoteAccess.store";
 import { useTerminalStateStore } from "../stores/terminal";
-import { terminalPaneOpenOptions } from "../stores/terminal/terminal.store.paneOrigin";
 
 export interface RemoteThreadTerminalTarget {
   readonly threadId: ThreadId;
@@ -16,7 +15,21 @@ export interface RemoteThreadTerminalTarget {
   readonly worktreePath?: string;
 }
 
-/** Re-opens the thread's open terminals on the remote target once access is back. */
+/** The pane has no live process to reattach: nothing to do in the background. */
+function isTerminalNotRunning(error: unknown): boolean {
+  for (let current = error, depth = 0; depth < 3; depth++) {
+    if (typeof current !== "object" || current === null) return false;
+    if ((current as { _tag?: unknown })._tag === "TerminalNotRunningError") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+/**
+ * Reattaches the thread's open terminals on the remote target once access is back. This runs
+ * with no user action, so it is always attach-only (plan D1): it never respawns an ended process
+ * or bypasses the limit dialog. A mounted view starts a new process only on a user action.
+ */
 export async function reconnectRemoteThreadTerminals(target: RemoteThreadTerminalTarget) {
   if (
     !target.cwd ||
@@ -30,11 +43,10 @@ export async function reconnectRemoteThreadTerminals(target: RemoteThreadTermina
   const terminalState = useTerminalStateStore.getState().terminalStateByThreadId[target.threadId];
   // An open surface always has panes; there is no implicit terminal to reopen.
   if (!terminalState?.terminalOpen) return;
-  await Promise.all(
+  const results = await Promise.allSettled(
     terminalState.terminalIds.map((terminalId) =>
       api.terminal.open({
-        // Restored panes only reattach (`attachOnly`); they are never respawned.
-        ...terminalPaneOpenOptions(target.threadId, terminalId),
+        attachOnly: true,
         threadId: target.threadId,
         executionTargetId: target.executionTargetId,
         terminalId,
@@ -43,6 +55,11 @@ export async function reconnectRemoteThreadTerminals(target: RemoteThreadTermina
       }),
     ),
   );
+  const failure = results.find(
+    (result): result is PromiseRejectedResult =>
+      result.status === "rejected" && !isTerminalNotRunning(result.reason),
+  );
+  if (failure) throw failure.reason;
 }
 
 /** Same as `reconnectRemoteThreadTerminals`, reporting a failure as a toast. */

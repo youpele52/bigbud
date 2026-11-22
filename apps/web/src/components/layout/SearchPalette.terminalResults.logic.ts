@@ -62,7 +62,12 @@ export function revealTerminalSearchResult(result: TerminalSearchResult, query: 
     store.setPanelActiveTerminal(result.threadId, result.terminalId);
     openTerminalPanel();
   } else {
-    store.ensureTerminal(result.threadId, result.terminalId, { open: true, active: true });
+    // The hit names an existing (maybe ended) terminal: show it, never respawn it.
+    store.ensureTerminal(result.threadId, result.terminalId, {
+      open: true,
+      active: true,
+      restored: true,
+    });
   }
   useSearchStore.getState().requestTerminalFind({
     threadId: result.threadId,

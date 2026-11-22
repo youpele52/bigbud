@@ -60,3 +60,14 @@ export const TerminalEndedReason = Schema.Literals([
   "exited",
 ]);
 export type TerminalEndedReason = typeof TerminalEndedReason.Type;
+
+/**
+ * Closes the host decided on (idle, memory pressure, the live limit, no owner): the pane is gone
+ * and an open never respawns it; only New terminal (a new id) starts a shell (plan §11.1).
+ */
+export const TERMINAL_HOST_CLOSED_REASONS: ReadonlyArray<TerminalEndedReason> = [
+  "idle",
+  "memory",
+  "limit",
+  "orphan",
+];

@@ -24,6 +24,7 @@ import {
   ensurePanelTerminalInState,
 } from "./terminal.store.panel";
 import { closeTerminalPaneInState } from "./terminal.store.close";
+import { removeEndedTerminalPaneInState } from "./terminal.store.ended";
 import { hydrateTerminalAgentFromSnapshot } from "./terminal.store.snapshot";
 import { markTerminalAgentActive } from "./terminal.store.recentAgent";
 import {
@@ -153,6 +154,12 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             if (!options?.open) {
               nextState = { ...nextState, terminalOpen: previousTerminalOpen };
             }
+            // An existing terminal shown again only reattaches; it is never respawned (D1).
+            if (options?.restored)
+              nextState = {
+                ...nextState,
+                restoredTerminalIds: [...(state.restoredTerminalIds ?? []), terminalId],
+              };
           }
           if (options?.active === false) {
             nextState = {
@@ -214,6 +221,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         updatePanelTerminal(threadId, (state) => setThreadActiveTerminal(state, terminalId)),
       closePanelTerminal: (threadId, terminalId) =>
         set((state) => closeTerminalPaneInState(state, threadId, terminalId, true)),
+      removeEndedTerminal: (threadId, terminalId) =>
+        set((state) => removeEndedTerminalPaneInState(state, threadId, terminalId)),
       setTerminalLaunchContext: (threadId, context) =>
         set((state) => ({
           terminalLaunchContextByThreadId: {

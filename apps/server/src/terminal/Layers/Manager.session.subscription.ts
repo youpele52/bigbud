@@ -4,6 +4,7 @@ import { Effect, Option } from "effect";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { toSessionKey } from "./Manager.shell";
+import { terminalInventoryEntry } from "./Manager.hostInventory.ts";
 import type { SessionApiContext } from "./Manager.session.types.ts";
 import type { TerminalSubscribeOptions } from "../Services/Manager";
 import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
@@ -130,10 +131,7 @@ export function subscribeToTerminalEvents(
             createdAt: new Date().toISOString(),
             sessions: hostInventory
               ? hostInventory.sessions(state.sessions.values())
-              : [...state.sessions.values()].map(({ threadId, terminalId }) => ({
-                  threadId,
-                  terminalId,
-                })),
+              : [...state.sessions.values()].map(terminalInventoryEntry),
           }
         : undefined;
       return [{ events, updatedAtByKey, inventory }, state] as const;

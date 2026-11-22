@@ -9,6 +9,7 @@ import {
   createSingleThreadTerminalState,
   newThreadTerminal,
 } from "../../stores/terminal/helpers.store";
+import { terminalPaneOpenOptions } from "../../stores/terminal/terminal.store.paneOrigin";
 import { resetTerminalStore } from "../../stores/terminal/terminal.store.test.helpers";
 import { useSearchStore } from "../../stores/ui";
 import {
@@ -103,5 +104,20 @@ describe("terminal search results", () => {
     expect(
       useTerminalStateStore.getState().terminalStateByThreadId[thread]!.terminalIds,
     ).not.toContain("panel-1");
+  });
+
+  it("adds a missing pane as restored, so opening an ended terminal never spawns a shell", () => {
+    const [result] = toTerminalSearchResults([hit({ terminalId: "ended-1" })], {
+      threadTitle: () => "Fix the build",
+      store: useTerminalStateStore.getState(),
+    });
+    revealTerminalSearchResult(result!, "failed");
+    const drawer = useTerminalStateStore.getState().terminalStateByThreadId[thread]!;
+    expect(drawer.terminalIds).toContain("ended-1");
+    expect(drawer.activeTerminalId).toBe("ended-1");
+    // The view's open is attach-only: the server returns the retained session or refuses.
+    expect(terminalPaneOpenOptions(thread, "ended-1")).toEqual({ attachOnly: true });
+    // A pane the user already had keeps its origin.
+    expect(terminalPaneOpenOptions(thread, "term-2")).toEqual({});
   });
 });

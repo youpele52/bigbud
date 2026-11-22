@@ -25,6 +25,7 @@ import {
   TerminalRendererRegistry,
 } from "./Manager.hostPolicy.ts";
 import { TerminalHostRoster } from "./Manager.hostRoster.ts";
+import { TerminalRemoteHosts } from "./Manager.remoteHosts.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { TerminalSessionState } from "./Manager.types.ts";
 
@@ -51,6 +52,8 @@ export interface TerminalHostHubDeps {
 export interface TerminalHostHubRuntime extends TerminalHostHub {
   readonly renderers: TerminalRendererRegistry;
   readonly roster: TerminalHostRoster;
+  /** Remote-agent hosts: per-connection policy, host events and quit close-all. */
+  readonly remote: TerminalRemoteHosts;
   /** Adoption, roster, policy, old-host notices and host-wide events; never rejects. */
   readonly start: () => Promise<void>;
   readonly closeDrainingHosts: () => Promise<{ closed: number; remaining: number }>;
@@ -139,11 +142,14 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
     scheduleExpiry();
   });
 
-  /** Host-wide notices (no pane, or a pane no session holds yet) from the admitted host. */
-  const onHostEvent = (event: OwnedPtyHostEvent) => {
+  /**
+   * Host-wide notices (no pane, or a pane no session holds yet). The local host reports every
+   * notice; a remote host is shared, so only notices of this backend's own sessions count there.
+   */
+  const handleHostEvent = (event: OwnedPtyHostEvent, scope: "local" | "remote") => {
     if (event.type !== "notice") return;
     // Every live notice, a session's own included, has now been seen by a backend.
-    deps.runtime()?.hostGenerations?.recordSeenNotice(event.value.noticeId);
+    if (scope === "local") deps.runtime()?.hostGenerations?.recordSeenNotice(event.value.noticeId);
     deps.runFork(
       Effect.gen(function* () {
         const ptyId = event.value.ptyId;
@@ -151,17 +157,25 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
         for (const session of deps.sessions())
           if (ptyId && session.host?.ptyId === ptyId) owner = session;
         // A live process's own listener reports it; an ended one (its exit came first) is ours.
-        if (owner?.process) return;
+        if (owner?.process || (scope === "remote" && !owner)) return;
         const pane =
           owner ?? (ptyId ? roster.entries().find((entry) => entry.ptyId === ptyId) : undefined);
         const mapped = terminalLifecycleNoticeFromHost(event.value, pane);
         if (!mapped) return;
         if (owner?.host) applyTerminalHostNotice(owner, owner.host, mapped.notice, mapped.ended);
-        if (mapped.ended) void roster.refresh().then(refreshInventory);
+        if (mapped.ended && scope === "local") void roster.refresh().then(refreshInventory);
+        else if (mapped.ended) refreshInventory();
         yield* publishNotice(mapped.notice);
       }),
     );
   };
+  const onHostEvent = (event: OwnedPtyHostEvent) => handleHostEvent(event, "local");
+  const remote = new TerminalRemoteHosts({
+    sessions: deps.sessions,
+    keepRunningAfterQuit: deps.keepRunningAfterQuit,
+    onHostEvent: (event) => handleHostEvent(event, "remote"),
+    log: deps.log,
+  });
 
   const ensureHostEvents = async () => {
     const runtime = deps.runtime();
@@ -189,6 +203,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   };
 
   const ensureHost = () => {
+    void remote.ensure();
     void policy.ensure();
     void ensureHostEvents();
     void ensureNoticeBaseline();
@@ -257,6 +272,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   return {
     renderers,
     roster,
+    remote,
     publishNotice,
     refreshInventory,
     subscribeLifecycle: (listener) =>
@@ -280,9 +296,13 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       pushViews((session) => session.threadId === threadId && session.terminalId === terminalId);
       refreshInventory();
     },
-    viewChanged: (threadId, terminalId) =>
-      pushViews((session) => session.threadId === threadId && session.terminalId === terminalId),
+    viewChanged: (threadId, terminalId) => {
+      void remote.ensure();
+      pushViews((session) => session.threadId === threadId && session.terminalId === terminalId);
+    },
     start: async () => {
+      // Remote hosts follow the keep setting even when no local host runs.
+      unsubscribeSettings ??= deps.onSettingsChange?.(ensureHost);
       if (!deps.runtime()?.hostGenerations) return;
       await roster.ready();
       refreshInventory();
@@ -295,7 +315,6 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
         .catch(() => undefined);
       summaryRaised = true;
       ensureHost();
-      unsubscribeSettings ??= deps.onSettingsChange?.(ensureHost);
       tickKey = await deps
         .runtime()
         ?.hostGenerations?.admittedKey()
@@ -321,6 +340,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
       if (expiryTimer) clearTimeout(expiryTimer);
       if (tickTimer) clearInterval(tickTimer);
       unsubscribeViews();
+      remote.dispose();
       unsubscribeHostEvents?.();
       unsubscribeSettings?.();
       lifecycleListeners.clear();

@@ -27,6 +27,7 @@ function fixture(showLifecycleNotices: boolean) {
   } satisfies Pick<NativeApi["terminal"], "onEvent" | "keepOpen">;
   const applyEvents = vi.fn();
   const reconcileInventory = vi.fn();
+  const removeEndedTerminal = vi.fn();
   const stop = subscribeAppTerminalState({
     terminal,
     isArchived: () => false,
@@ -34,6 +35,7 @@ function fixture(showLifecycleNotices: boolean) {
     reconcileInventory,
     applyWork: vi.fn(),
     showLifecycleNotices,
+    removeEndedTerminal,
   });
   return {
     emit,
@@ -41,6 +43,7 @@ function fixture(showLifecycleNotices: boolean) {
     lifecycle: (item: TerminalLifecycleNotice) => options!.onLifecycle!(item),
     applyEvents,
     reconcileInventory,
+    removeEndedTerminal,
     stop,
     unsubscribe,
   };
@@ -98,4 +101,16 @@ it("updates liveness without toasting in a renderer that does not own notificati
   expect(useTerminalLivenessStore.getState().byThreadId.t1?.a?.idleClosesAt).toBe(warning.closesAt);
   expect(toastManager.add).not.toHaveBeenCalled();
   f.stop();
+});
+
+it("removes the pane on a host close, with or without toasts, but keeps a host-lost pane", () => {
+  for (const show of [true, false]) {
+    const f = fixture(show);
+    f.lifecycle({ ...warning, noticeId: `closed-${show}`, kind: "idleClosed" });
+    expect(f.removeEndedTerminal).toHaveBeenCalledWith("t1", "a");
+    f.lifecycle({ ...warning, noticeId: `lost-${show}`, kind: "hostLost", terminalId: "b" });
+    f.lifecycle({ ...warning, noticeId: `warn-${show}` });
+    expect(f.removeEndedTerminal).toHaveBeenCalledOnce();
+    f.stop();
+  }
 });

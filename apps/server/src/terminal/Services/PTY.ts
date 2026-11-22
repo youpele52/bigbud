@@ -10,7 +10,7 @@ import { Effect, Schema, ServiceMap } from "effect";
 import type { RemoteAgentShellLaunch } from "../../remote-agent/remoteAgentShellLaunch.ts";
 import type { ShellUnconfirmedLaunch } from "@bigbud/contracts/workspace/terminalShell.ts";
 import type { ShellLaunchIdentity } from "@bigbud/contracts/workspace/terminalShell.ts";
-import type { OwnedPtyRuntime } from "./OwnedPtyRuntime.ts";
+import type { OwnedPtyHostControls, OwnedPtyRuntime } from "./OwnedPtyRuntime.ts";
 
 /**
  * PtyError - Error type for PTY adapter operations.
@@ -152,6 +152,22 @@ export interface PtyLifecycleControl {
   readonly keepOpen: (signal?: AbortSignal) => Promise<void>;
   readonly onActivity: (callback: (activity: PtyHostActivity) => void) => () => void;
   readonly onNotice: (callback: (notice: PtyHostLifecycleNotice) => void) => () => void;
+  /**
+   * Host-wide controls of the remote-agent host that carries this PTY, over its current
+   * connection (policy push, quit close-all, host events). Remote-agent PTYs only; a local host
+   * is driven through its runtime's generations instead.
+   */
+  readonly hostWide?: PtyHostWideControl;
+}
+
+export interface PtyHostWideControl extends Pick<
+  OwnedPtyHostControls,
+  "updatePolicy" | "closeAll"
+> {
+  /** Identifies the connection that now carries the PTY; it changes on every reconnect. */
+  readonly connectionKey: () => string;
+  /** Host-wide events (notices of PTYs whose exit came first) on the current connection. */
+  readonly subscribe: OwnedPtyHostControls["subscribe"];
 }
 
 /** Additive host create options; ignored where the host lacks the capability. */

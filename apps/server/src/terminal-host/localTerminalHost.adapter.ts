@@ -12,6 +12,7 @@ import {
   isDirectSshTerminalTarget,
   makeLocalTerminalHostDirectSsh,
 } from "./localTerminalHost.directSsh.ts";
+import { makeLocalTerminalHostSshClient } from "./localTerminalHost.directSsh.client.ts";
 import { makeLocalTerminalHostGenerations } from "./localTerminalHost.generations.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
 import {
@@ -63,6 +64,12 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
     }),
   );
   let closed = false;
+  // Quit close-all, policy and inventory reach draining generations too.
+  const hostGenerations = makeLocalTerminalHostGenerations({
+    controller,
+    pool,
+    ...(options.log ? { log: options.log } : {}),
+  });
   const runtime: OwnedPtyRuntime = Object.freeze({
     targetId: LOCAL_TERMINAL_HOST_TARGET_ID,
     pool,
@@ -76,11 +83,14 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
         throw new RemoteAgentPtyError("HOST_UNAVAILABLE", "No local terminal host is running.");
       return pool.getBound(LOCAL_TERMINAL_HOST_TARGET_ID, binding, ["terminal.pty"]);
     }),
-    // Quit close-all, policy and inventory reach draining generations too.
-    hostGenerations: makeLocalTerminalHostGenerations({
+    hostGenerations,
+    // One owner's host PTY, verified or closed by its generation's inventory (thread deletion).
+    hostPtys: makeLocalTerminalHostSshClient({
       controller,
       pool,
-      ...(options.log ? { log: options.log } : {}),
+      owners: () => owners,
+      control: async () => ({ registry }),
+      inventory: (signal) => hostGenerations.inventory(signal),
     }),
   });
   const assertTarget = (target: string) => {

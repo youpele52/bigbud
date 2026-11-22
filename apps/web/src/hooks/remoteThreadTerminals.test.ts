@@ -26,7 +26,7 @@ it("reopens nothing for a thread without terminals", async () => {
   expect(mocks.open).not.toHaveBeenCalled();
 });
 
-it("reattaches restored panes with attachOnly and reopens user-created panes normally", async () => {
+it("reattaches every pane attach-only, restored or user-created, and never respawns", async () => {
   useTerminalStateStore.setState({
     terminalStateByThreadId: {
       [threadId]: {
@@ -43,17 +43,32 @@ it("reattaches restored panes with attachOnly and reopens user-created panes nor
   });
   await reconnectRemoteThreadTerminals(target);
   expect(mocks.open).toHaveBeenCalledTimes(2);
-  expect(mocks.open).toHaveBeenCalledWith({
-    threadId,
-    executionTargetId: "ssh:remote",
-    terminalId: "restored",
-    cwd: "/work",
-    attachOnly: true,
+  for (const terminalId of ["restored", "fresh"])
+    expect(mocks.open).toHaveBeenCalledWith({
+      threadId,
+      executionTargetId: "ssh:remote",
+      terminalId,
+      cwd: "/work",
+      attachOnly: true,
+    });
+});
+
+it("ignores panes with nothing to reattach, but reports other failures", async () => {
+  useTerminalStateStore.setState({
+    terminalStateByThreadId: {
+      [threadId]: {
+        terminalOpen: true,
+        terminalHeight: 280,
+        terminalIds: ["ended", "live"],
+        runningTerminalIds: [],
+        activeTerminalId: "ended",
+        terminalGroups: [{ id: "group-ended", terminalIds: ["ended", "live"] }],
+        activeTerminalGroupId: "group-ended",
+      },
+    },
   });
-  expect(mocks.open).toHaveBeenCalledWith({
-    threadId,
-    executionTargetId: "ssh:remote",
-    terminalId: "fresh",
-    cwd: "/work",
-  });
+  mocks.open.mockRejectedValueOnce({ _tag: "TerminalNotRunningError" });
+  await expect(reconnectRemoteThreadTerminals(target)).resolves.toBeUndefined();
+  mocks.open.mockRejectedValueOnce(new Error("ssh down"));
+  await expect(reconnectRemoteThreadTerminals(target)).rejects.toThrow("ssh down");
 });

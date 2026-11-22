@@ -348,6 +348,8 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       },
       applyEvents: applyTerminalEvents,
       reconcileInventory: reconcileTerminalInventory,
+      removeEndedTerminal: (threadId, terminalId) =>
+        useTerminalStateStore.getState().removeEndedTerminal(threadId as ThreadId, terminalId),
       applyWork: (item) => {
         useStore.getState().applyTerminalWorkActivity(item);
         emitTerminalWorkActivity(item);

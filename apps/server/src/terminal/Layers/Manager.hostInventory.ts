@@ -23,6 +23,22 @@ export function terminalHostInventoryFields(
   };
 }
 
+/** Only a starting or running process is live; exited and failed sessions stay members. */
+const sessionIsLive = (session: TerminalSessionState) =>
+  session.status === "running" || session.status === "starting";
+
+/** One manager session's inventory entry; in-process running sessions stay exactly as before. */
+export function terminalInventoryEntry(
+  session: TerminalSessionState,
+): TerminalSessionInventoryEntry {
+  return {
+    threadId: session.threadId,
+    terminalId: session.terminalId,
+    ...(sessionIsLive(session) ? {} : { live: false }),
+    ...terminalHostInventoryFields(session),
+  };
+}
+
 /**
  * Manager sessions plus host-owned panes no view has reopened since a backend restart, so
  * restored panes are kept (and reattach) instead of being dropped as absent.
@@ -35,17 +51,15 @@ export function terminalInventorySessions(
   const seen = new Set<string>();
   for (const session of sessions) {
     seen.add(toSessionKey(session.threadId, session.terminalId));
-    entries.push({
-      threadId: session.threadId,
-      terminalId: session.terminalId,
-      ...terminalHostInventoryFields(session),
-    });
+    entries.push(terminalInventoryEntry(session));
   }
   for (const entry of roster) {
     if (seen.has(toSessionKey(entry.threadId, entry.terminalId))) continue;
     entries.push({
       threadId: entry.threadId,
       terminalId: entry.terminalId,
+      // A lost PTY keeps its pane (read-only last screen) but is not a running terminal.
+      ...(entry.lost ? { live: false } : {}),
       activity: !entry.lost && entry.activityState === "busy" ? "busy" : "quiet",
     });
   }

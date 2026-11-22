@@ -28,3 +28,19 @@ it("keeps inventory opt-in and preserves ordinary event payloads", () => {
   };
   expect(Schema.decodeUnknownSync(TerminalEventsStreamItem)(event)).toEqual(event);
 });
+
+it("carries an additive live flag; an entry without it (an older server) stays valid", () => {
+  const decode = Schema.decodeUnknownSync(TerminalEventsStreamItem);
+  const inventory = {
+    type: "inventory",
+    createdAt: "2026-11-22T00:00:00.000Z",
+    sessions: [
+      { threadId: "t", terminalId: "ended", live: false, activity: "quiet" },
+      { threadId: "t", terminalId: "running" },
+    ],
+  };
+  expect(decode(inventory)).toEqual(inventory);
+  expect(() =>
+    decode({ ...inventory, sessions: [{ threadId: "t", terminalId: "x", live: "no" }] }),
+  ).toThrow();
+});

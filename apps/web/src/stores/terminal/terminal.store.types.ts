@@ -43,10 +43,11 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
     terminalId: string,
     profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
   ) => void;
+  /** `restored`: a new pane for a terminal that already exists, which only ever reattaches. */
   ensureTerminal: (
     threadId: ThreadId,
     terminalId: string,
-    options?: { open?: boolean; active?: boolean },
+    options?: { open?: boolean; active?: boolean; restored?: boolean },
   ) => void;
   setActiveTerminal: (threadId: ThreadId, terminalId: string) => void;
   closeTerminal: (threadId: ThreadId, terminalId: string) => void;
@@ -72,6 +73,8 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   ) => void;
   setPanelActiveTerminal: (threadId: ThreadId, terminalId: string) => void;
   closePanelTerminal: (threadId: ThreadId, terminalId: string) => void;
+  /** The host closed this pane's terminal (idle, memory, limit, orphan, quit): drop the pane. */
+  removeEndedTerminal: (threadId: ThreadId, terminalId: string) => void;
   setTerminalLaunchContext: (threadId: ThreadId, context: ThreadTerminalLaunchContext) => void;
   clearTerminalLaunchContext: (threadId: ThreadId) => void;
   setTerminalActivity: (

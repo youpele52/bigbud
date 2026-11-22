@@ -59,6 +59,8 @@ export function applyLivenessInventory(
 ): TerminalLivenessState {
   const grouped: Record<string, Record<string, TerminalLivenessEntry>> = {};
   for (const session of inventory.sessions) {
+    // Exited, failed and host-lost sessions stay members, but are not running terminals.
+    if (session.live === false) continue;
     const byTerminal = (grouped[session.threadId] ??= {});
     byTerminal[session.terminalId] = {
       busy: session.activity === "busy",

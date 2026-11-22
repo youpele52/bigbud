@@ -206,6 +206,11 @@ export class RemoteAgentPtyLifecycle {
     return remoteAgentHostCapabilities(this.connection());
   }
 
+  /** The connection that carries this PTY now; it changes on reconnect. */
+  currentConnection(): Connection {
+    return this.connection();
+  }
+
   /** Call whenever the PTY starts listening to a (new) connection. */
   bind(connection: Connection): void {
     this.unsubscribe?.();

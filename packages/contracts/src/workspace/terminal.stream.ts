@@ -92,6 +92,11 @@ export const TerminalSessionInventory = Schema.Struct({
     Schema.Struct({
       threadId: Schema.String,
       terminalId: Schema.String,
+      /**
+       * `false` for a retained session whose process ended, or a host PTY the host lost: still
+       * a member (its pane may show the last screen), never a running terminal. Absent = live.
+       */
+      live: Schema.optional(Schema.Boolean),
       /** Sidebar activity (plan §8.5): a program in front, or output in the last 60 s. */
       activity: Schema.optional(TerminalInventoryActivity),
       restorable: Schema.optional(Schema.Boolean),

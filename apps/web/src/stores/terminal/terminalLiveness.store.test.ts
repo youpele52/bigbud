@@ -86,4 +86,24 @@ describe("terminal liveness", () => {
     applyTerminalLivenessNotice(notice("idleWarningCleared", { terminalId: "ghost" }));
     expect(useTerminalLivenessStore.getState().byThreadId).toEqual({});
   });
+
+  it("shows no indicator after an idle close followed by an inventory refresh", () => {
+    reconcileTerminalLivenessInventory({
+      type: "inventory",
+      createdAt: at,
+      sessions: [{ threadId: "t1", terminalId: "a", activity: "quiet" }],
+    });
+    applyTerminalLivenessNotice(notice("idleClosed"));
+    expect(liveness("t1")).toEqual({});
+    // The host re-sends inventory after the close: the retained session is listed, not live.
+    reconcileTerminalLivenessInventory({
+      type: "inventory",
+      createdAt: at,
+      sessions: [
+        { threadId: "t1", terminalId: "a", live: false, activity: "quiet", restorable: false },
+        { threadId: "t2", terminalId: "lost", live: false, activity: "quiet" },
+      ],
+    });
+    expect(useTerminalLivenessStore.getState().byThreadId).toEqual({});
+  });
 });

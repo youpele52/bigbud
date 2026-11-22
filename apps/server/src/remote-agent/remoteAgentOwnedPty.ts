@@ -28,6 +28,7 @@ import {
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentColdAttach, RemoteAgentOwnedInput } from "./remoteAgentOwnedPty.input.ts";
 import { REMOTE_PTY_INPUT_RECONCILE } from "./remoteAgentPtyClient.reconcile.ts";
+import { remoteAgentPtyHostWide } from "./remoteAgentPtyClient.hostWide.ts";
 import type { ShellHostScope } from "@bigbud/contracts/workspace/terminalShell.ts";
 import {
   remoteAgentPtyCreateLifecycleFields,
@@ -50,6 +51,8 @@ export interface OwnedRemoteAgentPtyOptions {
   ) => ReadonlyArray<{ readonly name: string; readonly value: string }>;
   /** A profile-less command for a `local_launch` create (Direct SSH in the local host, M7). */
   readonly commandLaunch?: (input: PtySpawnInput) => RemoteAgentCommandLaunch | undefined;
+  /** Remote-agent PTYs expose their host's policy, close-all and events (never the local host). */
+  readonly remoteHostControls?: boolean;
 }
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
@@ -321,6 +324,9 @@ export function makeOwnedRemoteAgentPty(
     );
     process.onExit(removeRestartListener);
     const requestedProfile = owner.shellLaunch?.requestedProfile;
+    const hostWide = options.remoteHostControls
+      ? remoteAgentPtyHostWide(() => process.lifecycle.currentConnection())
+      : undefined;
     return {
       pidDomain: "remote",
       recovered: !created,
@@ -366,6 +372,7 @@ export function makeOwnedRemoteAgentPty(
         keepOpen: (signal) => process.lifecycle.keepOpen(signal),
         onActivity: (callback) => process.lifecycle.onActivity(callback),
         onNotice: (callback) => process.lifecycle.onNotice(callback),
+        ...(hostWide ? { hostWide } : {}),
       },
       write: (data) => process.write(data),
       resize: (cols, rows) => process.resize(cols, rows),

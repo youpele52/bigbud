@@ -14,6 +14,7 @@ import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
 import { openRemoteAgentControl } from "./remoteAgentControl.ts";
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
+import { remoteAgentTerminalLifecycleOptions } from "./remoteAgentTerminalLifecycle.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import { observeLegacyRemoteAgentBinding } from "./remoteAgentLegacyBinding.ts";
 import {
@@ -73,7 +74,13 @@ export function makeRemoteAgentComposition(input: {
           undefined,
           input.binaryPath,
         );
-  const ownedPty = makeOwnedRemoteAgentPty(pool, remoteAgentOwners, resolveProfileBinding);
+  // With the terminal host enabled, remote terminals are lifecycle-managed too (plan §7.2).
+  const ownedPty = makeOwnedRemoteAgentPty(
+    pool,
+    remoteAgentOwners,
+    resolveProfileBinding,
+    remoteAgentTerminalLifecycleOptions(),
+  );
   const ptyResolver = {
     resolveProfileBinding,
     restoreOrCreate: managed

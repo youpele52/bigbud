@@ -29,6 +29,11 @@ export interface OwnedPtyRuntime {
    * runtime. Liveness and close address one owner's host PTY directly.
    */
   readonly localSshClient?: OwnedPtyLocalSshClient;
+  /**
+   * Liveness and confirmed close (terminate, then a verified exit) of one owner's PTY in the local
+   * terminal host, without attaching to it: a thread deletion closes host panes no view reopened.
+   */
+  readonly hostPtys?: OwnedPtyLocalSshClient;
 }
 
 /** `unknown`: the host (or the owner's generation) cannot be reached, so nothing is proven. */

@@ -10,6 +10,7 @@ import {
   applyTerminalLivenessNotice,
   reconcileTerminalLivenessInventory,
 } from "../stores/terminal/terminalLiveness.store";
+import { terminalNoticeEndsPane } from "../stores/terminal/terminal.store.ended";
 
 /** Keep batching ordered across subscription inventories, including same-tick resubscriptions. */
 export function subscribeGlobalTerminalState(input: {
@@ -83,6 +84,8 @@ export function subscribeAppTerminalState(input: {
   applyWork: (item: TerminalWorkActivity) => void;
   /** False in renderers that must not toast (the compact chat window). */
   showLifecycleNotices: boolean;
+  /** A host close (idle, memory, limit, orphan, quit) removes the pane, mounted or not (§11.1). */
+  removeEndedTerminal?: (threadId: string, terminalId: string) => void;
 }): () => void {
   const notices = input.showLifecycleNotices
     ? createTerminalLifecycleNotices({ terminal: input.terminal, toasts: toastManager })
@@ -102,6 +105,8 @@ export function subscribeAppTerminalState(input: {
     applyLifecycle: (notice) => {
       applyTerminalLivenessNotice(notice);
       notices?.handle(notice);
+      if (notice.threadId && notice.terminalId && terminalNoticeEndsPane(notice))
+        input.removeEndedTerminal?.(notice.threadId, notice.terminalId);
     },
   });
   return () => {

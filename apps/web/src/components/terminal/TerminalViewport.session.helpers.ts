@@ -29,6 +29,7 @@ import { releaseUnboundCloseFailure } from "./terminalLifecycle.recovery";
 import { preserveTerminalScroll } from "./terminalScrollState";
 import { terminalProfileOpenOptions } from "./TerminalViewport.profile";
 import { terminalPaneOpenOptions } from "../../stores/terminal/terminal.store.paneOrigin";
+import { terminalSnapshotHostClosed } from "../../stores/terminal/terminal.store.ended";
 import { deferRecoveryFit, terminalResizeGeometry } from "./terminalRecoveryGeometry";
 import {
   hasCurrentTerminalBaseline,
@@ -349,6 +350,11 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
     return true;
   }
   input.onSnapshot?.(snapshot);
+  // The host closed it (idle, memory, limit, orphan): the pane is gone, never respawned.
+  if (terminalSnapshotHostClosed(snapshot)) {
+    useTerminalStateStore.getState().removeEndedTerminal(input.threadId, input.terminalId);
+    return true;
+  }
   if (snapshot.status === "error" || snapshot.pid === null) {
     throw new Error(
       "The terminal did not start. Check the target and shell configuration, then retry startup.",

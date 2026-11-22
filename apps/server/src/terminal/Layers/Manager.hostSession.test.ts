@@ -210,7 +210,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("host-backed session
         onInventory: (inventory) => Effect.sync(() => inventories.push(inventory)),
       });
       expect(inventories[0]?.sessions).toEqual([
-        { threadId: "thread-1", terminalId: "lost-pane", activity: "quiet" },
+        // A lost PTY stays a member (read-only last screen) but is not a running terminal.
+        { threadId: "thread-1", terminalId: "lost-pane", live: false, activity: "quiet" },
         { threadId: "thread-2", terminalId: "live", activity: "busy" },
       ]);
 

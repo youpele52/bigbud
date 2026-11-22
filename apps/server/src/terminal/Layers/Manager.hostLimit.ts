@@ -64,6 +64,8 @@ export interface TerminalHostLimitContext {
   readonly roster: () => ReadonlyArray<TerminalHostRosterEntry>;
   readonly runtime: OwnedPtyRuntime | undefined;
   readonly now?: () => number;
+  /** Re-reads the roster after a pane was closed through the host, then refreshes inventory. */
+  readonly refreshRoster?: () => void;
 }
 
 /** The refusal as the contract error; the candidate is null when the host named none. */
