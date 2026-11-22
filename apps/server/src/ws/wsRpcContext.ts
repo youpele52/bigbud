@@ -37,7 +37,7 @@ import {
 } from "../command-admission/RuntimeMaintenanceGate.ts";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "../terminal/Services/Manager";
-import { localTerminalHostSelection } from "../terminal-host/localTerminalHost.layer.ts";
+import { serverWorkspaceCapabilities } from "./wsServerCapabilities.ts";
 import { TerminalActivity } from "../terminal/Services/TerminalActivity.ts";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
 import { WorkspaceEntries } from "../workspace/Services/WorkspaceEntries";
@@ -276,9 +276,6 @@ export const makeWsRpcContext = (
       const discovery = yield* observeConfigStage("discovery", discoveryRegistry.getCatalog);
       const rawSettings = yield* observeConfigStage("settings", serverSettings.getSettings);
       const settings = resolveTextGenByProbeStatus(rawSettings, providers);
-      const remoteAgentEnabled = isRemoteAgentConfigured();
-      const terminalHostEnabled =
-        localTerminalHostSelection({ stateDir: config.stateDir }) === "enabled";
       // Same source as workspace `~` expansion, so clients can address home-relative files.
       const homeDir = homedir();
 
@@ -304,14 +301,10 @@ export const makeWsRpcContext = (
           ...(config.otlpMetricsUrl !== undefined ? { otlpMetricsUrl: config.otlpMetricsUrl } : {}),
           otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
         },
-        workspaceCapabilities: {
-          remoteAgent: {
-            enabled: remoteAgentEnabled,
-            supportsDirectoryWatch: true,
-            supportsPtyReattach: remoteAgentEnabled,
-          },
-          terminalHost: { enabled: terminalHostEnabled },
-        },
+        workspaceCapabilities: serverWorkspaceCapabilities({
+          remoteAgentEnabled: isRemoteAgentConfigured(),
+          stateDir: config.stateDir,
+        }),
         settings,
       };
     }).pipe(Effect.flatMap(validateServerConfig));

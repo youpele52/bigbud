@@ -13,7 +13,8 @@ import type { DirectCleanupResource } from "../Services/DirectResourceCleanupExe
 import { captureDirectCleanupIdentity } from "./DirectResourceCleanup.identity.ts";
 import { parseAttachmentIdFromRelativePath } from "../../attachments/attachmentStore.ts";
 import { discoverThreadWorktrees } from "./ThreadDeletion.worktrees.ts";
-import { discoverThreadLogResources, type RetainedTerminalHistory } from "./ThreadDeletion.logs.ts";
+import { discoverThreadLogResources } from "./ThreadDeletion.logs.ts";
+import type { RetainedTerminalHistory } from "./TerminalHistoryRetention.ts";
 
 export interface DiscoveredThreadDeletionFiles {
   readonly resources: ReadonlyArray<PurgeResource>;

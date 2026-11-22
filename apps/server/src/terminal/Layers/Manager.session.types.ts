@@ -67,6 +67,10 @@ export interface SessionApiContext {
   historyTerminalIdsForThread: (
     threadId: string,
   ) => Effect.Effect<ReadonlyArray<string> | "unknown">;
+  /** Every file name in the history directory; `"unknown"` when it cannot be read. */
+  historyFileNames: () => Effect.Effect<ReadonlyArray<string> | "unknown">;
+  /** Removes one history file by name (the orphaned-history sweep). */
+  removeHistoryFile: (name: string) => Effect.Effect<void>;
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
   assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>;
   resolveRuntimePathIdentity?:

@@ -11,6 +11,7 @@ import { type SessionApiContext, type TerminalManagerShape } from "./Manager.ses
 import { makeTerminalClose } from "./Manager.session.close";
 import { makeRetainedShellOwnerApi } from "./Manager.session.shellOwners";
 import { retainedThreadHistoryTerminalIds } from "./Manager.history.retainedPanes";
+import { sweepOrphanedTerminalHistory } from "./Manager.history.orphans";
 import { makeTerminalOutputHold } from "./Manager.session.outputHold";
 import { TerminalSearchIndex } from "./Manager.search";
 import { captureTerminalRecovery } from "./Manager.recoveryRpc";
@@ -62,6 +63,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     ...makeRemoteTerminalApi(ctx, open, close),
     ...makeRetainedShellOwnerApi(ctx),
     retainedHistoryTerminalIds: (threadId) => retainedThreadHistoryTerminalIds(ctx, threadId),
+    sweepOrphanedHistory: (missingThreadIds) => sweepOrphanedTerminalHistory(ctx, missingThreadIds),
     hasActiveThread: (threadId) =>
       sessionsForThread(threadId).pipe(
         Effect.map((sessions) =>

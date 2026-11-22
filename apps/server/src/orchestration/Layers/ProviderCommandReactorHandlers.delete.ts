@@ -25,7 +25,6 @@ import {
   describeRuntimeCleanupFailures,
   abortUnsafeProjectCascadeThreadDeletion,
   cleanupDeletedThreadTerminalHistory,
-  retainedDeletedThreadTerminalHistory,
   hydrateStoredDirectCleanupResources,
   isSingleDeletionAlreadyFenced,
   makeStoppedDeletionSession,
@@ -38,6 +37,7 @@ import { recoverDirectCleanupWorktrees } from "../../deletion/Layers/DirectResou
 import { serializeManagedWorktreeResource } from "../../persistence/Layers/DirectResourceCleanupRepository.worktrees.ts";
 import type * as DeleteTypes from "./ProviderCommandReactorHandlers.delete.types.ts";
 import { abortThreadDeletion } from "./ProviderCommandReactorHandlers.delete.abort.ts";
+import { terminalManagerRetainedHistory } from "../../deletion/Layers/TerminalHistoryRetention.ts";
 export const makeProcessDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
@@ -165,7 +165,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             const files = yield* orchestrationEngine.threadDeletion!.discoverFiles({
               rootThreadId: thread.id,
               threadIds,
-              retainedTerminalHistory: retainedDeletedThreadTerminalHistory(terminal),
+              retainedTerminalHistory: terminalManagerRetainedHistory(terminal),
             });
             const operationId = `direct-cleanup:${event.eventId}`;
             preparedOperationId = operationId;

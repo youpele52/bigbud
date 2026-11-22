@@ -1,5 +1,5 @@
 import { ProjectId, ThreadId } from "@bigbud/contracts";
-import { Effect, FileSystem, Layer, Semaphore } from "effect";
+import { Effect, FileSystem, Layer, Option, Semaphore } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
 import { safeEntitySegment, threadAttachmentRelativePaths } from "./EntityPurge.assets.ts";
@@ -21,10 +21,11 @@ import {
   purgeResourceOperation,
 } from "./EntityPurge.errors.ts";
 import {
-  exclusiveOwnedLogNames,
-  readOwnedLogDirectory,
-  verifyOwnedLogsAbsent,
-} from "./EntityPurge.logs.ts";
+  listPurgeThreadLogResources,
+  verifyPurgeThreadLogsAbsent,
+} from "./EntityPurge.threadLogs.ts";
+import { terminalManagerRetainedHistory } from "./TerminalHistoryRetention.ts";
+import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { makeEntityPurgeSql } from "./EntityPurge.sql.ts";
 import { makeProjectDeletionSql } from "./ProjectDeletion.sql.ts";
 import { makeEntityPurgeClaims } from "./EntityPurge.claims.ts";
@@ -48,6 +49,10 @@ const makeEntityPurge = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const config = yield* ServerConfig;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
+  // Held panes keep their terminal history (N8); without a terminal manager every pane is held.
+  const retainedTerminalHistory = terminalManagerRetainedHistory(
+    Option.getOrUndefined(yield* Effect.serviceOption(TerminalManager)),
+  );
   const queries = makeEntityPurgeSql(sql);
   const maintenanceSemaphore = yield* Semaphore.make(1);
   const captureResource = Effect.fn("EntityPurge.captureResource")(function* (
@@ -116,22 +121,13 @@ const makeEntityPurge = Effect.gen(function* () {
           resources.set(`managed-worktree:${relativePath}`, resource);
         }
         const knownThreadIds = (yield* queries.listKnownThreadIds()).map((row) => row.threadId);
-        for (const [kind, directory, type] of [
-          ["provider-log", config.providerLogsDir, "provider"],
-          ["terminal-history", config.terminalLogsDir, "terminal"],
-        ] as const) {
-          const entries = yield* purgeResourceOperation("EntityPurge.readOwnedLogDirectory", () =>
-            readOwnedLogDirectory(directory),
-          );
-          for (const relativePath of exclusiveOwnedLogNames({
-            entries,
-            knownThreadIds,
-            threadId,
-            type,
-          })) {
-            resources.set(`${kind}:${relativePath}`, yield* captureResource(kind, relativePath));
-          }
-        }
+        for (const { kind, relativePath } of yield* listPurgeThreadLogResources({
+          config,
+          knownThreadIds,
+          threadId,
+          retainedTerminalHistory,
+        }))
+          resources.set(`${kind}:${relativePath}`, yield* captureResource(kind, relativePath));
         const job = yield* jobs.createOrGet({
           jobId,
           entityKind: "thread",
@@ -327,14 +323,7 @@ const makeEntityPurge = Effect.gen(function* () {
         yield* verifyResources(claimedJob);
         if (job.entityKind === "thread") {
           const knownThreadIds = (yield* queries.listKnownThreadIds()).map((row) => row.threadId);
-          yield* purgeResourceOperation("EntityPurge.verifyOwnedLogs", () =>
-            verifyOwnedLogsAbsent({
-              providerDirectory: config.providerLogsDir,
-              terminalDirectory: config.terminalLogsDir,
-              knownThreadIds,
-              threadId: job.entityId,
-            }),
-          );
+          yield* verifyPurgeThreadLogsAbsent({ config, knownThreadIds, job: claimedJob });
         }
         yield* transitionJob(job, "verifying", "root");
         phase = "root";

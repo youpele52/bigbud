@@ -7,10 +7,8 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import {
-  cleanupDeletedThreadTerminalHistory,
-  retainedDeletedThreadTerminalHistory,
-} from "../../orchestration/Layers/ProviderCommandReactorHandlers.delete.cleanup.ts";
+import { cleanupDeletedThreadTerminalHistory } from "../../orchestration/Layers/ProviderCommandReactorHandlers.delete.cleanup.ts";
+import { terminalManagerRetainedHistory } from "./TerminalHistoryRetention.ts";
 import { fixture, owner } from "../../persistence/Layers/DirectShellLaunchOwners.test.helpers.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { profileOwner } from "../../remote-agent/remoteAgentOwnedPty.profile.testUtils.ts";
@@ -116,7 +114,7 @@ const deleteThread = Effect.fn("test.deleteThread")(function* (manager: Terminal
         const files = yield* deletion.discoverFiles({
           rootThreadId: threadId,
           threadIds,
-          retainedTerminalHistory: retainedDeletedThreadTerminalHistory(manager),
+          retainedTerminalHistory: terminalManagerRetainedHistory(manager),
         });
         for (const resource of files.directResources) {
           deleted.push(resource.relativePath);
@@ -144,7 +142,7 @@ layer("thread deletion terminal history (Q1, N8)", (it) => {
       const files = yield* deletion.discoverFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
-        retainedTerminalHistory: retainedDeletedThreadTerminalHistory(manager),
+        retainedTerminalHistory: terminalManagerRetainedHistory(manager),
       });
       const captured = files.directResources.map((resource) => resource.relativePath);
       assert.equal(captured.length, 2);
@@ -172,7 +170,7 @@ layer("thread deletion terminal history (Q1, N8)", (it) => {
       const files = yield* deletion.discoverFiles({
         rootThreadId: threadId,
         threadIds: [threadId],
-        retainedTerminalHistory: retainedDeletedThreadTerminalHistory(manager),
+        retainedTerminalHistory: terminalManagerRetainedHistory(manager),
       });
       assert.deepEqual(
         files.directResources.map((resource) => resource.relativePath).toSorted(),

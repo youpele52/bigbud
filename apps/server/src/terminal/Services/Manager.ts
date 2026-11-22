@@ -162,6 +162,13 @@ export interface TerminalManagerShape {
   readonly retainedHistoryTerminalIds?: (
     threadId: string,
   ) => Effect.Effect<ReadonlySet<string> | "unknown">;
+  /**
+   * Removes history files of threads `missingThreadIds` reports gone from the projection, unless
+   * the retained-pane rule still holds the pane (plan Q1, N8).
+   */
+  readonly sweepOrphanedHistory?: (
+    missingThreadIds: (threadIds: ReadonlyArray<string>) => Effect.Effect<ReadonlySet<string>>,
+  ) => Effect.Effect<{ readonly removed: number; readonly kept: number }>;
   readonly listShellProfiles: (
     input: TerminalShellProfilesInput,
   ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;

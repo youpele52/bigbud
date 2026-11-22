@@ -8,7 +8,7 @@ import { Data, Effect, Layer, Option, Ref, ServiceMap } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { DiscoveredThreadDeletionFiles } from "../Layers/ThreadDeletion.files.ts";
-import type { RetainedTerminalHistory } from "../Layers/ThreadDeletion.logs.ts";
+import type { RetainedTerminalHistory } from "../Layers/TerminalHistoryRetention.ts";
 import {
   cleanupDiscoveredThreadWorktrees,
   discoverThreadDeletionFiles,

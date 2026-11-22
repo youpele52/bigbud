@@ -26,6 +26,10 @@ import { preflightRemoteTerminalShellProfile } from "./Manager.shell.remote";
 import { makeDirectShellLaunchOwners } from "../../persistence/Layers/DirectShellLaunchOwners";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
 import { withTerminalPasteStaging } from "./Manager.pasteStaging.attach.ts";
+import {
+  projectionMissingThreadIds,
+  scheduleOrphanedHistorySweep,
+} from "./Manager.history.orphans.schedule.ts";
 import { makeRemotePasteAgentResolver } from "./Manager.pasteStaging.remote.ts";
 import { classifyTerminalRuntimeLeaseError } from "./Manager.leaseError.ts";
 import type { RuntimePathIdentity } from "./Manager.types";
@@ -179,6 +183,7 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
       : {}),
     ...(quitIntent ? { resolveQuitIntent: quitIntent.resolve } : {}),
   });
+  yield* scheduleOrphanedHistorySweep(manager, projectionMissingThreadIds(sql));
   return yield* withTerminalPasteStaging(manager, {
     stateDir,
     maxFileMb: () => settings?.currentSnapshot?.()?.settings.terminalPasteMaxFileMb,
