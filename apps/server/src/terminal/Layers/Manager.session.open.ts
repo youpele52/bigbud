@@ -12,7 +12,11 @@ import { type SessionApiContext, type TerminalManagerShape } from "./Manager.ses
 import { makeResolveTerminalFolder } from "./Manager.cwd";
 import { prepareTerminalRestart } from "./Manager.session.restart";
 import { reattachRunningTerminalSession } from "./Manager.session.open.reattach.ts";
-import { openTerminalAttachOnly, rejectTerminalHostLimit } from "./Manager.session.open.host.ts";
+import {
+  endedTerminalSnapshot,
+  openTerminalAttachOnly,
+  rejectTerminalHostLimit,
+} from "./Manager.session.open.host.ts";
 import { resolveTerminalEvictLifecycle } from "./Manager.hostLimit.ts";
 import { terminalHostClosedSession } from "./Manager.hostLifecycle.ts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
@@ -107,6 +111,10 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         // A pane the host closed (idle, memory, limit, orphan) is gone: never respawn it (§11.1).
         if (Option.isSome(existing) && terminalHostClosedSession(existing.value))
           return snapshot(existing.value);
+        const closedReason = Option.isNone(existing)
+          ? ctx.hostClosed?.find(request.threadId, terminalId)
+          : undefined;
+        if (closedReason) return endedTerminalSnapshot(ctx, request, terminalId, closedReason);
         const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
         const attachOnly = () =>
           openTerminalAttachOnly({ ctx, request, terminalId, executionTargetId, existing });

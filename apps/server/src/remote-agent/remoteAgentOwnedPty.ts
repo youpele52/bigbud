@@ -28,7 +28,12 @@ import {
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentColdAttach, RemoteAgentOwnedInput } from "./remoteAgentOwnedPty.input.ts";
 import { REMOTE_PTY_INPUT_RECONCILE } from "./remoteAgentPtyClient.reconcile.ts";
-import { remoteAgentPtyHostWide } from "./remoteAgentPtyClient.hostWide.ts";
+import {
+  recoveredRemoteAgentPtyHostFeatures,
+  remoteAgentOwnedPtyHostControls,
+  remoteAgentPtyHostFeatures,
+  type RemoteAgentPtyHostFeatures,
+} from "./remoteAgentOwnedPty.host.ts";
 import type { ShellHostScope } from "@bigbud/contracts/workspace/terminalShell.ts";
 import {
   remoteAgentPtyCreateLifecycleFields,
@@ -184,6 +189,7 @@ export function makeOwnedRemoteAgentPty(
       await update((current) => ({ ...current, state: "outcome-unknown" }));
     };
     let process: RemoteAgentPtyProcess;
+    let features: RemoteAgentPtyHostFeatures;
     try {
       await observe(
         control.registry.update((state) => pinRemoteAgentBuild(state, pinOwner, buildId)),
@@ -191,6 +197,7 @@ export function makeOwnedRemoteAgentPty(
       cold?.signal.throwIfAborted();
       if (!created || owner.state !== "prepared") {
         process = new RemoteAgentPtyProcess(connection, owner.resourceId, reconnect);
+        features = recoveredRemoteAgentPtyHostFeatures(owner, connection, options.hostLifecycle);
         process.restoreSequences(
           owner.outputSequence,
           owner.nextInputSequence,
@@ -213,7 +220,12 @@ export function makeOwnedRemoteAgentPty(
           lifecycle.localLaunch && options.localLaunchEnvironment
             ? options.localLaunchEnvironment(input)
             : undefined;
-        owner = await update((current) => ({ ...current, state: "may-have-been-sent" }));
+        features = remoteAgentPtyHostFeatures(lifecycle);
+        owner = await update((current) => ({
+          ...current,
+          state: "may-have-been-sent",
+          hostFeatures: features,
+        }));
         const workspaceHandle = remoteAgentPtyWorkspaceHandle(connection, {
           target: owner.target,
           cwd: input.remoteCwd,
@@ -324,9 +336,6 @@ export function makeOwnedRemoteAgentPty(
     );
     process.onExit(removeRestartListener);
     const requestedProfile = owner.shellLaunch?.requestedProfile;
-    const hostWide = options.remoteHostControls
-      ? remoteAgentPtyHostWide(() => process.lifecycle.currentConnection())
-      : undefined;
     return {
       pidDomain: "remote",
       recovered: !created,
@@ -358,22 +367,8 @@ export function makeOwnedRemoteAgentPty(
           ? { status: "unconfirmed" as const, requestedProfile }
           : undefined;
       },
-      onSequencedData: (callback) => process.onSequencedData(callback),
-      screen: {
-        capabilities: () => process.lifecycle.capabilities(),
-        snapshot: (snapshotInput) => process.screenSnapshot(snapshotInput),
-      },
-      lifecycle: {
-        capabilities: () => process.lifecycle.capabilities(),
-        get evictedPtyId() {
-          return process.lifecycle.evictedPtyId;
-        },
-        setViewState: (state, signal) => process.lifecycle.setViewState(state, signal),
-        keepOpen: (signal) => process.lifecycle.keepOpen(signal),
-        onActivity: (callback) => process.lifecycle.onActivity(callback),
-        onNotice: (callback) => process.lifecycle.onNotice(callback),
-        ...(hostWide ? { hostWide } : {}),
-      },
+      // Host capabilities only for what this PTY's create asked for (never the connection's).
+      ...remoteAgentOwnedPtyHostControls(process, features, options.remoteHostControls),
       write: (data) => process.write(data),
       resize: (cols, rows) => process.resize(cols, rows),
       kill: (signal) => process.kill(signal),

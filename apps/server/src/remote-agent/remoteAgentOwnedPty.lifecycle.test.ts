@@ -31,7 +31,7 @@ function fakeProcess() {
     screenSnapshot: vi.fn(async () => ({ throughSequence: 3 })),
     lifecycle: {
       evictedPtyId: "evicted",
-      capabilities: () => ({ screen: true }),
+      capabilities: () => ALL_HOST_CAPABILITIES,
       setViewState: vi.fn(async () => undefined),
       keepOpen: vi.fn(async () => undefined),
       onActivity: vi.fn(() => () => undefined),
@@ -63,6 +63,16 @@ vi.mock("./remoteAgentController.ts", () => ({
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
 
 const listener = () => undefined;
+/** What a protocol 1.9 connection advertises for the whole host. */
+const ALL_HOST_CAPABILITIES = {
+  screen: true,
+  lifecycle: true,
+  spool: true,
+  queryResponder: true,
+  localLaunch: true,
+};
+const NONE = { screen: false, lifecycle: false, spool: false, queryResponder: false };
+const LIFECYCLE_19 = ["terminal.lifecycle", "terminal.screen", "terminal.query-responder"];
 
 function spawn(options?: Parameters<typeof makeOwnedRemoteAgentPty>[3]) {
   const store = {
@@ -153,14 +163,16 @@ describe("owned PTY protocol 1.9 create", () => {
   });
 
   it("exposes sequenced output, screen copies and lifecycle controls", async () => {
-    const pty = await spawn()(spawnInput());
+    f.capabilities = new Set([...f.capabilities, ...LIFECYCLE_19]);
+    const pty = await spawn({ hostLifecycle: { lifecycleManaged: true } })(spawnInput());
     const process = f.process as ReturnType<typeof fakeProcess>;
     pty.onSequencedData?.(listener);
     expect(process.onSequencedData).toHaveBeenCalledWith(listener);
     await expect(pty.screen?.snapshot({ attachRenderer: true })).resolves.toEqual({
       throughSequence: 3,
     });
-    expect(pty.screen?.capabilities()).toEqual({ screen: true });
+    expect(pty.screen?.capabilities()).toEqual(ALL_HOST_CAPABILITIES);
+    expect(f.owner?.hostFeatures).toEqual({ screen: true, lifecycle: true });
     expect(pty.lifecycle?.evictedPtyId).toBe("evicted");
     await pty.lifecycle?.setViewState({ viewState: "hidden", rendererAttached: false });
     await pty.lifecycle?.keepOpen();
@@ -172,10 +184,24 @@ describe("owned PTY protocol 1.9 create", () => {
     expect(process.lifecycle.onActivity).toHaveBeenCalledWith(listener);
   });
 
-  it("exposes host-wide controls only for remote-agent terminals that ask for them", async () => {
-    expect((await spawn()(spawnInput())).lifecycle?.hostWide).toBeUndefined();
+  it("exposes host-wide controls only for managed remote-agent terminals that ask for them", async () => {
+    f.capabilities = new Set([...f.capabilities, ...LIFECYCLE_19]);
+    const managed = { hostLifecycle: { lifecycleManaged: true } };
+    expect((await spawn(managed)(spawnInput())).lifecycle?.hostWide).toBeUndefined();
     f.owner = undefined;
-    const remote = await spawn({ remoteHostControls: true })(spawnInput());
+    const remote = await spawn({ ...managed, remoteHostControls: true })(spawnInput());
     expect(remote.lifecycle?.hostWide?.connectionKey()).toMatch(/^remote-connection-/);
+  });
+
+  it("flag off on a 1.9 agent: the PTY reports no screen or lifecycle, exactly as before", async () => {
+    f.capabilities = new Set([...f.capabilities, ...LIFECYCLE_19]);
+    // No create defaults (the terminal host flag is off): nothing is asked for.
+    const pty = await spawn({ remoteHostControls: true })(spawnInput());
+    expect(f.create.mock.calls[0]![0].lifecycle).toEqual({});
+    expect(f.owner?.hostFeatures).toEqual({ screen: false, lifecycle: false });
+    // The connection advertises everything; this PTY has none of it.
+    expect(pty.screen?.capabilities()).toMatchObject(NONE);
+    expect(pty.lifecycle?.capabilities()).toMatchObject(NONE);
+    expect(pty.lifecycle?.hostWide).toBeUndefined();
   });
 });

@@ -181,6 +181,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     const evictInactiveSessionsIfNeeded = makeInactiveSessionEviction(
       modifyManagerState,
       maxRetainedInactiveSessions,
+      (session) => host.hostClosed.record(session),
     );
 
     const lifecycleCtx: ProcessLifecycleContext = {
@@ -301,6 +302,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       ),
       hostInventory: host.hostInventory,
       hostLimit: host.hostLimit,
+      hostClosed: host.hostClosed,
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,

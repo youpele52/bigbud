@@ -5,8 +5,12 @@
  *
  * @module Manager.session.open.host
  */
+import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { TerminalNotRunningError } from "@bigbud/contracts/workspace/terminal.ts";
-import type { TerminalLimitError } from "@bigbud/contracts/workspace/terminal.limit.ts";
+import type {
+  TerminalEndedReason,
+  TerminalLimitError,
+} from "@bigbud/contracts/workspace/terminal.limit.ts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -69,6 +73,34 @@ export const openTerminalAttachOnly = Effect.fn("terminal.openAttachOnly")(funct
   });
   return ctx.snapshot(session);
 });
+
+/**
+ * The ended snapshot of a host-closed terminal the manager no longer retains (its tombstone):
+ * nothing is spawned and nothing is retained again.
+ */
+export function endedTerminalSnapshot(
+  ctx: SessionApiContext,
+  request: OpenRequest,
+  terminalId: string,
+  reason: TerminalEndedReason,
+) {
+  const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
+  const session = createTerminalSessionState({
+    threadId: request.threadId,
+    terminalId,
+    executionTargetId,
+    dropPathMode: defaultTerminalDropPathMode(executionTargetId),
+    cwd: request.cwd,
+    worktreePath: request.worktreePath ?? null,
+    history: "",
+    cols: request.cols ?? DEFAULT_OPEN_COLS,
+    rows: request.rows ?? DEFAULT_OPEN_ROWS,
+    runtimeEnv: normalizedRuntimeEnv(request.env),
+  });
+  session.status = "exited";
+  session.endedReason = reason;
+  return ctx.snapshot(session);
+}
 
 /**
  * The host refused the spawn at its live limit: nothing was created, so a new session is

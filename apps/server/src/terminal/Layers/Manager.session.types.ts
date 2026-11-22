@@ -6,6 +6,7 @@ import type * as Option from "effect/Option";
 import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
 import type { TerminalHostInventorySource } from "./Manager.session.subscription.ts";
 import type { TerminalHostLimitContext } from "./Manager.hostLimit.ts";
+import type { TerminalHostClosedTombstones } from "./Manager.hostClosed.tombstones.ts";
 
 import {
   type TerminalCwdError,
@@ -97,6 +98,8 @@ export interface SessionApiContext {
   hostInventory?: TerminalHostInventorySource | undefined;
   /** Live-limit candidates and lost panes (plan S3); absent without a host runtime. */
   hostLimit?: TerminalHostLimitContext | undefined;
+  /** Host-closed terminals evicted from the retained sessions; an open never respawns them. */
+  hostClosed?: TerminalHostClosedTombstones | undefined;
 }
 
 export type { TerminalManagerShape };

@@ -26,6 +26,7 @@ import {
 } from "./Manager.hostPolicy.ts";
 import { TerminalHostRoster } from "./Manager.hostRoster.ts";
 import { TerminalRemoteHosts } from "./Manager.remoteHosts.ts";
+import type { TerminalHostClosedTombstones } from "./Manager.hostClosed.tombstones.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { TerminalSessionState } from "./Manager.types.ts";
 
@@ -47,6 +48,8 @@ export interface TerminalHostHubDeps {
   readonly log: (message: string, detail: Record<string, unknown>) => void;
   /** Settings changes (the keep setting changes the orphan policy). */
   readonly onSettingsChange?: (listener: () => void) => () => void;
+  /** Host closes of panes no session holds any more (evicted, or kept across a restart). */
+  readonly hostClosed?: TerminalHostClosedTombstones;
 }
 
 export interface TerminalHostHubRuntime extends TerminalHostHub {
@@ -157,12 +160,17 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
         for (const session of deps.sessions())
           if (ptyId && session.host?.ptyId === ptyId) owner = session;
         // A live process's own listener reports it; an ended one (its exit came first) is ours.
-        if (owner?.process || (scope === "remote" && !owner)) return;
+        if (owner?.process) return;
+        const evicted = !owner && ptyId ? deps.hostClosed?.paneForPty(ptyId) : undefined;
+        if (scope === "remote" && !owner && !evicted) return;
         const pane =
-          owner ?? (ptyId ? roster.entries().find((entry) => entry.ptyId === ptyId) : undefined);
+          owner ??
+          evicted ??
+          (ptyId ? roster.entries().find((entry) => entry.ptyId === ptyId) : undefined);
         const mapped = terminalLifecycleNoticeFromHost(event.value, pane);
         if (!mapped) return;
         if (owner?.host) applyTerminalHostNotice(owner, owner.host, mapped.notice, mapped.ended);
+        else if (pane && mapped.ended) deps.hostClosed?.recordClosed(pane, mapped.ended);
         if (mapped.ended && scope === "local") void roster.refresh().then(refreshInventory);
         else if (mapped.ended) refreshInventory();
         yield* publishNotice(mapped.notice);

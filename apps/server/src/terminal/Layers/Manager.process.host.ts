@@ -11,6 +11,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import { terminalViews } from "../activity/terminalViewRegistry.ts";
 import { makeTerminalHostHub } from "./Manager.hostHub.ts";
+import { TerminalHostClosedTombstones } from "./Manager.hostClosed.tombstones.ts";
 import { terminalInventorySessions } from "./Manager.hostInventory.ts";
 import type { TerminalHostLimitContext } from "./Manager.hostLimit.ts";
 import { terminalPaneIdsForThread } from "./Manager.hostPaneIds.ts";
@@ -37,6 +38,7 @@ export function makeTerminalManagerHost(input: {
   const sessions = () => SynchronizedRef.getUnsafe(stateRef).sessions.values();
   const log = (message: string, detail: Record<string, unknown>) =>
     input.runFork(Effect.logWarning(message, detail));
+  const hostClosed = new TerminalHostClosedTombstones();
   const hub = makeTerminalHostHub({
     runtime,
     keepRunningAfterQuit,
@@ -50,6 +52,7 @@ export function makeTerminalManagerHost(input: {
       })),
     runFork: input.runFork,
     log,
+    hostClosed,
     ...(options.onSettingsChange ? { onSettingsChange: options.onSettingsChange } : {}),
   });
   const hostInventory: TerminalHostInventorySource = {
@@ -65,6 +68,7 @@ export function makeTerminalManagerHost(input: {
   };
   return {
     hub,
+    hostClosed,
     hostInventory,
     hostLimit,
     start: () => {

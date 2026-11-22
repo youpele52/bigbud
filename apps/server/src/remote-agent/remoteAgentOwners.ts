@@ -46,6 +46,13 @@ const OwnerSchema = Schema.Struct({
   pendingInput: Schema.optional(InputIdentitySchema),
   inputResolved: Schema.optional(Schema.Number),
   inputResolution: Schema.optional(InputResolutionSchema),
+  /**
+   * What the host was asked for at create, with the capability advertised (protocol 1.9): a
+   * screen model and lifecycle state. Absent on rows written before this field existed.
+   */
+  hostFeatures: Schema.optional(
+    Schema.Struct({ screen: Schema.Boolean, lifecycle: Schema.Boolean }),
+  ),
 });
 export type RemoteAgentOwner = typeof OwnerSchema.Type;
 export type RemoteAgentInterruptionReason = "restart";
