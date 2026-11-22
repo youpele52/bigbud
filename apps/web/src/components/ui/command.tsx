@@ -3,7 +3,10 @@
 import { Dialog as CommandDialogPrimitive } from "@base-ui/react/dialog";
 import type * as React from "react";
 import { cn } from "~/lib/utils";
-import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
+import {
+  MODAL_BACKDROP_CLASS_NAME,
+  SOLID_FLOATING_SURFACE_CLASS_NAME,
+} from "~/components/ui/solidSurface";
 import {
   Autocomplete,
   AutocompleteCollection,
@@ -31,7 +34,8 @@ function CommandDialogBackdrop({ className, ...props }: CommandDialogPrimitive.B
   return (
     <CommandDialogPrimitive.Backdrop
       className={cn(
-        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
+        MODAL_BACKDROP_CLASS_NAME,
+        "transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
         className,
       )}
       data-slot="command-dialog-backdrop"
