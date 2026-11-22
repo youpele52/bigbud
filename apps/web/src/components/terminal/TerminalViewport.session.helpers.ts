@@ -28,8 +28,7 @@ import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { releaseUnboundCloseFailure } from "./terminalLifecycle.recovery";
 import { preserveTerminalScroll } from "./terminalScrollState";
 import { terminalProfileOpenOptions } from "./TerminalViewport.profile";
-import { terminalPaneOpenOptions } from "../../stores/terminal/terminal.store.paneOrigin";
-import { terminalSnapshotHostClosed } from "../../stores/terminal/terminal.store.ended";
+import { terminalPaneOpen } from "./TerminalViewport.session.restored";
 import { deferRecoveryFit, terminalResizeGeometry } from "./terminalRecoveryGeometry";
 import {
   hasCurrentTerminalBaseline,
@@ -314,24 +313,32 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   // Never auto-open a terminal on a user-disconnected SSH target; Connect clears the flag.
   if (!viewed && isExecutionTargetDisconnected(input.executionTargetId))
     throw new Error(REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE);
+  // Restored panes only reattach (plan D1): the server never respawns them.
+  const pane = await terminalPaneOpen(input.threadId, input.terminalId);
+  if (input.disposed()) return true;
   const opened =
     viewed ??
-    (await api.terminal.open({
-      ...terminalProfileOpenOptions(input.threadId, input.terminalId),
-      // Restored panes only reattach (plan D1): the server never respawns them.
-      ...terminalPaneOpenOptions(input.threadId, input.terminalId),
-      threadId: input.threadId,
-      terminalId: input.terminalId,
-      ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-      cwd: input.cwd,
-      ...(input.worktreePathRef.current !== undefined
-        ? { worktreePath: input.worktreePathRef.current }
-        : {}),
-      cols: activeTerminal.cols,
-      rows: activeTerminal.rows,
-      ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
-      ...(input.evict ? { evict: input.evict } : {}),
-    }));
+    (await pane.settle(
+      api.terminal.open({
+        ...terminalProfileOpenOptions(input.threadId, input.terminalId),
+        ...pane.options,
+        threadId: input.threadId,
+        terminalId: input.terminalId,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+        cwd: input.cwd,
+        ...(input.worktreePathRef.current !== undefined
+          ? { worktreePath: input.worktreePathRef.current }
+          : {}),
+        cols: activeTerminal.cols,
+        rows: activeTerminal.rows,
+        ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
+        ...(input.evict ? { evict: input.evict } : {}),
+      }),
+    ));
+  if (opened === null) {
+    pane.drop();
+    return true;
+  }
   const snapshot = await resolveTerminalViewportSnapshot(opened, {
     localUpdatedAt: () => input.intake.snapshotUpdatedAt,
     disposed: input.disposed,
@@ -350,9 +357,9 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
     return true;
   }
   input.onSnapshot?.(snapshot);
-  // The host closed it (idle, memory, limit, orphan): the pane is gone, never respawned.
-  if (terminalSnapshotHostClosed(snapshot)) {
-    useTerminalStateStore.getState().removeEndedTerminal(input.threadId, input.terminalId);
+  // The host closed it, or a restored pane has nothing to show: the pane goes, never respawned.
+  if (pane.ended(snapshot)) {
+    pane.drop();
     return true;
   }
   if (snapshot.status === "error" || snapshot.pid === null) {

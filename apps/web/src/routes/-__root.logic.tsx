@@ -42,7 +42,7 @@ import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 import { createAsyncOperationQueue } from "./-__root.recovery.serial";
-import { subscribeAppTerminalState } from "./-__root.terminal-events";
+import { subscribeAppTerminalState, trackTerminalServerRun } from "./-__root.terminal-events";
 import { TerminalLimitDialog } from "../components/terminal/TerminalLimitDialog";
 import { emitTerminalWorkActivity } from "../notifications/terminalWorkEvents";
 import {
@@ -383,6 +383,8 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
 
   useDisconnectedExecutionTargetsSync();
   useServerWelcomeSubscription(handleWelcome);
+  // A backend restart without a reload: panes reattach only, never respawn (§14).
+  useEffect(trackTerminalServerRun, []);
   useServerConfigUpdatedSubscription(handleServerConfigUpdated);
 
   // Hosts `promptTerminalLimit` for this renderer.

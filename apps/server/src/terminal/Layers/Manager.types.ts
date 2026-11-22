@@ -22,6 +22,7 @@ import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration
 import type {
   PtyAdapterShape,
   PtyExitEvent,
+  PtyHostWideControl,
   PtyProcess,
   PtySpawnHostLifecycle,
 } from "../Services/PTY";
@@ -216,6 +217,11 @@ export interface TerminalManagerOptions {
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
+  /**
+   * Remote hosts of kept managed terminals no session holds (plan §14 quit); defaults to the
+   * configured remote agents' durable owners over live connections, with the terminal host on.
+   */
+  remoteKeptTerminalHosts?: () => Promise<ReadonlyArray<PtyHostWideControl>>;
   acquireWorktreeLease?: (input: {
     runtimePathIdentity?: RuntimePathIdentity | undefined;
     threadId: string;

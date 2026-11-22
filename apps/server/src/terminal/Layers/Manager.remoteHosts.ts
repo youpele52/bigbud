@@ -5,7 +5,9 @@
  * (a close notice follows the PTY's exit, after the session stopped listening), and closes the
  * managed terminals on a default-mode quit. Hosts are found through the running managed sessions
  * whose PTY exposes host-wide controls (remote agents that advertise protocol 1.9 lifecycle
- * only); an older agent never has them, and the local host never goes through here.
+ * only), plus, with the terminal host on, hosts of kept terminals no session holds (read from
+ * their durable owners at startup, setting changes and every tick, used over live connections
+ * only). An older agent never has them, and the local host never goes through here.
  *
  * @module Manager.remoteHosts
  */
@@ -26,6 +28,12 @@ export interface TerminalRemoteHostsDeps {
   readonly onHostEvent: (event: OwnedPtyHostEvent) => void;
   readonly log: (message: string, detail: Record<string, unknown>) => void;
   readonly now?: () => number;
+  /**
+   * Hosts that run managed terminals no session holds (kept across a backend restart), over
+   * existing live connections only. Read at startup, on ticks and setting changes; a quit uses
+   * the last read, so it never waits on storage.
+   */
+  readonly keptHosts?: () => Promise<ReadonlyArray<PtyHostWideControl>>;
 }
 
 interface RemoteConnection {
@@ -58,17 +66,26 @@ export class TerminalRemoteHosts {
   private revision = 0;
   private timer: ReturnType<typeof setInterval> | undefined;
   private disposed = false;
+  private includeKept = false;
+  /** Hosts of kept terminals, from the last owner read; each resolves its live connection. */
+  private kept: ReadonlyArray<PtyHostWideControl> = [];
 
   constructor(private readonly deps: TerminalRemoteHostsDeps) {}
 
-  /** Coalesced: policy and event subscription for every new connection or keep change. */
-  ensure(): Promise<void> {
+  /**
+   * Coalesced: policy and event subscription for every new connection or keep change. With
+   * `includeKept`, hosts of kept terminals (no session) are re-read from their owners first.
+   */
+  ensure(includeKept = false): Promise<void> {
     if (this.disposed) return Promise.resolve();
+    this.includeKept ||= includeKept;
     if (this.running) {
       this.again = true;
       return this.running;
     }
-    this.running = this.run().finally(() => {
+    const kept = this.includeKept;
+    this.includeKept = false;
+    this.running = this.run(kept).finally(() => {
       this.running = undefined;
       if (this.again) {
         this.again = false;
@@ -78,9 +95,26 @@ export class TerminalRemoteHosts {
     return this.running;
   }
 
-  /** True while any running managed terminal lives on a remote host. */
+  /** Session hosts plus kept-terminal hosts with a live connection; one control per connection. */
+  private controls(): Map<string, PtyHostWideControl> {
+    const controls = remoteTerminalHostControls(this.deps.sessions());
+    for (const control of this.kept) {
+      try {
+        const key = control.connectionKey();
+        if (!controls.has(key)) controls.set(key, control);
+      } catch {
+        // No live connection to that host right now: nothing to address.
+      }
+    }
+    return controls;
+  }
+
+  /**
+   * True while a managed terminal, running in a session or kept, lives on a reachable remote
+   * host. Synchronous: a quit never reads storage before its close budget starts.
+   */
   hasHosts(): boolean {
-    return remoteTerminalHostControls(this.deps.sessions()).size > 0;
+    return this.controls().size > 0;
   }
 
   /**
@@ -91,7 +125,7 @@ export class TerminalRemoteHosts {
     input: { readonly reason: "quit" | "update"; readonly managedOnly: boolean },
     signal?: AbortSignal,
   ): Promise<{ readonly closed: number; readonly unreachable: number }> {
-    const controls = [...remoteTerminalHostControls(this.deps.sessions()).values()];
+    const controls = [...this.controls().values()];
     const results = await Promise.allSettled(
       controls.map((control) => control.closeAll(input, signal)),
     );
@@ -120,8 +154,12 @@ export class TerminalRemoteHosts {
     this.connections.clear();
   }
 
-  private async run(): Promise<void> {
-    const controls = remoteTerminalHostControls(this.deps.sessions());
+  private async run(includeKept: boolean): Promise<void> {
+    if (includeKept && this.deps.keptHosts)
+      this.kept = await this.deps.keptHosts().catch(() => this.kept);
+    // Kept terminals may gain a live connection later: keep checking while they are configured.
+    if (this.deps.keptHosts) this.startTicking();
+    const controls = this.controls();
     if (controls.size === 0) return;
     this.startTicking();
     const policyKey = this.deps.keepRunningAfterQuit() ? "keep" : "close";
@@ -164,7 +202,7 @@ export class TerminalRemoteHosts {
 
   private startTicking(): void {
     if (this.timer || this.disposed) return;
-    this.timer = setInterval(() => void this.ensure(), TERMINAL_REMOTE_HOST_TICK_MS);
+    this.timer = setInterval(() => void this.ensure(true), TERMINAL_REMOTE_HOST_TICK_MS);
     this.timer.unref?.();
   }
 }

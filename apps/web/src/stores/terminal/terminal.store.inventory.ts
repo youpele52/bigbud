@@ -16,9 +16,16 @@ type SurfaceStates = Record<ThreadId, ThreadTerminalState>;
 
 /** Latest authoritative inventory, so a later rehydrate can drop dead restored panes at once. */
 let latestTerminalInventory: TerminalSessionInventory | null = null;
+/** Counts remembered inventories, so a caller can tell whether one arrived since a moment. */
+let terminalInventoryCount = 0;
 
 export function rememberTerminalInventory(inventory: TerminalSessionInventory | null): void {
   latestTerminalInventory = inventory;
+  terminalInventoryCount += 1;
+}
+
+export function terminalInventoryGeneration(): number {
+  return terminalInventoryCount;
 }
 
 export function readLatestTerminalInventory(): TerminalSessionInventory | null {

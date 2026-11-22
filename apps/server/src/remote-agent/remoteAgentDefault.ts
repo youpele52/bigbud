@@ -2,6 +2,7 @@ import {
   makeRemoteAgentComposition,
   type RemoteAgentComposition,
 } from "./remoteAgentComposition.ts";
+import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { parseSshExecutionTarget, parseSshExecutionTransport } from "../ssh/sshExecutionTarget.ts";
 
 export const DEFAULT_REMOTE_AGENT_BINARY = "$HOME/.bigbud/agent/bin/current";
@@ -65,6 +66,17 @@ export function getConfiguredRemoteAgentComposition(): RemoteAgentComposition | 
   const composition = makeRemoteAgentComposition({ binaryPath: configuration.binaryPath });
   compositions.set(configuration.binaryPath, composition);
   return composition;
+}
+
+/** A ready connection for the target in any composition already built; never builds or dials. */
+export function liveConfiguredRemoteAgentConnection(
+  executionTargetId: string,
+): RemoteAgentConnection | null {
+  for (const composition of compositions.values()) {
+    const connection = composition.pool.liveConnection(executionTargetId);
+    if (connection) return connection;
+  }
+  return null;
 }
 
 /** Fails the target's live connections in every configured composition; remote work keeps running. */

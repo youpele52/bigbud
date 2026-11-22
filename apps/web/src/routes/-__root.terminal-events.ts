@@ -11,6 +11,15 @@ import {
   reconcileTerminalLivenessInventory,
 } from "../stores/terminal/terminalLiveness.store";
 import { terminalNoticeEndsPane } from "../stores/terminal/terminal.store.ended";
+import {
+  markAllTerminalPanesRestoredInState,
+  markTerminalServerRunUnknown,
+  observeTerminalServerRun,
+} from "../stores/terminal/terminal.store.serverRun";
+import { useTerminalStateStore } from "../stores/terminal/terminal.store";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { getServerConfig, onWelcome } from "../rpc/serverState";
+import { wsConnectionStatusAtom } from "../rpc/wsConnectionState";
 
 /** Keep batching ordered across subscription inventories, including same-tick resubscriptions. */
 export function subscribeGlobalTerminalState(input: {
@@ -112,5 +121,31 @@ export function subscribeAppTerminalState(input: {
   return () => {
     unsubscribe();
     notices?.dispose();
+  };
+}
+
+/**
+ * A backend restart without a page reload (§14): a dropped connection makes the server run
+ * unknown, and a welcome from a new run marks every pane restored, so no open respawns a
+ * terminal the old run's host closed (`terminal.store.serverRun`). Only with the terminal host
+ * on: without it nothing is host-closed, and panes behave exactly as before.
+ */
+export function trackTerminalServerRun(): () => void {
+  const hostEnabled = () =>
+    getServerConfig()?.workspaceCapabilities?.terminalHost?.enabled === true;
+  const stopStatus = appAtomRegistry.subscribe(wsConnectionStatusAtom, (status) => {
+    if (status.phase !== "connected" && hostEnabled()) markTerminalServerRunUnknown();
+  });
+  const stopWelcome = onWelcome((payload) =>
+    observeTerminalServerRun(payload.serverRunId, (inventoryFromNewRun) => {
+      if (!hostEnabled()) return;
+      useTerminalStateStore.setState((state) =>
+        markAllTerminalPanesRestoredInState(state, inventoryFromNewRun),
+      );
+    }),
+  );
+  return () => {
+    stopStatus();
+    stopWelcome();
   };
 }

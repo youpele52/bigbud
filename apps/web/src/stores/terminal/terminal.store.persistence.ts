@@ -71,18 +71,10 @@ function hydrateTerminalLayouts(value: unknown): Record<string, TerminalLayoutMo
   );
 }
 
-/**
- * Every pane loaded from storage is `restored`: it may reattach but is never respawned. The first
- * authoritative inventory (or one already received) drops restored panes the host lacks.
- */
-function markHydratedPanesRestored(
-  state: TerminalStateStoreState,
-  hydrated: boolean,
-): TerminalStateStoreState {
-  if (!hydrated) return state;
-  const saved: Record<string, unknown> = state.terminalStateByThreadId ?? {};
-  const terminalStateByThreadId: Record<string, ThreadTerminalState> = {};
-  let restored = false;
+/** One surface's saved panes, every one `restored`; unusable entries are dropped. */
+function restoredSurfaces(saved: unknown): Record<string, ThreadTerminalState> {
+  const surfaces: Record<string, ThreadTerminalState> = {};
+  if (!saved || typeof saved !== "object") return surfaces;
   for (const [id, value] of Object.entries(saved)) {
     if (!value || typeof value !== "object") continue;
     const pane = value as Partial<ThreadTerminalState>;
@@ -96,13 +88,36 @@ function markHydratedPanesRestored(
       restoredTerminalIds: [...pane.terminalIds],
     });
     if (isDefaultThreadTerminalState(normalized)) continue;
-    terminalStateByThreadId[id] = normalized;
-    restored ||= (normalized.restoredTerminalIds?.length ?? 0) > 0;
+    surfaces[id] = normalized;
   }
+  return surfaces;
+}
+
+/**
+ * Every pane loaded from storage, drawer and right panel alike, is `restored`: it may reattach
+ * but is never respawned. The first authoritative inventory (or one already received) drops
+ * restored panes the host lacks.
+ */
+function markHydratedPanesRestored(
+  state: TerminalStateStoreState,
+  hydrated: { readonly drawer: boolean; readonly panel: boolean },
+): TerminalStateStoreState {
+  if (!hydrated.drawer && !hydrated.panel) return state;
+  const terminalStateByThreadId = hydrated.drawer
+    ? restoredSurfaces(state.terminalStateByThreadId)
+    : state.terminalStateByThreadId;
+  const panelTerminalStateByThreadId = hydrated.panel
+    ? restoredSurfaces(state.panelTerminalStateByThreadId)
+    : state.panelTerminalStateByThreadId;
+  const restored = [terminalStateByThreadId, panelTerminalStateByThreadId].some((surfaces) =>
+    Object.values(surfaces).some((surface) => (surface.restoredTerminalIds?.length ?? 0) > 0),
+  );
   const next: TerminalStateStoreState = {
     ...state,
     terminalStateByThreadId:
       terminalStateByThreadId as TerminalStateStoreState["terminalStateByThreadId"],
+    panelTerminalStateByThreadId:
+      panelTerminalStateByThreadId as TerminalStateStoreState["panelTerminalStateByThreadId"],
     restoredPanesAwaitingInventory: restored,
   };
   const inventory = readLatestTerminalInventory();
@@ -118,6 +133,7 @@ type PersistedTerminalState = Pick<
   | "terminalLayoutByThreadId"
   | "terminalWslDistributionByThreadId"
   | "terminalStateByThreadId"
+  | "panelTerminalStateByThreadId"
   | "terminalLabelOverridesByThreadId"
 >;
 
@@ -137,11 +153,16 @@ export const terminalPersistenceOptions = {
     terminalLayoutByThreadId: state.terminalLayoutByThreadId,
     terminalWslDistributionByThreadId: state.terminalWslDistributionByThreadId,
     terminalStateByThreadId: state.terminalStateByThreadId,
+    // Right-panel panes survive a reload too (restored, like the drawer's).
+    panelTerminalStateByThreadId: state.panelTerminalStateByThreadId,
     terminalLabelOverridesByThreadId: state.terminalLabelOverridesByThreadId,
   }),
   merge: (persisted: unknown, current: TerminalStateStoreState): TerminalStateStoreState => {
     const saved = persisted && typeof persisted === "object" ? persisted : {};
-    const hydratedPanes = "terminalStateByThreadId" in saved;
+    const hydratedPanes = {
+      drawer: "terminalStateByThreadId" in saved,
+      panel: "panelTerminalStateByThreadId" in saved,
+    };
     const merged = {
       ...current,
       ...saved,

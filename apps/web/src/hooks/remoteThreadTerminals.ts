@@ -7,22 +7,13 @@ import {
   isExecutionTargetDisconnected,
 } from "../stores/remoteAccess/remoteAccess.store";
 import { useTerminalStateStore } from "../stores/terminal";
+import { isTerminalNotRunningError } from "../stores/terminal/terminal.store.ended";
 
 export interface RemoteThreadTerminalTarget {
   readonly threadId: ThreadId;
   readonly executionTargetId: string;
   readonly cwd?: string;
   readonly worktreePath?: string;
-}
-
-/** The pane has no live process to reattach: nothing to do in the background. */
-function isTerminalNotRunning(error: unknown): boolean {
-  for (let current = error, depth = 0; depth < 3; depth++) {
-    if (typeof current !== "object" || current === null) return false;
-    if ((current as { _tag?: unknown })._tag === "TerminalNotRunningError") return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
 }
 
 /**
@@ -57,7 +48,7 @@ export async function reconnectRemoteThreadTerminals(target: RemoteThreadTermina
   );
   const failure = results.find(
     (result): result is PromiseRejectedResult =>
-      result.status === "rejected" && !isTerminalNotRunning(result.reason),
+      result.status === "rejected" && !isTerminalNotRunningError(result.reason),
   );
   if (failure) throw failure.reason;
 }

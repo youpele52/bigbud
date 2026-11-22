@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 
 import type { TerminalViewRegistry } from "../activity/terminalViewRegistry.ts";
 import type { OwnedPtyHostEvent, OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
+import type { PtyHostWideControl } from "../Services/PTY.ts";
 import type { TerminalHostHub } from "./Manager.host.types.ts";
 import { legacyTerminalHostNotice, offlineClosedNotice } from "./Manager.hostInventory.ts";
 import {
@@ -50,6 +51,8 @@ export interface TerminalHostHubDeps {
   readonly onSettingsChange?: (listener: () => void) => () => void;
   /** Host closes of panes no session holds any more (evicted, or kept across a restart). */
   readonly hostClosed?: TerminalHostClosedTombstones;
+  /** Remote hosts of kept terminals no session holds (live connections only; flag on). */
+  readonly remoteKeptHosts?: () => Promise<ReadonlyArray<PtyHostWideControl>>;
 }
 
 export interface TerminalHostHubRuntime extends TerminalHostHub {
@@ -183,6 +186,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
     keepRunningAfterQuit: deps.keepRunningAfterQuit,
     onHostEvent: (event) => handleHostEvent(event, "remote"),
     log: deps.log,
+    ...(deps.remoteKeptHosts ? { keptHosts: deps.remoteKeptHosts } : {}),
   });
 
   const ensureHostEvents = async () => {
@@ -211,7 +215,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
   };
 
   const ensureHost = () => {
-    void remote.ensure();
+    void remote.ensure(true);
     void policy.ensure();
     void ensureHostEvents();
     void ensureNoticeBaseline();
@@ -311,6 +315,7 @@ export function makeTerminalHostHub(deps: TerminalHostHubDeps): TerminalHostHubR
     start: async () => {
       // Remote hosts follow the keep setting even when no local host runs.
       unsubscribeSettings ??= deps.onSettingsChange?.(ensureHost);
+      void remote.ensure(true);
       if (!deps.runtime()?.hostGenerations) return;
       await roster.ready();
       refreshInventory();

@@ -147,11 +147,57 @@ describe("open request options", () => {
 
     useTerminalStateStore.setState({
       terminalStateByThreadId: {
-        [threadId]: { restoredTerminalIds: [terminalId] },
+        [threadId]: {
+          terminalOpen: true,
+          terminalHeight: 280,
+          terminalIds: [terminalId],
+          runningTerminalIds: [],
+          activeTerminalId: terminalId,
+          terminalGroups: [{ id: "g", terminalIds: [terminalId] }],
+          activeTerminalGroupId: "g",
+          restoredTerminalIds: [terminalId],
+        },
       } as never,
     });
-    await expect(openTerminalSession(input())).rejects.toThrow("did not start");
+    // A restored pane whose terminal did not run is dropped, never shown as an error pane.
+    await expect(openTerminalSession(input())).resolves.toBe(true);
     expect(api.terminal.open.mock.calls[1]![0]).toMatchObject({ attachOnly: true });
+    expect(useTerminalStateStore.getState().terminalStateByThreadId[threadId]).toBeUndefined();
+  });
+
+  it("drops a restored pane with nothing to attach (an ended search hit)", async () => {
+    useTerminalStateStore.setState({
+      terminalStateByThreadId: {
+        [threadId]: {
+          terminalOpen: true,
+          terminalHeight: 280,
+          terminalIds: [terminalId, "other"],
+          runningTerminalIds: [],
+          activeTerminalId: terminalId,
+          terminalGroups: [{ id: "g", terminalIds: [terminalId, "other"] }],
+          activeTerminalGroupId: "g",
+          restoredTerminalIds: [terminalId],
+        },
+      } as never,
+    });
+    api.terminal.open.mockRejectedValueOnce({
+      _tag: "TerminalNotRunningError",
+      threadId,
+      terminalId,
+    });
+    await expect(openTerminalSession(input())).resolves.toBe(true);
+    expect(useTerminalStateStore.getState().terminalStateByThreadId[threadId]?.terminalIds).toEqual(
+      ["other"],
+    );
+    // A user-created pane's failure still surfaces as an error.
+    api.terminal.open.mockRejectedValueOnce({
+      _tag: "TerminalNotRunningError",
+      threadId,
+      terminalId: "other",
+    });
+    await expect(openTerminalSession({ ...input(), terminalId: "other" })).rejects.toMatchObject({
+      _tag: "TerminalNotRunningError",
+    });
   });
 
   it("a limit retry names the pane to evict", async () => {
