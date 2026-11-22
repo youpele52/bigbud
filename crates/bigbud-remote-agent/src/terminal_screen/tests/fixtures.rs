@@ -7,6 +7,8 @@ use vt100::Color;
 
 #[path = "fixtures.more.rs"]
 mod more;
+#[path = "fixtures.q1.rs"]
+mod q1;
 #[path = "fixtures.xterm.rs"]
 mod xterm;
 
@@ -327,5 +329,6 @@ pub(crate) fn corpus() -> Vec<Fixture> {
     ];
     fixtures.extend(more::corpus());
     fixtures.extend(xterm::corpus());
+    fixtures.extend(q1::corpus());
     fixtures
 }

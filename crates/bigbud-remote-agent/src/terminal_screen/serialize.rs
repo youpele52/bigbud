@@ -1,7 +1,9 @@
 //! Snapshot serializer (§8.4, §15 R1). Output order: reset, normal scrollback and screen,
 //! the normal screen's saved cursor and region, the alternate screen, the active region,
-//! cursor and SGR, then input modes. The pending escape tail is returned separately and is
-//! written last by the client (`PtyScreenSnapshotHeader.pending_escape_tail`).
+//! cursor and SGR, input modes, then the character sets. The alternate screen's saved
+//! cursor goes before the normal one's when its character set copy is shorter (see
+//! `serialize.charsets.rs`). The pending escape tail is returned separately and is written
+//! last by the client (`PtyScreenSnapshotHeader.pending_escape_tail`).
 
 use super::copy::ScreenCopy;
 use super::fidelity::{Exclusion, ExclusionKind, FidelityReport};
@@ -10,6 +12,8 @@ use super::probe::{Probe, SavedCursor};
 use sha2::{Digest, Sha256};
 use std::fmt::Write as _;
 
+#[path = "serialize.charsets.rs"]
+mod charsets;
 #[path = "serialize.rows.rs"]
 pub(crate) mod rows;
 #[path = "serialize.state.rs"]
@@ -161,12 +165,31 @@ pub(crate) fn serialize(
     );
     let (normal_state, alt_state) = (tracker.saved_state(0), tracker.saved_state(1));
     // `vt100` keeps the inactive alternate screen's saved cursor across sessions.
-    let inactive_saved =
-        (!alternate && tracker.alt_allocated).then(|| probe.inactive_alternate_saved());
+    let alt_saved = if alternate {
+        alt_saved
+    } else {
+        tracker
+            .alt_allocated
+            .then(|| probe.inactive_alternate_saved())
+    }
+    .filter(|saved| state::needs_saved(saved, alt_state));
+    // xterm.js's character set array only grows, so the shorter saved copy goes first.
+    let alt_first = alt_saved.is_some() && alt_state.charsets.len() < normal_state.charsets.len();
+    let (early_alt, late_alt) = if alt_first {
+        (alt_saved.as_ref(), None)
+    } else {
+        (None, alt_saved.as_ref())
+    };
 
     let prefix = "\x1bc";
     let mut suffix = String::new();
-    state::write_saved(&mut suffix, &normal_saved, normal_state);
+    let mut charsets = charsets::CharsetWriter::new();
+    if early_alt.is_some() {
+        // Rows end with their own attributes; the alternate screen fills with the default.
+        suffix.push_str("\x1b[m");
+    }
+    state::write_inactive_alternate(&mut suffix, early_alt, alt_state, None, &mut charsets);
+    state::write_saved(&mut suffix, &normal_saved, normal_state, &mut charsets);
     if alternate {
         if let Some((top, bottom)) = tracker.regions.first().copied().flatten() {
             let _ = write!(suffix, "\x1b[{};{}r", top + 1, bottom + 1);
@@ -175,20 +198,21 @@ pub(crate) fn serialize(
         state::write_tab_stops(&mut suffix, &tracker, 0);
         suffix.push_str("\x1b[?47h\x1b[H");
         suffix.push_str(&alt_block);
-        if let Some(saved) = &alt_saved {
-            state::write_saved(&mut suffix, saved, alt_state);
+        if let Some(saved) = late_alt {
+            state::write_saved(&mut suffix, saved, alt_state, &mut charsets);
         }
         state::write_kitty(&mut suffix, tracker.kitty.get(1));
     } else {
         state::write_kitty(&mut suffix, tracker.kitty.first());
         state::write_inactive_alternate(
             &mut suffix,
-            inactive_saved.as_ref(),
+            late_alt,
             alt_state,
             tracker.kitty.get(1),
+            &mut charsets,
         );
     }
-    state::write_active(&mut suffix, &active, &tracker, cols);
+    state::write_active(&mut suffix, &active, &tracker, cols, &mut charsets);
 
     // Drop the oldest scrollback rows until both caps hold; never the visible rows.
     let fixed_bytes = prefix.len() + suffix.len();
@@ -220,7 +244,7 @@ pub(crate) fn serialize(
     let first_emitted = normal_top - u64::try_from(emitted_scrollback).unwrap_or(0);
     let emitted = Some((first_emitted, normal_top + u64::from(rows) - 1));
     let alt_rows = if alternate { rows } else { 0 };
-    let fidelity = fidelity_report(&tracker.marks, &tracker, emitted, alt_rows, dropped);
+    let fidelity = fidelity_report(&tracker, emitted, alt_rows, dropped, charsets.exact());
     Ok(ScreenSnapshot {
         through_sequence,
         cols,
@@ -236,12 +260,13 @@ pub(crate) fn serialize(
 }
 
 fn fidelity_report(
-    marks: &Marks,
     tracker: &super::tracker::Tracker,
     emitted: Option<(u64, u64)>,
     alt_rows: u16,
     dropped: usize,
+    charsets_exact: bool,
 ) -> FidelityReport {
+    let marks = &tracker.marks;
     let mut exclusions = Vec::new();
     for (kind, rows) in [
         (
@@ -268,6 +293,12 @@ fn fidelity_report(
     if tracker.kitty_in_use() {
         exclusions.push(Exclusion {
             kind: ExclusionKind::KittyKeyboardHostOnly,
+            rows: 0,
+        });
+    }
+    if !charsets_exact {
+        exclusions.push(Exclusion {
+            kind: ExclusionKind::CharsetState,
             rows: 0,
         });
     }

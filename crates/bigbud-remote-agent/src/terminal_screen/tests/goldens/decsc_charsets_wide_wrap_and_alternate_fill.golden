@@ -22,7 +22,7 @@
   },
   "snapshot": {
     "alternateScreen": true,
-    "ansi": "\u001bc─\r\nabcde 中\u001b[4X\u001b[m\u001b[3;3H\u001b[0;44m\u001b(0\u001b7\u001b[m\u001b(B\u001b[?47h\u001b[H\u001b[0;44m\u001b[6X\u001b[m\r\n\u001b[0;44m\u001b[6X\u001b[m\r\n\u001b[0;44m\u001b[6X\u001b[m\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[3;3H\u001b[m\u001b[0;44m\u001b[?25h\u001b(0",
+    "ansi": "\u001bc─\r\nabcde 中\u001b[4X\u001b[m\u001b[3;3H\u001b[0;44m\u001b(0\u001b7\u001b[m\u001b(B\u001b[?47h\u001b[H\u001b[0;44m\u001b[6X\u001b[m\r\n\u001b[0;44m\u001b[6X\u001b[m\r\n\u001b[0;44m\u001b[6X\u001b[m\u001b[m\u001b[3;3H\u001b[m\u001b[0;44m\u001b[?25h\u001b(0",
     "cols": 6,
     "excludedAlternate": false,
     "excludedRows": [],
@@ -32,7 +32,7 @@
     "reflowRows": 0,
     "rows": 3,
     "scrollbackRows": 0,
-    "sha256": "91ef97499758b05556019fbcc9659849208af58355d83628afb28ca7266f95b4",
+    "sha256": "64a9b1ca2a620d3a4c5fae60ca68b41c8616a453263f75538ab14e42bd258481",
     "trimmedRows": 0
   },
   "steps": [

@@ -194,8 +194,8 @@ fn goldens_match_the_corpus() {
 }
 
 /// `BIGBUD_SCREEN_EXPORT_RANDOM=<dir>` writes randomized-stream goldens (same format) so
-/// the cross-engine harness can run them too (`BIGBUD_SCREEN_EXPORT_COUNT`, default 200);
-/// without it the test does nothing.
+/// the cross-engine harness can run them too (`BIGBUD_SCREEN_EXPORT_COUNT`, default 200,
+/// from seed `BIGBUD_SCREEN_EXPORT_SEED`, default 1); without it the test does nothing.
 #[test]
 fn export_random_stream_goldens() {
     let Some(directory) = std::env::var_os("BIGBUD_SCREEN_EXPORT_RANDOM").map(PathBuf::from) else {
@@ -206,7 +206,11 @@ fn export_random_stream_goldens() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(200u64);
-    for seed in 1..=count {
+    let first = std::env::var("BIGBUD_SCREEN_EXPORT_SEED")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1u64);
+    for seed in first..first.saturating_add(count) {
         let (cols, rows) = (
             u16::try_from(8 + seed % 40).unwrap(),
             u16::try_from(2 + seed % 9).unwrap(),

@@ -10,7 +10,7 @@ fn tracked_state(model: &ScreenModel) -> String {
     let t = &model.tracker;
     format!(
         "alt={} regions={:?} origin={} autowrap={} insert={} reverse={} focus={} sync={} kitty={:?} \
-         g0={:?} g1={:?} so={} link={:?} open={} unsupported={} tabs={:?}/{:?} reverse_video={}",
+         charsets={:?} link={:?} open={} unsupported={} tabs={:?}/{:?} reverse_video={}",
         t.alt_active,
         t.regions,
         t.origin,
@@ -20,9 +20,7 @@ fn tracked_state(model: &ScreenModel) -> String {
         t.focus,
         t.sync_output,
         t.kitty,
-        t.g0,
-        t.g1,
-        t.shifted_out,
+        t.charsets,
         t.link,
         t.link_open,
         t.unsupported,
@@ -151,7 +149,11 @@ fn fixtures_report_exactly_their_exclusions() {
         let mut expected = fixture.exclusions.to_vec();
         expected.sort_by_key(|kind| kind.as_str());
         assert_eq!(kinds, expected, "{}", fixture.name);
-        let affects_rows = snapshot.fidelity.exclusions.iter().any(|e| e.rows > 0);
+        let affects_rows = snapshot
+            .fidelity
+            .exclusions
+            .iter()
+            .any(|e| e.rows > 0 || e.kind.reduces_fidelity());
         let fidelity = if affects_rows {
             Fidelity::Trimmed
         } else {
@@ -159,7 +161,10 @@ fn fixtures_report_exactly_their_exclusions() {
         };
         assert_eq!(snapshot.fidelity.fidelity, fidelity, "{}", fixture.name);
         for exclusion in &snapshot.fidelity.exclusions {
-            let host_only = exclusion.kind == ExclusionKind::KittyKeyboardHostOnly;
+            let host_only = matches!(
+                exclusion.kind,
+                ExclusionKind::KittyKeyboardHostOnly | ExclusionKind::CharsetState
+            );
             assert_eq!(
                 exclusion.rows == 0,
                 host_only,

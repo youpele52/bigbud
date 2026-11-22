@@ -1,7 +1,10 @@
 //! SGR analysis. `vt100` stores fg, bg, bold-or-dim, italic, underline and inverse. xterm.js
 //! also renders blink, invisible, strikethrough, overline, underline styles and colours, and
 //! bold together with dim. Those are tracked here as "unsupported" so affected rows are
-//! reported through `fidelity`. Forms `vt100` misparses are rewritten before it sees them:
+//! reported through `fidelity`. xterm.js keeps the underline style outside what DECSC saves,
+//! so after DECRC it can disagree with the restored underline flag; until SGR sets both again
+//! the rows are reported too (`STALE_UNDERLINE`). Forms `vt100` misparses are rewritten
+//! before it sees them:
 //! `38:2:<cs>:r:g:b` (colour-space form), `4:<style>`, and `58`/`59` with their arguments
 //! (which `vt100` would otherwise read as separate SGR codes, for example `58;2;…` as dim).
 
@@ -15,6 +18,9 @@ const OVERLINE: u8 = 1 << 3;
 const UNDERLINE_STYLE: u8 = 1 << 4;
 const UNDERLINE_COLOR: u8 = 1 << 5;
 pub(crate) const BOLD_AND_DIM: u8 = 1 << 6;
+/// The underline style xterm.js kept across DECRC disagrees with the restored underline: it
+/// renders, or hides, underlines that `vt100` does not (`AttributeData.isUnderline`).
+pub(crate) const STALE_UNDERLINE: u8 = 1 << 7;
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct SgrPlan {
@@ -26,16 +32,14 @@ pub(crate) struct SgrPlan {
     /// A background colour may be set (a hint for background colour erase; never false
     /// while one is set).
     pub(crate) background: bool,
+    /// xterm.js's underline style is not `NONE` (it survives DECRC).
+    pub(crate) underline_style: bool,
 }
 
 /// Plans one SGR (`CSI … m` without private marker or intermediates).
-pub(crate) fn plan_sgr(
-    params: &Params,
-    unsupported: u8,
-    bold: bool,
-    dim: bool,
-    background: bool,
-) -> SgrPlan {
+pub(crate) fn plan_sgr(params: &Params, tracker: &super::Tracker) -> SgrPlan {
+    let (unsupported, bold, dim) = (tracker.unsupported, tracker.bold, tracker.dim);
+    let mut underline_style = tracker.underline_style;
     // At most 32 groups (`vte`'s parameter limit), kept on the stack: SGR is the hottest path.
     let mut storage: [&[u16]; super::super::scanner::MAX_PARAMS] =
         [&[]; super::super::scanner::MAX_PARAMS];
@@ -45,7 +49,7 @@ pub(crate) fn plan_sgr(
         count += 1;
     }
     let groups = storage.get(..count).unwrap_or_default();
-    let mut background = background;
+    let mut background = tracker.background;
     let mut at = 0;
     while let Some(group) = groups.get(at) {
         at += 1;
@@ -71,6 +75,7 @@ pub(crate) fn plan_sgr(
                 *bits = 0;
                 *bold = false;
                 *dim = false;
+                underline_style = false;
             }
             [1] => *bold = true,
             [2] => *dim = true,
@@ -96,14 +101,20 @@ pub(crate) fn plan_sgr(
             }
             [21] => {
                 rewrite = true;
+                underline_style = true;
+                *bits &= !STALE_UNDERLINE;
                 set_bit(bits, UNDERLINE_STYLE, true);
                 kept.push(Keep::Code(4));
                 continue;
             }
-            [4] | [24] => *bits &= !UNDERLINE_STYLE,
+            [4] | [24] => {
+                underline_style = *group == [4];
+                *bits &= !(UNDERLINE_STYLE | STALE_UNDERLINE);
+            }
             [4, style, ..] => {
                 rewrite = true;
-                *bits &= !UNDERLINE_STYLE;
+                underline_style = *style != 0;
+                *bits &= !(UNDERLINE_STYLE | STALE_UNDERLINE);
                 if *style >= 2 {
                     *bits |= UNDERLINE_STYLE;
                 }
@@ -150,6 +161,7 @@ pub(crate) fn plan_sgr(
         bold,
         dim,
         background,
+        underline_style,
     }
 }
 

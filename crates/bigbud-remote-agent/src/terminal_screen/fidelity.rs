@@ -31,7 +31,8 @@ pub enum ExclusionKind {
     /// Rows that showed OSC 8 links: `vt100` keeps the text, not the link target.
     Osc8LinkTargets,
     /// Rows that showed attributes `vt100` cannot store: blink, invisible, strikethrough,
-    /// overline, underline style or colour, or bold together with dim.
+    /// overline, underline style or colour, or bold together with dim; and rows where a wide
+    /// character wrapping from the last column left an underlined or inverse empty cell.
     UnsupportedAttributes,
     /// Rows written while autowrap was off, insert mode was on, or reverse wraparound was
     /// on: `vt100` implements none of them, so output can land elsewhere than in xterm.js.
@@ -39,6 +40,11 @@ pub enum ExclusionKind {
     /// Kitty keyboard flags; xterm.js does not implement them, so they are host state only
     /// and never affect rows (always reported with `rows = 0`).
     KittyKeyboardHostOnly,
+    /// Character set state a snapshot cannot re-create: xterm.js's designation array only
+    /// grows, so a saved or current state with a shorter array than an earlier-written one
+    /// is restored longer. Rows are unaffected (`rows = 0`), but output after a later cursor
+    /// save or restore may print with different sets, so fidelity is reduced.
+    CharsetState,
 }
 
 impl ExclusionKind {
@@ -49,7 +55,13 @@ impl ExclusionKind {
             Self::UnsupportedAttributes => "unsupported_attributes",
             Self::UnsupportedModes => "unsupported_modes",
             Self::KittyKeyboardHostOnly => "kitty_keyboard_host_only",
+            Self::CharsetState => "charset_state",
         }
+    }
+
+    /// Whether the kind reduces fidelity even without affected rows.
+    pub fn reduces_fidelity(self) -> bool {
+        self == Self::CharsetState
     }
 }
 
@@ -66,7 +78,7 @@ pub struct FidelityReport {
     /// Oldest scrollback rows dropped so the snapshot fits both caps.
     pub trimmed_rows: u32,
     /// Exclusions that apply to this snapshot (kinds with no affected rows are omitted,
-    /// except kitty keyboard state, which is listed whenever it is in use).
+    /// except kitty keyboard and character set state, listed whenever they apply).
     pub exclusions: Vec<Exclusion>,
 }
 
@@ -74,7 +86,11 @@ impl FidelityReport {
     pub(crate) fn new(partial: bool, trimmed_rows: u32, exclusions: Vec<Exclusion>) -> Self {
         let fidelity = if partial {
             Fidelity::Partial
-        } else if trimmed_rows > 0 || exclusions.iter().any(|exclusion| exclusion.rows > 0) {
+        } else if trimmed_rows > 0
+            || exclusions
+                .iter()
+                .any(|exclusion| exclusion.rows > 0 || exclusion.kind.reduces_fidelity())
+        {
             Fidelity::Trimmed
         } else {
             Fidelity::Full

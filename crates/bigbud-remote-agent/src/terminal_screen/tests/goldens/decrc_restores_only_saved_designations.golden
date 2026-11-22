@@ -1,0 +1,39 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,2],
+    "cursorHidden": false,
+    "screen": [
+      [["─",1,"default","default",0],["─",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "decrc_restores_only_saved_designations",
+  "geometry": {
+    "cols": 10,
+    "rows": 3,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc──\r\n\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;3H\u001b[?25h\u001b)0",
+    "cols": 10,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "7014372e0acf888b9f159e472a4fb3268bb266a7bc4c0be821ea995be4e0692d",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b7\u001b(0\u001b)0\u001b8q\u000eq\u000f\u001b(B"
+    }
+  ]
+}

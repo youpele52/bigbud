@@ -1,0 +1,44 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [2,3],
+    "cursorHidden": false,
+    "screen": [
+      [["a",1,"default","default",0],["b",1,"default","default",0],["c",1,"default","default",0],["d",1,"default","default",0],[" ",1,"default","default",8]],
+      [["中",2,"default","default",8],["",0,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["a",1,"default","default",0],["b",1,"default","default",0],["o",1,"default","default",8],[" ",1,"default","default",8],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "underlined_wide_wrap_and_orphaned_half",
+  "geometry": {
+    "cols": 5,
+    "rows": 3,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcabcd\u001b[0;4m \u001b[m\r\n\u001b[0;4m中\u001b[m\r\nab\u001b[0;4mo \u001b[m\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[3;4H\u001b[m\u001b[0;4m\u001b[?25h",
+    "cols": 5,
+    "excludedAlternate": false,
+    "excludedRows": [0,1,2],
+    "exclusions": [
+      {
+        "kind": "unsupported_attributes",
+        "rows": 3
+      }
+    ],
+    "fidelity": "trimmed",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "792b885afea744b06813033265ec4bee47370b196351411e2af268c86e7517b2",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "abcd\u001b[4m中\r\n\u001b[24mab\u001b[4m😀\u001b[3;3Ho"
+    }
+  ]
+}

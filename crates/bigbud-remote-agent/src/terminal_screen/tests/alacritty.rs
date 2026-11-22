@@ -162,6 +162,14 @@ fn documented(name: &str, difference: &str) -> Option<&'static str> {
         "insert_delete_lines_home_the_column" => Some("alacritty: IL/DL keep the column"),
         // xterm.js SD exposes default-attribute lines; alacritty fills them with the bg.
         "scroll_up_discards_and_scroll_down_is_not_bce" => Some("alacritty: SD uses BCE"),
+        // xterm.js DECRC restores only the sets DECSC copied, and xterm.js has national sets,
+        // G2/G3 shifts, `ESC % G` and DECSET 2; alacritty restores every set and lacks those.
+        "decrc_restores_only_saved_designations"
+        | "leaving_1049_restores_only_saved_designations"
+        | "national_charsets_and_locking_shifts" => Some("alacritty: character sets"),
+        // Like xterm.js, alacritty leaves an empty underlined cell where the model writes an
+        // underlined space (reported as UnsupportedAttributes).
+        "underlined_wide_wrap_and_orphaned_half" => Some("empty underlined cell"),
         _ => None,
     }
 }

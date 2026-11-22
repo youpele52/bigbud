@@ -20,7 +20,7 @@
   },
   "snapshot": {
     "alternateScreen": true,
-    "ansi": "\u001bckb\r\n\u001b[m\u001b[1;3H\u001b7\u001b[m\u001b[>5u\u001b[?47h\u001b[H\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[>8u\u001b[m\u001b[1;3H\u001b[?25h",
+    "ansi": "\u001bckb\r\n\u001b[m\u001b[1;3H\u001b7\u001b[m\u001b[>5u\u001b[?47h\u001b[H\r\n\u001b[>8u\u001b[m\u001b[1;3H\u001b[?25h",
     "cols": 20,
     "excludedAlternate": false,
     "excludedRows": [],
@@ -35,7 +35,7 @@
     "reflowRows": 0,
     "rows": 2,
     "scrollbackRows": 0,
-    "sha256": "24029797a630dedc3af69ce0fbba97bc1d219610771a033e99eb954c3fda3080",
+    "sha256": "13a7b847aba3ed0e3f6d0974d83b2ff70209dcf783413471a412c52f7955431b",
     "trimmedRows": 0
   },
   "steps": [

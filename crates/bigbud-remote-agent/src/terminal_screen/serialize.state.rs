@@ -1,7 +1,8 @@
 //! Cursor, attributes and modes written after the screen contents.
 
 use super::super::probe::{CellAttrs, Probe, SavedCursor, WrapCell, wrap_cell};
-use super::super::tracker::{Charset, SavedState, Tracker, extras_codes};
+use super::super::tracker::{SavedState, Tracker, extras_codes};
+use super::charsets::CharsetWriter;
 use super::rows::set_attrs;
 use std::fmt::Write as _;
 use vt100::{CursorStyle, MouseProtocolEncoding, MouseProtocolMode};
@@ -43,7 +44,12 @@ impl ActiveState {
 
 /// Positions (re-printing the last cell for a pending wrap), sets the attributes and the
 /// character sets and wraparound mode DECSC also saves in xterm.js, saves, then resets them.
-pub(super) fn write_saved(out: &mut String, saved: &SavedCursor, modes: SavedState) {
+pub(super) fn write_saved(
+    out: &mut String,
+    saved: &SavedCursor,
+    modes: SavedState,
+    charsets: &mut CharsetWriter,
+) {
     let mut current = CellAttrs::default();
     out.push_str("\x1b[m");
     move_to(
@@ -54,22 +60,14 @@ pub(super) fn write_saved(out: &mut String, saved: &SavedCursor, modes: SavedSta
         saved.wrap_cell.as_ref(),
     );
     set_attrs(out, &mut current, modes.attrs);
-    let toggles = [
-        (modes.g0 == Charset::DecSpecial, "\x1b(0", "\x1b(B"),
-        (modes.g1 == Charset::DecSpecial, "\x1b)0", "\x1b)B"),
-        (modes.shifted_out, "\x0e", "\x0f"),
-        (!modes.autowrap, "\x1b[?7l", "\x1b[?7h"),
-    ];
-    for (on, set, _) in toggles {
-        if on {
-            out.push_str(set);
-        }
+    charsets.apply(out, modes.charsets);
+    if !modes.autowrap {
+        out.push_str("\x1b[?7l");
     }
     out.push_str("\x1b7\x1b[m");
-    for (on, _, reset) in toggles {
-        if on {
-            out.push_str(reset);
-        }
+    charsets.clear(out, modes.charsets);
+    if !modes.autowrap {
+        out.push_str("\x1b[?7h");
     }
 }
 
@@ -87,23 +85,28 @@ fn move_to(out: &mut String, current: &mut CellAttrs, row: u32, col: u16, wrap: 
     }
 }
 
-/// State kept on the inactive alternate screen (its saved cursor and kitty stack), written
-/// by switching to it and back; the final cursor position is written afterwards.
+/// Whether an alternate screen's saved cursor differs from a fresh xterm.js buffer's.
+pub(super) fn needs_saved(saved: &SavedCursor, modes: SavedState) -> bool {
+    (saved.row, saved.col) != (0, 0) || modes != SavedState::default()
+}
+
+/// State kept on the inactive alternate screen (its saved cursor, when [`needs_saved`], and
+/// kitty stack), written by switching to it and back; the final cursor position is written
+/// afterwards.
 pub(super) fn write_inactive_alternate(
     out: &mut String,
     saved: Option<&SavedCursor>,
     modes: SavedState,
     kitty: Option<&Vec<u16>>,
+    charsets: &mut CharsetWriter,
 ) {
-    let saved =
-        saved.filter(|saved| (saved.row, saved.col) != (0, 0) || modes != SavedState::default());
     let kitty = kitty.filter(|stack| !stack.is_empty());
     if saved.is_none() && kitty.is_none() {
         return;
     }
     out.push_str("\x1b[?47h");
     if let Some(saved) = saved {
-        write_saved(out, saved, modes);
+        write_saved(out, saved, modes, charsets);
     }
     write_kitty(out, kitty);
     out.push_str("\x1b[?47l");
@@ -125,7 +128,13 @@ pub(super) fn write_tab_stops(out: &mut String, tracker: &Tracker, index: usize)
     }
 }
 
-pub(super) fn write_active(out: &mut String, active: &ActiveState, tracker: &Tracker, cols: u16) {
+pub(super) fn write_active(
+    out: &mut String,
+    active: &ActiveState,
+    tracker: &Tracker,
+    cols: u16,
+    charsets: &mut CharsetWriter,
+) {
     write_tab_stops(out, tracker, usize::from(tracker.alt_active));
     let region = tracker.region();
     if let Some((top, bottom)) = region {
@@ -163,6 +172,7 @@ pub(super) fn write_active(out: &mut String, active: &ActiveState, tracker: &Tra
         let _ = write!(out, "\x1b[{style} q");
     }
     write_input_modes(out, active, tracker);
+    charsets.apply(out, tracker.charsets);
 }
 
 /// DECSCUSR parameter for a non-default cursor style.
@@ -201,9 +211,6 @@ fn write_input_modes(out: &mut String, active: &ActiveState, tracker: &Tracker) 
         (tracker.reverse_wrap, "\x1b[?45h"),
         (tracker.sync_output, "\x1b[?2026h"),
         (tracker.reverse_video, "\x1b[?5h"),
-        (tracker.g0 == Charset::DecSpecial, "\x1b(0"),
-        (tracker.g1 == Charset::DecSpecial, "\x1b)0"),
-        (tracker.shifted_out, "\x0e"),
     ] {
         if on {
             out.push_str(sequence);

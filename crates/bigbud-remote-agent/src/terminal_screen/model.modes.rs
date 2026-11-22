@@ -69,11 +69,15 @@ impl Feeder<'_, '_> {
         self.tracker.switch_screen(true, window);
         if save {
             self.tracker.regions[1] = None;
-            // xterm.js fills the new alternate screen with the current background colour.
-            self.send(b"\x1b[?1049h\x1b[2J");
-        } else {
-            self.send(b"\x1b[?47h\x1b[2J");
         }
+        // xterm.js fills the new alternate screen with the current background colour. DECSC
+        // is sent apart because `vt100`'s `?1049h` also forgets the alternate screen's saved
+        // cursor, which xterm.js keeps across alternate-screen sessions.
+        self.send(if save {
+            b"\x1b7\x1b[?47h\x1b[2J"
+        } else {
+            b"\x1b[?47h\x1b[2J"
+        });
         // xterm.js copies the cursor between buffers, a pending wrap included.
         self.flush();
         self.return_to((row, col));

@@ -4,7 +4,7 @@
 use super::super::marks::{MarkKind, Window};
 use super::super::query::{self, DetectedQuery};
 use super::super::scanner::{Params, Seq, Span, Token};
-use super::super::tracker::{LINK_CAP, plan_sgr};
+use super::super::tracker::{Charsets, LINK_CAP, plan_sgr};
 use super::{FeedOutput, ScreenModel, ScrollCounter};
 
 pub(super) fn feed(model: &mut ScreenModel, bytes: &[u8]) -> FeedOutput {
@@ -51,7 +51,7 @@ fn window_of(parser: &vt100::Parser<ScrollCounter>) -> Option<Window> {
 pub(super) struct Feeder<'a, 'b> {
     pub(super) parser: &'a mut vt100::Parser<ScrollCounter>,
     pub(super) tracker: &'a mut super::Tracker,
-    scratch: &'a mut Vec<u8>,
+    pub(super) scratch: &'a mut Vec<u8>,
     bytes: &'b [u8],
     batch: Option<(usize, usize)>,
     pub(super) queries: Vec<DetectedQuery>,
@@ -119,23 +119,12 @@ impl Feeder<'_, '_> {
 
     fn token(&mut self, token: Token<'_>) {
         match token {
-            Token::Text { raw, span } => match self.tracker.translation() {
-                None if self.tracker.background => self.text_with_background(raw),
-                None => self.text(raw, span),
-                Some(charset) => {
-                    let mut scratch = std::mem::take(self.scratch);
-                    scratch.clear();
-                    super::text::translate(raw, charset, &mut scratch);
-                    if self.tracker.background {
-                        self.text_with_background(&scratch);
-                    } else {
-                        self.text(&scratch, Span::Held);
-                    }
-                    *self.scratch = scratch;
-                }
-            },
+            Token::Text { raw, span } => {
+                self.report_wide_overwrites(raw);
+                self.text_token(raw, span);
+            }
             Token::Shift { shift_out, span } => {
-                self.tracker.shifted_out = shift_out;
+                self.tracker.charsets.invoke(u8::from(shift_out));
                 self.pass(span, &[]);
             }
             Token::Dropped { osc_payload } => {
@@ -218,11 +207,11 @@ impl Feeder<'_, '_> {
                     self.tracker.set_tab_stop(col, cols);
                 }
             }
-            ([intermediate @ (b'(' | b')')], _) => {
-                self.tracker.designate(*intermediate, final_byte);
+            _ => {
+                // Character set designations and shifts; `vt100` ignores them.
+                self.tracker.charsets.escape(intermediates, final_byte);
                 self.pass(span, raw);
             }
-            _ => self.pass(span, raw),
         }
     }
 
@@ -321,6 +310,11 @@ impl Feeder<'_, '_> {
                 let _handled = self.tab(params.first().max(1));
             }
             (None, [], b'Z') => self.back_tab(params.first().max(1)),
+            // DECSTR resets the character sets (not the copy DECSC saved).
+            (None, [b'!'], b'p') => {
+                self.tracker.charsets = Charsets::default();
+                self.pass(span, raw);
+            }
             (None, [], b'J') if params.first() == 2 && self.tracker.alt_active => {
                 self.tracker.alt_cleared();
                 self.pass(span, raw);
@@ -337,14 +331,7 @@ impl Feeder<'_, '_> {
     }
 
     fn sgr(&mut self, params: &Params, raw: &[u8], span: Span) {
-        let tracker = &self.tracker;
-        let plan = plan_sgr(
-            params,
-            tracker.unsupported,
-            tracker.bold,
-            tracker.dim,
-            tracker.background,
-        );
+        let plan = plan_sgr(params, self.tracker);
         let was_active = self.tracker.unsupported != 0;
         let now_active = plan.unsupported != 0;
         if was_active != now_active {
@@ -354,6 +341,7 @@ impl Feeder<'_, '_> {
         self.tracker.bold = plan.bold;
         self.tracker.dim = plan.dim;
         self.tracker.background = plan.background;
+        self.tracker.underline_style = plan.underline_style;
         match plan.rewrite {
             None => self.pass(span, raw),
             Some(bytes) if bytes.is_empty() => self.flush(),

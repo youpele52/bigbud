@@ -1,15 +1,18 @@
 //! Terminal state that `vt100` 0.18.1 does not model or does not expose, tracked from the
 //! scanner's tokens in stream order: DEC/ANSI modes (origin, autowrap, insert, reverse wrap,
-//! focus 1004, synchronized output 2026), scroll regions, kitty keyboard stacks, the G0/G1
+//! focus 1004, synchronized output 2026), scroll regions, kitty keyboard stacks, the G0–G3
 //! character sets, the open OSC 8 hyperlink, attributes outside `vt100`, and exclusion marks.
 
 use super::marks::{MarkKind, Marks, Window};
 use super::probe::CellAttrs;
 
+#[path = "tracker.charsets.rs"]
+mod charsets;
 #[path = "tracker.sgr.rs"]
 mod sgr;
 #[path = "tracker.tabs.rs"]
 mod tabs;
+pub(crate) use charsets::{Charset, Charsets};
 pub(crate) use sgr::{extras_codes, plan_sgr};
 
 /// Kitty keyboard stacks are bounded; the oldest entry is evicted when full.
@@ -17,21 +20,12 @@ const KITTY_STACK_CAP: usize = 32;
 /// Longest OSC 8 `params;uri` kept for re-opening the link after a snapshot.
 pub(crate) const LINK_CAP: usize = 4096;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Charset {
-    #[default]
-    Ascii,
-    DecSpecial,
-}
-
 /// What xterm.js DECSC saves, per screen (xterm.js keeps it on each buffer): attributes,
 /// the character sets, origin and wraparound modes, plus the attributes tracked here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SavedState {
     pub(crate) attrs: CellAttrs,
-    pub(crate) g0: Charset,
-    pub(crate) g1: Charset,
-    pub(crate) shifted_out: bool,
+    pub(crate) charsets: Charsets,
     pub(crate) origin: bool,
     pub(crate) autowrap: bool,
     unsupported: u8,
@@ -43,9 +37,7 @@ impl Default for SavedState {
     fn default() -> Self {
         Self {
             attrs: CellAttrs::default(),
-            g0: Charset::Ascii,
-            g1: Charset::Ascii,
-            shifted_out: false,
+            charsets: Charsets::default(),
             origin: false,
             autowrap: true,
             unsupported: 0,
@@ -69,9 +61,7 @@ pub(crate) struct Tracker {
     /// DECSCNM (`?5`): reverse video for the whole screen.
     pub(crate) reverse_video: bool,
     pub(crate) kitty: [Vec<u16>; 2],
-    pub(crate) g0: Charset,
-    pub(crate) g1: Charset,
-    pub(crate) shifted_out: bool,
+    pub(crate) charsets: Charsets,
     /// `params;uri` of the open hyperlink; `None` when closed or too long to re-open.
     pub(crate) link: Option<Vec<u8>>,
     pub(crate) link_open: bool,
@@ -81,6 +71,8 @@ pub(crate) struct Tracker {
     pub(crate) dim: bool,
     /// Hint that a background colour may be set (see `model.bce.rs`).
     pub(crate) background: bool,
+    /// xterm.js's underline style is not `NONE` (see `tracker.sgr.rs`).
+    pub(crate) underline_style: bool,
     /// DECSC state of the normal and alternate screens.
     saved: [SavedState; 2],
     /// Normal-screen scrollback length at the last DECSC there: xterm.js restores the row
@@ -95,6 +87,8 @@ pub(crate) struct Tracker {
     /// from `vt100` while the alternate screen is active).
     pub(crate) normal_top_cache: u64,
     pub(crate) alt_allocated: bool,
+    /// A wide character may have been printed since the last reset (see `model.text.rs`).
+    pub(crate) wide_cells: bool,
 }
 
 impl Default for Tracker {
@@ -110,15 +104,14 @@ impl Default for Tracker {
             sync_output: false,
             reverse_video: false,
             kitty: [Vec::new(), Vec::new()],
-            g0: Charset::Ascii,
-            g1: Charset::Ascii,
-            shifted_out: false,
+            charsets: Charsets::default(),
             link: None,
             link_open: false,
             unsupported: 0,
             bold: false,
             dim: false,
             background: false,
+            underline_style: false,
             saved: [SavedState::default(); 2],
             saved_scrollback: 0,
             tab_stops: [None, None],
@@ -126,6 +119,7 @@ impl Default for Tracker {
             partial: false,
             normal_top_cache: 0,
             alt_allocated: false,
+            wide_cells: false,
         }
     }
 }
@@ -141,27 +135,18 @@ impl Tracker {
         *self = Self::default();
     }
 
-    /// The character set currently invoked into GL, if it needs translation.
+    /// The character set that prints now, if it needs translation.
     pub(crate) fn translation(&self) -> Option<Charset> {
-        let active = if self.shifted_out { self.g1 } else { self.g0 };
+        let active = self.charsets.active();
         (active != Charset::Ascii).then_some(active)
-    }
-
-    pub(crate) fn designate(&mut self, intermediate: u8, final_byte: u8) {
-        let charset = match final_byte {
-            b'0' => Charset::DecSpecial,
-            _ => Charset::Ascii,
-        };
-        match intermediate {
-            b'(' => self.g0 = charset,
-            b')' => self.g1 = charset,
-            _ => {}
-        }
     }
 
     /// DECSET/DECRST for modes outside `vt100`. Returns true when the mode is tracked here.
     pub(crate) fn set_private_mode(&mut self, mode: u16, enabled: bool) -> bool {
         match mode {
+            // DECSET 2 designates ASCII into G0–G3 (DECRST 2 changes nothing in xterm.js).
+            2 if enabled => self.charsets.designate_all_ascii(),
+            2 => {}
             5 => self.reverse_video = enabled,
             6 => self.origin = enabled,
             7 => self.autowrap = enabled,
@@ -251,9 +236,7 @@ impl Tracker {
     pub(crate) fn save_cursor(&mut self, attrs: CellAttrs) {
         let state = SavedState {
             attrs,
-            g0: self.g0,
-            g1: self.g1,
-            shifted_out: self.shifted_out,
+            charsets: self.charsets,
             origin: self.origin,
             autowrap: self.autowrap,
             unsupported: self.unsupported,
@@ -272,10 +255,17 @@ impl Tracker {
         let state = self.saved_state(self.screen_index());
         (self.bold, self.dim) = state.intensity;
         self.background = state.background;
-        (self.g0, self.g1, self.shifted_out) = (state.g0, state.g1, state.shifted_out);
+        self.charsets.restore(state.charsets);
         (self.origin, self.autowrap) = (state.origin, state.autowrap);
         let before = self.unsupported != 0;
-        self.unsupported = state.unsupported | self.intensity_bit();
+        // The underline style is not restored; the underline flag is.
+        let stale = if self.underline_style == state.attrs.underline {
+            0
+        } else {
+            sgr::STALE_UNDERLINE
+        };
+        self.unsupported =
+            (state.unsupported & !sgr::STALE_UNDERLINE) | self.intensity_bit() | stale;
         (state.attrs, before != (self.unsupported != 0))
     }
 
