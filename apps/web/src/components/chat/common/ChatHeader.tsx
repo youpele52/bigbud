@@ -19,7 +19,7 @@ import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { RightPanelToggleButton } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
-import { truncateThreadName } from "../../sidebar/Sidebar.logic";
+import { HeaderBreadcrumb } from "../../layout/HeaderBreadcrumb";
 import { ContentPanelHeaderBar } from "../../layout/ContentPanelHeaderBar";
 import { ThreadActivityIndicator, threadActivityLabel } from "./threadActivityIndicator";
 import { ChatLayoutMenu } from "./ChatHeader.layoutMenu";
@@ -97,25 +97,22 @@ export const ChatHeader = memo(function ChatHeader({
     <ContentPanelHeaderBar
       collapsedTitleGridClassName={CHAT_COLUMN_HEADER_TITLE_GRID_CLASS}
       title={
-        <h2
-          className="min-w-0 shrink truncate text-sm font-medium text-foreground"
-          title={activeThreadTitle}
-        >
-          {activeProjectName && `${activeProjectName} > `}
-          <span className="text-muted-foreground">
-            {truncateThreadName(activeThreadTitle)}
-            <span className="ml-3">
-              {activityTone && (
+        <h2 className="min-w-0">
+          <HeaderBreadcrumb
+            parent={activeProjectName}
+            current={activeThreadTitle}
+            trailing={
+              activityTone && (
                 <span
                   aria-hidden="true"
                   title={threadActivityLabel(activityTone)}
-                  className="inline-flex items-center gap-[3px] pr-1"
+                  className="ml-1.5 inline-flex shrink-0 items-center pr-1"
                 >
                   <ThreadActivityIndicator tone={activityTone} />
                 </span>
-              )}
-            </span>
-          </span>
+              )
+            }
+          />
         </h2>
       }
       actions={

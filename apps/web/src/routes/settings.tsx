@@ -1,4 +1,5 @@
-import { ChevronRightIcon, RotateCcwIcon } from "lucide-react";
+import { RotateCcwIcon } from "lucide-react";
+import { HeaderBreadcrumb } from "../components/layout/HeaderBreadcrumb";
 import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
@@ -59,11 +60,7 @@ function SettingsContentLayout() {
             <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <SidebarTrigger className="size-7 shrink-0 md:hidden" />
-                <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
-                  <span className="shrink-0 text-foreground">Settings</span>
-                  <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-                  <span className="truncate text-muted-foreground">{activeSectionLabel}</span>
-                </div>
+                <HeaderBreadcrumb parent="Settings" current={activeSectionLabel} />
               </div>
               <SettingsSearch query={searchQuery} onQueryChange={setSearchQuery} />
               <div className="flex items-center justify-end gap-2">
@@ -85,14 +82,12 @@ function SettingsContentLayout() {
 
         {isElectron && (
           <div className="drag-region grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border px-5">
-            <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+            <div className="flex min-w-0 items-center gap-1.5">
               {/* Keeps the title clear of the traffic lights and the sidebar toggle. */}
               {!sidebarOpen && (
                 <div className={cn("shrink-0", WINDOW_COLLAPSED_HEADER_INSET_CLASS)} />
               )}
-              <span className="shrink-0 text-foreground">Settings</span>
-              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-              <span className="truncate text-muted-foreground">{activeSectionLabel}</span>
+              <HeaderBreadcrumb parent="Settings" current={activeSectionLabel} />
             </div>
             <SettingsSearch query={searchQuery} onQueryChange={setSearchQuery} />
             <div className="flex items-center justify-end gap-2">
