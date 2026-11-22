@@ -28,7 +28,7 @@ Some server work continues after the initiating RPC returns. Queue-backed worker
 
 ## Desktop event delivery
 
-For packaged desktop sessions, `bigbud-desktop-supervisor` coordinates delivery of canonical orchestration events to the web consumer. The TypeScript server and SQLite remain the source of truth for event existence and meaning; the supervisor coordinates bounded delivery, acknowledgements, and recovery. Standalone server and mobile-remote consumers use the supported TypeScript delivery path. See [Desktop Event Delivery in the README](../../README.md#desktop-event-delivery) and the [Rust crate guidance](../../crates/AGENTS.md).
+For packaged desktop sessions, `bigbud-desktop-supervisor` coordinates delivery of canonical orchestration events to the web consumer. The TypeScript server and SQLite remain the source of truth for event existence and meaning; the supervisor coordinates bounded delivery, acknowledgements, and recovery. Standalone server and mobile-remote consumers use the supported TypeScript delivery path. Electron resolves the supervisor binary; the server and sidecar communicate directly over framed stdio. Run `bun run smoke:desktop-supervisor` to exercise the native delivery path.
 
 The [delivery-authority ADR](../decisions/2026-08-27-desktop-delivery-supervisor-authority.md) records the ownership and recovery decision; the [codebase glossary](./encyclopedia.md#desktop-orchestration-delivery) defines canonical domain authority, application acknowledgement, controlled fallback, and direct unmanaged delivery.
 

@@ -4,11 +4,9 @@
   <img src="apps/desktop/resources/icon.png" alt="bigbud logo" width="80">
 </p>
 
-An AI workspace for everyone. It keeps your research, writing, coding, files, and git workflows in one place so you can stay focused and get more done with less context switching.
+**Switch agents. Not workspaces.**
 
-> **About the name:** This project was formally known as **bigCode** ([https://github.com/youpele52/bigCode](https://github.com/youpele52/bigCode)). The rebranding to **bigbud** reflects our evolved vision: while we excel at coding tasks, we're expanding to help anyone accomplish their goals. Like a good friend, bigbud is here to be useful to everyone — programmers and non-programmers alike.
->
-> _Note:_ The original bigCode repository was either hacked or DMCA'd — while the page returns a 404, its Actions and Settings pages are still accessible.
+bigbud is an AI workspace for knowledge work, from researching an idea to writing a report or building software. Use the agents you already like and keep your chats, files, and notes together. When a task needs more than a reply, your agent can browse the web or, with your permission, work directly in your desktop apps.
 
 ## Table of Contents
 
@@ -17,12 +15,20 @@ An AI workspace for everyone. It keeps your research, writing, coding, files, an
   - [Desktop App](#desktop-app)
   - [From Source](#from-source)
 - [Provider Setup](#provider-setup)
+- [Orchestra and Agent Coordination](#orchestra-and-agent-coordination)
+- [Search and Quick Open](#search-and-quick-open)
 - [Remote Projects](#remote-projects)
+- [Remote Backends](#remote-backends)
+- [Mobile Companion](#mobile-companion)
+- [Scheduled Tasks](#scheduled-tasks)
+- [Workspace Tools](#workspace-tools)
+- [Terminal](#terminal)
 - [Computer Use](#computer-use)
 - [Speech to Text](#speech-to-text)
-  - [Bring Your Own Key](#bring-your-own-key)
-  - [How It Works](#how-it-works)
-  - [Usage](#usage)
+- [Inyosira](#inyosira)
+- [System Monitor](#system-monitor)
+- [Usage Dashboard](#usage-dashboard)
+- [Games](#games)
 - [Desktop vs Web](#desktop-vs-web)
 - [Documentation](#documentation)
 - [Development](#development)
@@ -31,20 +37,15 @@ An AI workspace for everyone. It keeps your research, writing, coding, files, an
 
 ## Features
 
-- **Multi-provider support** — Switch between Codex, Claude, Copilot, OpenCode, Pi, Cursor, and more
-- **Remote projects over SSH** — Work against remote folders without moving the full AI runtime onto the remote machine
-- **Desktop & Web** — Native Electron desktop app or lightweight web UI
-- **Embedded browser** — Open links in-app, keep browser history, and attach annotated page context to chats
-- **Real-time streaming** — Live output with file changes, terminal commands, shell logs, and reasoning updates
-- **Live speech-to-text** — Speak to your agent with real-time transcription powered by OpenAI
-- **Built-in terminal and chat shell mode** — Use the integrated terminal or run quick composer commands like `!ls`
-- **Replies, pinning, and thread organization** — Reply to any message, pin important chats, and keep context intact across reconnects
-- **Approvals and full access mode** — Review approval requests with better thread context, or auto-approve commands and edits for autonomous runs
-- **System control** — Tell agents to execute commands and perform tasks on your PC/Mac
-- **Computer Use (Desktop & Browser Automation)** — Agents can control the in-app browser and, on desktop, your macOS machine — navigate, click, type, scroll, capture screenshots, launch apps, list windows, and more. Permission-gated with safety guardrails
-- **Inline video preview** — Play video files (.mp4, .webm, .mov, .avi) directly in the Files panel with native controls and HTTP Range streaming
-- **Right panel tab management** — Close the active right-panel tab (browser, diff, files, git, kanban, notes, terminal) with `Cmd+W` / `Ctrl+W`
-- **Thread forking** — Branch a conversation from any point to explore alternatives
+- **[Orchestra and agent coordination](#orchestra-and-agent-coordination)** — Run agents in parallel, hand work from one to another, and coordinate chats across projects.
+- **[Search and Quick Open](#search-and-quick-open)** — Find past conversations, terminal output, and files without remembering where you left them.
+- **Work across devices** — Open [remote folders over SSH](#remote-projects), run bigbud on [your own Linux server](#remote-backends), or check in from [your phone](#mobile-companion).
+- **[Multiple providers](#provider-setup)** — Use Codex, Claude, Copilot, OpenCode, Pi, Cursor, and more from one workspace.
+- **[Workspace tools](#workspace-tools)** — Keep your browser, files, git changes, notes, Kanban board, and terminal beside your chat.
+- **[Inyosira](#inyosira)** — Give your attention to the chats that need it now and set the rest aside.
+- **[Scheduled tasks](#scheduled-tasks)** — Set up recurring agent work and review each run when it finishes.
+- **Stay in control of each chat** — Follow streamed output and tool activity, answer questions and approvals, pin important chats, or branch a conversation to explore a different direction.
+- **[Computer Use](#computer-use) and [voice dictation](#speech-to-text)** — Let an agent work with a browser or desktop app, or speak a prompt instead of typing it.
 
 <p align="center">
   <img src="docs/images/screenshot-chat.png" alt="bigbud Chat Interface" width="100%" />
@@ -72,6 +73,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 ### From Source
 
+Install Node.js 24.13.1 or later in the 24.x series, Bun 1.3.9 or later in the 1.x series, and Rust via rustup. The repository selects the Rust version for you.
+
 ```bash
 git clone https://github.com/youpele52/bigbud.git
 cd bigbud
@@ -89,108 +92,120 @@ bun dev:desktop
 
 ## Provider Setup
 
-bigbud supports multiple AI coding agents. Configure at least one in **Settings → Providers**:
+1. Open **Settings → Providers** and choose a provider you want to use.
+2. Follow its setup prompt to sign in or add credentials. bigbud shows what’s already configured.
+3. Start a chat and pick your model in the composer.
 
-| Provider     | Setup                                                                               |
-| ------------ | ----------------------------------------------------------------------------------- |
-| **Claude**   | Install Claude Code: `npm i -g @anthropic-ai/claude-code`, then `claude auth login` |
-| **Copilot**  | Authenticate via GitHub CLI: `gh auth login`                                        |
-| **Codex**    | Install Codex CLI and run `codex login`                                             |
-| **OpenCode** | See [OpenCode docs](https://opencode.ai)                                            |
-| **Pi**       | Bundled — no additional setup needed                                                |
-| **Cursor**   | Install [Cursor](https://cursor.sh)                                                 |
+You only need one provider to get started. Copilot setup can reuse an existing runtime or install one for you. Pi is included; connect the model provider you want to use.
 
-Provider status is checked in real-time and displayed in Settings. Each provider can be toggled on or off independently.
+## Orchestra and Agent Coordination
 
-For Claude's SDK integration, authentication boundaries and recovery behavior, see [Claude in bigbud](docs/development/providers-claude.md).
+Open **Quick actions → Orchestrate** to split a task between agents, run them in parallel, or pass work from one to the next. From a chat, you can also ask a supported agent to start or message a chat in another project. Replies come back to the conversation that asked, and bigbud asks for permission when the agent needs access you haven’t granted.
+
+## Search and Quick Open
+
+- **`Cmd/Ctrl+F`** searches conversations, projects, recent terminal output, and files. It can include your computer and already connected remote hosts, depending on your file access settings. When a terminal is focused, it searches that terminal instead.
+- **`Cmd/Ctrl+P`** opens the command palette and finds files by name in your projects and across permitted local and connected remote locations.
 
 ## Remote Projects
 
-bigbud can connect to remote projects over SSH while keeping the app experience local.
+Open a folder on another machine from **Remote Workspaces** in the sidebar without moving your whole bigbud setup there. Pick a saved SSH host or add one, then choose the folder you want to work in.
 
-- **Remote workspace support** — Open and work in remote projects across Codex, Claude, Copilot, OpenCode, and Pi where supported
-- **Agent-backed by default** — Supported remote workspace operations use the managed Rust agent at `$HOME/.bigbud/agent/bin/current`, including provider shell and file bridges
-- **Safer reconnects** — After restart, saved remote workspaces stay disconnected until SSH access is verified again
-- **Flexible unlock flow** — Reconnect with SSH keys or temporary password-based SSH unlock without saving secrets
-- **Consent-gated setup** — On first use, bigbud explains the remote-agent installation and waits for an explicit Yes before writing anything to the remote host or creating the project
-- **Per-project connection choice** — When adding or editing a remote project, choose the bigbud remote agent or Direct SSH. The choice is verified before it is saved, and both methods can be used side by side
-- **Direct SSH option** — Direct SSH requires no bigbud agent installation; the remote agent is the option for durable remote terminals, long-running work, and resilient reconnects
+**Direct SSH** is the default for new workspaces and needs no bigbud agent on the host. Choose the **bigbud remote agent** when you want remote terminals that can reattach after a disconnect or to edit remote files from the Files panel. Existing workspaces keep their saved connection method.
 
-Packaged desktop builds and `bun dev:desktop` use the managed agent transport by default, so local development exercises the production path. New remote projects persist their selected method; `BIGBUD_REMOTE_AGENT_TRANSPORT` remains available as the process default for legacy target IDs, while `BIGBUD_REMOTE_AGENT_BINARY` remains available for testing a custom remote path. Packaged builds use the signed `remote-agent-install-source.json` published with the same release.
+## Remote Backends
 
-Local and managed-remote file watching share the Rust `bigbud-workspace-watch` implementation. Server-bearing development commands build the native `bigbud-remote-agent` automatically, and packaged desktop builds include it. Standalone server deployments can set `BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to an executable built with `cargo build --locked --package bigbud-remote-agent`; a missing or incompatible binary is reported as a typed watcher diagnostic instead of falling back to a different local watcher.
+To run bigbud itself on a Linux server or VM you own, set up a **remote backend**. This is different from opening a folder over SSH: the server runs your chats, providers, and terminals so work can continue when your laptop disconnects. Once the server is set up, use **Open remote backend** in the desktop sidebar to open it in its own window.
 
-## Desktop Event Delivery
+When connected to a remote backend, use **Settings → Remote → Peer hosts** to pair another bigbud server you trust. An agent can hand it a task and follow its progress without your laptop staying online.
 
-Packaged desktop sessions ship `bigbud-desktop-supervisor` as the authoritative
-orchestration delivery coordinator. The TypeScript server remains the source
-of truth for events and SQLite state; Rust owns bounded delivery order,
-consumer generations, application ACKs, timeout recovery, and reconnect
-reattachment. Electron only packages and resolves the executable—the protocol
-travels directly between the server and the sidecar over framed stdio.
+## Mobile Companion
 
-Development can exercise this path with `bun run smoke:desktop-supervisor` and
-`BIGBUD_DESKTOP_SUPERVISOR_ENABLED=1`. `BIGBUD_DESKTOP_SUPERVISOR_ENABLED=0`
-selects the startup rollback route. After exhausted native recovery, the UI
-reports a fenced TypeScript fallback that remains active until the session
-reconnects; the two delivery routes never run concurrently.
+Open **Settings → Remote → Mobile Remote Control** and pair your phone using the QR code or link. On your phone, you can check chats, send prompts, answer questions and approvals, and review diffs. Use [the Tailscale pairing guide](https://github.com/youpele52/bigbud/blob/main/docs/REMOTE_ACCESS.md#mobile-companion) to connect away from your local network. The companion controls an existing backend; it doesn’t run agents on your phone.
+
+## Scheduled Tasks
+
+Open **Scheduled** in the sidebar to set up recurring agent work. Describe what you want done and when, then review the schedule before enabling it. You can pause a task, run it on demand, or open its run history to see what happened.
+
+## Workspace Tools
+
+Open the right-panel launcher to keep the tools you need next to your chat:
+
+- **Browser and Files** — Browse and annotate pages, preview files (including video where the codec is supported), and edit supported text files in local and remote-agent workspaces. Direct SSH file previews are read-only.
+- **Git and Diff** — Review changes and history, annotate diffs, and manage branches and worktrees in Git projects.
+- **Notes and Kanban** — Save decisions and drafts, track tasks, and let supported agents read or update notes and cards.
+
+In chat, attach files or another thread for context, or select a passage and choose **Cite** to point your agent to the exact words. Use **Quick actions** to open **Sidecar** for a temporary second conversation or **Tasks** to follow a plan. Supported agents can also show interactive tables and diagrams directly in chat. Use `Cmd/Ctrl+W` to close the active right-panel tab when the terminal isn’t focused.
+
+## Terminal
+
+Open a terminal when you need one, split it into panes, or keep it running while you switch chats. You can also run a quick shell command from the composer with `!`, for example `!ls`. When a long-running command finishes in a pane you aren’t watching, bigbud can move its chat to **Needs you** and notify you.
+
+**Preview:** Start bigbud with `BIGBUD_TERMINAL_HOST=1` to keep local and Direct SSH terminals running across backend restarts on supported systems. **Settings → Terminal → Keep terminals running after quitting** is separate and off by default.
 
 ## Computer Use
 
-bigbud's **Computer Use** feature lets AI agents control the in-app browser and, on desktop, your macOS machine. This enables agents to navigate web pages, fill forms, take screenshots, open applications, and more — all within your session.
+- **Built-in browser:** Supported agents can navigate, click, type, scroll, and take screenshots in bigbud’s browser on desktop or web. It doesn’t require enabling native desktop control.
+- **Desktop apps:** Enable **Settings → AI → Computer Use** and follow the setup prompts. On macOS, agents can click, type, and use keyboard shortcuts once you grant the required permissions and set the chat to **Full access**. Accessibility enables control; Screen Recording allows captures. Windows and Linux support desktop control too, but available actions depend on the system and runtime. **Background** mode avoids taking focus; choose **Foreground** when the task needs it.
+- **System browser:** If you prefer your usual browser over bigbud’s built-in one, system-browser interaction requires the desktop app, enabled Computer Use, and a chat in **Full access**.
 
-### Desktop Automation
-
-Desktop computer use works through the open-source `cua-driver` MCP backend and requires macOS Accessibility and Screen Recording permissions.
-
-- **Permission-gated** — Enable in **Settings → AI → Computer Use**. Mutating actions (click, type, key presses) require `full-access` runtime mode; read-only actions (capture, list windows, diagnostics) work in any mode.
-- **Safety guardrails** — Dangerous key combos (Cmd+Q, Alt+F4) and sensitive text (passwords, API keys, credit card numbers) are blocked before reaching the driver.
-- **First-run setup** — On desktop, a setup dialog guides you through enabling the feature, installing the `cua-driver` runtime, and granting macOS permissions.
-
-### Browser Automation
-
-Browser actions (navigate, click, type, scroll, capture screenshots) work through a built-in Playwright-based `BrowserManager`. Browser automation does not require permission opt-in and works in both desktop and web modes.
-
-### Cross-Provider Support
-
-Computer Use capabilities are injected into all supported providers (Codex, Claude, Copilot, OpenCode, Pi) via per-provider bridges — MCP stdio servers, Copilot SDK tools, and Pi coding agent extensions — set up automatically at session start.
+Capturing or inspecting the desktop does not require Full access, but actions that change it do. **Full access is not a sandbox**; use it only for chats you trust with that level of access.
 
 ## Speech to Text
 
-Voice dictation powered by OpenAI's Realtime Transcription API. Add an API key in **Settings → Speech to Text** to enable it.
+Add your OpenAI API key in **Settings → AI → Speech to Text** and choose **Save & Verify**. In the composer, click the microphone once to start dictating and again to stop. The transcript goes into your draft so you can review it before sending. Audio streams directly to OpenAI, not through the bigbud server.
 
-### Bring Your Own Key
-
-The feature uses your own OpenAI API key — you must have one configured to use voice input. This keeps costs separate and avoids bigbud needing access to your OpenAI account.
-
-### How It Works
-
-- **Audio capture:** Uses the Web Audio API with an `AudioWorkletNode` to capture microphone input as PCM16 at 24 kHz
-- **Streaming:** Audio streams directly from your browser to OpenAI via WebSocket — it never touches the bigbud server
-- **Turn detection:** Manual control — press and hold to record, release to send. Partial transcription appears in real-time as you speak
-- **Model:** Uses OpenAI's realtime transcription session flow with `gpt-realtime-whisper`
-
-### Usage
-
-1. Go to **Settings → AI → Speech to Text**
-2. Enter your OpenAI API key (starts with `sk-`)
-3. Click **Save & Verify** to validate the key
-4. In the composer, click the microphone button and speak.
-
-> **macOS:** The first time you use voice input, macOS will prompt you to grant microphone access. If you previously denied it, go to **System Settings → Privacy & Security → Microphone** and re-enable it for the app.
+On macOS, allow microphone access when prompted. If you previously denied it, you can restore it in **System Settings → Privacy & Security → Microphone**.
 
 <p align="center">
   <img src="docs/images/screenshot-settings.png" alt="bigbud Provider Settings" width="100%" />
 </p>
 
+## Inyosira
+
+Inyosira means **breathe**. Not everything needs your attention right now. Switch from **Projects** to **Inyosira** in the sidebar to keep what matters in view, see when a chat needs you, and set the rest aside.
+
+- **Present** — Keep the chats you're working on in view.
+- **Needs you** — Find chats waiting for an answer or approval.
+- **Later** — Set aside chats that can wait. Snooze one to bring it back to **Needs you** when you're ready.
+- **Done** — Clear finished work from your active list without archiving or deleting it.
+
+Move chats between groups yourself, or turn on **Keep Present focused** to move inactive chats out of the way while keeping active work in view.
+
+![Inyosira sidebar in bigbud](https://assets.bigbud.app/content/Inyosira%202.png)
+
+## System Monitor
+
+Open **System Monitor** from the desktop sidebar to see what's keeping your computer busy. Check CPU, memory, storage, and network activity, or switch to the **bigbud** tab to see what the app itself is using. Search running processes and sort them by CPU or memory to find what's consuming the most resources.
+
+You can also select a connected Linux SSH workspace in **System Monitor** or the **System** side panel to see the remote computer's CPU, memory, storage, and network activity. Monitoring uses read-only SSH commands and doesn't require installing the bigbud remote agent.
+
+![System Monitor showing computer resource usage](https://assets.bigbud.app/content/system%20monitor.png)
+
+![System Monitor showing bigbud resource usage](https://assets.bigbud.app/content/system%20monitor%20bigbud.png)
+
+## Usage Dashboard
+
+Open **Usage** from the sidebar to see where your tokens go. Track usage over time and compare providers and models using activity stored on your device. For supported providers, you can also see how much of your subscription allowance remains and when it resets.
+
+![Usage dashboard showing the token breakdown by provider and model](https://assets.bigbud.app/content/Screenshot%202026-07-08%20at%2022.46.04.png)
+
+![Subscription limits in the Usage dashboard](https://assets.bigbud.app/content/Subscription%20limits.png)
+
+## Games
+
+Open **Games** from the sidebar to play free browser games, from quick puzzles to arcade classics, while your agent keeps working in the background.
+
+![Games catalog in bigbud](https://assets.bigbud.app/content/bigbud.app%20games.png)
+
 ## Desktop vs Web
 
-|                     | Desktop                       | Web                       |
-| ------------------- | ----------------------------- | ------------------------- |
-| **Installation**    | Native installer              | `bun dev` or self-hosted  |
-| **Server**          | Bundled — runs locally        | Requires separate server  |
-| **Native features** | OS notifications, system tray | Browser-based only        |
-| **Best for**        | Everyday use                  | Development, self-hosting |
+|                     | Desktop                                        | Web                         |
+| ------------------- | ---------------------------------------------- | --------------------------- |
+| **Installation**    | Native installer                               | `bun dev` or self-hosted    |
+| **Server**          | Bundled locally, or connect to your own        | Connects to a bigbud server |
+| **Native features** | OS notifications, system tray, desktop control | Browser-based only          |
+| **Best for**        | Everyday use                                   | Browser access, development |
 
 ## Documentation
 
@@ -254,4 +269,4 @@ bun dist:desktop:win         # Windows NSIS installer
 
 bigbud is actively used and maintained. See the [changelog](https://bigbud.app/changelog/) for recent updates.
 
-We're not accepting contributions yet. See [the contribution guide](./docs/development/CONTRIBUTING.md) for details.
+We're not accepting external code contributions at the moment. Bug reports and feature requests are welcome as issues, and pull requests are for detailed implementation plans only. See [the contribution guide](https://github.com/youpele52/bigbud/blob/main/docs/development/CONTRIBUTING.md) for details.
