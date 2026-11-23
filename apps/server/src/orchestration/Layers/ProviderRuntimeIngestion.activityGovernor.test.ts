@@ -1,6 +1,13 @@
-import { EventId, ThreadId, TurnId, type OrchestrationThreadActivity } from "@bigbud/contracts";
+import {
+  RuntimeRequestId,
+  EventId,
+  ThreadId,
+  TurnId,
+  type OrchestrationThreadActivity,
+} from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
+import { runtimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.ts";
 import { RuntimeActivityGovernor } from "./ProviderRuntimeIngestion.activityGovernor.ts";
 
 const threadId = ThreadId.makeUnsafe("thread-1");
@@ -61,10 +68,54 @@ describe("RuntimeActivityGovernor", () => {
       take(governor, [
         activity({ id: "completed", kind: "tool.completed" }),
         activity({ id: "failure", kind: "tool.progress", tone: "error" }),
-        activity({ id: "approval", kind: "request.opened" }),
         activity({ id: "input", kind: "user-input.requested" }),
       ]),
-    ).toHaveLength(4);
+    ).toHaveLength(3);
+  });
+
+  it("preserves converted approval opens and resolutions and both response failures over budget", () => {
+    const governor = new RuntimeActivityGovernor({ maxRowsPerTurn: 0, maxBytesPerTurn: 0 });
+    const common = {
+      provider: "claudeAgent",
+      sessionEpoch: 42,
+      threadId,
+      turnId,
+      createdAt,
+      requestId: RuntimeRequestId.makeUnsafe("request-1"),
+    } as const;
+    const opened = runtimeEventToActivities({
+      ...common,
+      type: "request.opened",
+      eventId: EventId.makeUnsafe("open"),
+      payload: { requestType: "command_execution_approval", detail: "pwd" },
+    });
+    const resolved = runtimeEventToActivities({
+      ...common,
+      type: "request.resolved",
+      eventId: EventId.makeUnsafe("resolved"),
+      payload: { requestType: "command_execution_approval", decision: "accept" },
+    });
+    const inputResolved = runtimeEventToActivities({
+      ...common,
+      type: "user-input.resolved",
+      eventId: EventId.makeUnsafe("input-resolved"),
+      payload: { answers: {} },
+    });
+    const activities = [
+      ...opened,
+      ...resolved,
+      ...inputResolved,
+      activity({ id: "approval-failed", kind: "provider.approval.respond.failed", tone: "info" }),
+      activity({ id: "input-failed", kind: "provider.user-input.respond.failed", tone: "info" }),
+    ];
+    expect(activities.map(({ kind }) => kind)).toEqual([
+      "approval.requested",
+      "approval.resolved",
+      "user-input.resolved",
+      "provider.approval.respond.failed",
+      "provider.user-input.respond.failed",
+    ]);
+    expect(take(governor, activities)).toEqual(activities);
   });
 
   it("bounds updates for one logical activity and resets on turn completion", () => {

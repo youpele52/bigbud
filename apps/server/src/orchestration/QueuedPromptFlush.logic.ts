@@ -24,6 +24,7 @@ function isLifecycleFlushTrigger(command: OrchestrationCommand): boolean {
     command.type === "thread.delegation.model-choice.expire" ||
     command.type === "thread.turn-control.set" ||
     command.type === "thread.queued-prompt.flush-cancel" ||
+    command.type === "thread.queued-prompt.remove" ||
     // The provider accepted a requested turn, which clears its pending-start gate. The
     // reactor records it after any running stamp, so a still-running turn keeps blocking.
     (command.type === "thread.activity.append" &&

@@ -39,7 +39,14 @@ function categoryFor(activity: OrchestrationThreadActivity): string {
 
 function isTerminal(activity: OrchestrationThreadActivity): boolean {
   if (activity.tone === "error" || activity.kind.endsWith(".completed")) return true;
-  if (activity.kind.startsWith("request.") || activity.kind.startsWith("user-input.")) return true;
+  if (
+    activity.kind === "approval.requested" ||
+    activity.kind === "approval.resolved" ||
+    activity.kind.startsWith("user-input.") ||
+    activity.kind === "provider.approval.respond.failed" ||
+    activity.kind === "provider.user-input.respond.failed"
+  )
+    return true;
   const payload = activity.payload;
   return (
     activity.kind === "hook.updated" &&

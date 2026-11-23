@@ -61,6 +61,27 @@ describe("makeLifecycleQueuedPromptFlushCommand", () => {
     expect(first?.commandId).toBe(second?.commandId);
   });
 
+  it("wakes the remaining prefix after removal without releasing a user hold", () => {
+    const removal = {
+      type: "thread.queued-prompt.remove" as const,
+      threadId,
+      messageId: MessageId.makeUnsafe("removed"),
+      commandId: CommandId.makeUnsafe("remove"),
+      createdAt: trigger.createdAt,
+    };
+    const flush = (readModel: ReturnType<typeof model>) =>
+      makeLifecycleQueuedPromptFlushCommand({
+        trigger: removal,
+        readModel,
+        createdAt: removal.createdAt,
+      });
+    expect(flush(model())).toMatchObject({
+      type: "thread.queued-prompt.flush",
+      messageIds: ["one"],
+    });
+    expect(flush(model({ queueHold: true }))).toBeNull();
+  });
+
   it("blocks flush for active approval or user-input state", () => {
     expect(
       makeLifecycleQueuedPromptFlushCommand({
