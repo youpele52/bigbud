@@ -74,7 +74,7 @@ describe("Codex dynamic tools: delegated model choice", () => {
     const handler = createCodexThreadOrchestrationDynamicToolHandler(ThreadId.makeUnsafe("parent"));
 
     // Malformed requests reach the server untouched; it falls back instead of failing.
-    const modelSelection = { provider: 42, model: "claude-sonnet" };
+    const modelSelection = { provider: 42, model: "claude-sonnet", effort: "high" };
     await handler({
       namespace: "bigbud_orchestration",
       tool: "create_thread",

@@ -93,6 +93,13 @@ export const StoreThreadDelegationResultInput = Schema.Struct({
 });
 export type StoreThreadDelegationResultInput = typeof StoreThreadDelegationResultInput.Type;
 
+export const ClaimThreadDelegationResultInput = Schema.Struct({
+  delegationId: ThreadDelegation.fields.delegationId,
+  resultJson: Schema.String,
+  updatedAt: ThreadDelegation.fields.updatedAt,
+});
+export type ClaimThreadDelegationResultInput = typeof ClaimThreadDelegationResultInput.Type;
+
 export interface ThreadDelegationRepositoryShape {
   readonly getByInvocation: (
     input: ThreadDelegationInvocation,
@@ -103,6 +110,9 @@ export interface ThreadDelegationRepositoryShape {
   readonly updateState: (
     input: UpdateThreadDelegationStateInput,
   ) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;
+  readonly claimResult: (
+    input: ClaimThreadDelegationResultInput,
+  ) => Effect.Effect<string, PersistenceSqlError | PersistenceDecodeError>;
   readonly storeResult: (
     input: StoreThreadDelegationResultInput,
   ) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;

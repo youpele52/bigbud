@@ -102,6 +102,8 @@ You only need one provider to get started. Copilot setup can reuse an existing r
 
 Open **Quick actions → Orchestrate** to split a task between agents, run them in parallel, or pass work from one to the next. From a chat, you can also ask a supported agent to start or message a chat in another project. Replies come back to the conversation that asked, and bigbud asks for permission when the agent needs access you haven’t granted.
 
+When starting a new chat through an agent, you can ask for a specific model and reasoning effort: “Start a new Opus thread at high effort.” bigbud applies the tier only when the model advertises it for that target. The child’s model-choice notice says what was configured or why the request wasn’t applied. Configured effort isn’t confirmation that the provider used it. If a tier is unavailable or unknown, the child keeps the selected model’s normal effort. This doesn’t change existing chats.
+
 ## Search and Quick Open
 
 - **`Cmd/Ctrl+F`** searches conversations, projects, recent terminal output, and files. It can include your computer and already connected remote hosts, depending on your file access settings. When a terminal is focused, it searches that terminal instead.

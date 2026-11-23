@@ -131,7 +131,7 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     triggers: ["Independent work should run in a standalone thread."],
     risk: "mutating",
     workflow:
-      "Call create_thread once with a title and self-contained task. Where create_thread offers modelSelection, you may pass a provider and model from list_available_models; omit it to use your own model. Poll the accepted child with get_thread_status, which reports the model requested and the model used.",
+      "Call create_thread once with a title and self-contained task. Where create_thread offers modelSelection, you may pass a provider and model from list_available_models; omit it to use your own model. If the installed tool exposes modelSelection.effort, use an exact tier listed for that model and target. Poll the accepted child with get_thread_status; configured effort is not confirmation that the provider honored it.",
     permissions: `Use another project only when the user asks; creating there first needs the user's confirmation. ${CROSS_PROJECT_TARGET_TOOL_NOTE} Only models the user can use are accepted; otherwise the child uses your model.`,
     examples: [
       "Create a child thread to investigate the server failure.",
@@ -152,12 +152,12 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     triggers: ["New work would be better served by a different provider or model."],
     risk: "read-only",
     workflow:
-      "Call list_available_models, pick a listed provider and model, and pass it as modelSelection to create_thread. An empty list means agent model choice is off.",
+      "Call list_available_models, pick a listed provider and model, and pass it as modelSelection to create_thread. When agentModelChoice is parent, omit modelSelection. Unknown effort support is not an advertised tier.",
     permissions: "Read-only. Lists only models the user has enabled, trusted and signed in to.",
     examples: ["List the models available for a delegated research thread."],
     antiPatterns: ["Do not request a model that is not listed; it falls back to your model."],
     availability: [
-      "Available when the thread orchestration bridge offers list_available_models (not in OpenCode V2 yet).",
+      "Available when the thread orchestration bridge offers list_available_models (OpenCode V2 requires bootstrap ABI 6 or later).",
     ],
     relatedCapabilityIds: ["thread.create"],
   }),

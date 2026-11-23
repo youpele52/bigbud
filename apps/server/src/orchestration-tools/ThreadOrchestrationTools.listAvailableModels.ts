@@ -9,10 +9,19 @@ import { Effect, Schema } from "effect";
 
 import {
   type OrchestrationEngineShape,
+  ensureOrchestrationProjectState,
   getOrchestrationThread,
 } from "../orchestration/Services/OrchestrationEngine.ts";
+import { isLocalExecutionTarget } from "../executionTargets.ts";
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
-import { loadModelChoiceContext } from "./ThreadOrchestrationTools.modelChoice.context.ts";
+import {
+  loadModelChoiceContext,
+  resolveDelegatedChildTarget,
+} from "./ThreadOrchestrationTools.modelChoice.context.ts";
+import {
+  indexEffortCatalog,
+  listDelegatedEffort,
+} from "./ThreadOrchestrationTools.modelChoice.effort.ts";
 import { listRankedUsableModels } from "./ThreadOrchestrationTools.modelChoice.usable.ts";
 import {
   LIST_AVAILABLE_MODELS_DEFAULT_LIMIT,
@@ -41,16 +50,26 @@ export const listAvailableModelsViaOrchestration = Effect.fn("listAvailableModel
         ? { subProviderID: caller.modelSelection.subProviderID }
         : {}),
     };
+    const project = yield* ensureOrchestrationProjectState(
+      input.orchestrationEngine,
+      caller.projectId,
+    ).pipe(Effect.orElseSucceed(() => null));
+    const target = resolveDelegatedChildTarget(project ?? undefined, caller);
+    const scope = {
+      providerRuntimeExecutionTargetId: target.providerRuntimeExecutionTargetId ?? null,
+      workspaceExecutionTargetId: target.workspaceExecutionTargetId ?? null,
+      modelCatalog: "local-registry" as const,
+      targetEffortCatalogAvailable: isLocalExecutionTarget(target.providerRuntimeExecutionTargetId),
+    };
     const context = yield* loadModelChoiceContext({
       sources: input.modelSources,
-      target: {
-        providerRuntimeExecutionTargetId: caller.providerRuntimeExecutionTargetId,
-        workspaceExecutionTargetId: caller.workspaceExecutionTargetId,
-      },
+      qualifyWorkspaceEffort: true,
+      target,
     });
     if (context === null) {
       return {
         parentModel,
+        scope: { ...scope, targetEffortCatalogAvailable: false },
         agentModelChoice: "agent" as const,
         catalogAvailable: false,
         models: [],
@@ -62,21 +81,25 @@ export const listAvailableModelsViaOrchestration = Effect.fn("listAvailableModel
       agentModelChoice === "parent" || !Schema.is(ModelSelection)(caller.modelSelection)
         ? []
         : listRankedUsableModels(context, caller.modelSelection);
+    const effortCatalog = indexEffortCatalog(context);
+    const summarize = (option: (typeof ranked)[number]) => ({
+      provider: option.selection.provider,
+      providerLabel: option.providerLabel,
+      model: option.selection.model,
+      name: option.label,
+      ...("subProviderID" in option.selection && option.selection.subProviderID !== undefined
+        ? { subProviderID: option.selection.subProviderID }
+        : {}),
+      lastUsedAt: option.lastUsedAt,
+      isParentModel: option.isFallback,
+      effort: listDelegatedEffort(context, option.selection, effortCatalog),
+    });
     return {
       parentModel,
+      scope,
       agentModelChoice,
       catalogAvailable: true,
-      models: ranked.slice(0, limit).map((option) => ({
-        provider: option.selection.provider,
-        providerLabel: option.providerLabel,
-        model: option.selection.model,
-        name: option.label,
-        ...("subProviderID" in option.selection && option.selection.subProviderID !== undefined
-          ? { subProviderID: option.selection.subProviderID }
-          : {}),
-        lastUsedAt: option.lastUsedAt,
-        isParentModel: option.isFallback,
-      })),
+      models: ranked.slice(0, limit).map(summarize),
       hasMore: ranked.length > limit,
     };
   },

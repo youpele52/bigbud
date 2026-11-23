@@ -17,9 +17,9 @@ it("genuine frozen A/B handlers stay pinned across selection/rollback through ac
   expect(result.aDigest).not.toBe(result.bDigest);
 });
 
-it("current v5 bootstrap keeps the preferred path and rejects incompatible rollback", async () => {
+it("current v6 bootstrap keeps the preferred path and rejects incompatible rollback", async () => {
   expect(await runV2ProductionCurrentFixture()).toEqual({
-    bootstrapAbi: "bigbud.thread.bootstrap.v5",
+    bootstrapAbi: "bigbud.thread.bootstrap.v6",
     incompatibleRollbackRejected: true,
     completedDuplicate: true,
   });

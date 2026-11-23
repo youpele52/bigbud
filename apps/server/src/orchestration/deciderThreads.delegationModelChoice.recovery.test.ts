@@ -1,4 +1,5 @@
 import { CommandId, MessageId, type OrchestrationCommand } from "@bigbud/contracts";
+import { deriveDelegatedModelChoiceRecord } from "@bigbud/shared/delegatedModelChoice";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -70,7 +71,18 @@ describe("delegated model choice retries (M2)", () => {
 
 describe("a pick while another blocker holds the queue (L7)", () => {
   it("later flushes the held message with the picked model, not the fallback", async () => {
-    const held = await heldReadModel();
+    const hold = holdCommand();
+    if (hold.type !== "thread.delegation.model-choice.hold") throw new Error("Expected hold");
+    const effort = { requested: "high", reason: "model-not-selected" } as const;
+    const withEffort = {
+      ...hold,
+      requestedActivity: {
+        ...hold.requestedActivity,
+        payload: { ...hold.requestedActivity.payload, effort },
+      },
+    };
+    const initial = baseReadModel();
+    const held = await apply(initial, await decide(initial, withEffort));
     const starting = {
       ...held,
       threads: [
@@ -95,5 +107,10 @@ describe("a pick while another blocker holds the queue (L7)", () => {
     const events = await decide(idle, flush);
     const requested = events.find((event) => event.type === "thread.turn-start-requested");
     expect(requested?.payload).toMatchObject({ modelSelection: alternative });
+    expect(deriveDelegatedModelChoiceRecord(picked.threads[0]!.activities)).toMatchObject({
+      status: "resolved",
+      outcome: "user-picked",
+      effort,
+    });
   });
 });

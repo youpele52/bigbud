@@ -111,15 +111,15 @@ export async function runV2ProductionGenerationsFixture() {
   return report!;
 }
 
-/** Current preferred bootstrap must still use v5 and refuse an incompatible retained handler. */
+/** Current preferred bootstrap must use v6 and refuse an incompatible retained handler. */
 export async function runV2ProductionCurrentFixture() {
   let report: Record<string, unknown> | undefined;
   await withV2ProductionThreadTools(async ({ artifact, invoke, selectImplementation }) => {
-    assert.equal(artifact.bootstrapAbi, "bigbud.thread.bootstrap.v5");
+    assert.equal(artifact.bootstrapAbi, "bigbud.thread.bootstrap.v6");
     const before = await snapshot(artifact.directory);
     const listed = (await invoke("list_threads", {}, "current-list")) as Listed;
     assert.equal(listed.result.returnedCount, 1);
-    await assert.rejects(selectImplementation("v4"), /incompatible/);
+    await assert.rejects(selectImplementation("v5"), /incompatible/);
     assert.deepEqual(await invoke("list_threads", {}, "current-list"), listed);
     assert.deepEqual(await snapshot(artifact.directory), before);
     report = {

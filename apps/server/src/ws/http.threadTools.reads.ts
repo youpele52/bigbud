@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 
 import type { ThreadOrchestrationToolDispatcherShape } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { boundV2ModelList } from "../provider/Layers/OpencodeV2/Orchestration.implementation.v6.ts";
 import { ThreadToolRequestError, type ThreadToolRequest } from "./http.threadTools.schema.ts";
 
 type ThreadToolRequestBody = typeof ThreadToolRequest.Type;
@@ -88,6 +89,6 @@ export const handleListAvailableModelsAction = Effect.fn("handleListAvailableMod
       callerThreadId: input.callerThreadId,
       ...(input.body.limit !== undefined ? { limit: input.body.limit } : {}),
     }).pipe(Effect.mapError(toRequestError("Failed to list available models.")));
-    return yield* HttpServerResponse.json({ ok: true, result });
+    return yield* HttpServerResponse.json(boundV2ModelList({ ok: true, result }));
   },
 );

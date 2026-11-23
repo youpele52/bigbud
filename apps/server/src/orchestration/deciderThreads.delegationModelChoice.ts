@@ -152,6 +152,7 @@ const decideResolution = Effect.fn("decideDelegationModelChoiceResolution")(func
   const payload: DelegationModelChoiceResolved = {
     choiceId: pending.choiceId,
     requested: pending.requested,
+    ...(pending.effort !== undefined ? { effort: pending.effort } : {}),
     fallback: pending.fallback,
     reason: pending.reason,
     used,

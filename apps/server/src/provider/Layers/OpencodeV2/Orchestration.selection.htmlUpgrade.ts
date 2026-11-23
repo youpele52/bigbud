@@ -11,9 +11,11 @@ export async function selectV2HtmlBootstrapUpgrade(
   owners: ReadonlyArray<ReturnType<typeof decodeV2EnrollmentRecord>>,
 ): Promise<V2PluginSetupArtifact | undefined> {
   if (
-    !["bigbud.thread.bootstrap.v4", "bigbud.thread.bootstrap.v5"].includes(
-      preferred.bootstrapAbi,
-    ) ||
+    ![
+      "bigbud.thread.bootstrap.v4",
+      "bigbud.thread.bootstrap.v5",
+      "bigbud.thread.bootstrap.v6",
+    ].includes(preferred.bootstrapAbi) ||
     !owners.length
   )
     return;
@@ -31,8 +33,13 @@ export async function selectV2HtmlBootstrapUpgrade(
     if (
       retained.bootstrapAbi !== "bigbud.thread.bootstrap.v3" &&
       !(
-        preferred.bootstrapAbi === "bigbud.thread.bootstrap.v5" &&
+        (preferred.bootstrapAbi === "bigbud.thread.bootstrap.v5" ||
+          preferred.bootstrapAbi === "bigbud.thread.bootstrap.v6") &&
         retained.bootstrapAbi === "bigbud.thread.bootstrap.v4"
+      ) &&
+      !(
+        preferred.bootstrapAbi === "bigbud.thread.bootstrap.v6" &&
+        retained.bootstrapAbi === "bigbud.thread.bootstrap.v5"
       )
     )
       return;

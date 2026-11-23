@@ -14,7 +14,11 @@ import {
   type V2ThreadOwner,
   type V2ThreadEnvelope,
 } from "./Orchestration.protocol.ts";
-import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
+import {
+  v2DefaultImplementationVersion,
+  v2ThreadImplementation,
+  type V2ImplementationVersion,
+} from "./Orchestration.implementation.ts";
 import { makeV2LegacyRegistrationFixture } from "./Orchestration.registration.legacy.fixture.ts";
 
 /** App-only challenge/dispatch fixture; never contacts a vendor or real native session. */
@@ -24,7 +28,7 @@ export async function makeV2ThreadPluginFixture(
     readonly exportArtifact?: typeof exportV2ThreadArtifact;
     readonly invoke?: (value: Record<string, unknown>) => Promise<unknown>;
     readonly responseLease?: () => { readonly revision: number; readonly expiry: number };
-    readonly implementationVersion?: "v1" | "v2" | "v3" | "v4" | "v5";
+    readonly implementationVersion?: V2ImplementationVersion;
     readonly legacyRegistration?: boolean;
   } = {},
 ) {
@@ -117,12 +121,7 @@ export async function makeV2ThreadPluginFixture(
       bootstrapAbi: artifact.bootstrapAbi,
       compatibilityDigest: artifact.compatibilityDigest,
       implementationDigest: v2ThreadImplementation(
-        options.implementationVersion ??
-          (artifact.bootstrapAbi === "bigbud.thread.bootstrap.v5"
-            ? "v5"
-            : artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4"
-              ? "v3"
-              : "v1"),
+        options.implementationVersion ?? v2DefaultImplementationVersion(artifact.bootstrapAbi),
       ).implementationDigest,
       threadId: "disposable-canonical-thread",
       nativeSessionId,

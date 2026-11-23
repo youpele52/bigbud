@@ -1,3 +1,4 @@
+import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
 import { MessageId, ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 import { vi } from "vitest";
@@ -5,6 +6,7 @@ import { vi } from "vitest";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
+import { provider } from "./ThreadOrchestrationTools.modelChoice.test.helpers.ts";
 import type { PersistenceSqlError } from "../persistence/Errors.ts";
 
 export const DELEGATION_CREATED_AT = "2026-10-15T10:00:00.000Z";
@@ -70,6 +72,10 @@ export function makeSystem(
     (_input: unknown): Effect.Effect<void, PersistenceSqlError> => Effect.void,
   );
   const updateState = vi.fn(() => Effect.void);
+  let claimedResult: string | undefined;
+  const claimResult = vi.fn<ThreadDelegationRepositoryShape["claimResult"]>(({ resultJson }) =>
+    Effect.sync(() => (claimedResult ??= resultJson)),
+  );
   const storeResult = vi.fn(
     (_input: Parameters<ThreadDelegationRepositoryShape["storeResult"]>[0]) => Effect.void,
   );
@@ -87,6 +93,7 @@ export function makeSystem(
     getByInvocation: (input) => getByInvocation(input),
     reserve: (_input) => Effect.succeed(delegation),
     updateState,
+    claimResult,
     storeResult,
     findDirectByChild: () => Effect.succeed(Option.none()),
   };
@@ -97,10 +104,57 @@ export function makeSystem(
     projectionThreadWatchRepository,
     addActiveWatch,
     updateState,
+    claimResult,
     storeResult,
     delegation,
     setGetByInvocation: (value: ThreadDelegationRepositoryShape["getByInvocation"]) => {
       getByInvocation = value;
+    },
+  };
+}
+
+export function makeRemoteProjectEffortSystem() {
+  const system = makeSystem({
+    ...callerThread,
+    providerRuntimeExecutionTargetId: "local",
+    workspaceExecutionTargetId: "local",
+    executionTargetId: "local",
+  });
+  const read = system.engine.getReadModel();
+  vi.spyOn(system.engine, "getReadModel").mockImplementation(() =>
+    read.pipe(
+      Effect.map((snapshot) => ({
+        ...snapshot,
+        projects: snapshot.projects.map((project) =>
+          project.id === targetProjectId
+            ? { ...project, executionTargetId: "ssh:other-host" }
+            : project,
+        ),
+      })),
+    ),
+  );
+  return {
+    system,
+    modelSources: {
+      getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+      getProviders: Effect.succeed([
+        provider("codex", {}, [
+          {
+            slug: "gpt-5.4",
+            capabilities: {
+              reasoningEffortLevels: [{ value: "high", label: "High" }],
+              effortMetadataStatus: "verified-supported",
+              effortMetadataOrigin: "live",
+              supportsFastMode: false,
+              supportsThinkingToggle: false,
+              contextWindowOptions: [],
+              promptInjectedEffortLevels: [],
+            },
+          },
+        ]),
+      ]),
+      listRecent: () => Effect.succeed([]),
+      hasInteractiveClient: () => false,
     },
   };
 }

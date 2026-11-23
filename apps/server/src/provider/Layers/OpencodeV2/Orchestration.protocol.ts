@@ -11,6 +11,7 @@ export const V2_THREAD_ACTIONS = [
   "rename_thread",
   "set_elevator_summary",
   "render_html",
+  "list_available_models",
 ] as const;
 export const V2_THREAD_OWNER_FIELDS = [
   "protocol",

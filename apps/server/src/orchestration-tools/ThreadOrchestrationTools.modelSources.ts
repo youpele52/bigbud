@@ -20,7 +20,7 @@ import {
 } from "./ThreadOrchestrationToolDispatcher.ts";
 
 export function makeThreadToolModelSources(input: {
-  readonly providerRegistry: Pick<ProviderRegistryShape, "getProviders">;
+  readonly providerRegistry: Pick<ProviderRegistryShape, "getProviders" | "getWorkspaceModels">;
   readonly serverSettings: Pick<ServerSettingsShape, "getSettings">;
   readonly projectionThreadRepository: Pick<
     ProjectionThreadRepositoryShape,
@@ -31,6 +31,8 @@ export function makeThreadToolModelSources(input: {
   return {
     // Cached snapshots only: the tool path never refreshes or probes providers (A1).
     getProviders: input.providerRegistry.getProviders,
+    getOpencodeWorkspaceModels: (directory) =>
+      input.providerRegistry.getWorkspaceModels?.("opencodeV2", directory),
     getSettings: input.serverSettings.getSettings,
     listRecent: (limit) => input.projectionThreadRepository.listRecentModelSelections({ limit }),
     hasInteractiveClient: () => input.delivery.hasOpenConsumer(),

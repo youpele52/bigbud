@@ -171,6 +171,11 @@ describe("CopilotAdapter remote workspace sessions", () => {
         threadId: THREAD_ID,
         provider: "copilot",
         executionTargetId: "ssh:host=devbox&user=root&port=22",
+        modelSelection: {
+          provider: "copilot",
+          model: "gpt-5",
+          options: { reasoningEffort: "high" },
+        },
         cwd: "/srv/project",
         runtimeMode: "approval-required",
       });
@@ -200,6 +205,7 @@ describe("CopilotAdapter remote workspace sessions", () => {
         return;
       }
 
+      assert.equal(createdConfig.reasoningEffort, "high");
       assert.equal(createdConfig.workingDirectory, createdClientOptions?.workingDirectory);
       assert.notEqual(createdConfig.workingDirectory, "/srv/project");
       assert.equal(

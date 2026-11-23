@@ -254,6 +254,10 @@ const makeProviderRegistryLayer = (
 
       return {
         refreshUsageLimits,
+        getWorkspaceModels: (provider: ProviderKind, directory: string) =>
+          registrations
+            .find((entry) => entry.provider === provider)
+            ?.service.getWorkspaceModels?.(directory),
         getProviders: Effect.sync(() => currentProviderSnapshots(currentProviders)).pipe(
           Effect.tapError(Effect.logError),
           Effect.orElseSucceed(() => []),

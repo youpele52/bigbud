@@ -13,8 +13,11 @@ import { v2NativeToolName } from "./Runtime.registration.ts";
 /** All narrow native actions must remain usable under the original final-rule order; never append grants. */
 export function assertV2ThreadPolicy(
   session: Pick<V2RuntimeSession, "toolPolicy"> & Partial<Pick<V2RuntimeSession, "native">>,
+  invocation?: V2ThreadInvocation["action"],
 ) {
   for (const action of V2_THREAD_ACTIONS) {
+    // Retained policies need not grant a tool that did not exist when they were created.
+    if (action === "list_available_models" && invocation !== action) continue;
     if (
       !session.toolPolicy ||
       v2PermissionEffect(session.toolPolicy, `bigbud_thread_v1_${action}`, "*") === "deny" ||
@@ -56,7 +59,7 @@ async function correlateV2ThreadInvocation(
   const validateOwner = await v2ReplyGuard(runtime.options, runtime.sessions, session, bounded)();
   assertEnrollment();
   validateOwner();
-  assertV2ThreadPolicy(session);
+  assertV2ThreadPolicy(session, request.action);
   await Effect.runPromise(runtime.options.journal.assertOwnerAvailable(session.threadId));
   assertEnrollment();
   validateOwner();

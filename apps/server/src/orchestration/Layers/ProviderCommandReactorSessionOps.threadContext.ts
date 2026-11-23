@@ -27,14 +27,14 @@ export function prependThreadContextToProviderInput(input: {
   readonly computerUseEnabled?: boolean;
   readonly agentBrowserPreference?: AgentBrowserPreference;
   readonly serverMode?: RuntimeMode;
-  /** False where the bridge has no model choice yet (OpenCode V2 until plan Phase 5). */
+  /** False where model choice guidance is negotiated by the installed bridge. */
   readonly supportsDelegatedModelChoice?: boolean;
 }): string {
   const modelChoice = input.supportsDelegatedModelChoice !== false;
   const modelChoiceLines = modelChoice
     ? [
         "To request a provider and model for a new thread, call `list_available_models` and pass one as `modelSelection` to `create_thread`; omit it to use your own model.",
-        "bigbud uses the requested model only when the user can use it; otherwise the new thread uses your model, and the user may pick another within about 10 seconds. `create_thread` never fails or waits because of `modelSelection`; its result reports the model requested and the model used.",
+        "bigbud uses the requested model only when the user can use it; otherwise the new thread uses your model, and the user may pick another within about 10 seconds. `create_thread` never fails or waits because of `modelSelection`; its result reports the model requested and the model used. Set `modelSelection.effort` only to an exact listed tier for the model and target, and check the result to see whether it was configured; that is not provider confirmation.",
       ]
     : [];
   const mcpToolNames = [

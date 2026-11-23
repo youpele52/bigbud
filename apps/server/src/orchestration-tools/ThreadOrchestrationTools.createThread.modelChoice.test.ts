@@ -181,31 +181,68 @@ describe("create_thread with modelSelection", () => {
     });
   });
 
-  it("stores the decision after reserving and reuses it on retry (no re-decide, no conflict)", async () => {
+  it("uses the winning inherited selection when an overlapping lookup proposes another model", async () => {
     const system = local();
-    await create(system, { modelSelection: { provider: "copilot" }, modelSources: sources() });
-    const stored = system.storeResult.mock.calls[0]?.[0];
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const explicit = create(system, {
+      modelSelection: { provider: "claudeAgent", model: "claude-sonnet" },
+      modelSources: sources({
+        getSettings: Effect.promise(async () => {
+          entered();
+          await blocked;
+          return DEFAULT_SERVER_SETTINGS;
+        }),
+      }),
+    });
+    try {
+      await started;
+      await create(system, {});
+    } finally {
+      release();
+    }
+    expect(await explicit).not.toHaveProperty("modelChoice");
+    expect(system.claimResult).toHaveBeenCalledTimes(2);
+    const dispatched = commands(system);
+    expect(dispatched.slice(3)).toEqual(dispatched.slice(0, 3));
+    expect(dispatched[0]).toMatchObject({ type: "thread.create", modelSelection: trunk });
+  });
+
+  it("reuses the stored decision on an interrupted retry even if the request omits modelSelection", async () => {
+    const system = local();
+    system.dispatch.mockImplementationOnce(() => Effect.interrupt);
+    await expect(
+      create(system, { modelSelection: { provider: "copilot" }, modelSources: sources() }),
+    ).rejects.toBeDefined();
+    expect(system.storeResult).not.toHaveBeenCalled();
+    const stored = system.claimResult.mock.calls[0]?.[0];
     expect(JSON.parse(stored?.resultJson ?? "{}").modelDecision.kind).toBe("hold");
     const retry = local();
     retry.setGetByInvocation(() =>
       Effect.succeed(
         Option.some({
           ...retry.delegation,
-          state: "thread_accepted" as const,
+          state: "project_resolved" as const,
           resultJson: stored?.resultJson ?? null,
         }),
       ),
     );
     const getProviders = vi.fn(() => Effect.succeed([]));
     await create(retry, {
-      modelSelection: { provider: "copilot" },
       modelSources: sources({
         hasInteractiveClient: () => false,
         getProviders: Effect.suspend(getProviders),
       }),
     });
     expect(getProviders).not.toHaveBeenCalled();
-    expect(commands(retry)).toEqual(commands(system));
+    expect(commands(retry)[0]).toEqual(commands(system)[0]);
+    expect(commands(retry).at(-1)).toMatchObject({ type: "thread.delegation.model-choice.hold" });
     expect(JSON.parse(retry.storeResult.mock.calls.at(-1)?.[0].resultJson ?? "{}")).toMatchObject({
       accepted: true,
       modelDecision: { kind: "hold" },

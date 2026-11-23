@@ -86,12 +86,26 @@ export async function readV2CompatibleManualBootstrap(
   // Manual entries still require an explicit update; never create an autoload alias for them.
   if (
     managed &&
-    ["bigbud.thread.bootstrap.v3", "bigbud.thread.bootstrap.v4"].includes(artifact.bootstrapAbi) &&
-    ["bigbud.thread.bootstrap.v4", "bigbud.thread.bootstrap.v5"].includes(preferred.bootstrapAbi) &&
+    [
+      "bigbud.thread.bootstrap.v3",
+      "bigbud.thread.bootstrap.v4",
+      "bigbud.thread.bootstrap.v5",
+    ].includes(artifact.bootstrapAbi) &&
+    [
+      "bigbud.thread.bootstrap.v4",
+      "bigbud.thread.bootstrap.v5",
+      "bigbud.thread.bootstrap.v6",
+    ].includes(preferred.bootstrapAbi) &&
     artifact.bootstrapAbi !== preferred.bootstrapAbi
   )
     return undefined;
-  if (artifact.bootstrapAbi !== preferred.bootstrapAbi)
+  if (
+    artifact.bootstrapAbi !== preferred.bootstrapAbi &&
+    !(
+      artifact.bootstrapAbi === "bigbud.thread.bootstrap.v5" &&
+      preferred.bootstrapAbi === "bigbud.thread.bootstrap.v6"
+    )
+  )
     throw new Error(
       "V2 manual bootstrap namespace ABI requires an explicit update; no compact-session downgrade, autoload alias or history mutation.",
     );

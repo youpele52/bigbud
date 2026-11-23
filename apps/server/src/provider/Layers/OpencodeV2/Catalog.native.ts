@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { ModelRef } from "@opencode/client";
 import { v2Request, type OpencodeV2Client } from "./Client.ts";
+import { rememberV2WorkspaceCatalog } from "./Catalog.workspace.ts";
 
 /** Native location/plugin settlement is asynchronous; bounded read-only retry never dispatches a prompt. */
 export function readV2NativeCatalog(
@@ -27,7 +28,11 @@ export function readV2NativeCatalog(
                 model.id === options.requested!.id,
             )
           : value.data.length > 0;
-        if (settled || attempt === 4) return value;
+        if (settled || attempt === 4) {
+          signal.throwIfAborted();
+          rememberV2WorkspaceCatalog(client, value, directory);
+          return value;
+        }
         await delay(250, undefined, { signal });
       }
     },

@@ -13,6 +13,7 @@ import {
 } from "@bigbud/contracts";
 import {
   DELEGATED_MODEL_CHOICE_MAX_OPTIONS,
+  type DelegationEffortDecision,
   DelegationModelChoiceRequested,
   DelegationModelChoiceResolved,
   ModelChoiceOption,
@@ -24,6 +25,10 @@ import { resolveSelectableModel } from "@bigbud/shared/model";
 import { isRetiredProvider } from "@bigbud/shared/providerLifecycle";
 import { Option, Schema } from "effect";
 
+import {
+  configureDelegatedEffort,
+  readDelegatedEffort,
+} from "./ThreadOrchestrationTools.modelChoice.effort.ts";
 import {
   isUsableProviderModel,
   listRankedUsableModels,
@@ -72,7 +77,17 @@ export function isAbsentModelSelection(value: unknown): boolean {
 
 /** Lenient transport input to a bounded request; agent-set `options` are dropped (OD5). */
 export function parseRequestedModelSelection(value: unknown): RequestedModelSelection | null {
-  return Option.getOrNull(decodeRequested(value));
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const { provider, model, subProviderID } = value as Record<string, unknown>;
+  const effort = readDelegatedEffort(value)?.requested;
+  return Option.getOrNull(
+    decodeRequested({
+      ...(provider !== undefined ? { provider } : {}),
+      ...(model !== undefined ? { model } : {}),
+      ...(subProviderID !== undefined ? { subProviderID } : {}),
+      ...(effort !== undefined ? { effort } : {}),
+    }),
+  );
 }
 
 function isProviderKind(value: string): value is ProviderKind {
@@ -83,7 +98,9 @@ function resolveRequested(
   requested: RequestedModelSelection,
   context: ModelChoiceContext,
   trunk: ModelSelection,
-): { readonly selection: ModelSelection } | { readonly reason: ModelChoiceUnusableReason } {
+):
+  | { readonly selection: ModelSelection; readonly ambiguousEffortIdentity?: true }
+  | { readonly reason: ModelChoiceUnusableReason } {
   if (isRetiredProvider(requested.provider)) return { reason: "provider-retired" };
   const snapshot = isProviderKind(requested.provider)
     ? context.providers.find((candidate) => candidate.provider === requested.provider)
@@ -115,10 +132,20 @@ function resolveRequested(
       : { reason: "unknown-model" };
   }
   const slug = resolveSelectableModel(snapshot.provider, requested.model, candidates);
-  const model = slug === null ? undefined : candidates.find((candidate) => candidate.slug === slug);
+  const matching = slug === null ? [] : candidates.filter((candidate) => candidate.slug === slug);
+  const named =
+    requested.model !== slug
+      ? matching.filter(
+          (candidate) => candidate.name.toLowerCase() === requested.model?.toLowerCase(),
+        )
+      : [];
+  const model = named.length === 1 ? named[0] : matching[0];
   if (!model) return { reason: "unknown-model" };
   if (!isUsableProviderModel(model)) return { reason: "model-requires-setup" };
-  return { selection: selectionFor(snapshot.provider, model, trunk) };
+  return {
+    selection: selectionFor(snapshot.provider, model, trunk),
+    ...(matching.length > 1 && named.length !== 1 ? { ambiguousEffortIdentity: true } : {}),
+  };
 }
 
 function withFallbackOption(
@@ -148,8 +175,16 @@ export function decideModelChoice(input: {
   readonly deadlineAt: string;
 }): ModelDecision {
   const requested = parseRequestedModelSelection(input.request);
+  const effort = isAbsentModelSelection(input.request)
+    ? undefined
+    : readDelegatedEffort(input.request);
+  const unapplied = (reason: "model-not-selected" | "agent-choice-disabled") =>
+    effort === undefined ? {} : { effort: { ...effort, reason: effort.reason ?? reason } };
   const immediate = (
-    resolved: Pick<DelegationModelChoiceResolved, "reason" | "used" | "outcome" | "resolvedBy">,
+    resolved: Pick<
+      DelegationModelChoiceResolved,
+      "reason" | "used" | "outcome" | "resolvedBy" | "effort"
+    >,
     suggestions: ReadonlyArray<ModelChoiceOption> = [],
   ): ModelDecision => ({
     kind: "immediate",
@@ -160,7 +195,17 @@ export function decideModelChoice(input: {
     reason: ModelChoiceUnusableReason,
     resolvedBy: DelegationModelChoiceResolved["resolvedBy"],
     suggestions: ReadonlyArray<ModelChoiceOption> = [],
-  ) => immediate({ reason, used: input.trunk, outcome: "fallback", resolvedBy }, suggestions);
+  ) =>
+    immediate(
+      {
+        reason,
+        used: input.trunk,
+        outcome: "fallback",
+        resolvedBy,
+        ...unapplied(resolvedBy === "disabled" ? "agent-choice-disabled" : "model-not-selected"),
+      },
+      suggestions,
+    );
 
   const context = input.context;
   if (context === null) return fallback("catalog-unavailable", "server");
@@ -172,9 +217,21 @@ export function decideModelChoice(input: {
       ? ({ reason: "invalid-request" } as const)
       : resolveRequested(requested, context, input.trunk);
   if ("selection" in resolution) {
+    const configured =
+      effort === undefined
+        ? { selection: resolution.selection }
+        : resolution.ambiguousEffortIdentity && effort.requested !== undefined
+          ? {
+              selection: resolution.selection,
+              effort: { ...effort, reason: "capabilities-unknown" as const },
+            }
+          : configureDelegatedEffort(effort, context, resolution.selection);
     return immediate({
       reason: null,
-      used: resolution.selection,
+      used: configured.selection,
+      ...("effort" in configured
+        ? { effort: configured.effort satisfies DelegationEffortDecision }
+        : {}),
       outcome: "requested",
       resolvedBy: "server",
     });
@@ -193,6 +250,7 @@ export function decideModelChoice(input: {
       requested,
       fallback: input.trunk,
       reason: resolution.reason,
+      ...unapplied("model-not-selected"),
       options,
       deadlineAt: input.deadlineAt,
       heldMessageId: MessageId.makeUnsafe(input.heldMessageId),

@@ -1,4 +1,4 @@
-import type { ServerProvider } from "@bigbud/contracts";
+import type { ServerProvider, ServerProviderModel } from "@bigbud/contracts";
 import type { SubscriptionRefreshOutcome } from "@bigbud/contracts/server/usageLimits.ts";
 import type { Effect, Stream } from "effect";
 
@@ -16,6 +16,10 @@ export interface ServerProviderRecoveryOptions {
 
 export interface ServerProviderShape {
   readonly getSnapshot: Effect.Effect<ServerProvider>;
+  /** Cache-only lookup for providers with Location-specific capabilities; undefined on a miss. */
+  readonly getWorkspaceModels?: (
+    directory: string,
+  ) => ReadonlyArray<ServerProviderModel> | undefined;
   readonly refresh: Effect.Effect<ServerProvider>;
   /** Optional read-only quota probe, without provider recovery or model discovery. */
   readonly refreshUsageLimits?: Effect.Effect<ProviderUsageReadResult>;

@@ -39,6 +39,7 @@ export interface ModelChoiceContext {
   readonly target: {
     readonly providerRuntimeExecutionTargetId?: string | null | undefined;
     readonly workspaceExecutionTargetId?: string | null | undefined;
+    readonly workspaceRoot?: string | null | undefined;
   };
   /** Any open delivery consumer (OD6). */
   readonly hasInteractiveClient: boolean;

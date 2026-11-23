@@ -46,7 +46,11 @@ function getPiModelCapabilities(model: PiRpcModel): ModelCapabilities {
         label: value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
       })),
     },
-    "verified-supported",
+    model.reasoning === true
+      ? "verified-supported"
+      : model.reasoning === false
+        ? "verified-unsupported"
+        : "unknown",
     "live",
   );
 }

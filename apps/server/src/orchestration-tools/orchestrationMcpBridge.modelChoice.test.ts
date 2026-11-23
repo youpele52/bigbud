@@ -54,7 +54,12 @@ describe("MCP bridge model choice tools", () => {
 
   it("passes the raw modelSelection through and lists models read-only", async () => {
     const { fixture, bridge } = await startBridge();
-    const modelSelection = { provider: "claudeAgent", model: "claude-sonnet", options: { x: 1 } };
+    const modelSelection = {
+      provider: "claudeAgent",
+      model: "claude-sonnet",
+      effort: "high",
+      options: { x: 1 },
+    };
     await bridge.send({
       jsonrpc: "2.0",
       id: 2,

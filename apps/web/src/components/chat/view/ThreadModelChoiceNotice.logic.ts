@@ -5,6 +5,7 @@
 import { PROVIDER_DISPLAY_NAMES } from "@bigbud/contracts/constants/provider.constant.ts";
 import {
   DELEGATED_MODEL_CHOICE_HOLD_MS,
+  type DelegationEffortDecision,
   type ModelChoiceOption,
   type ModelChoiceResolvedBy,
   type ModelChoiceUnusableReason,
@@ -102,10 +103,35 @@ function reasonText(reason: ModelChoiceUnusableReason | null): string {
   return reason === null ? "unavailable" : REASON_TEXT[reason];
 }
 
+const EFFORT_REASON_TEXT: Record<NonNullable<DelegationEffortDecision["reason"]>, string> = {
+  "invalid-effort": "invalid effort value",
+  "unsupported-effort": "not supported by this model",
+  "capabilities-unknown": "support is unknown for this model and target",
+  "model-not-selected": "the requested model wasn't selected",
+  "agent-choice-disabled": "agent model choice is off",
+};
+
+function effortText(effort: DelegationEffortDecision | undefined): string | null {
+  if (!effort) return null;
+  const requested = displayText(effort.requested);
+  const configured = displayText(effort.configured);
+  if (configured) return `Effort configured: ${configured}.`;
+  const description = requested ? `Requested effort ${requested}` : "Requested effort";
+  return effort.reason
+    ? `${description} not applied (${EFFORT_REASON_TEXT[effort.reason]}).`
+    : null;
+}
+
+function joinDescriptions(...parts: ReadonlyArray<string | null>): string | null {
+  return parts.filter((part) => part !== null).join(" ") || null;
+}
+
 function resolvedNotice(
   record: Extract<DelegatedModelChoiceRecord, { status: "resolved" }>,
 ): ModelChoiceNotice {
   const requested = requestedText(record.requested);
+  const effort = effortText(record.effort);
+  const effortFailed = !!record.effort?.reason;
   if (record.cancelled) {
     return {
       kind: "cancelled",
@@ -117,24 +143,24 @@ function resolvedNotice(
   if (record.outcome === "requested") {
     return {
       kind: "requested",
-      tone: "success",
+      tone: effortFailed ? "warning" : "success",
       title: `Using requested model ${requested}`,
-      description: null,
+      description: effort,
     };
   }
   if (record.outcome === "user-picked") {
     return {
       kind: "user-picked",
-      tone: "success",
+      tone: effortFailed ? "warning" : "success",
       title: `You chose ${selectionText(record.used)} (requested ${requested} unavailable)`,
-      description: null,
+      description: effort,
     };
   }
   return {
     kind: "fallback",
     tone: "warning",
     title: `Requested ${requested} unavailable (${reasonText(record.reason)}); used ${selectionText(record.used)}`,
-    description: RESOLVED_BY_TEXT[record.resolvedBy] ?? null,
+    description: joinDescriptions(RESOLVED_BY_TEXT[record.resolvedBy] ?? null, effort),
   };
 }
 
@@ -149,10 +175,12 @@ export function deriveModelChoiceNotice(
     kind: "pending",
     tone: "info",
     title: "Choose a model for this thread",
-    description:
+    description: joinDescriptions(
       seconds > 0
         ? `${unavailable} Choose a model — using ${selectionText(record.fallback)} in ${seconds}s.`
         : `${unavailable} Using ${selectionText(record.fallback)} now…`,
+      effortText(record.effort),
+    ),
   };
 }
 
@@ -180,9 +208,13 @@ export function deriveModelChoiceCardRow(
   if (choice === undefined) return null;
   if (choice.source === "linked") {
     const requested = choice.summary.requested;
+    const effort = displayText(requested?.effort);
     return requested === null
       ? null
-      : { kind: "requested", label: `Requested ${requestedText(requested)}` };
+      : {
+          kind: "requested",
+          label: `Requested ${requestedText(requested)}${effort ? ` · effort ${effort}` : ""}`,
+        };
   }
   const record = choice.record;
   if (record.status === "pending") {
@@ -196,6 +228,8 @@ export function deriveModelChoiceCardRow(
     kind: "resolved",
     tone: notice.tone === "success" ? "success" : "warning",
     label: record.cancelled ? "Cancelled" : selectionText(record.used),
-    title: notice.title,
+    title:
+      joinDescriptions(notice.title, record.cancelled ? null : effortText(record.effort)) ??
+      notice.title,
   };
 }

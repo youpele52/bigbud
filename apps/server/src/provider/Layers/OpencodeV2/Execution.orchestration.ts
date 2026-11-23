@@ -20,6 +20,7 @@ export const V2_ORCHESTRATION_ACTIONS = [
   "browser",
   "computer_use",
   "create_thread",
+  "list_available_models",
   "send_thread_message",
   "list_threads",
   "search_capabilities",

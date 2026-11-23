@@ -8,6 +8,7 @@ import { V2_LOCAL_TOOL_LIMITATION } from "./Runtime.policy.ts";
 import { normalizeV2Catalog } from "./Catalog.ts";
 import { makeV2PublicCatalogLoader, mergeV2Catalogs } from "./Catalog.public.ts";
 import { readV2NativeCatalog } from "./Catalog.native.ts";
+import { readCachedV2WorkspaceCatalog } from "./Catalog.workspace.ts";
 import { v2Request } from "./Client.ts";
 import type { V2DevelopmentConfig } from "./Development.config.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
@@ -298,6 +299,14 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   if (initiallyEnabled && !application) yield* refresh.pipe(Effect.forkScoped);
   return {
     getSnapshot: snapshots.getSnapshot,
+    getWorkspaceModels: (directory: string) =>
+      !closed && lease?.process.isRunning() && config.process.sharedService
+        ? readCachedV2WorkspaceCatalog(
+            lease.process.client,
+            config.process.sharedService,
+            directory,
+          )
+        : undefined,
     refresh,
     refreshWithRecovery: () => refresh,
     streamChanges: snapshots.streamChanges,

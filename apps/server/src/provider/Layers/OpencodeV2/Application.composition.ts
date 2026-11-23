@@ -343,6 +343,18 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       adapterService: adapter,
       providerService: {
         getSnapshot: snapshots.getSnapshot,
+        getWorkspaceModels: (directory) => {
+          const current = settings.currentSnapshot?.()?.settings.providers.opencodeV2;
+          if (
+            !current?.enabled ||
+            !hasOpencodeV2NativeTrust(current) ||
+            !initialized ||
+            initialized.key !== v2ApplicationConfigKey(current) ||
+            initialized.consentRevision !== consent.currentRevision()
+          )
+            return undefined;
+          return initialized.provider.getWorkspaceModels(directory);
+        },
         refresh,
         refreshWithRecovery: () => refresh,
         streamChanges: snapshots.streamChanges,

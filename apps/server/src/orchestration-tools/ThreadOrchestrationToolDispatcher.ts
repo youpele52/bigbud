@@ -7,6 +7,7 @@ import type {
   MessageId,
   ProjectId,
   ServerProvider,
+  ServerProviderModel,
 } from "@bigbud/contracts";
 import type { ServerSettings } from "@bigbud/contracts/core/settings.ts";
 import type { Effect } from "effect";
@@ -158,6 +159,9 @@ export interface ThreadOrchestrationToolDispatcherShape {
 export interface ThreadToolModelSources {
   /** Cached snapshots only; the tool path never refreshes providers. */
   readonly getProviders: Effect.Effect<ReadonlyArray<ServerProvider>>;
+  readonly getOpencodeWorkspaceModels?: (
+    directory: string,
+  ) => ReadonlyArray<ServerProviderModel> | undefined;
   readonly getSettings: Effect.Effect<ServerSettings, Error>;
   readonly listRecent: (limit: number) => Effect.Effect<ReadonlyArray<RecentModelSelection>, Error>;
   readonly hasInteractiveClient: () => boolean;

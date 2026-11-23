@@ -15,7 +15,7 @@ import {
 import { V2_HTML_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v4.ts";
 import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
 import { V2_NATIVE_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.ts";
-import { V2_SUMMARY_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v5.ts";
+import { V2_DELEGATION_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v6.ts";
 import { V2_IMPLEMENTATION_MANIFEST } from "./Orchestration.implementation.manifest.generated.ts";
 import {
   ensureV2ThreadPrivateChild,
@@ -86,11 +86,11 @@ async function makeRetainedRegistrationFixture(
     }
     source = source
       .replaceAll(
-        JSON.stringify(V2_SUMMARY_BOOTSTRAP_SPECS),
+        JSON.stringify(V2_DELEGATION_BOOTSTRAP_SPECS),
         JSON.stringify(html ? V2_HTML_BOOTSTRAP_SPECS : V2_NATIVE_BOOTSTRAP_SPECS),
       )
-      .replaceAll(V2_IMPLEMENTATION_MANIFEST.v5.schemaDigest, compatibility.schemaDigest)
-      .replaceAll("bigbud.thread.bootstrap.v5", compatibility.bootstrapAbi)
+      .replaceAll(V2_IMPLEMENTATION_MANIFEST.v6.schemaDigest, compatibility.schemaDigest)
+      .replaceAll("bigbud.thread.bootstrap.v6", compatibility.bootstrapAbi)
       .replaceAll(V2_COMPATIBILITY_DIGEST, compatibilityDigest);
     modules[name] = source;
   }

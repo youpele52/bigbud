@@ -1,3 +1,5 @@
+import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
+import { V2_SUMMARY_BOOTSTRAP_COMPATIBILITY } from "./Orchestration.compatibility.ts";
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
 import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
@@ -21,9 +23,11 @@ it("v5 admits only its own summary while retained handlers and ABI4 remain froze
   expect(
     knownV2BootstrapCompatibility(V2_N8_BOOTSTRAP_COMPATIBILITY, V2_N8_COMPATIBILITY_DIGEST),
   ).toBe(V2_N8_BOOTSTRAP_COMPATIBILITY);
-  const current = v2ThreadImplementation();
+  const current = v2ThreadImplementation("v5");
   expect(current.bootstrapAbi).toBe("bigbud.thread.bootstrap.v5");
-  expect(() => assertV2ImplementationCompatible(current)).not.toThrow();
+  expect(() =>
+    assertV2ImplementationCompatible(current, V2_SUMMARY_BOOTSTRAP_COMPATIBILITY),
+  ).not.toThrow();
   const prepared = current.prepare({
     action: "set_elevator_summary",
     input: { summary: "Own summary" },
@@ -63,7 +67,9 @@ it("v5 admits only its own summary while retained handlers and ABI4 remain froze
 });
 
 it("ABI5 exposes seven issuer-scoped tools only to the enrolled session with trusted summary identity", async () => {
-  const app = await makeV2ThreadPluginFixture();
+  const app = await makeV2ThreadPluginFixture({
+    exportArtifact: (root) => exportV2ThreadArtifact(root, "v5"),
+  });
   try {
     const owner = app.bind("summary-session", app.root);
     const host = makeV2ThreadPluginHost(owner);

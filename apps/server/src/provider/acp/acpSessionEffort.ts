@@ -1,5 +1,8 @@
 import type { EffortOption, ModelCapabilities } from "@bigbud/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
+import { AcpRequestError, type AcpError } from "effect-acp/errors";
+import { Effect, ServiceMap } from "effect";
+import type { AcpSessionRuntimeShape } from "./AcpSessionRuntime.ts";
 import {
   formatEffortLabel,
   sanitizeEffortOptions,
@@ -92,6 +95,38 @@ export function resolveAcpEffortChoice(
   if (!configOption || !trimmed) return undefined;
   return uniqueAliasMatch(trimmed, flattenAcpSessionConfigSelectOptions(configOption));
 }
+
+/** Internal execution context, present only when dispatching the delegated initial prompt. */
+export const ExactDelegatedAcpEffort = ServiceMap.Reference<string | undefined>(
+  "bigbud/provider/acp/ExactDelegatedAcpEffort",
+  { defaultValue: () => undefined },
+);
+
+export const applyExactDelegatedAcpEffort = Effect.fn("applyExactDelegatedAcpEffort")(function* (
+  runtime: Pick<AcpSessionRuntimeShape, "getConfigOptions"> & {
+    readonly setConfigOption: (configId: string, value: string) => Effect.Effect<unknown, AcpError>;
+  },
+  requested: string,
+  modelSelected = true,
+) {
+  const option = findAcpEffortConfigOption(yield* runtime.getConfigOptions);
+  const mismatch = (actual: string | undefined) =>
+    new AcpRequestError({
+      code: -32602,
+      errorMessage: `Delegated effort ${JSON.stringify(requested)} was not applied: ${actual === undefined ? "the exact tier is not available for the selected model" : `ACP reported ${JSON.stringify(actual)}`}. No prompt was sent.`,
+    });
+  if (
+    !modelSelected ||
+    !option ||
+    !flattenAcpSessionConfigSelectOptions(option).some(({ value }) => value === requested)
+  ) {
+    return yield* mismatch(undefined);
+  }
+  yield* runtime.setConfigOption(option.id, requested);
+  const applied = (yield* runtime.getConfigOptions).find(({ id }) => id === option.id);
+  const actual = applied?.type === "select" ? applied.currentValue : undefined;
+  if (actual !== requested) return yield* mismatch(actual);
+});
 
 export function buildAcpEffortLevels(
   configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,

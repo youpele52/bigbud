@@ -11,6 +11,10 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
 - **[A window that feels all of a piece](#a-window-that-feels-all-of-a-piece):** Let your wallpaper show through the whole window, and browse files beside your code instead of under a drawer.
 
+## Unreleased
+
+- **Choose reasoning effort for a delegated chat:** Ask a supported agent to start a chat with a listed model and effort tier. bigbud reports the tier it configured, or why it kept the model’s normal effort. Retained OpenCode V2 tool installations need bootstrap ABI 6 to offer this choice; remote runtimes without a target-qualified catalog report effort support as unknown.
+
 ## v0.4.1 (22 November, 2026)
 
 ### Terminals That Stay Where You Left Them
