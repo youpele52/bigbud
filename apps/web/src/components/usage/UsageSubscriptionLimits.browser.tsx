@@ -61,12 +61,40 @@ describe("UsageSubscriptionLimits", () => {
       .toHaveAttribute("aria-valuenow", "75");
   });
 
+  it("consolidates low standard windows without announcing updates or including stale values", async () => {
+    await renderLimits(
+      {
+        ...status("available"),
+        windows: [
+          { id: "short", kind: "five-hour", label: "5-hour limit", utilization: 90 },
+          { id: "week", kind: "seven-day", label: "7-day limit", utilization: 95 },
+          { id: "month", kind: "monthly", label: "Monthly limit", utilization: 94 },
+          { id: "rolling", kind: "rolling", label: "Rolling limit", utilization: 100 },
+        ],
+      },
+      {
+        ...status("stale"),
+        source: "muse-msp",
+        windows: [{ id: "short", kind: "five-hour", label: "5-hour limit", utilization: 100 }],
+      },
+    );
+    const warning = page.getByRole("group", { name: "Subscription allowance warning" });
+    await expect.element(warning).toHaveAttribute("data-status", "warning");
+    await expect.element(warning).toHaveTextContent("Subscription allowance nearly exhausted");
+    await expect.element(warning).toHaveTextContent("5-hour limit: 10% remaining");
+    await expect.element(warning).toHaveTextContent("7-day limit: 5% remaining");
+    await expect.element(warning).toHaveTextContent("Monthly limit: 6% remaining");
+    await expect.element(warning).not.toHaveTextContent("Rolling limit");
+    await expect.element(warning).not.toHaveTextContent("Muse Code");
+    await expect.element(page.getByText("Subscription limits may be out of date")).toBeVisible();
+  });
+
   it("refreshes all subscription limits via the dedicated API with Settings-style loading and alignment", async () => {
     let finish!: () => void;
     api.refreshUsageLimits.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          finish = resolve;
+        new Promise((resolve) => {
+          finish = () => resolve({ providers: [], outcomes: [] });
         }),
     );
     await renderLimits(status("available"));
@@ -99,10 +127,28 @@ describe("UsageSubscriptionLimits", () => {
       .element(page.getByRole("alert"))
       .toHaveTextContent("Couldn’t refresh limits. Try again.");
     await expect.element(refresh).toBeEnabled();
-    api.refreshUsageLimits.mockResolvedValueOnce({ providers: [] });
+    api.refreshUsageLimits.mockResolvedValueOnce({ providers: [], outcomes: [] });
     await refresh.click();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     expect(api.refreshUsageLimits).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports manual per-reader results without masking partial success", async () => {
+    api.refreshUsageLimits.mockResolvedValueOnce({
+      providers: [],
+      outcomes: [
+        { provider: "codex", status: "fresh" },
+        { provider: "cursor", status: "cached" },
+        { provider: "claudeAgent", status: "timed-out" },
+      ],
+    });
+    await renderLimits(status("available"));
+    await page.getByRole("button", { name: "Refresh subscription limits" }).click();
+    const results = page.getByRole("list", { name: "Subscription refresh results" });
+    await expect.element(results).toHaveTextContent("Codex: Updated");
+    await expect.element(results).toHaveTextContent("Cursor: Cached values");
+    await expect.element(results).toHaveTextContent("Refresh timed out");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
 
   it("keeps limit resets display-only and below limits in compact Usage", async () => {

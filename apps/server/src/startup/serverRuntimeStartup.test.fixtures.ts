@@ -86,7 +86,7 @@ export function startupLayer(
         Layer.succeed(ProviderRegistry, {
           getProviders: Effect.succeed([]),
           refresh: () => Effect.succeed([]),
-          refreshUsageLimits: Effect.succeed([]),
+          refreshUsageLimits: Effect.succeed({ providers: [], outcomes: [] }),
           streamChanges: Stream.empty,
           awaitFirstReadyProvider: Effect.succeed(Option.none()),
           openChanges: Effect.succeed(Stream.empty),

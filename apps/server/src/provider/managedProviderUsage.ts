@@ -3,6 +3,23 @@ import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLi
 import { Effect, PubSub, Ref } from "effect";
 import { inheritProviderSnapshot } from "./providerSnapshot.authority.ts";
 import { areProviderSnapshotsEqual } from "./providerSnapshot.equal.ts";
+import type { ProviderUsageReadResult } from "./Services/ServerProvider.ts";
+
+function readerStatus(limits: ServerProviderUsageLimits): ProviderUsageReadResult["status"] {
+  switch (limits.status) {
+    case "available":
+      return limits.lastSuccessfulAt && limits.lastSuccessfulAt < limits.checkedAt
+        ? "cached"
+        : "fresh";
+    case "stale":
+      return "cached";
+    case "unavailable":
+      return "unavailable";
+    case "pending":
+    case "error":
+      return "failed";
+  }
+}
 
 /** Gives quota its own revision without superseding model discovery or optional capabilities. */
 export function makeManagedProviderUsagePublication(
@@ -51,12 +68,12 @@ export function managedProviderUsageRefresh<Settings>(input: {
   readonly haveSettingsChanged: (a: Settings, b: Settings) => boolean;
   readonly didRefresh?: () => void;
 }) {
-  return Effect.gen(function* () {
+  return Effect.gen(function* (): Effect.fn.Return<ProviderUsageReadResult> {
     const settings = yield* input.getSettings;
     const generation = yield* Ref.get(input.generationRef);
     const snapshot = yield* Ref.get(input.snapshotRef);
     if (!snapshot.enabled || input.haveSettingsChanged(yield* Ref.get(input.settingsRef), settings))
-      return snapshot;
+      return { snapshot, status: "skipped" };
     const usageLimits = yield* input.read(settings);
     const latestSettings = yield* input.getSettings;
     const current = yield* Ref.get(input.snapshotRef);
@@ -65,12 +82,12 @@ export function managedProviderUsageRefresh<Settings>(input: {
       input.haveSettingsChanged(settings, latestSettings) ||
       !current.enabled
     )
-      return current;
+      return { snapshot: current, status: "skipped" };
     const next = yield* Ref.updateAndGet(input.snapshotRef, (latest) => {
       input.didRefresh?.();
       return inheritProviderSnapshot(latest, { ...latest, usageLimits });
     });
     yield* PubSub.publish(input.changes, next);
-    return next;
+    return { snapshot: next, status: readerStatus(usageLimits) };
   });
 }

@@ -1,6 +1,13 @@
 import { Schema } from "effect";
 
 import { IsoDateTime, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { ProviderKind } from "../orchestration/orchestration.provider";
+
+export const SubscriptionRefreshOutcome = Schema.Struct({
+  provider: ProviderKind,
+  status: Schema.Literals(["fresh", "cached", "unavailable", "failed", "skipped", "timed-out"]),
+});
+export type SubscriptionRefreshOutcome = typeof SubscriptionRefreshOutcome.Type;
 
 export const ServerProviderUsageLimitStatus = Schema.Literals([
   "pending",

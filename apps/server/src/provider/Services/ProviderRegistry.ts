@@ -7,6 +7,7 @@
  * @module ProviderRegistry
  */
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
+import type { ServerRefreshUsageLimitsResult } from "@bigbud/contracts/server/rpc.usage.ts";
 import { ServiceMap } from "effect";
 import type { Effect, Option, Scope, Stream } from "effect";
 
@@ -22,7 +23,7 @@ export interface ProviderRegistryShape {
   readonly refresh: (provider?: ProviderKind) => Effect.Effect<ReadonlyArray<ServerProvider>>;
 
   /** Fetch fresh subscription quota for every enabled supported provider, without recovery. */
-  readonly refreshUsageLimits: Effect.Effect<ReadonlyArray<ServerProvider>>;
+  readonly refreshUsageLimits: Effect.Effect<ServerRefreshUsageLimitsResult>;
 
   /**
    * Stream of provider snapshot updates.

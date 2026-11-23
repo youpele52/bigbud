@@ -11,13 +11,16 @@ it("routes subscription refresh to quota-only registry reads, never recovery", a
     providerRegistry: {
       refreshUsageLimits: Effect.sync(() => {
         read();
-        return [];
+        return { providers: [], outcomes: [{ provider: "codex", status: "cached" }] };
       }),
       refresh: recover,
     },
   } as unknown as WsRpcContext;
   const handler = makeServerWsRpcHandlers(context)[WS_METHODS.serverRefreshUsageLimits];
-  expect(await Effect.runPromise(handler({}))).toEqual({ providers: [] });
+  expect(await Effect.runPromise(handler({}))).toEqual({
+    providers: [],
+    outcomes: [{ provider: "codex", status: "cached" }],
+  });
   expect(read).toHaveBeenCalledOnce();
   expect(recover).not.toHaveBeenCalled();
 });

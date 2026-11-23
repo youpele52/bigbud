@@ -65,6 +65,11 @@ export function UsageSubscriptionProviderLimits({
       {limits.status === "pending" ? (
         <BigbudLoader className="h-auto min-h-40 rounded-lg" label={`Checking ${title}`} />
       ) : null}
+      {limits.status === "available" && limits.lastSuccessfulAt ? (
+        <p className="text-xs text-muted-foreground">
+          Last successful update: {formatSubscriptionTimestamp(limits.lastSuccessfulAt)}
+        </p>
+      ) : null}
       {hasRetainedLimits ? (
         <div
           className={compact ? "grid gap-4 @min-[640px]:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}

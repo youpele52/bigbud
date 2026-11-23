@@ -74,12 +74,18 @@ describe("independent quota publication", () => {
             snapshot.version === "enriched" ? Deferred.succeed(published, snapshot) : Effect.void,
           ).pipe(Effect.forkScoped);
           yield* Deferred.await(started);
-          assert.deepStrictEqual((yield* service.refreshUsageLimits!).usageLimits, quota(70));
+          assert.deepStrictEqual(
+            (yield* service.refreshUsageLimits!).snapshot.usageLimits,
+            quota(70),
+          );
           nextQuota =
             status === "available"
               ? quota(80)
               : { ...quota(80), status, windows: [], manualResets: undefined };
-          assert.deepStrictEqual((yield* service.refreshUsageLimits!).usageLimits, nextQuota);
+          assert.deepStrictEqual(
+            (yield* service.refreshUsageLimits!).snapshot.usageLimits,
+            nextQuota,
+          );
           yield* Deferred.succeed(release, undefined);
           yield* Deferred.await(finished);
           assert.deepStrictEqual((yield* Deferred.await(published)).usageLimits, nextQuota);
@@ -131,7 +137,10 @@ describe("independent quota publication", () => {
           yield* Effect.yieldNow;
           yield* Deferred.succeed(initialGate, undefined);
           yield* Deferred.await(foregroundReady);
-          assert.deepStrictEqual((yield* service.refreshUsageLimits!).usageLimits, quota(70));
+          assert.deepStrictEqual(
+            (yield* service.refreshUsageLimits!).snapshot.usageLimits,
+            quota(70),
+          );
           assert.strictEqual((yield* service.getSnapshot).modelRecovery?.status, "retrying");
           yield* TestClock.adjust(1_000);
           yield* Deferred.await(retryStarted);
@@ -186,7 +195,10 @@ describe("independent quota publication", () => {
           ).pipe(Effect.forkScoped);
           yield* TestClock.adjust(1_000);
           yield* Deferred.await(decorating);
-          assert.deepStrictEqual((yield* service.refreshUsageLimits!).usageLimits, quota(70));
+          assert.deepStrictEqual(
+            (yield* service.refreshUsageLimits!).snapshot.usageLimits,
+            quota(70),
+          );
           yield* Deferred.succeed(release, undefined);
           assert.deepStrictEqual((yield* Deferred.await(recovered)).usageLimits, quota(70));
           assert.deepStrictEqual((yield* service.getSnapshot).models, live.models);
@@ -235,11 +247,17 @@ describe("independent quota publication", () => {
           checkProvider: Effect.sync(() => ({ ...live, usageLimits: probedQuota })),
           readUsageLimits: () => Effect.succeed(quota(70)),
         });
-        assert.deepStrictEqual((yield* service.refreshUsageLimits!).usageLimits, quota(70));
+        assert.deepStrictEqual(
+          (yield* service.refreshUsageLimits!).snapshot.usageLimits,
+          quota(70),
+        );
         probedQuota = quota(90);
         yield* TestClock.adjust(1_000);
         assert.deepStrictEqual((yield* service.getSnapshot).usageLimits, quota(90));
-        assert.deepStrictEqual((yield* service.refreshUsageLimits!).usageLimits, quota(70));
+        assert.deepStrictEqual(
+          (yield* service.refreshUsageLimits!).snapshot.usageLimits,
+          quota(70),
+        );
         probedQuota = quota(95);
         assert.deepStrictEqual((yield* service.refresh).usageLimits, quota(95));
       }),

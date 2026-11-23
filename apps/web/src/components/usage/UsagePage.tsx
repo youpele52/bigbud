@@ -168,7 +168,7 @@ export function UsagePage() {
             })}
           </div>
         </section>
-        <UsageSubscriptionLimits limits={subscriptionLimits} loading={providersLoading} />
+        <UsageSubscriptionLimits visible limits={subscriptionLimits} loading={providersLoading} />
         {displaySummary ? (
           <section className="mt-8 space-y-4 text-xs text-muted-foreground">
             <UsageAccountingFooter summary={displaySummary} />

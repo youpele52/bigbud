@@ -70,9 +70,7 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
     [WS_METHODS.serverRefreshUsageLimits]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverRefreshUsageLimits,
-        context.providerRegistry.refreshUsageLimits.pipe(
-          Effect.map((providers) => ({ providers })),
-        ),
+        context.providerRegistry.refreshUsageLimits,
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>

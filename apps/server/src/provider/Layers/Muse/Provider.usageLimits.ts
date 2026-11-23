@@ -1,7 +1,7 @@
 import type { MuseSettings } from "@bigbud/contracts";
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 
-import { usageLimitsStatus } from "../../providerUsageLimits.ts";
+import { usageLimitsStatus, usageRecord } from "../../providerUsageLimits.ts";
 import { runProcess } from "../../../utils/processRunner.ts";
 import type { MuseHostFactory, MuseTransport } from "./Client.ts";
 import { resolveMuseLaunch } from "./Client.platform.ts";
@@ -77,7 +77,20 @@ export async function readMuseUsageLimits(
     const observed =
       (await readFromHost(input)) ??
       (input.observations ?? museUsageObservations).latest(now(), MUSE_OBSERVATION_MAX_AGE_MS);
-    if (observed !== undefined) return normalizeMuseUsage(observed, checkedAt);
+    if (observed !== undefined) {
+      const limits = normalizeMuseUsage(observed, checkedAt);
+      const observedAt = usageRecord(observed).observedAtMs;
+      if (
+        limits.status === "available" &&
+        typeof observedAt === "number" &&
+        Number.isFinite(observedAt) &&
+        observedAt >= 0 &&
+        observedAt <= now()
+      ) {
+        return { ...limits, lastSuccessfulAt: new Date(observedAt).toISOString() };
+      }
+      return limits;
+    }
 
     const report = (await (input.cli ?? runMuseUsageCli)(input.settings.binaryPath)) as {
       readonly allowance?: unknown;
@@ -87,7 +100,7 @@ export async function readMuseUsageLimits(
       // no_allowance, api_key, not signed in, server_sent_no_usage: no windows to show.
       return usageLimitsStatus(MUSE_USAGE_SOURCE, checkedAt, "unavailable");
     }
-    return normalizeMuseUsage(report.allowance, checkedAt);
+    return normalizeMuseUsage(report.allowance, new Date(now()).toISOString());
   } catch {
     return usageLimitsStatus(MUSE_USAGE_SOURCE, checkedAt, "error");
   }
