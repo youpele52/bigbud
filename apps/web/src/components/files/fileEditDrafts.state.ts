@@ -19,6 +19,8 @@ export interface FileEditDraft {
   readonly retryAllowed: boolean;
   readonly verificationEpoch: number;
   readonly needsVerification: boolean;
+  /** Remote targets: "saved" means the host acknowledged the write. */
+  readonly remote: boolean;
 }
 
 export interface FileEditAttempt {
@@ -42,14 +44,24 @@ export interface DraftEntry {
   editingCount: number;
   disk: { contents: string; hash: string };
   failure?: FileEditAttempt;
+  /** Set on Connect: the next verified read resumes the paused autosave. */
+  resumeAfterRead?: boolean;
 }
 
 export const fileEditEntries = new Map<string, DraftEntry>();
 export const fileEditListeners = new Map<string, Set<() => void>>();
 
+let afterDraftUpdate: ((entry: DraftEntry) => void) | null = null;
+
+/** Lets the persistence module observe draft changes without a circular import. */
+export function onFileEditDraftUpdated(listener: (entry: DraftEntry) => void): void {
+  afterDraftUpdate = listener;
+}
+
 /** Unresolved attempts are retired explicitly, never merely by displaying matching bytes. */
 export function updateFileEditDraft(entry: DraftEntry, draft: FileEditDraft): void {
   entry.draft = draft;
+  afterDraftUpdate?.(entry);
   for (const listener of fileEditListeners.get(entry.key) ?? []) listener();
 }
 

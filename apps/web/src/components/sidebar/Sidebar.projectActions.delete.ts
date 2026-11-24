@@ -6,6 +6,7 @@ import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationComma
 import { useStore } from "../../stores/main";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { forgetFileEditDraftsForWorkspace } from "../files/fileEditDrafts";
 import { toastManager } from "../ui/toast";
 import { getFallbackThreadIdAfterDelete } from "./Sidebar.logic";
 import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
@@ -81,6 +82,14 @@ export function useSidebarProjectDeleteActions({
         commandId: newCommandId(),
         projectId,
       });
+      const removed = projects.find((entry) => entry.id === projectId);
+      if (removed?.cwd) {
+        const executionTargetId = resolveWorkspaceExecutionTargetId(removed);
+        forgetFileEditDraftsForWorkspace(
+          removed.cwd,
+          isRemoteExecutionTargetId(executionTargetId) ? executionTargetId : undefined,
+        );
+      }
 
       if (routeThreadId && deletedThreadIds.has(routeThreadId)) {
         if (fallbackThreadId) {
@@ -109,6 +118,7 @@ export function useSidebarProjectDeleteActions({
     appSettings.sidebarThreadSortOrder,
     navigate,
     pendingProjectDeleteConfirmation,
+    projects,
     routeThreadId,
     threadIdsByProjectId,
   ]);

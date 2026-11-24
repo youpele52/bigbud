@@ -195,12 +195,16 @@ describe("Files panel text editing", () => {
         expectedSha256: hash,
       });
       await vi.waitFor(() =>
-        expect(document.querySelector('[role="status"] .sr-only')?.textContent).toBe("Saved"),
+        expect(document.querySelector('[role="status"] .sr-only')?.textContent).toBe(
+          "Saved to host",
+        ),
       );
       expect(document.querySelector('[role="status"]')?.classList.contains("text-success")).toBe(
         true,
       );
-      expect(document.querySelector('[role="status"] [aria-label="Saved"] svg')).not.toBeNull();
+      expect(
+        document.querySelector('[role="status"] [aria-label="Saved to host"] svg'),
+      ).not.toBeNull();
       const header = document.querySelector("[data-file-preview-header]")!;
       const navigation = header.firstElementChild!;
       const edit = header.querySelector('[aria-label="Preview file"]')!;
@@ -287,7 +291,7 @@ describe("Files panel text editing", () => {
       await vi.waitFor(() => expect(document.body.textContent).toContain("Refresh file"), {
         timeout: 5000,
       });
-      expect(document.body.textContent).not.toContain("Discard draft");
+      expect(document.body.textContent).not.toContain("Compare");
       mocks.read.mockResolvedValue({
         contents: "external",
         truncated: false,
@@ -301,18 +305,14 @@ describe("Files panel text editing", () => {
       [...document.querySelectorAll<HTMLButtonElement>("[data-file-preview-header] button")]
         .find((button) => button.getAttribute("aria-label") === "Preview file")!
         .click();
-      await vi.waitFor(() => expect(document.body.textContent).toContain("Discard draft"));
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-      try {
-        [...document.querySelectorAll<HTMLButtonElement>("[data-file-preview-header] button")]
-          .find((button) => button.textContent === "Discard draft")!
-          .click();
-        await vi.waitFor(() =>
-          expect(document.querySelector(".file-preview-code")?.textContent).toContain("external"),
-        );
-      } finally {
-        confirm.mockRestore();
-      }
+      await vi.waitFor(() => expect(document.body.textContent).toContain("Compare"));
+      await page.getByRole("button", { name: "Compare" }).click();
+      await vi.waitFor(() => expect(page.getByRole("dialog")).toBeVisible());
+      expect(page.getByRole("dialog").element().textContent).toContain("external");
+      await page.getByRole("button", { name: "Use disk version" }).click();
+      await vi.waitFor(() =>
+        expect(document.querySelector(".file-preview-code")?.textContent).toContain("external"),
+      );
     } finally {
       await mounted.unmount();
     }

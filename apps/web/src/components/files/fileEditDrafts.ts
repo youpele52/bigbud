@@ -1,3 +1,4 @@
+import { isLocalExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import {
   cancelFileEditTimer,
   fileEditEncoder,
@@ -8,6 +9,7 @@ import {
   type FileEditDraft,
 } from "./fileEditDrafts.state";
 import { scheduleFileEditSave as schedule } from "./fileEditDrafts.write";
+import { forgetStoredRemoteFileEditDrafts } from "./fileEditDrafts.persist";
 
 export { MAX_EDIT_BYTES, getFileEditReadEpoch } from "./fileEditDrafts.state";
 export type { FileEditDraft, DraftStatus } from "./fileEditDrafts.state";
@@ -93,6 +95,7 @@ export function observeFileEditRead(input: {
         retryAllowed: false,
         verificationEpoch: 0,
         needsVerification: false,
+        remote: !isLocalExecutionTargetId(input.executionTargetId),
       },
       timer: null,
       writing: false,
@@ -115,8 +118,20 @@ export function observeFileEditRead(input: {
   }
   entry.disk = { contents: input.contents, hash: input.sha256 };
   const verified = { ...entry.draft, needsVerification: false };
-  if (entry.failure?.disposition === "unknown") {
-    update(entry, { ...verified, status: "error", retryAllowed: false, diskVerified: false });
+  // An unknown save is resolved only by what this fresh read shows: the attempted bytes mean it
+  // landed (handled below); the original bytes mean a new guarded save is safe, because any late
+  // original write checks the same base hash and loses; anything else is a conflict.
+  if (entry.failure?.disposition === "unknown" && input.sha256 !== entry.failure.hash) {
+    const original = input.sha256 === entry.failure.baseHash;
+    update(entry, {
+      ...verified,
+      status: original ? "error" : "conflict",
+      retryAllowed: original,
+      diskVerified: !original,
+      message: original
+        ? "The previous save didn't reach the file. Retry is safe; your draft is retained."
+        : "File changed on disk while the save outcome was unknown. Your draft is retained; review before discarding it.",
+    });
     return;
   }
   if (
@@ -183,6 +198,11 @@ export function observeFileEditRead(input: {
     });
   } else if (entry.draft.needsVerification) {
     update(entry, verified);
+    // Reconnected after a pause and the host still has the base version: resume autosave.
+    if (entry.resumeAfterRead && entry.draft.status === "pending") {
+      delete entry.resumeAfterRead;
+      schedule(entry);
+    }
   }
 }
 
@@ -216,7 +236,8 @@ export function retryFileEditDraft(key: string) {
     entry.writing ||
     entry.draft.status !== "error" ||
     !entry.draft.retryAllowed ||
-    entry.failure?.disposition === "unknown"
+    // An unknown attempt becomes retryable only after a fresh read showed the original bytes.
+    (entry.failure?.disposition === "unknown" && entry.draft.needsVerification)
   )
     return;
   delete entry.failure;
@@ -231,8 +252,7 @@ export function discardConflictedFileEditDraft(key: string) {
     entry.writing ||
     entry.editingCount > 0 ||
     entry.draft.status !== "conflict" ||
-    !entry.draft.diskVerified ||
-    entry.failure?.disposition === "unknown"
+    !entry.draft.diskVerified
   )
     return;
   cancelFileEditTimer(entry);
@@ -249,6 +269,53 @@ export function discardConflictedFileEditDraft(key: string) {
     retryAllowed: false,
     needsVerification: false,
   });
+}
+
+/** The verified disk version a conflicted draft is compared against, or null. */
+export function getFileEditDiskVersion(key: string): { contents: string; hash: string } | null {
+  const entry = entries.get(key);
+  return entry?.draft.diskVerified ? { ...entry.disk } : null;
+}
+
+/**
+ * Keep mine: overwrite only the disk version the user was shown. The save is guarded by that
+ * version's hash, so a change made after the conflict appeared conflicts again instead.
+ */
+export function keepMineFileEditDraft(key: string, shownHash: string) {
+  const entry = entries.get(key);
+  if (
+    !entry ||
+    entry.writing ||
+    entry.draft.status !== "conflict" ||
+    !entry.draft.diskVerified ||
+    entry.draft.needsVerification ||
+    // A refresh moved the disk version after it was shown; the user must compare again.
+    entry.disk.hash !== shownHash
+  )
+    return;
+  delete entry.failure;
+  const status = entry.draft.contents === entry.disk.contents ? "saved" : "pending";
+  update(entry, {
+    ...entry.draft,
+    baseContents: entry.disk.contents,
+    baseHash: entry.disk.hash,
+    status,
+    message: null,
+    diskVerified: false,
+    retryAllowed: false,
+  });
+  if (status === "pending") schedule(entry);
+}
+
+/** A removed workspace takes its drafts with it, in memory and in storage. */
+export function forgetFileEditDraftsForWorkspace(cwd: string, executionTargetId?: string) {
+  for (const [key, entry] of entries) {
+    if (entry.cwd !== cwd || entry.executionTargetId !== executionTargetId) continue;
+    cancelFileEditTimer(entry);
+    entries.delete(key);
+    for (const listener of listeners.get(key) ?? []) listener();
+  }
+  if (executionTargetId) forgetStoredRemoteFileEditDrafts(cwd, executionTargetId);
 }
 
 export function trackFileEditSession(key: string): () => void {

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   changeFileEditDraft,
-  discardConflictedFileEditDraft,
   fileEditKey,
   getFileEditDraft,
   getFileEditReadEpoch,
@@ -36,20 +35,6 @@ async function failSave(input: ReturnType<typeof fixture>) {
 afterEach(() => write.mockReset());
 
 describe("file edit recovery", () => {
-  it.each(["old", "draft"])("never retries an unknown write after reading %s", async (contents) => {
-    write.mockRejectedValueOnce(new Error("Response lost"));
-    const input = fixture();
-    await failSave(input);
-    observeFileEditRead({ ...input, contents, sha256: contents === "old" ? baseHash : draftHash });
-    discardConflictedFileEditDraft(input.key);
-    expect(getFileEditDraft(input.key)?.contents).toBe("draft");
-    changeFileEditDraft(input.key, "newer draft");
-    retryFileEditDraft(input.key);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    expect(write).toHaveBeenCalledTimes(1);
-    expect(getFileEditDraft(input.key)).toMatchObject({ contents: "newer draft", status: "error" });
-  });
-
   it("uses a new identity after a terminal failure and fresh verification", async () => {
     write
       .mockRejectedValueOnce(Object.assign(new Error("Denied"), { writeDisposition: "terminal" }))
@@ -135,16 +120,12 @@ describe("file edit recovery", () => {
     expect(write.mock.calls[1]![0].operationId).not.toBe(write.mock.calls[0]![0].operationId);
   });
 
-  it("does not falsely announce an unknown write as saved when its bytes appear", async () => {
+  it("settles an unknown write only from a fresh read showing its exact bytes", async () => {
     write.mockRejectedValueOnce(new Error("Response lost"));
     const input = fixture();
     await failSave(input);
     observeFileEditRead({ ...input, contents: "draft", sha256: draftHash });
-    expect(getFileEditDraft(input.key)).toMatchObject({
-      contents: "draft",
-      status: "error",
-      retryAllowed: false,
-    });
+    expect(getFileEditDraft(input.key)).toMatchObject({ contents: "draft", status: "saved" });
     retryFileEditDraft(input.key);
     expect(write).toHaveBeenCalledOnce();
   });

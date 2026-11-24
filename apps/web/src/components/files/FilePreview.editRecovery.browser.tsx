@@ -36,23 +36,19 @@ it("keeps an open draft visible after disk grows and returns to a read-only larg
     expect(page.getByRole("textbox", { name: "large-disk.txt" })).toBeVisible();
     expect(document.querySelector("diffs-container")?.shadowRoot?.textContent).toContain("small!");
     document.querySelector<HTMLButtonElement>('[aria-label="Preview file"]')!.click();
-    await vi.waitFor(() => expect(document.body.textContent).toContain("Discard draft"));
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Compare"));
     expect(document.querySelector(".file-preview-code")?.textContent).toContain("small!");
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    try {
-      (page.getByRole("button", { name: "Discard draft" }).element() as HTMLButtonElement).click();
-      await vi.waitFor(() =>
-        expect(document.querySelector(".file-preview-code")?.textContent).toContain(
-          "external large file",
-        ),
-      );
-      expect(document.querySelector('[aria-label="Edit file"]')).toBeNull();
-      expect(document.querySelector("[data-file-preview-editor]")).toBeNull();
-      expect(document.querySelector('[role="alert"]')).toBeNull();
-      expect(mocks.write).toHaveBeenCalledOnce();
-    } finally {
-      confirm.mockRestore();
-    }
+    await page.getByRole("button", { name: "Compare" }).click();
+    await page.getByRole("button", { name: "Use disk version" }).click();
+    await vi.waitFor(() =>
+      expect(document.querySelector(".file-preview-code")?.textContent).toContain(
+        "external large file",
+      ),
+    );
+    expect(document.querySelector('[aria-label="Edit file"]')).toBeNull();
+    expect(document.querySelector("[data-file-preview-editor]")).toBeNull();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(mocks.write).toHaveBeenCalledOnce();
   } finally {
     await mounted.unmount();
   }

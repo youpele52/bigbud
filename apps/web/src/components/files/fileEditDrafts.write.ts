@@ -1,4 +1,5 @@
 import { readNativeApi } from "../../rpc/nativeApi";
+import { pauseSaveWhileDisconnected } from "./fileEditDrafts.connection";
 import {
   cancelFileEditTimer,
   fileEditEncoder,
@@ -32,6 +33,7 @@ async function sha256(contents: string): Promise<string> {
 
 async function save(entry: DraftEntry): Promise<void> {
   if (entry.writing || entry.failure || entry.draft.status !== "pending") return;
+  if (pauseSaveWhileDisconnected(entry)) return;
   const { contents, baseHash } = entry.draft;
   const operationId = `file-edit-${crypto.randomUUID()}`;
   const revision = entry.revision;
@@ -62,7 +64,7 @@ async function save(entry: DraftEntry): Promise<void> {
     if (!api) throw new Error("Connection unavailable.");
     nextHash = await sha256(contents);
     dispatched = true;
-    await api.projects.writeFile({
+    const result = await api.projects.writeFile({
       cwd: entry.cwd,
       relativePath: entry.relativePath,
       ...(entry.executionTargetId ? { executionTargetId: entry.executionTargetId } : {}),
@@ -71,7 +73,24 @@ async function save(entry: DraftEntry): Promise<void> {
       operationId,
     });
     const newer = entry.revision !== revision;
+    // A backend that reports different bytes than were sent must be re-read before trusting it.
+    const reported = result?.resultSha256;
+    const mismatch = reported !== undefined && reported !== nextHash;
     entry.writing = false;
+    if (mismatch) {
+      // Never show "saved" for bytes the host did not confirm; a fresh read settles it.
+      entry.failure = { contents, baseHash, hash: nextHash, operationId, disposition: "terminal" };
+      update(entry, {
+        ...entry.draft,
+        status: "error",
+        retryAllowed: false,
+        diskVerified: false,
+        needsVerification: true,
+        verificationEpoch: entry.draft.verificationEpoch + 1,
+        message: "The host reported different bytes than were sent. Checking the file on disk.",
+      });
+      return;
+    }
     update(entry, {
       ...entry.draft,
       baseContents: contents,
@@ -105,7 +124,9 @@ async function save(entry: DraftEntry): Promise<void> {
           ? `${detail}. Save outcome unknown; draft retained. Further saves are blocked because the original write may still finish.`
           : conflict
             ? "File changed on disk. Draft retained; refresh to inspect the latest version before resolving."
-            : `${detail}. Draft retained; verify the file before retrying.`,
+            : disposition === "not-dispatched" && entry.draft.remote
+              ? "Saves paused: the host isn't reachable. Your draft is retained; retry once connected."
+              : `${detail}. Draft retained; verify the file before retrying.`,
     });
   } finally {
     entry.writing = false;

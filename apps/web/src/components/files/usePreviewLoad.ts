@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ProjectFileEditCapability } from "@bigbud/contracts/workspace/project";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { getFileEditReadEpoch } from "./fileEditDrafts.state";
 
@@ -10,6 +11,8 @@ interface PreviewState {
   truncated: boolean;
   sizeBytes: number | null;
   sha256: string | null;
+  /** Server-reported editing support; null when unknown (older server or failed read). */
+  edit: ProjectFileEditCapability | null;
   error: string | null;
   refreshError: string | null;
   readVersion: number;
@@ -31,6 +34,7 @@ const INITIAL_STATE: PreviewState = {
   truncated: false,
   sizeBytes: null,
   sha256: null,
+  edit: null,
   error: null,
   refreshError: null,
   readVersion: 0,
@@ -86,6 +90,7 @@ export function usePreviewLoad({
             truncated: false,
             sizeBytes: null,
             sha256: null,
+            edit: null,
             error: "Native API not found.",
             refreshError: null,
             readVersion: 0,
@@ -115,6 +120,7 @@ export function usePreviewLoad({
               truncated: result.truncated,
               sizeBytes: result.sizeBytes ?? null,
               sha256: result.sha256 ?? null,
+              edit: result.edit ?? null,
               error: null,
               refreshError: null,
               readVersion: requestId,
@@ -148,6 +154,7 @@ export function usePreviewLoad({
               truncated: false,
               sizeBytes: null,
               sha256: null,
+              edit: null,
               error: message,
               refreshError: null,
               readVersion: 0,

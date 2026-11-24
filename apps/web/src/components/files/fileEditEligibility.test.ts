@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { canEditFilePreview, canReconcileFilePreview } from "./fileEditEligibility";
+import {
+  canEditFilePreview,
+  canReconcileFilePreview,
+  fileEditReadOnlyReason,
+} from "./fileEditEligibility";
 
 const hash = "a".repeat(64);
 
@@ -43,5 +47,39 @@ describe("file preview edit eligibility", () => {
     expect(canEditFilePreview(input)).toBe(false);
     expect(canReconcileFilePreview({ ...input, truncated: true })).toBe(false);
     expect(canReconcileFilePreview({ ...input, sha256: null })).toBe(false);
+  });
+
+  it("follows the server-reported capability over the target ID", () => {
+    const preview = { sha256: hash, sizeBytes: 5, truncated: false };
+    expect(
+      canEditFilePreview({
+        ...preview,
+        executionTargetId: "ssh:host=dev&transport=direct-ssh",
+        edit: { mode: "guarded", maxBytes: 512 * 1024 },
+      }),
+    ).toBe(true);
+    expect(
+      canEditFilePreview({
+        ...preview,
+        executionTargetId: "local",
+        edit: { mode: "readOnly", maxBytes: 0, reason: "unsupportedTarget" },
+      }),
+    ).toBe(false);
+    expect(
+      canEditFilePreview({ ...preview, sizeBytes: 10, edit: { mode: "guarded", maxBytes: 5 } }),
+    ).toBe(false);
+  });
+
+  it("explains read-only files from the capability, falling back to direct SSH", () => {
+    expect(
+      fileEditReadOnlyReason({
+        edit: { mode: "readOnly", maxBytes: 0, reason: "directSshPendingOwner" },
+      }),
+    ).toBe("directSshPendingOwner");
+    expect(fileEditReadOnlyReason({ edit: { mode: "guarded", maxBytes: 1 } })).toBeNull();
+    expect(fileEditReadOnlyReason({ executionTargetId: "ssh:host=dev&transport=direct-ssh" })).toBe(
+      "directSshPendingOwner",
+    );
+    expect(fileEditReadOnlyReason({ executionTargetId: "local" })).toBeNull();
   });
 });

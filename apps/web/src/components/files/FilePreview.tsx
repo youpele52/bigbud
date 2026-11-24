@@ -100,7 +100,7 @@ export const FilePreview = memo(function FilePreview({
   });
 
   const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
-  const { draftKey, draft, eligible } = useFileEditDraft({
+  const { draftKey, draft, eligible, readOnlyReason } = useFileEditDraft({
     cwd,
     relativePath,
     executionTargetId,
@@ -321,7 +321,7 @@ export const FilePreview = memo(function FilePreview({
               draft={draft}
               draftKey={draftKey}
               editing={editing}
-              executionTargetId={executionTargetId}
+              readOnlyReason={readOnlyReason}
               onRefresh={refreshPreview}
             />
             {isMarkdownFile && !editing ? (
