@@ -35,10 +35,16 @@ export function requestTerminalClose(input: {
     input.close();
     return;
   }
+  const label = terminalPaneLabel(
+    useTerminalStateStore.getState(),
+    input.threadId,
+    input.terminalId,
+  );
   useTerminalCloseConfirmationStore.getState().request({
-    threadId: input.threadId,
-    terminalId: input.terminalId,
-    label: terminalPaneLabel(useTerminalStateStore.getState(), input.threadId, input.terminalId),
+    title: "Close running terminal?",
+    description: `A process is still running in “${label}”. Closing stops it and deletes its history.`,
+    confirmLabel: "Close terminal",
+    watch: { threadId: input.threadId, terminalId: input.terminalId },
     close: input.close,
   });
 }

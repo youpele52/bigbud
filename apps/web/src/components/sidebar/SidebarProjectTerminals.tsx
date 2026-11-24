@@ -7,6 +7,7 @@ import { revealExistingTerminal } from "../terminal/revealTerminal";
 import { Button } from "../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import {
+  closeAllProjectTerminals,
   closeIdleProjectTerminals,
   closeProjectTerminal,
   keepProjectTerminalOpen,
@@ -84,7 +85,8 @@ export function SidebarProjectTerminals({
   const rows = toRows(threads);
   const otherRows = toRows(otherThreads);
   // One footer action for every idle row the popover lists, in either section.
-  const allIdle = idleProjectTerminals([...rows, ...otherRows]);
+  const allRows = [...rows, ...otherRows];
+  const allIdle = idleProjectTerminals(allRows);
   const target = (row: ProjectTerminalRow) => ({
     threadId: row.threadId,
     terminalId: row.terminalId,
@@ -126,6 +128,8 @@ export function SidebarProjectTerminals({
         side="right"
         align="start"
         className="w-80 max-h-96"
+        // Focus the first row only when opened from the keyboard; a click shows no focus ring.
+        initialFocus={(openType) => openType === "keyboard"}
         data-thread-selection-safe
         onPointerDown={stopHeader}
         onClick={stopHeader}
@@ -148,8 +152,22 @@ export function SidebarProjectTerminals({
               {otherRows.map((row) => renderRow(row, true))}
             </>
           ) : null}
-          {allIdle.length > 0 ? (
-            <div className="mt-1 flex justify-end border-t border-border pt-2">
+          <div className="mt-1 flex items-center justify-end gap-2 border-t border-border pt-2">
+            <Button
+              size="xs"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => {
+                setOpen(false);
+                closeAllProjectTerminals(
+                  allRows.map(target),
+                  allRows.filter((row) => row.state === "busy").map((row) => row.title),
+                );
+              }}
+            >
+              Close all
+            </Button>
+            {allIdle.length > 0 ? (
               <Button
                 size="xs"
                 variant="outline"
@@ -157,8 +175,8 @@ export function SidebarProjectTerminals({
               >
                 Close idle ({allIdle.length})
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </PopoverPopup>
     </Popover>

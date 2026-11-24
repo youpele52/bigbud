@@ -48,7 +48,8 @@ describe("terminal close guard", () => {
     requestTerminalClose({ threadId: thread, terminalId: "term-1", close });
     expect(close).not.toHaveBeenCalled();
     const pending = useTerminalCloseConfirmationStore.getState().pending;
-    expect(pending).toMatchObject({ threadId: thread, terminalId: "term-1", label: "Dev server" });
+    expect(pending).toMatchObject({ watch: { threadId: thread, terminalId: "term-1" } });
+    expect(pending!.description).toContain("“Dev server”");
     pending!.close();
     expect(close).toHaveBeenCalledOnce();
   });

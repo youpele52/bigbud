@@ -1,11 +1,12 @@
 import { create } from "zustand";
 
-/** A close of a busy terminal waiting for the user's answer. */
+/** A close waiting for the user's answer: one busy terminal, or a batch ("Close all"). */
 export interface PendingTerminalClose {
-  readonly threadId: string;
-  readonly terminalId: string;
-  /** The terminal's tab label, shown in the dialog. */
-  readonly label: string;
+  readonly title: string;
+  readonly description: string;
+  readonly confirmLabel: string;
+  /** A single terminal whose exit makes the question moot; null for a batch. */
+  readonly watch: { readonly threadId: string; readonly terminalId: string } | null;
   readonly close: () => void;
 }
 

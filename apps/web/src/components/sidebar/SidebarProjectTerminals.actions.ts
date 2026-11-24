@@ -4,6 +4,8 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { useTerminalStateStore } from "../../stores/terminal";
 import { isTerminalBusy, requestTerminalClose } from "../terminal/terminalCloseGuard";
 import { closeTerminalConfirmed } from "../terminal/terminalLifecycle.operations";
+import { useTerminalCloseConfirmationStore } from "../../stores/terminal/terminalCloseConfirmation.store";
+import { useTerminalLivenessStore } from "../../stores/terminal/terminalLiveness.store";
 import { toastManager } from "../ui/toast";
 
 interface TerminalTarget {
@@ -46,6 +48,35 @@ export function closeProjectTerminal(target: TerminalTarget): void {
 export function closeIdleProjectTerminals(targets: ReadonlyArray<TerminalTarget>): void {
   for (const target of targets)
     if (!isTerminalBusy(target.threadId, target.terminalId)) closeNow(target);
+}
+
+/**
+ * "Close all": always asks once for the whole batch, naming the terminals still running, then
+ * closes each without a per-terminal prompt.
+ */
+export function closeAllProjectTerminals(
+  targets: ReadonlyArray<TerminalTarget>,
+  busyLabels: ReadonlyArray<string>,
+): void {
+  if (targets.length === 0) return;
+  const count = targets.length;
+  const noun = count === 1 ? "terminal" : "terminals";
+  const running =
+    busyLabels.length === 0
+      ? "None are running a process."
+      : `${busyLabels.length} ${busyLabels.length === 1 ? "is" : "are"} still running (${busyLabels.join(", ")}).`;
+  useTerminalCloseConfirmationStore.getState().request({
+    title: `Close all ${count} ${noun}?`,
+    description: `${running} Closing stops them and deletes their history.`,
+    confirmLabel: "Close all",
+    watch: null,
+    close: () => {
+      // Skip terminals that ended while the dialog was open; there is nothing left to close.
+      const live = useTerminalLivenessStore.getState().byThreadId;
+      for (const target of targets)
+        if (live[target.threadId]?.[target.terminalId] !== undefined) closeNow(target);
+    },
+  });
 }
 
 /** Cancel a pending idle close, as the idle-warning toast's "Keep open" does. */
