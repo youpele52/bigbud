@@ -74,6 +74,8 @@ describe("remote workspace runtime adapter", () => {
     expect(read.contents).toBe("remote contents");
     expect(read.sizeBytes).toBe(15);
     expect(read.sha256).toBe(createHash("sha256").update("remote contents").digest("hex"));
+    // The fake agent advertises no capabilities, so it cannot save: read only.
+    expect(read.edit).toEqual({ mode: "readOnly", maxBytes: 0, reason: "agentTooOld" });
 
     const written = await Effect.runPromise(
       runtime.files.writeFile({
@@ -248,5 +250,64 @@ describe("remote workspace runtime adapter", () => {
     );
     expect(error).toMatchObject({ writeDisposition: "not-dispatched" });
     expect(requests).toHaveLength(0);
+  });
+});
+
+describe("remote workspace guarded writes", () => {
+  const write = (client: RemoteAgentWorkspaceClient) =>
+    makeRemoteWorkspaceRuntime({ resolve: async () => client }).files.writeFile({
+      executionTargetId: "ssh:example",
+      cwd: "/remote/project",
+      relativePath: "README.md",
+      contents: "updated",
+      expectedSha256: "a".repeat(64),
+    });
+
+  it("returns the hash a workspace.write 1.1 agent reports and omits it for older agents", async () => {
+    const reporting = fakeClient();
+    reporting.writeFile = async () => ({
+      ...(await fakeClient().writeFile({} as never)),
+      currentSha256: "c".repeat(64),
+    });
+    expect(await Effect.runPromise(write(reporting))).toEqual({
+      relativePath: "README.md",
+      resultSha256: "c".repeat(64),
+    });
+    expect(await Effect.runPromise(write(fakeClient()))).toEqual({ relativePath: "README.md" });
+  });
+
+  it("maps an agent WRITE_CONFLICT to a typed conflict carrying the disk hash", async () => {
+    const client = fakeClient();
+    client.writeFile = async () => {
+      throw new RemoteAgentWorkspaceError(
+        "WRITE_CONFLICT",
+        "workspace file changed since it was read",
+        "terminal",
+        "d".repeat(64),
+      );
+    };
+    const error = await Effect.runPromise(Effect.flip(write(client)));
+    expect(error).toMatchObject({
+      conflict: true,
+      currentSha256: "d".repeat(64),
+      writeDisposition: "terminal",
+    });
+  });
+});
+
+describe("remote workspace edit capability", () => {
+  it("reports guarded saves only when the agent advertises workspace.write", async () => {
+    const client = fakeClient();
+    Object.assign(client, {
+      connection: { supportsCapability: (name: string) => name === "workspace.write" },
+    });
+    const read = await Effect.runPromise(
+      makeRemoteWorkspaceRuntime({ resolve: async () => client }).files.readFilePreview({
+        executionTargetId: "ssh:example",
+        cwd: "/remote/project",
+        relativePath: "README.md",
+      }),
+    );
+    expect(read.edit).toEqual({ mode: "guarded", maxBytes: 512 * 1024 });
   });
 });

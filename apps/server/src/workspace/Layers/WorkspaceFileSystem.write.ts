@@ -1,15 +1,4 @@
-import { createHash } from "node:crypto";
-import {
-  chmod,
-  lstat,
-  readFile as readFileBytes,
-  realpath,
-  rename,
-  stat,
-  unlink,
-  writeFile as writeFileBytes,
-} from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { writeFile as writeFileBytes } from "node:fs/promises";
 
 import { Effect, FileSystem, Path, Schema, Semaphore } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -27,52 +16,15 @@ import {
   WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
 } from "../Services/WorkspaceFileSystem.ts";
 import type { WorkspacePathsShape } from "../Services/WorkspacePaths.ts";
-
-async function currentSha256(absolutePath: string): Promise<string | undefined> {
-  try {
-    return createHash("sha256")
-      .update(await readFileBytes(absolutePath))
-      .digest("hex");
-  } catch (cause) {
-    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") return undefined;
-    throw cause;
-  }
-}
+import {
+  ConditionalWriteConflict,
+  ConditionalWriteOutcomeUnknown,
+  currentSha256,
+  replaceConditionalFile,
+} from "./WorkspaceFileSystem.write.conditional.ts";
 
 function isAlreadyExists(cause: unknown): boolean {
   return cause instanceof Error && "code" in cause && cause.code === "EEXIST";
-}
-
-async function replaceConditionalFile(
-  workspaceRoot: string,
-  absolutePath: string,
-  contents: string,
-): Promise<void> {
-  const root = await realpath(workspaceRoot);
-  const resolved = await realpath(absolutePath);
-  const withinRoot = relative(root, resolved);
-  if (
-    !withinRoot ||
-    withinRoot === ".." ||
-    withinRoot.startsWith(`..${sep}`) ||
-    isAbsolute(withinRoot)
-  ) {
-    throw new Error("Conditional editing is limited to files inside the workspace root.");
-  }
-  if ((await lstat(absolutePath)).isSymbolicLink()) {
-    throw new Error("Conditional editing of symbolic links is not supported.");
-  }
-  const temporaryPath = join(dirname(absolutePath), `.bigbud-edit-${crypto.randomUUID()}`);
-  const original = await stat(absolutePath);
-  try {
-    await writeFileBytes(temporaryPath, contents, { flag: "wx", mode: original.mode & 0o777 });
-    await chmod(temporaryPath, original.mode & 0o777);
-    await rename(temporaryPath, absolutePath);
-  } finally {
-    await unlink(temporaryPath).catch((cause: unknown) => {
-      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) throw cause;
-    });
-  }
 }
 
 export function makeWorkspaceWriteFile(input: {
@@ -182,6 +134,8 @@ export function makeWorkspaceWriteFile(input: {
           operation: "workspaceFileSystem.writeFileExpectedHash",
           detail: `Workspace file changed since it was read (expected ${value.expectedSha256}, actual ${actualSha256 ?? "missing"}).`,
           writeDisposition: "not-dispatched",
+          conflict: true,
+          ...(actualSha256 ? { currentSha256: actualSha256 } : {}),
         });
       }
     }
@@ -228,7 +182,10 @@ export function makeWorkspaceWriteFile(input: {
                     writeDisposition: "terminal",
                     cause,
                   })
-                : localWriteError(cause, "terminal");
+                : localWriteError(
+                    cause,
+                    cause instanceof ConditionalWriteOutcomeUnknown ? "unknown" : "terminal",
+                  );
             },
           ),
         catch: (cause) =>
@@ -237,30 +194,51 @@ export function makeWorkspaceWriteFile(input: {
       yield* input.workspaceEntries.invalidate(value.cwd);
       return { relativePath: target.relativePath };
     }
-    yield* value.expectedSha256 !== undefined
-      ? Effect.tryPromise({
+    const expectedSha256 = value.expectedSha256;
+    if (expectedSha256 !== undefined) {
+      // Uninterruptible: the per-path permit must be held until the filesystem work settles, or a
+      // retry after an unknown outcome could race the still-running original.
+      const written = yield* Effect.uninterruptible(
+        Effect.tryPromise({
           // Only an actual rejection of the filesystem promise proves the local write settled.
           try: () =>
-            replaceConditionalFile(value.cwd, target.absolutePath, value.contents).catch(
-              (cause: unknown) => {
-                throw localWriteError(cause, "terminal");
-              },
-            ),
+            replaceConditionalFile(
+              value.cwd,
+              target.absolutePath,
+              value.contents,
+              expectedSha256,
+            ).catch((cause: unknown) => {
+              throw cause instanceof ConditionalWriteConflict
+                ? new WorkspaceFileSystemError({
+                    cwd: value.cwd,
+                    relativePath: value.relativePath,
+                    operation: "workspaceFileSystem.writeFileExpectedHash",
+                    detail: `Workspace file changed since it was read (expected ${expectedSha256}, actual ${cause.actualSha256 ?? "missing"}).`,
+                    writeDisposition: "not-dispatched",
+                    conflict: true,
+                    ...(cause.actualSha256 ? { currentSha256: cause.actualSha256 } : {}),
+                  })
+                : localWriteError(cause, "terminal");
+            }),
           catch: (cause) =>
             Schema.is(WorkspaceFileSystemError)(cause) ? cause : localWriteError(cause),
-        })
-      : input.fileSystem.writeFileString(target.absolutePath, value.contents).pipe(
-          Effect.mapError(
-            (cause) =>
-              new WorkspaceFileSystemError({
-                cwd: value.cwd,
-                relativePath: value.relativePath,
-                operation: "workspaceFileSystem.writeFile",
-                detail: cause.message,
-                cause,
-              }),
-          ),
-        );
+        }),
+      );
+      yield* input.workspaceEntries.invalidate(value.cwd);
+      return { relativePath: target.relativePath, resultSha256: written.resultSha256 };
+    }
+    yield* input.fileSystem.writeFileString(target.absolutePath, value.contents).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WorkspaceFileSystemError({
+            cwd: value.cwd,
+            relativePath: value.relativePath,
+            operation: "workspaceFileSystem.writeFile",
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    );
     yield* input.workspaceEntries.invalidate(value.cwd);
     return { relativePath: target.relativePath };
   });
