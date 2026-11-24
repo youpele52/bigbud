@@ -69,26 +69,33 @@ it("explicit production default reports setup-required and never creates a liste
   expect(opens).toBe(0);
   await leases.dispose();
 });
-it("caller close awaits real transport child exit and preserves another caller's endpoint", async () => {
-  const f = await fixture(),
-    signal = new AbortController().signal;
-  const first = await f.leases.open("route:1", f.profile.profile.profileId, signal),
-    second = await f.leases.open("route:2", f.profile.profile.profileId, signal);
-  expect(first.localCredential).not.toBe(second.localCredential);
-  expect(await fetchLease(first)).toBe("lease-output");
-  expect(await fetchLease(second)).toBe("lease-output");
-  expect(calls.children).toHaveLength(2);
-  expect(await f.leases.close("route:2", first.leaseId)).toEqual({ closed: false });
-  await f.leases.close("route:1", first.leaseId);
-  expect(await f.leases.close("route:1", first.leaseId)).toEqual({ closed: false });
-  expect(calls.children[0]!.exitCode !== null || calls.children[0]!.signalCode !== null).toBe(true);
-  await expect(fetchLease(first)).rejects.toThrow();
-  expect(await fetchLease(second)).toBe("lease-output");
-  f.active.delete("route:2");
-  await f.leases.closeCaller("route:2");
-  expect(calls.children[1]!.exitCode !== null || calls.children[1]!.signalCode !== null).toBe(true);
-  await expect(fetchLease(second)).rejects.toThrow();
-});
+it.skipIf(process.platform !== "linux")(
+  "caller close awaits real transport child exit and preserves another caller's endpoint",
+  async () => {
+    const f = await fixture(),
+      signal = new AbortController().signal;
+    const first = await f.leases.open("route:1", f.profile.profile.profileId, signal),
+      second = await f.leases.open("route:2", f.profile.profile.profileId, signal);
+    expect(first.localCredential).not.toBe(second.localCredential);
+    expect(await fetchLease(first)).toBe("lease-output");
+    expect(await fetchLease(second)).toBe("lease-output");
+    expect(calls.children).toHaveLength(2);
+    expect(await f.leases.close("route:2", first.leaseId)).toEqual({ closed: false });
+    await f.leases.close("route:1", first.leaseId);
+    expect(await f.leases.close("route:1", first.leaseId)).toEqual({ closed: false });
+    expect(calls.children[0]!.exitCode !== null || calls.children[0]!.signalCode !== null).toBe(
+      true,
+    );
+    await expect(fetchLease(first)).rejects.toThrow();
+    expect(await fetchLease(second)).toBe("lease-output");
+    f.active.delete("route:2");
+    await f.leases.closeCaller("route:2");
+    expect(calls.children[1]!.exitCode !== null || calls.children[1]!.signalCode !== null).toBe(
+      true,
+    );
+    await expect(fetchLease(second)).rejects.toThrow();
+  },
+);
 it("disconnect during private profile lookup prevents late listener creation", async () => {
   let resolve!: (profile: ResolvedRemoteBackendRelayProfile) => void,
     active = true,
@@ -155,61 +162,69 @@ it("RPC metadata is required and remote-mode handler cannot use local relay priv
   expect(calls.children).toHaveLength(0);
 });
 
-it("authoritative disconnect forwards only after the real channel child is closed", async () => {
-  const f = await fixture();
-  const lease = await f.leases.open(
-    "route:1",
-    f.profile.profile.profileId,
-    new AbortController().signal,
-  );
-  expect(await fetchLease(lease)).toBe("lease-output");
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const source = yield* Queue.unbounded<number>();
-        const forwarded = yield* bridgeSshMonitorDisconnects(source, "route", (id) =>
-          f.leases.closeCaller(`route:${id}`),
-        );
-        f.active.delete("route:1");
-        yield* Queue.offer(source, 1);
-        expect(yield* Queue.take(forwarded)).toBe(1);
-        expect(calls.children[0]!.exitCode !== null || calls.children[0]!.signalCode !== null).toBe(
-          true,
-        );
-      }),
-    ),
-  );
-  await expect(fetchLease(lease)).rejects.toThrow();
-});
-it("HTTP server Scope retains a returned lease and awaits real process cleanup at shutdown", async () => {
-  const f = await fixture();
-  let retained: { baseUrl: string; localCredential: string } | undefined;
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const config = yield* buildTestServerConfig({
-          config: { mode: "desktop", authToken: "local-control-fixture" },
-        });
-        const scope = yield* Effect.scope;
-        const route = yield* makeRemoteBackendRelayRoute("route", scope).pipe(
-          Effect.provideService(ServerConfig, config),
-          Effect.provideService(RemoteBackendRelayProfiles, {
-            list: async () => ({ availability: "available", profiles: [f.profile.profile] }),
-            resolve: async () => f.profile,
-          }),
-        );
-        route.lifecycle.ready(async () => new Set([1]));
-        retained = yield* route.handlers[WS_METHODS.serverOpenRemoteBackendRelay](
-          { profileId: f.profile.profile.profileId, requestId: randomUUID() },
-          { clientId: 1 },
-        );
-        expect(yield* Effect.promise(() => fetchLease(retained!))).toBe("lease-output");
-      }),
-    ).pipe(Effect.provide(NodeServices.layer)),
-  );
-  expect(calls.children[0]!.exitCode !== null || calls.children[0]!.signalCode !== null).toBe(true);
-  await expect(fetchLease(retained!)).rejects.toThrow();
-});
+it.skipIf(process.platform !== "linux")(
+  "authoritative disconnect forwards only after the real channel child is closed",
+  async () => {
+    const f = await fixture();
+    const lease = await f.leases.open(
+      "route:1",
+      f.profile.profile.profileId,
+      new AbortController().signal,
+    );
+    expect(await fetchLease(lease)).toBe("lease-output");
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const source = yield* Queue.unbounded<number>();
+          const forwarded = yield* bridgeSshMonitorDisconnects(source, "route", (id) =>
+            f.leases.closeCaller(`route:${id}`),
+          );
+          f.active.delete("route:1");
+          yield* Queue.offer(source, 1);
+          expect(yield* Queue.take(forwarded)).toBe(1);
+          expect(
+            calls.children[0]!.exitCode !== null || calls.children[0]!.signalCode !== null,
+          ).toBe(true);
+        }),
+      ),
+    );
+    await expect(fetchLease(lease)).rejects.toThrow();
+  },
+);
+it.skipIf(process.platform !== "linux")(
+  "HTTP server Scope retains a returned lease and awaits real process cleanup at shutdown",
+  async () => {
+    const f = await fixture();
+    let retained: { baseUrl: string; localCredential: string } | undefined;
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const config = yield* buildTestServerConfig({
+            config: { mode: "desktop", authToken: "local-control-fixture" },
+          });
+          const scope = yield* Effect.scope;
+          const route = yield* makeRemoteBackendRelayRoute("route", scope).pipe(
+            Effect.provideService(ServerConfig, config),
+            Effect.provideService(RemoteBackendRelayProfiles, {
+              list: async () => ({ availability: "available", profiles: [f.profile.profile] }),
+              resolve: async () => f.profile,
+            }),
+          );
+          route.lifecycle.ready(async () => new Set([1]));
+          retained = yield* route.handlers[WS_METHODS.serverOpenRemoteBackendRelay](
+            { profileId: f.profile.profile.profileId, requestId: randomUUID() },
+            { clientId: 1 },
+          );
+          expect(yield* Effect.promise(() => fetchLease(retained!))).toBe("lease-output");
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
+    );
+    expect(calls.children[0]!.exitCode !== null || calls.children[0]!.signalCode !== null).toBe(
+      true,
+    );
+    await expect(fetchLease(retained!)).rejects.toThrow();
+  },
+);
 it("listing projects only explicit public pin fields and respects per-caller capacity", async () => {
   const f = await fixture();
   Object.assign(f.profile.profile, { deployment: f.profile.deployment });

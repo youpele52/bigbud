@@ -108,5 +108,6 @@ export async function fetchLease(lease: { baseUrl: string; localCredential: stri
       "x-bigbud-client-rpc-revision": "1",
     },
   });
+  if (!response.ok) throw new Error(`Fixture relay returned HTTP ${response.status}`);
   return response.text();
 }
