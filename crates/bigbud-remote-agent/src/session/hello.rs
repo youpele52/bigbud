@@ -71,8 +71,14 @@ impl AgentSession {
         .map(|(name, major)| v1::Capability {
             name: name.to_owned(),
             major,
-            // 1.2 adds computed guard-v2 bindings and post-request refresh.
-            minor: if name == "service.lease" { 2 } else { 0 },
+            minor: match name {
+                // 1.2 adds computed guard-v2 bindings and post-request refresh.
+                "service.lease" => 2,
+                // 1.1 reports the written content's SHA-256 on every successful write;
+                // 1.2 adds the write receipt query.
+                "workspace.write" => 2,
+                _ => 0,
+            },
         })
         .collect()
     }

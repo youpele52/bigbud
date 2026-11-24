@@ -10,6 +10,9 @@ impl AgentSession {
             Some(v1::frame::Payload::CancelRequest(request)) if self.ready => {
                 self.handle_cancel_request(request)
             }
+            Some(v1::frame::Payload::WriteReceiptRequest(request)) if self.ready => {
+                Ok(self.handle_write_receipt(request))
+            }
             Some(v1::frame::Payload::PtyListRequest(request)) if self.ready => {
                 Ok(self.handle_pty_list(request))
             }

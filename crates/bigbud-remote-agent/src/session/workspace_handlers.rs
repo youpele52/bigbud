@@ -246,7 +246,15 @@ impl AgentSession {
         let result = if duplicate {
             Ok(request.bytes.len() as u64)
         } else {
-            let workspace = self.workspace(&request.workspace_handle)?;
+            // An unknown handle writes nothing, so it must not leave the operation accepted:
+            // a duplicate of it would otherwise be reported as a successful write.
+            let workspace = match self.workspace(&request.workspace_handle) {
+                Ok(workspace) => workspace,
+                Err(error) => {
+                    self.accepted_operations.remove(&request.operation_id);
+                    return Err(error);
+                }
+            };
             let expected_sha256 =
                 (!request.expected_sha256.is_empty()).then_some(request.expected_sha256.as_str());
             match (request.create_only, expected_sha256) {
@@ -255,10 +263,20 @@ impl AgentSession {
                 (false, expected) => workspace.write_file(&request.path, &request.bytes, expected),
             }
         };
-        if result.is_err() && !duplicate {
-            self.accepted_operations.remove(&request.operation_id);
+        if !duplicate {
+            match &result {
+                Ok(_) => self.record_write_receipt(
+                    &request.operation_id,
+                    crate::workspace::content_sha256(&request.bytes),
+                ),
+                Err(_) => {
+                    self.accepted_operations.remove(&request.operation_id);
+                }
+            }
         }
         let response = match result {
+            // `workspace.write` 1.1: a success reports the hash of the bytes now on disk, which
+            // are exactly the request bytes (also for a duplicate of an accepted write).
             Ok(written_bytes) => v1::WriteFileResponse {
                 request_id: request.request_id,
                 operation_id: request.operation_id,
@@ -266,7 +284,7 @@ impl AgentSession {
                 written_bytes,
                 error_code: String::new(),
                 error_message: String::new(),
-                current_sha256: String::new(),
+                current_sha256: crate::workspace::content_sha256(&request.bytes),
             },
             Err(error) => v1::WriteFileResponse {
                 request_id: request.request_id,

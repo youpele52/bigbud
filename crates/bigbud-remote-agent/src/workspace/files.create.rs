@@ -16,7 +16,11 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(not(unix))]
 use super::files::lock_target;
 #[cfg(unix)]
-use super::files::lock_target_at;
+use super::files_lock::lock_for_write;
+#[cfg(unix)]
+use super::files_seams::after_sync;
+#[cfg(unix)]
+use super::files_target::verify_read_back;
 use super::path::validate_relative_path;
 use super::{MAX_WRITE_BYTES, WorkspaceError, WorkspaceRoot, map_io};
 
@@ -42,7 +46,7 @@ impl WorkspaceRoot {
         let parent = relative.parent().unwrap_or_else(|| Path::new(""));
         #[cfg(unix)]
         {
-            self.create_file_unix(relative_path, parent, file_name, bytes)
+            self.create_file_unix(relative_path, &relative, parent, file_name, bytes)
         }
         #[cfg(not(unix))]
         {
@@ -54,6 +58,7 @@ impl WorkspaceRoot {
     fn create_file_unix(
         &self,
         relative_path: &str,
+        relative: &Path,
         parent: &Path,
         file_name: &std::ffi::OsStr,
         bytes: &[u8],
@@ -61,14 +66,15 @@ impl WorkspaceRoot {
         let parent_directory = self.open_or_create_directory(parent)?;
         let target_name = CString::new(file_name.as_bytes())
             .map_err(|_| WorkspaceError::InvalidPath(relative_path.to_owned()))?;
-        let _target_lock = lock_target_at(parent_directory.as_raw_fd(), relative_path)?;
+        // Same locks as `write_file`, so creates and overwrites serialize.
+        let _write_lock = lock_for_write(&parent_directory, relative)?;
         // SAFETY: The directory descriptor and C string remain valid; O_EXCL never follows or
         // replaces an existing entry, including a dangling symlink.
         let descriptor = unsafe {
             libc::openat(
                 parent_directory.as_raw_fd(),
                 target_name.as_ptr(),
-                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
                 0o600,
             )
         };
@@ -77,7 +83,15 @@ impl WorkspaceRoot {
         }
         // SAFETY: openat returned a valid descriptor whose ownership is transferred exactly once.
         let mut file = unsafe { File::from_raw_fd(descriptor) };
-        if let Err(error) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+        let written = file
+            .write_all(bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(WorkspaceError::Io)
+            .and_then(|_| {
+                after_sync(&file);
+                verify_read_back(&mut file, bytes)
+            });
+        if let Err(error) = written {
             drop(file);
             // The file is ours: remove the partial create so a retry can succeed.
             // SAFETY: The directory descriptor and target filename remain valid.
@@ -85,7 +99,7 @@ impl WorkspaceRoot {
             {
                 return Err(map_io(std::io::Error::last_os_error()));
             }
-            return Err(WorkspaceError::Io(error));
+            return Err(error);
         }
         drop(file);
         parent_directory.sync_all().map_err(map_io)?;

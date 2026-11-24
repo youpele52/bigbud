@@ -218,6 +218,7 @@ impl AgentSession {
                 AcceptedOperation {
                     request_digest,
                     expires_at: now + ACCEPTED_OPERATION_RETENTION,
+                    result_sha256: None,
                 },
             );
         }

@@ -19,6 +19,7 @@ import {
 } from "./remoteAgentProtocol.ts";
 import { WireWriter } from "./remoteAgentProtocol.codec.wire.ts";
 import { encodeWorkspaceWatchFrame } from "./remoteAgentProtocol.codec.workspace.watch.ts";
+import { encodeWriteReceiptFrame } from "./remoteAgentProtocol.codec.workspace.writeReceipt.ts";
 
 function encodeWorkspaceOpenRequest(value: RemoteAgentWorkspaceOpenRequest): Uint8Array {
   const writer = new WireWriter();
@@ -175,7 +176,10 @@ export function encodeWorkspaceFrame(
   frame: RemoteAgentFrame,
 ): { readonly field: number; readonly value: Uint8Array } | undefined {
   const watchFrame =
-    encodeWorkspaceWatchFrame(frame) ?? encodePasteStagingFrame(frame) ?? encodeSearchFrame(frame);
+    encodeWorkspaceWatchFrame(frame) ??
+    encodePasteStagingFrame(frame) ??
+    encodeSearchFrame(frame) ??
+    encodeWriteReceiptFrame(frame);
   if (watchFrame) return watchFrame;
   switch (frame.type) {
     case "workspaceOpenRequest":

@@ -79,6 +79,8 @@ pub(crate) use pty_screen::{SnapshotSource, SnapshotTransfer, produce as produce
 mod retirement;
 #[path = "workspace_handlers.rs"]
 mod workspace_handlers;
+#[path = "workspace_receipt.rs"]
+mod workspace_receipt;
 #[path = "workspace_watch_handlers.rs"]
 mod workspace_watch_handlers;
 
@@ -106,6 +108,9 @@ mod test_helpers;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_receipt.tests.rs"]
+mod workspace_receipt_tests;
 #[cfg(test)]
 #[path = "workspace_write.tests.rs"]
 mod workspace_write_tests;
@@ -203,6 +208,9 @@ pub struct AgentSession {
 struct AcceptedOperation {
     request_digest: Vec<u8>,
     expires_at: Instant,
+    /// SHA-256 of the bytes a write operation put on disk, recorded only after it succeeded;
+    /// answers `workspace.write` 1.2 receipt queries.
+    result_sha256: Option<String>,
 }
 
 #[derive(Clone)]

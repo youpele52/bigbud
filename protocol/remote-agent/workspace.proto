@@ -132,6 +132,27 @@ message WriteFileResponse {
   string current_sha256 = 7;
 }
 
+// Receipt query (`workspace.write` 1.2): whether this agent applied the guarded write identified by
+// operation_id and request_digest. It never performs or retries a write. "Not applied" is not
+// definitive: a write frame from a lost connection may still be processed.
+message WriteReceiptRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+}
+
+message WriteReceiptResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  // True only when this agent recorded a successful write for the identity.
+  bool applied = 3;
+  // Lowercase hex SHA-256 of the bytes written; set when applied.
+  string result_sha256 = 4;
+  // OPERATION_ID_CONFLICT when the identity was accepted with a different request digest.
+  string error_code = 5;
+  string error_message = 6;
+}
+
 message WorkspaceWatchStartRequest {
   string request_id = 1;
   string subscription_id = 2;

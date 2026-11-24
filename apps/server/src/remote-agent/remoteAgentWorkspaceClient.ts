@@ -14,6 +14,11 @@ import {
 } from "./remoteAgentWorkspaceWatchClient.ts";
 import type { RemoteAgentWorkspaceWatchEvent } from "./remoteAgentProtocol.ts";
 import type { RemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
+import {
+  requestRemoteAgentWriteReceipt,
+  supportsRemoteAgentWriteReceipt,
+  type RemoteAgentWriteReceipt,
+} from "./remoteAgentWorkspaceClient.writeReceipt.ts";
 import type { ProjectWriteFileDisposition } from "@bigbud/contracts/workspace/project.ts";
 
 /** Agents with this capability honour `createOnly` as an exclusive create; older ones drop it. */
@@ -28,6 +33,8 @@ export class RemoteAgentWorkspaceError extends Error {
     readonly code: string,
     message: string,
     readonly writeDisposition?: ProjectWriteFileDisposition,
+    /** Disk hash reported with a WRITE_CONFLICT; empty when the file is missing. */
+    readonly currentSha256?: string,
   ) {
     super(message);
     this.name = "RemoteAgentWorkspaceError";
@@ -229,9 +236,38 @@ export class RemoteAgentWorkspaceClient {
         response.value.errorCode,
         response.value.errorMessage,
         "terminal",
+        response.value.currentSha256 || undefined,
       );
     }
     return response.value;
+  }
+
+  /**
+   * Asks the agent whether this exact write identity was applied (`workspace.write` 1.2). Older
+   * agents are never queried. Only `applied: true` is definitive; it also settles the durable
+   * write journal. The write itself is never performed or retried here.
+   */
+  async queryWriteReceipt(input: {
+    readonly operationId: string;
+    readonly requestDigest: Uint8Array;
+    readonly requestId?: string;
+  }): Promise<RemoteAgentWriteReceipt> {
+    if (!supportsRemoteAgentWriteReceipt(this.connection)) return { applied: false };
+    const response = await requestRemoteAgentWriteReceipt(this.connection, {
+      requestId: input.requestId ?? randomUUID(),
+      operationId: input.operationId,
+      requestDigest: input.requestDigest,
+    });
+    assertAccepted(response);
+    if (
+      !response.applied ||
+      response.operationId !== input.operationId ||
+      !/^[a-f0-9]{64}$/.test(response.resultSha256)
+    ) {
+      return { applied: false };
+    }
+    await this.mutation?.terminal(input.operationId);
+    return { applied: true, resultSha256: response.resultSha256 };
   }
 
   async searchFilenames(input: {
