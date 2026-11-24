@@ -112,6 +112,10 @@ message Frame {
     ResourceCleanupCancelResponse resource_cleanup_cancel_response = 107;
     WriteReceiptRequest write_receipt_request = 108;
     WriteReceiptResponse write_receipt_response = 109;
+    CreateDirectoryRequest create_directory_request = 110;
+    CreateDirectoryResponse create_directory_response = 111;
+    DeleteEntryRequest delete_entry_request = 112;
+    DeleteEntryResponse delete_entry_response = 113;
     .bigbud.remote_agent.service_lease.v1.StartRequest service_lease_start_request = 120;
     .bigbud.remote_agent.service_lease.v1.Response service_lease_start_response = 121;
     .bigbud.remote_agent.service_lease.v1.QueryRequest service_lease_status_request = 122;

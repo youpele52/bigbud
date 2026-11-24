@@ -19,6 +19,9 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { makeLocalWorkspaceSearchLayer } from "../../remote-agent/localWorkspaceSearchLayer.ts";
 import { makeLocalWorkspaceWatchLayer } from "../../remote-agent/localWorkspaceWatchLayer.ts";
 import { LocalWorkspaceAgentLive } from "./LocalWorkspaceAgent.ts";
+import { makeSystemWorkspaceTrash } from "../../workspace/Layers/WorkspaceTrash.ts";
+import { unsupportedWorkspaceMutations } from "../Services/WorkspaceMutations.ts";
+import { makeLocalWorkspaceMutations } from "./WorkspaceMutations.local.ts";
 
 export function makeTargetAwareRuntime(input: {
   readonly local: WorkspaceRuntimeBackendShape;
@@ -45,6 +48,20 @@ export function makeTargetAwareRuntime(input: {
     },
     watch: {
       watchDirectory: (value) => backend(value.executionTargetId).watch.watchDirectory(value),
+    },
+    mutations: {
+      entryActions: (value) =>
+        (backend(value.executionTargetId).mutations ?? unsupportedWorkspaceMutations).entryActions(
+          value,
+        ),
+      createDirectory: (value) =>
+        (
+          backend(value.executionTargetId).mutations ?? unsupportedWorkspaceMutations
+        ).createDirectory(value),
+      deleteEntry: (value) =>
+        (backend(value.executionTargetId).mutations ?? unsupportedWorkspaceMutations).deleteEntry(
+          value,
+        ),
     },
   };
 }
@@ -76,9 +93,14 @@ const makeWorkspaceRuntimeLive = (
       const files = yield* WorkspaceFiles;
       const search = yield* WorkspaceSearch;
       const watch = yield* WorkspaceWatch;
+      const mutations = makeLocalWorkspaceMutations({
+        workspacePaths: yield* WorkspacePaths,
+        workspaceEntries: yield* WorkspaceEntries,
+        trash: makeSystemWorkspaceTrash(),
+      });
       const remote = yield* Effect.serviceOption(RemoteWorkspaceRuntime);
       return makeTargetAwareRuntime({
-        local: { files, search, watch },
+        local: { files, search, watch, mutations },
         ...(remote._tag === "Some" ? { remote: remote.value } : {}),
         ...(useRemote ? { useRemote } : {}),
       });
@@ -87,6 +109,8 @@ const makeWorkspaceRuntimeLive = (
     Layer.provide(workspaceFilesLive),
     Layer.provide(workspaceSearchLive),
     Layer.provide(localWatchLayer),
+    Layer.provide(workspaceEntriesForRuntimeLive),
+    Layer.provide(WorkspacePathsLive),
   );
 
 /**

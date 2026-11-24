@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { WorkspaceRequestStatus } from "../common/WorkspaceRequestStatus";
 import { EMPTY_ENTRIES, type DirectoryState } from "./FilesPanel.shared";
-import { renderFilesPanelTree } from "./FilesPanel.tree";
+import { renderFilesPanelTree, type FilesPanelPendingEntrySlot } from "./FilesPanel.tree";
 
 interface FilesPanelTreeBodyInput {
   readonly showLoading: boolean | undefined;
@@ -14,6 +14,7 @@ interface FilesPanelTreeBodyInput {
   readonly onRetryDirectory?: ((path: string) => void) | undefined;
   readonly error: string | null | undefined;
   readonly entries: ReadonlyArray<ProjectEntry>;
+  readonly pendingEntry?: FilesPanelPendingEntrySlot | null | undefined;
   readonly workspaceRoot: string | null;
   readonly previewPath: string | null;
   readonly resolvedTheme: "light" | "dark";
@@ -48,7 +49,9 @@ export function renderFilesPanelTreeBody(input: FilesPanelTreeBodyInput): ReactN
           onRetry={() => input.onRetryDirectory?.("")}
         />
       ) : null}
+      {input.pendingEntry?.parentPath === "" ? input.pendingEntry.render(0) : null}
       {renderFilesPanelTree({
+        pendingEntry: input.pendingEntry,
         remote: input.remote,
         onRetryDirectory: input.onRetryDirectory,
         entries: input.entries ?? EMPTY_ENTRIES,

@@ -8,8 +8,15 @@ import { WorkspaceRequestStatus } from "../common/WorkspaceRequestStatus";
 import { EMPTY_ENTRIES, entryName, type DirectoryState } from "./FilesPanel.shared";
 import { joinWorkspaceEntryPath, writeFilesPanelDragEntry } from "./filesPanel.dnd";
 
+/** The inline new-entry input, rendered first inside `parentPath` ("" is the root). */
+export interface FilesPanelPendingEntrySlot {
+  readonly parentPath: string;
+  readonly render: (depth: number) => ReactNode;
+}
+
 interface FilesPanelTreeProps {
   entries: ReadonlyArray<ProjectEntry>;
+  pendingEntry?: FilesPanelPendingEntrySlot | null | undefined;
   depth: number;
   workspaceRoot: string | null;
   previewPath: string | null;
@@ -99,6 +106,9 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
         </button>
         {isDirectory && expanded ? (
           <div>
+            {props.pendingEntry?.parentPath === entry.path
+              ? props.pendingEntry.render(props.depth + 1)
+              : null}
             {props.remote ? (
               <>
                 {nestedState?.loading || nestedState?.error ? (

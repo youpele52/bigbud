@@ -165,6 +165,9 @@ export interface WsRpcClient {
     readonly searchFileContents: RpcUnaryMethod<typeof WS_METHODS.projectsSearchFileContents>;
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
+    readonly entryActions: RpcUnaryMethod<typeof WS_METHODS.projectsEntryActions>;
+    readonly createDirectory: RpcUnaryMethod<typeof WS_METHODS.projectsCreateDirectory>;
+    readonly deleteEntry: RpcUnaryMethod<typeof WS_METHODS.projectsDeleteEntry>;
   };
   readonly notes: {
     readonly list: (input: NotesListInput) => Promise<NotesListResult>;

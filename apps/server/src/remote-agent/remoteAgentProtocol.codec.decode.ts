@@ -332,7 +332,7 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
           field === 65 ||
           (field >= 66 && field <= 79) ||
           (field >= 80 && field <= 95) ||
-          (field >= 100 && field <= 109) ||
+          (field >= 100 && field <= 113) ||
           (field >= 120 && field <= 127)
         )
       ) {

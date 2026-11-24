@@ -49,6 +49,8 @@ impl AgentSession {
             ("os-index.search", 1),
             ("workspace.write", 1),
             ("workspace.write-create-only", 1),
+            ("workspace.mkdir", 1),
+            ("workspace.delete", 1),
             ("workspace.watch", 1),
             ("process.run", 1),
             ("process.attach", 1),

@@ -29,6 +29,9 @@ export const WS_METHODS = {
   subscribeProjectDirectoryChanges: "subscribeProjectDirectoryChanges",
   projectsReadFilePreview: "projects.readFilePreview",
   projectsWriteFile: "projects.writeFile",
+  projectsEntryActions: "projects.entryActions",
+  projectsCreateDirectory: "projects.createDirectory",
+  projectsDeleteEntry: "projects.deleteEntry",
 
   // Notes methods
   notesList: "notes.list",

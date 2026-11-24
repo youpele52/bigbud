@@ -36,6 +36,8 @@ export function FilesPanelContextMenu(props: {
   contextMenuState: ContextMenuTarget | null;
   onClose: () => void;
   threadId?: ThreadId | null | undefined;
+  onDelete?: (target: { relativePath: string; kind: "file" | "directory" }) => void;
+  deleteDisabledReason?: string | null;
 }) {
   return (
     <FileTargetContextMenu
@@ -47,6 +49,8 @@ export function FilesPanelContextMenu(props: {
       }
       onClose={props.onClose}
       threadId={props.threadId}
+      onDelete={props.onDelete}
+      deleteDisabledReason={props.deleteDisabledReason}
     />
   );
 }

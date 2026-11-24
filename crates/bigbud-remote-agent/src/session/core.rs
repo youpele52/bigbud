@@ -77,6 +77,8 @@ pub(crate) use pty_lifecycle_host::{HostLifecycle, HostOptions};
 pub(crate) use pty_screen::{SnapshotSource, SnapshotTransfer, produce as produce_snapshot};
 #[path = "retirement.rs"]
 mod retirement;
+#[path = "workspace_entries.rs"]
+mod workspace_entries;
 #[path = "workspace_handlers.rs"]
 mod workspace_handlers;
 #[path = "workspace_receipt.rs"]
@@ -108,6 +110,9 @@ mod test_helpers;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_entries.tests.rs"]
+mod workspace_entries_tests;
 #[cfg(test)]
 #[path = "workspace_receipt.tests.rs"]
 mod workspace_receipt_tests;

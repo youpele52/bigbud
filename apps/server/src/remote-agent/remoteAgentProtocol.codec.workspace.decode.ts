@@ -24,6 +24,7 @@ import {
 } from "./remoteAgentProtocol.codec.workspace.decode.write.ts";
 import { decodeWorkspaceWatchFrame } from "./remoteAgentProtocol.codec.workspace.watch.ts";
 import { decodeWriteReceiptFrame } from "./remoteAgentProtocol.codec.workspace.writeReceipt.ts";
+import { decodeEntryMutationFrame } from "./remoteAgentProtocol.codec.workspace.entryMutation.ts";
 
 type MutableOperationRequest = {
   requestId: string;
@@ -257,7 +258,8 @@ export function decodeWorkspaceFrame(
     decodeWorkspaceWatchFrame(field, bytes) ??
     decodePasteStagingFrame(field, bytes) ??
     decodeSearchFrame(field, bytes) ??
-    decodeWriteReceiptFrame(field, bytes);
+    decodeWriteReceiptFrame(field, bytes) ??
+    decodeEntryMutationFrame(field, bytes);
   if (watchFrame) return watchFrame;
   switch (field) {
     case 8:

@@ -300,6 +300,33 @@ These changes are uncommitted in the shared `dev` checkout. They are implementat
   - Linux run of the real-agent test.
   - **Manual Files UI acceptance over SSH on a disposable host.**
 
+## Files: create and delete (24 November 2026)
+
+**Status:** Implemented in the working tree, pending a manual dev-app test. Remote hosts need an agent rebuilt from this checkout.
+
+### Decisions (user, 24 November 2026)
+
+1. **One add button** in the Files panel header (`FileAddIcon`). It opens a small menu with **New file** and **New folder**. An inline name input then appears in the target folder: the folder last opened in the tree, or the workspace root. Enter creates; Esc cancels. A new file opens in the editor. A name that already exists shows an inline error and nothing is overwritten.
+2. **Delete** is one action for files and folders, on local and remote-agent projects. It always asks first. A file prompt reads "Delete README.md?". A folder prompt names the folder and says everything inside is deleted too. Local deletes move to the system Trash. Where the Trash is unavailable, the item is deleted permanently and the prompt says so. Remote-agent deletes are permanent and the prompt says "This can't be undone." There is no checkpoint offer in v1.
+3. **Context menu:** a destructive **Delete…** item sits right before **Restore path checkpoint**. Dividers group the items: open | copy | capture checkpoint | Delete… and Restore path checkpoint.
+4. **Direct SSH stays read only** for create and delete. The controls are disabled with the existing read-only copy (`FILE_EDIT_READ_ONLY_COPY`).
+
+### Design
+
+- **Capability:** a new `projects.entryActions` RPC reports, for each workspace, whether create file, create folder and delete are allowed and whether delete is permanent. The web does not parse target IDs. Local backend: allowed. Legacy Direct SSH backend: read only. Agent: read only for an action the agent does not advertise (`agentTooOld`), and `ownerUnavailable` when it cannot connect.
+- **Create file:** the existing `projects.writeFile` with `createOnly: true` and empty contents. The name must be a single path segment, so no parents are created.
+- **Create folder:** `projects.createDirectory`. Locally this is a non-recursive `mkdir` in a real parent inside the realpath of the root, and it fails if the entry exists. On the agent it is `CreateDirectoryRequest/Response` (frames 110/111, capability `workspace.mkdir` 1.0): `mkdirat` relative to a parent opened with `O_NOFOLLOW` at every component.
+- **Delete:** `projects.deleteEntry`, which carries the kind the user saw. Locally the parent's realpath must be inside the root's realpath, and the workspace root is refused. A symlink is removed as a link, never followed, and a kind mismatch is refused. The item goes to the Trash (macOS `/usr/bin/trash`, Linux `gio trash`, Windows Recycle Bin via PowerShell); otherwise it is removed with `unlink` or a recursive `rm` that does not follow symlinks. On the agent it is `DeleteEntryRequest/Response` (frames 112/113, capability `workspace.delete` 1.0), descriptor-relative: `fstatat(AT_SYMLINK_NOFOLLOW)`, links unlinked, directories walked with `O_NOFOLLOW`, and a bounded count pass (depth and entries) runs before anything is removed. Both agent requests use `operationId` and a request digest like writes, so a duplicate is answered without acting twice.
+- **Refusals:** the legacy local backend reached with an `ssh:` target refuses create folder and delete as `not-dispatched` and never shells out. The dev SSH-owner router (`wsSshOwnerDev.workspace.ts`) is not changed. Its listings carry no actions, and the new RPCs bypass it.
+- **Refresh:** the server invalidates workspace entries after each mutation, and the web reloads the parent folder.
+
+### Phases
+
+- **F1 contracts and server:** contracts, WS RPCs, local create folder and delete with Trash, and server tests. Done.
+- **F2 agent protocol:** `.proto`, Rust handlers and workspace operations, TS codec and client, golden vectors, and Rust and TS tests. Done.
+- **F3 web:** the header add menu, the inline input, Delete in the context menu with dividers, the confirmation dialog, and Direct SSH gating, with logic and browser tests. Done.
+- **F4 manual acceptance:** create and delete locally (Trash) and on a disposable host with a rebuilt agent; confirm Direct SSH shows the controls disabled. Pending.
+
 ## Decisions (24 November 2026)
 
 1. **Draft retention:** remote files autosave like local files, and a save means the host acknowledged it. Only drafts the host has not acknowledged are kept locally, for at most 10 minutes (D5).

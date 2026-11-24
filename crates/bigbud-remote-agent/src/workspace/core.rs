@@ -1,5 +1,10 @@
 #[path = "directory.rs"]
 mod directory;
+#[path = "entries.rs"]
+mod entries;
+#[cfg(unix)]
+#[path = "entries.unix.rs"]
+mod entries_unix;
 #[path = "files.rs"]
 mod files;
 #[path = "files.create.rs"]
@@ -25,6 +30,9 @@ mod path;
 mod search;
 
 #[cfg(test)]
+#[path = "entries.tests.rs"]
+mod entries_tests;
+#[cfg(test)]
 #[path = "files.lock.tests.rs"]
 mod lock_tests;
 #[cfg(test)]
@@ -40,6 +48,7 @@ mod write_tests;
 use std::io;
 
 pub use directory::DirectoryEntry;
+pub use entries::EntryKind;
 pub use files::{ReadFileResult, content_sha256};
 pub use path::WorkspaceRoot;
 pub use search::ContentMatch;
@@ -90,6 +99,14 @@ pub enum WorkspaceError {
     EmptySearchQuery,
     #[error("workspace search exceeded the configured file limit")]
     SearchLimitExceeded,
+    #[error("the workspace root itself cannot be created or deleted")]
+    RootEntry,
+    #[error("workspace entry is not the kind that was confirmed; nothing was deleted")]
+    KindMismatch,
+    #[error("folder is too large or too deep to delete here; nothing was deleted")]
+    DeleteLimitExceeded,
+    #[error("folder contains another mounted file system; nothing was deleted")]
+    DeleteCrossesMount,
     #[error("workspace I/O failed: {0}")]
     Io(#[source] io::Error),
 }

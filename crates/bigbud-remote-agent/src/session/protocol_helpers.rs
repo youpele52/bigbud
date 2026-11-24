@@ -272,6 +272,10 @@ pub(super) fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::ConditionalCreate => "INVALID_ARGUMENT",
         WorkspaceError::EmptySearchQuery => "EMPTY_SEARCH_QUERY",
         WorkspaceError::SearchLimitExceeded => "SEARCH_LIMIT_EXCEEDED",
+        WorkspaceError::RootEntry => "ROOT_ENTRY",
+        WorkspaceError::KindMismatch => "KIND_MISMATCH",
+        WorkspaceError::DeleteLimitExceeded => "DELETE_LIMIT_EXCEEDED",
+        WorkspaceError::DeleteCrossesMount => "DELETE_CROSSES_MOUNT",
         WorkspaceError::Io(_) => "IO_ERROR",
     }
 }

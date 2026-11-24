@@ -17,6 +17,7 @@ import {
 } from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import type { WsRpcContext } from "./wsRpcContext";
+import { makeWorkspaceEntryWsRpcHandlers } from "./wsRpcHandlers.workspace.entries";
 
 export function projectWriteFileError(
   cause: WorkspaceFileSystemError | WorkspacePathOutsideRootError,
@@ -53,6 +54,7 @@ export function makeWorkspaceWsRpcHandlers(
   toProjectDirectoryWatchError: (cause: any) => ProjectDirectoryWatchError,
 ) {
   return {
+    ...makeWorkspaceEntryWsRpcHandlers(context.workspaceMutations),
     [WS_METHODS.projectsSearchEntries]: (
       input: Parameters<WsRpcContext["workspaceRuntime"]["search"]["searchEntries"]>[0],
     ) =>

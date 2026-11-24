@@ -1,7 +1,7 @@
 import { ORGANIZATION_AUTOMATION_METHODS } from "@bigbud/contracts/server/organizationAutomation.ts";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 
-import { randomUUID } from "~/lib/utils";
+import { withOperationId } from "./wsRpcClient.operationId";
 
 import { resetWsReconnectBackoff } from "./wsConnectionState";
 import { WsTransport } from "./wsTransport";
@@ -108,12 +108,20 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.projectsSearchFileContents](input)),
       searchEntries: (input) =>
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
-      writeFile: (input) => {
-        const operationInput = input.operationId
-          ? input
-          : { ...input, operationId: `workspace-write-${randomUUID()}` };
-        return transport.request((client) => client[WS_METHODS.projectsWriteFile](operationInput));
-      },
+      writeFile: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsWriteFile](withOperationId(input, "workspace-write")),
+        ),
+      entryActions: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsEntryActions](input)),
+      createDirectory: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsCreateDirectory](withOperationId(input, "workspace-mkdir")),
+        ),
+      deleteEntry: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsDeleteEntry](withOperationId(input, "workspace-delete")),
+        ),
     },
     notes: {
       list: (input) => transport.request((client) => client[WS_METHODS.notesList](input)),

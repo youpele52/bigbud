@@ -46,6 +46,12 @@ impl AgentSession {
             Some(v1::frame::Payload::WriteFileRequest(request)) if self.ready => {
                 self.handle_write_file(request)
             }
+            Some(v1::frame::Payload::CreateDirectoryRequest(request)) if self.ready => {
+                self.handle_create_directory(request)
+            }
+            Some(v1::frame::Payload::DeleteEntryRequest(request)) if self.ready => {
+                self.handle_delete_entry(request)
+            }
             Some(v1::frame::Payload::ProcessRequest(request)) if self.ready => self
                 .handle_process_request(request)
                 .and_then(|mut responses| responses.pop().ok_or(SessionError::UnexpectedMessage)),
