@@ -30,6 +30,7 @@ import {
   type OrchestrationDispatchError,
 } from "../Errors.ts";
 import * as ProjectWorkspace from "../ProjectWorkspace.files.ts";
+import * as ProjectWorkspaceTransport from "../ProjectWorkspace.transportCarryOver.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { WorkspaceModeGate } from "../../remote-backend/workspaceMode.gate.ts";
@@ -157,7 +158,13 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               const committedCommand = yield* commitProjectWorkspaceApplication(
                 sql,
                 nativeIdentity,
-                commitCanonicalCommand(envelope, currentReadModel, eventBases),
+                ProjectWorkspaceTransport.carryTransportOnlyBindings(
+                  sql,
+                  envelope.command,
+                  currentReadModel,
+                ).pipe(
+                  Effect.andThen(commitCanonicalCommand(envelope, currentReadModel, eventBases)),
+                ),
               ).pipe(
                 Effect.catchTag("SqlError", (sqlError) =>
                   Effect.fail(

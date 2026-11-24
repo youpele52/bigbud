@@ -3,6 +3,7 @@
  *
  * Handles: project.create, project.meta.update, project.delete
  */
+import { isTransportOnlyTargetChange } from "../ssh/sshExecutionTarget.transport.ts";
 import {
   BUILT_IN_CHATS_PROJECT_ID,
   LOCAL_EXECUTION_TARGET_ID,
@@ -157,10 +158,16 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
         workspaceRoot: command.workspaceRoot,
       });
       const previousProject = readModel.projects.find((entry) => entry.id === command.projectId);
+      const previousWorkspaceTarget =
+        previousProject?.workspaceExecutionTargetId ?? previousProject?.executionTargetId;
+      // Switching only the SSH transport keeps the same host and folder: not a folder change.
       const workspaceChanged =
         previousProject?.workspaceRoot !== command.workspaceRoot ||
-        command.workspaceExecutionTargetId !==
-          (previousProject?.workspaceExecutionTargetId ?? previousProject?.executionTargetId);
+        (command.workspaceExecutionTargetId !== previousWorkspaceTarget &&
+          !isTransportOnlyTargetChange(
+            previousWorkspaceTarget,
+            command.workspaceExecutionTargetId,
+          ));
       yield* requireProjectNotDeleting({
         readModel,
         command,
