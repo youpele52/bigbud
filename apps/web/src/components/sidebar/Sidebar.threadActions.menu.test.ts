@@ -19,6 +19,7 @@ describe("thread context menu", () => {
   it("puts Reconnect and Disconnect in their own section above Delete for SSH-workspace threads", () => {
     const items = buildThreadContextMenuItems({
       thread,
+      canEditRemoteWorkspace: true,
       remoteItems: buildRemoteTargetMenuItems({
         executionTargetId: "ssh:host=ice-2-kg&auth=password",
         disconnected: false,
@@ -26,9 +27,9 @@ describe("thread context menu", () => {
       }),
     });
     expect(ids(items).slice(-6)).toEqual([
-      "copy-thread-id",
       "copy-path",
       "archive",
+      "edit-ssh",
       "reconnect",
       "disconnect",
       "delete",
@@ -36,6 +37,7 @@ describe("thread context menu", () => {
     const archive = items.findIndex((item) => item.id === "archive");
     expect(items.slice(archive + 1).map((item) => item.id)).toEqual([
       "separator-remote",
+      "edit-ssh",
       "reconnect",
       "disconnect",
       "separator-delete",
@@ -46,16 +48,18 @@ describe("thread context menu", () => {
   it("shows Connect alone above Delete when the workspace is disconnected", () => {
     const items = buildThreadContextMenuItems({
       thread,
+      canEditRemoteWorkspace: true,
       remoteItems: buildRemoteTargetMenuItems({
         executionTargetId: "ssh:host=ice-2-kg&auth=password",
         disconnected: true,
         reconnectPending: false,
       }),
     });
-    expect(ids(items).slice(-3)).toEqual(["archive", "connect", "delete"]);
+    expect(ids(items).slice(-4)).toEqual(["archive", "edit-ssh", "connect", "delete"]);
     const archive = items.findIndex((item) => item.id === "archive");
     expect(items.slice(archive + 1).map((item) => item.id)).toEqual([
       "separator-remote",
+      "edit-ssh",
       "connect",
       "separator-delete",
       "delete",
@@ -67,6 +71,7 @@ describe("thread context menu", () => {
     expect(ids(items).slice(-2)).toEqual(["archive", "delete"]);
     expect(items.some((item) => item.id === "separator-remote")).toBe(false);
     expect(items.some((item) => item.id === "reconnect")).toBe(false);
+    expect(items.some((item) => item.id === "edit-ssh")).toBe(false);
   });
 
   it("offers the elevator summary only when it says more than the title", () => {
@@ -74,5 +79,18 @@ describe("thread context menu", () => {
     expect(resolveThreadElevatorSummary({ title: "A", elevatorSummary: " More  detail " })).toBe(
       "More detail",
     );
+  });
+
+  it("omits Edit remote workspace when the project is not a resolved SSH workspace", () => {
+    const items = buildThreadContextMenuItems({
+      thread,
+      remoteItems: buildRemoteTargetMenuItems({
+        executionTargetId: "ssh:host=ice-2-kg&auth=password",
+        disconnected: true,
+        reconnectPending: false,
+      }),
+    });
+    expect(items.some((item) => item.id === "edit-ssh")).toBe(false);
+    expect(items.some((item) => item.id === "connect")).toBe(true);
   });
 });

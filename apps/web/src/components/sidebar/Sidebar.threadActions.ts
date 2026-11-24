@@ -25,6 +25,8 @@ import {
 } from "../../stores/remoteAccess/remoteTargetActions.menu";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import { requestNewThreadTitle } from "./Sidebar.threadActions.generation";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { isSshExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 
 /** Encapsulates all thread-level actions for the sidebar. */
 export function useSidebarThreadActions({
@@ -33,6 +35,7 @@ export function useSidebarThreadActions({
   appSettings,
   navigateToThreadRoute,
   cancelProjectRename,
+  openRemoteWorkspaceEditDialog,
 }: SidebarThreadActionsInput): SidebarThreadActionsOutput {
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
@@ -220,12 +223,22 @@ export function useSidebarThreadActions({
       const project = useStore.getState().projects.find((entry) => entry.id === thread.projectId);
       const remoteItems = readRemoteTargetMenuItems(project ?? { ...thread, id: thread.projectId });
       const clicked = await api.contextMenu.show(
-        buildThreadContextMenuItems({ thread, remoteItems }),
+        buildThreadContextMenuItems({
+          thread,
+          remoteItems,
+          canEditRemoteWorkspace:
+            project !== undefined &&
+            isSshExecutionTargetId(resolveWorkspaceExecutionTargetId(project)),
+        }),
         position,
       );
 
       if (await runInyosiraMenuAction(clicked, [threadId])) return;
       if (await runRemoteTargetMenuAction(clicked, thread.projectId)) return;
+      if (clicked === "edit-ssh") {
+        if (project) openRemoteWorkspaceEditDialog(project);
+        return;
+      }
       if (clicked === "generate-title") return requestNewThreadTitle(threadId);
 
       if (clicked === "rename") {
@@ -290,6 +303,7 @@ export function useSidebarThreadActions({
       copyPathToClipboard,
       copyThreadIdToClipboard,
       handleBranchThread,
+      openRemoteWorkspaceEditDialog,
       requestThreadDelete,
       renamingCommittedRef,
       setRenamingThreadId,

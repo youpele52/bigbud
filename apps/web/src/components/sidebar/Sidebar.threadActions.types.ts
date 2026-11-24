@@ -2,7 +2,7 @@ import type { MouseEvent } from "react";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 import type { AutomationId } from "@bigbud/contracts";
 import type { useSettings } from "../../hooks/useSettings";
-import type { SidebarThreadSummary } from "../../models/types";
+import type { Project, SidebarThreadSummary } from "../../models/types";
 
 export interface SidebarThreadActionsInput {
   sidebarThreadsById: Record<ThreadId, SidebarThreadSummary | undefined>;
@@ -12,6 +12,8 @@ export interface SidebarThreadActionsInput {
   navigateToThreadRoute: (threadId: ThreadId) => void | Promise<boolean>;
   /** Called when a thread rename starts — cancels any in-progress project rename. */
   cancelProjectRename: () => void;
+  /** Opens the remote workspace editor (SSH workspaces only). */
+  openRemoteWorkspaceEditDialog: (project: Project) => void;
 }
 
 export interface SidebarThreadActionsOutput {
