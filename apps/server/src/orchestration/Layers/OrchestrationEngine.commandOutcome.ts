@@ -50,12 +50,35 @@ export function makeCommandOutcomeQuery(input: {
             status: "rejected" as const,
             rejectedAt: receipt.value.acceptedAt,
             reason: receipt.value.rejectionReason ?? "other",
-            ...(receipt.value.aggregateKind === "project" &&
-            receipt.value.error?.startsWith(WORKSPACE_PREFLIGHT_DETAIL_PREFIX)
-              ? { detail: receipt.value.error.slice(WORKSPACE_PREFLIGHT_DETAIL_PREFIX.length) }
-              : {}),
+            ...projectRejectionDetail(receipt.value.aggregateKind, receipt.value.error),
           });
         }),
       ),
     );
+}
+
+const MAX_PUBLIC_DETAIL_LENGTH = 600;
+const EMBEDDED_ERROR = /[{}\n]|\b[A-Z][A-Za-z]*Error\b|\bstderr\b|\bfatal:/;
+const PROJECT_INVARIANT_PREFIX = /^Orchestration command invariant failed \(project\.[a-z.]+\): /;
+
+/**
+ * Project rejections carry user-facing guidance (workspace preflight or a project invariant such
+ * as "keep this folder and create a new project"); surface it instead of the bare reason code.
+ */
+function projectRejectionDetail(
+  aggregateKind: string,
+  error: string | null | undefined,
+): { readonly detail: string } | Record<string, never> {
+  if (aggregateKind !== "project" || !error) return {};
+  if (error.startsWith(WORKSPACE_PREFLIGHT_DETAIL_PREFIX)) {
+    return { detail: error.slice(WORKSPACE_PREFLIGHT_DETAIL_PREFIX.length) };
+  }
+  const invariant = PROJECT_INVARIANT_PREFIX.exec(error);
+  if (!invariant) return {};
+  const detail = error.slice(invariant[0].length);
+  // Only short, plain guidance crosses the RPC boundary; wrapped tool errors (git stderr,
+  // serialized causes, command lines) stay private.
+  return detail.length <= MAX_PUBLIC_DETAIL_LENGTH && !EMBEDDED_ERROR.test(detail)
+    ? { detail }
+    : {};
 }

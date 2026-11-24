@@ -137,3 +137,49 @@ it.effect("returns unknown when no durable command receipt exists", () =>
     });
   }),
 );
+
+it.effect("surfaces the user-facing guidance of a rejected project invariant", () =>
+  Effect.gen(function* () {
+    const commandId = CommandId.makeUnsafe("command-project-invariant");
+    const outcome = yield* makeQuery({
+      commandId,
+      aggregateKind: "project",
+      aggregateId: ProjectId.makeUnsafe("project-1"),
+      acceptedAt: "2026-08-26T12:02:00.000Z",
+      resultSequence: 7,
+      status: "rejected",
+      rejectionReason: "other",
+      error:
+        "Orchestration command invariant failed (project.reconfigure): Keep this project folder and create a new project.",
+      payloadDigestVersion: null,
+      payloadDigest: null,
+    })(commandId);
+
+    assert.strictEqual(outcome.status, "rejected");
+    if (outcome.status !== "rejected") return;
+    assert.strictEqual(outcome.detail, "Keep this project folder and create a new project.");
+  }),
+);
+
+it.effect("keeps wrapped tool errors in project invariants private", () =>
+  Effect.gen(function* () {
+    const commandId = CommandId.makeUnsafe("command-project-git-error");
+    const outcome = yield* makeQuery({
+      commandId,
+      aggregateKind: "project",
+      aggregateId: ProjectId.makeUnsafe("project-1"),
+      acceptedAt: "2026-08-26T12:02:00.000Z",
+      resultSequence: 7,
+      status: "rejected",
+      rejectionReason: "other",
+      error:
+        'Orchestration command invariant failed (project.reconfigure): GitCommandError({"operation":"worktree","detail":"fatal: secret path"})',
+      payloadDigestVersion: null,
+      payloadDigest: null,
+    })(commandId);
+
+    assert.strictEqual(outcome.status, "rejected");
+    if (outcome.status !== "rejected") return;
+    assert.isFalse("detail" in outcome);
+  }),
+);
