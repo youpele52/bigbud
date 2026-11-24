@@ -19,10 +19,25 @@ export const GitFetchInput = Schema.Struct({
 });
 export type GitFetchInput = typeof GitFetchInput.Type;
 
+/**
+ * Limits a discard to files the user saw. `paths` must be listed in the current status; `all`
+ * also requires the listed set to equal the current changed files exactly.
+ */
+export const GitDiscardSelection = Schema.Struct({
+  scope: Schema.Literals(["paths", "all"]),
+  paths: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(10_000),
+  ),
+});
+export type GitDiscardSelection = typeof GitDiscardSelection.Type;
+
 export const GitDiscardChangesInput = Schema.Struct({
   ...ExecutionTargetInputShape,
   ...GitMutationOperationInputShape,
   cwd: TrimmedNonEmptyStringSchema,
+  /** Omitted: legacy whole-tree `git checkout -- .` (tracked files only). */
+  selection: Schema.optional(GitDiscardSelection),
 });
 export type GitDiscardChangesInput = typeof GitDiscardChangesInput.Type;
 

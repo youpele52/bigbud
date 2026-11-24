@@ -2,6 +2,11 @@ import type { GitCommitSummary, GitGetCommitDetailsResult } from "@bigbud/contra
 
 import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { ensureNativeApi } from "~/rpc/nativeApi";
+import {
+  buildGitChangedFileMenuItems,
+  buildGitDiscardRequest,
+  type GitDiscardRequest,
+} from "./GitPanel.discard.logic";
 import { formatGitCommitAuthorNames } from "./GitPanelAuthors";
 
 type GitCommitCopyAction =
@@ -11,8 +16,6 @@ type GitCommitCopyAction =
   | "copy-tags"
   | "copy-author"
   | "copy-body";
-
-type GitChangedFileCopyAction = "copy-selected-text" | "copy-path" | "copy-filename";
 
 function readSelectedText(): string {
   return window.getSelection()?.toString().trim() ?? "";
@@ -81,23 +84,28 @@ export async function showGitCommitCopyMenu(input: {
   await copyTextToClipboard((input.body ?? "").trim());
 }
 
+/** Shows the changed-file menu; discard actions are handed to `onDiscard` for confirmation. */
 export async function showGitChangedFileCopyMenu(input: {
   path: string;
+  listedPaths: ReadonlyArray<string>;
   position: { x: number; y: number };
+  onDiscard: (request: GitDiscardRequest) => void;
 }): Promise<void> {
   const selectedText = readSelectedText();
-  const action = await showCopyMenu<GitChangedFileCopyAction>(
-    [
-      ...(selectedText ? [{ id: "copy-selected-text" as const, label: "Copy Selected Text" }] : []),
-      { id: "copy-path", label: "Copy Path" },
-      { id: "copy-filename", label: "Copy Filename" },
-    ],
+  const action = await ensureNativeApi().contextMenu.show(
+    buildGitChangedFileMenuItems({ selectedText }),
     input.position,
   );
-  if (!action) {
+  if (!action || action === "separator-discard") {
     return;
   }
 
+  if (action === "discard-file" || action === "discard-all") {
+    input.onDiscard(
+      buildGitDiscardRequest({ action, path: input.path, listedPaths: input.listedPaths }),
+    );
+    return;
+  }
   if (action === "copy-selected-text") {
     await copyTextToClipboard(selectedText);
     return;

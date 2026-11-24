@@ -14,6 +14,8 @@ import { makeUpstreamOps } from "./GitStatus.upstream.ts";
 import { makeCommitOps } from "./GitStatus.commit.ts";
 import { makeReadStatusDetails } from "./GitStatus.details.ts";
 import { gitMutationOperationId } from "./GitCoreExecutor.ts";
+import { makeDiscardSelectedChanges } from "./GitStatus.discard.ts";
+import type { WorkspaceTrash } from "../../workspace/Layers/WorkspaceTrash.ts";
 
 export interface GitStatusOps {
   statusDetails: GitCoreShape["statusDetails"];
@@ -32,6 +34,8 @@ export interface GitStatusOps {
 export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
   helpers: GitHelpers,
   path: Path.Path,
+  /** Local repositories move discarded untracked files to the Trash; remote targets delete. */
+  trash?: WorkspaceTrash,
 ) {
   const { executeGit, runGit, runGitStdout } = helpers;
 
@@ -277,8 +281,19 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     },
   );
 
+  const discardSelectedChanges = makeDiscardSelectedChanges({
+    executeGit,
+    path,
+    readListedPaths: (cwd) =>
+      readStatusDetails(cwd, "GitCore.statusDetailsLocal").pipe(
+        Effect.map((details) => details.workingTree.files.map((file) => file.path)),
+      ),
+    trash,
+  });
+
   const discardChanges: GitCoreShape["discardChanges"] = Effect.fn("discardChanges")(
-    function* (cwd, _executionTargetId, operationId) {
+    function* (cwd, _executionTargetId, operationId, selection) {
+      if (selection) return yield* discardSelectedChanges(cwd, selection, operationId);
       yield* executeGit("GitCore.discardChanges", cwd, ["checkout", "--", "."], {
         timeoutMs: 15_000,
         fallbackErrorMessage: "Failed to discard working tree changes",

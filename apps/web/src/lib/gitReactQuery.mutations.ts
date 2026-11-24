@@ -1,5 +1,6 @@
 import {
   type GitActionProgressEvent,
+  type GitDiscardSelection,
   type GitStackedAction,
   type ThreadId,
   type ExecutionTargetId,
@@ -149,12 +150,16 @@ export function gitDiscardChangesMutationOptions(input: {
 }) {
   return mutationOptions({
     mutationKey: gitMutationKeys.discardChanges(input.cwd, input.executionTargetId),
-    mutationFn: async ({ operationId }: GitMutationVariables) => {
+    mutationFn: async ({
+      operationId,
+      selection,
+    }: GitMutationVariables & { readonly selection?: GitDiscardSelection }) => {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Discard changes is unavailable.");
       return api.git.discardChanges({
         cwd: input.cwd,
         operationId,
+        ...(selection ? { selection } : {}),
         ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
       });
     },

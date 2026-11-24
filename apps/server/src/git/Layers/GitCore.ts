@@ -7,6 +7,7 @@ import { GitCommandError } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
 import { makeRawExecute, wrapExecuteWithMetrics, makeGitHelpers } from "./GitCoreExecutor.ts";
 import { makeGitStatusOps } from "./GitStatus.ts";
+import { makeSystemWorkspaceTrash } from "../../workspace/Layers/WorkspaceTrash.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
 import { makeGitWorktreeOps } from "./GitWorktree.ts";
 import type { GitWorktreeOps } from "./GitWorktree.ts";
@@ -42,7 +43,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const execute: GitCoreShape["execute"] = wrapExecuteWithMetrics(executeRaw);
   const helpers = makeGitHelpers(execute);
 
-  const statusOps = yield* makeGitStatusOps(helpers, path);
+  const statusOps = yield* makeGitStatusOps(helpers, path, makeSystemWorkspaceTrash());
 
   const branchOps = makeGitBranchOps(helpers, statusOps);
 
@@ -170,16 +171,16 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
             )
           : requireRemoteGitAgent("git.fetch", cwd, executionTargetId)
         : statusOps.fetch(cwd, undefined, operationId),
-    discardChanges: (cwd, executionTargetId, operationId?) =>
+    discardChanges: (cwd, executionTargetId, operationId?, selection?) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
           ? remoteOpsForTarget(executionTargetId).pipe(
               Effect.flatMap(({ statusOps: targetStatusOps }) =>
-                targetStatusOps.discardChanges(cwd, undefined, operationId),
+                targetStatusOps.discardChanges(cwd, undefined, operationId, selection),
               ),
             )
           : requireRemoteGitAgent("git.discardChanges", cwd, executionTargetId)
-        : statusOps.discardChanges(cwd, undefined, operationId),
+        : statusOps.discardChanges(cwd, undefined, operationId, selection),
     readRangeContext: (cwd, baseBranch, executionTargetId) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute
