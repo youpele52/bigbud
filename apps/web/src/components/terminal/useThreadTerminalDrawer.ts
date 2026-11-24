@@ -6,16 +6,13 @@ import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projec
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useComposerDraftStore } from "../../stores/composer";
-import {
-  selectTerminalEventEntries,
-  selectThreadTerminalState,
-  terminalEventBufferKey,
-  useTerminalStateStore,
-} from "../../stores/terminal";
+import { selectThreadTerminalState, useTerminalStateStore } from "../../stores/terminal";
+import { resolveTerminalAgentKind } from "./terminalAgentKind.resolve";
 import { useServerSettings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
+import { resolveTerminalBaseLabel } from "./terminalDisplay";
 import { closeTerminalConfirmed } from "./terminalLifecycle.operations";
+import { requestTerminalClose, type CloseTerminalHandler } from "./terminalCloseGuard";
 import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
 import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import { canCreateProfileTerminal } from "./TerminalProfilePicker.launch";
@@ -45,7 +42,7 @@ export interface UseThreadTerminalDrawerResult {
     profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
   ) => void;
   activateTerminal: (terminalId: string) => void;
-  closeTerminal: (terminalId: string) => void;
+  closeTerminal: CloseTerminalHandler;
   setTerminalLabelOverride: (terminalId: string, label: string) => void;
   clearTerminalLabelOverride: (terminalId: string) => void;
   setTerminalHeight: (height: number) => void;
@@ -186,22 +183,10 @@ export function useThreadTerminalDrawer(
   );
   const terminalProviderById = useMemo(() => {
     const nextById: Record<string, TerminalAgentKind> = {};
+    const source = { terminalAgentProviderByKey, terminalEventEntriesByKey };
     for (const terminalId of terminalState.terminalIds) {
-      const key = terminalEventBufferKey(threadId, terminalId);
-      if (Object.hasOwn(terminalAgentProviderByKey, key)) {
-        const liveProvider = terminalAgentProviderByKey[key];
-        if (liveProvider) nextById[terminalId] = liveProvider;
-        continue;
-      }
-      const eventEntries = selectTerminalEventEntries(
-        terminalEventEntriesByKey,
-        threadId,
-        terminalId,
-      );
-      const terminalProvider = resolveTerminalProviderFromEvents(eventEntries);
-      if (terminalProvider) {
-        nextById[terminalId] = terminalProvider;
-      }
+      const provider = resolveTerminalAgentKind(source, threadId, terminalId);
+      if (provider) nextById[terminalId] = provider;
     }
     return nextById;
   }, [terminalAgentProviderByKey, terminalEventEntriesByKey, terminalState.terminalIds, threadId]);
@@ -275,31 +260,41 @@ export function useThreadTerminalDrawer(
     [bumpFocusRequestId, storeSetActiveTerminal, threadId],
   );
 
-  const closeTerminal = useCallback(
-    (terminalId: string) => {
+  const closeTerminal = useCallback<CloseTerminalHandler>(
+    (terminalId, options) => {
       const api = readNativeApi();
       if (!api) return;
-      void closeTerminalConfirmed({
-        api,
+      requestTerminalClose({
         threadId,
         terminalId,
-        executionTargetId,
-        onPending: () => {
-          const next = terminalState.terminalIds.find((id) => id !== terminalId);
-          if (next && terminalState.activeTerminalId === terminalId)
-            storeSetActiveTerminal(threadId, next);
-          bumpFocusRequestId();
-        },
-        onConfirmed: () => storeCloseTerminal(threadId, terminalId),
+        options,
+        close: () =>
+          void closeTerminalConfirmed({
+            api,
+            threadId,
+            terminalId,
+            executionTargetId,
+            onPending: () => {
+              // Read now: the confirmation may have waited while panes changed.
+              const surfaces = useTerminalStateStore.getState();
+              const current = (
+                isPanel ? surfaces.panelTerminalStateByThreadId : surfaces.terminalStateByThreadId
+              )[threadId];
+              const next = current?.terminalIds.find((id) => id !== terminalId);
+              if (next && current?.activeTerminalId === terminalId)
+                storeSetActiveTerminal(threadId, next);
+              bumpFocusRequestId();
+            },
+            onConfirmed: () => storeCloseTerminal(threadId, terminalId),
+          }),
       });
     },
     [
       bumpFocusRequestId,
       executionTargetId,
+      isPanel,
       storeCloseTerminal,
       storeSetActiveTerminal,
-      terminalState.terminalIds,
-      terminalState.activeTerminalId,
       threadId,
     ],
   );

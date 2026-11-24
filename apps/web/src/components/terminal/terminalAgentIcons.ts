@@ -23,3 +23,8 @@ export function terminalAgentLabel(kind: TerminalAgentKind): string {
     ? `Terminal: ${TERMINAL_ONLY_AGENT_NAMES[kind]}`
     : `Terminal provider: ${PROVIDER_DISPLAY_NAMES[kind]}`;
 }
+
+/** The agent's plain name ("OpenCode", "Claude Code"), for lists that title a terminal by its agent. */
+export function terminalAgentName(kind: TerminalAgentKind): string {
+  return isTerminalOnly(kind) ? TERMINAL_ONLY_AGENT_NAMES[kind] : PROVIDER_DISPLAY_NAMES[kind];
+}

@@ -1,3 +1,4 @@
+import { forgetTerminalLiveness } from "../../stores/terminal/terminalLiveness.store";
 import type { NativeApi, ThreadId } from "@bigbud/contracts";
 import { forgetTerminalLaunch, readTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import {
@@ -78,6 +79,7 @@ export async function closeTerminalConfirmed(input: {
         }).then(() => {
           if (readTerminalLifecycle(threadId, terminalId)?.id !== operation.id) return;
           input.onConfirmed();
+          forgetTerminalLiveness(threadId, terminalId);
           forgetTerminalLaunch(threadId, terminalId);
           finishTerminalLifecycle(threadId, terminalId, operation);
         });

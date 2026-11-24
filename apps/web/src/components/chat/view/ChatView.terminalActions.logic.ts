@@ -1,3 +1,4 @@
+import { useTerminalStateStore } from "../../../stores/terminal";
 import type { TerminalStateStoreState } from "../../../stores/terminal/terminal.store.types";
 import type { TerminalSplitDirection } from "../../../lib/terminalSplitLayout";
 import { canCreateProfileTerminal } from "../../terminal/TerminalProfilePicker.launch";
@@ -9,6 +10,7 @@ import { randomUUID } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { ensureThreadMaterialized } from "../../../lib/threadMaterialization";
 import { closeTerminalConfirmed } from "../../terminal/terminalLifecycle.operations";
+import { requestTerminalClose, type CloseTerminalHandler } from "../../terminal/terminalCloseGuard";
 import { runBoundTerminalCommand } from "../../../lib/terminalLaunchBinding.command";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
 import { resolveWorkspaceExecutionTargetId } from "../../../lib/providerExecutionTargets";
@@ -48,7 +50,7 @@ export interface UseTerminalActionsResult {
   toggleTerminalVisibility: () => void;
   splitTerminal: (direction?: TerminalSplitDirection) => void;
   createNewTerminal: () => void;
-  closeTerminal: (terminalId: string) => void;
+  closeTerminal: CloseTerminalHandler;
   runTerminalCommand: (
     command: string,
     options?: {
@@ -163,32 +165,39 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
     setTerminalFocusRequestId((value) => value + 1);
   }, [activeThreadId, storeNewTerminal, setTerminalFocusRequestId, terminalState.activeTerminalId]);
 
-  const closeTerminal = useCallback(
-    (terminalId: string) => {
+  const closeTerminal = useCallback<CloseTerminalHandler>(
+    (terminalId, options) => {
       const api = readNativeApi();
       if (!activeThreadId || !api) return;
-      void closeTerminalConfirmed({
-        api,
+      requestTerminalClose({
         threadId: activeThreadId,
         terminalId,
-        executionTargetId: activeProject
-          ? resolveWorkspaceExecutionTargetId(activeProject)
-          : undefined,
-        onPending: () => {
-          const next = terminalState.terminalIds.find((id) => id !== terminalId);
-          if (next && terminalState.activeTerminalId === terminalId)
-            storeSetActiveTerminal(activeThreadId, next);
-          setTerminalFocusRequestId((value) => value + 1);
-        },
-        onConfirmed: () => storeCloseTerminal(activeThreadId, terminalId),
+        options,
+        close: () =>
+          void closeTerminalConfirmed({
+            api,
+            threadId: activeThreadId,
+            terminalId,
+            executionTargetId: activeProject
+              ? resolveWorkspaceExecutionTargetId(activeProject)
+              : undefined,
+            onPending: () => {
+              // Read now: the confirmation may have waited while panes changed.
+              const current =
+                useTerminalStateStore.getState().terminalStateByThreadId[activeThreadId];
+              const next = current?.terminalIds.find((id) => id !== terminalId);
+              if (next && current?.activeTerminalId === terminalId)
+                storeSetActiveTerminal(activeThreadId, next);
+              setTerminalFocusRequestId((value) => value + 1);
+            },
+            onConfirmed: () => storeCloseTerminal(activeThreadId, terminalId),
+          }),
       });
     },
     [
       activeProject,
       activeThreadId,
       storeCloseTerminal,
-      terminalState.terminalIds,
-      terminalState.activeTerminalId,
       storeSetActiveTerminal,
       setTerminalFocusRequestId,
     ],

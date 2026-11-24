@@ -1,3 +1,4 @@
+import { TerminalCloseConfirmation } from "../components/terminal/TerminalCloseConfirmation";
 import { QueryClient } from "@tanstack/react-query";
 import { ResourceAwarenessToastCoordinator } from "../components/resource-monitor/ResourceAwarenessToastCoordinator";
 import {
@@ -130,6 +131,7 @@ export function RootRouteView() {
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <TerminalFinishedNotifications />
+        <TerminalCloseConfirmation />
         <WebSocketConnectionSurface>
           <>
             <div className="relative h-screen overflow-hidden">

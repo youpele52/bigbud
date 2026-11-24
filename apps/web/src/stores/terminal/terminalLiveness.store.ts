@@ -147,6 +147,14 @@ export function applyTerminalLivenessNotice(notice: TerminalLifecycleNotice): vo
   useTerminalLivenessStore.setState((state) => applyLivenessNotice(state, notice));
 }
 
+/**
+ * A confirmed close ended this terminal: drop it now rather than waiting for the next inventory,
+ * so the sidebar counts never show a terminal the user just closed.
+ */
+export function forgetTerminalLiveness(threadId: string, terminalId: string): void {
+  useTerminalLivenessStore.setState((state) => setEntry(state, threadId, terminalId, () => null));
+}
+
 const EMPTY_THREAD_LIVENESS: ThreadTerminalLiveness = Object.freeze({});
 
 export function selectThreadTerminalLiveness(

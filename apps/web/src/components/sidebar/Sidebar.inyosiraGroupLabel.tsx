@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import { HandPointingLeft03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -13,12 +14,15 @@ export function SidebarInyosiraGroupLabel({
   hasThreads = false,
   isExpanded,
   onExpandedChange,
+  actions,
 }: {
   state: ThreadOrganizationState;
   result: InyosiraCountResult;
   hasThreads?: boolean;
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
+  /** Controls beside the label, outside its toggle button. */
+  actions?: ReactNode;
 }) {
   const isEmptyNeedsYou =
     state === "needs-you" && !hasThreads && result.status === "loaded" && result.count === 0;
@@ -38,7 +42,11 @@ export function SidebarInyosiraGroupLabel({
         ? "Thread count unavailable"
         : "Loading thread count";
   return (
-    <SidebarSectionLabel isExpanded={isExpanded} onExpandedChange={onExpandedChange}>
+    <SidebarSectionLabel
+      isExpanded={isExpanded}
+      onExpandedChange={onExpandedChange}
+      actions={actions}
+    >
       <span
         className={`inline-flex items-center gap-2 ${isEmptyNeedsYou ? "text-muted-foreground" : ""}`}
       >

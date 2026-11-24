@@ -1,3 +1,4 @@
+import type { CloseTerminalHandler } from "./terminalCloseGuard";
 import type { ExecutionTargetId, ResolvedKeybindingsConfig, ThreadId } from "@bigbud/contracts";
 import type { TerminalContextSelection } from "~/lib/terminalContext";
 import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
@@ -25,7 +26,7 @@ export interface ThreadTerminalDrawerProps {
   newShortcutLabel?: string | undefined;
   closeShortcutLabel?: string | undefined;
   onActiveTerminalChange: (terminalId: string) => void;
-  onCloseTerminal: (terminalId: string) => void;
+  onCloseTerminal: CloseTerminalHandler;
   onHeightChange: (height: number) => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   keybindings: ResolvedKeybindingsConfig;

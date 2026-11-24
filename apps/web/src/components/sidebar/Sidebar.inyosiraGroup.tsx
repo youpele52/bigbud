@@ -19,6 +19,7 @@ import { SidebarInyosiraGroupLabel } from "./Sidebar.inyosiraGroupLabel";
 import { SidebarInyosiraLocationLine } from "./Sidebar.inyosiraLocation";
 import type { SharedProjectItemProps } from "./Sidebar.types";
 import { SidebarThreadListControls } from "./SidebarThreadListControls";
+import { SidebarProjectTerminals } from "./SidebarProjectTerminals";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 
 interface SidebarInyosiraGroupProps {
@@ -100,6 +101,15 @@ export function SidebarInyosiraGroup({
         hasThreads={threadIds.length > 0}
         isExpanded={expanded}
         onExpandedChange={(next) => setStateCollapsed(state, !next)}
+        actions={
+          state === "present" ? (
+            <SidebarProjectTerminals
+              scope={{ kind: "threads", threadIds }}
+              otherScope={{ kind: "excluding", threadIds }}
+              navigateToThread={shared.navigateToThread}
+            />
+          ) : null
+        }
       />
       {expanded ? (
         <SidebarMenuSub className="ml-5 mr-0 my-0 translate-x-0 gap-0.5 border-l-0 px-0 py-0 [&>[data-thread-item]]:px-2">
