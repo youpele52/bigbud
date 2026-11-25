@@ -1,4 +1,5 @@
 import type { RemoteAgentPtyFrame } from "./remoteAgentProtocol.pty.ts";
+import type { RemoteAgentTerminalHostFrame } from "./remoteAgentProtocol.terminalHost.ts";
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
 import type { RemoteAgentPasteStagingFrame } from "./remoteAgentProtocol.pasteStaging.ts";
 import type { RemoteAgentSearchFrame } from "./remoteAgentProtocol.search.ts";
@@ -16,7 +17,7 @@ export type {
   RemoteAgentSupervisorShutdownResponse,
 } from "./remoteAgentProtocol.control.ts";
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
-export const REMOTE_AGENT_PROTOCOL_MINOR = 9;
+export const REMOTE_AGENT_PROTOCOL_MINOR = 10;
 export const REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
 export interface RemoteAgentClientHello {
   readonly protocolMajor: number;
@@ -374,7 +375,8 @@ export type RemoteAgentFrame =
   | { readonly type: "processAckResponse"; readonly value: RemoteAgentProcessAckResponse }
   | { readonly type: "processAttachResponse"; readonly value: RemoteAgentProcessAttachResponse }
   | RemoteAgentPtyFrame
-  | RemoteAgentPtyLifecycleFrame;
+  | RemoteAgentPtyLifecycleFrame
+  | RemoteAgentTerminalHostFrame;
 
 export class RemoteAgentProtocolDecodeError extends Error {
   readonly _tag = "RemoteAgentProtocolDecodeError";

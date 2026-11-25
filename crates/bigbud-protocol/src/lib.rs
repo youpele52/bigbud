@@ -8,7 +8,7 @@ pub use frame::{
 pub use generated::{service_lease, v1};
 
 pub const PROTOCOL_MAJOR: u32 = 1;
-pub const PROTOCOL_MINOR: u32 = 9;
+pub const PROTOCOL_MINOR: u32 = 10;
 pub const DEFAULT_MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 /// Protocol 1.9 terminal lifecycle limits and names (`pty_lifecycle.proto`).

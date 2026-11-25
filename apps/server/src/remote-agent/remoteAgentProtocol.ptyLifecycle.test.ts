@@ -40,7 +40,7 @@ const maxChunk = (index: number, last: boolean): RemoteAgentFrame => ({
 
 describe("remote-agent protocol 1.9 terminal lifecycle", () => {
   it("advertises protocol minor 9", () => {
-    expect(REMOTE_AGENT_PROTOCOL_MINOR).toBe(9);
+    expect(REMOTE_AGENT_PROTOCOL_MINOR).toBe(10);
   });
 
   it.each(lifecycleGoldenFrames)("matches the shared Rust golden %s", (name, frame) => {
