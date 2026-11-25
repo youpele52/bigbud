@@ -83,6 +83,63 @@ export const controlCases = {
       ],
     ],
   ],
+  // Owner-initiated restart reconciliation (W3.7). The owner asks before
+  // HelloAccepted; the backend answers from durable rows only.
+  proof_reconcile_hydrate: [
+    [
+      18,
+      [
+        [1, Buffer.alloc(32, 0x21)],
+        [2, Buffer.from("aabb", "hex")],
+      ],
+    ],
+  ],
+  proof_reconcile_snapshot: [
+    [
+      19,
+      [
+        [1, Buffer.alloc(32, 0x21)],
+        [2, Buffer.alloc(32, 0x5e)],
+        [
+          3,
+          [
+            [1, target],
+            [2, "owner"],
+            [3, "bound"],
+            [4, "e".repeat(64)],
+            [5, 4242],
+            [6, 99],
+            [7, 7],
+            [8, "prior owner"],
+          ],
+        ],
+        [
+          4,
+          [
+            [1, `terminal:${"b".repeat(64)}`],
+            [2, "thread-1"],
+            [3, "terminal-1"],
+            [4, "aa"],
+            [5, target],
+            [6, "generation"],
+            [7, "reservation-1"],
+            [8, "prepared"],
+            [9, 4242],
+          ],
+        ],
+      ],
+    ],
+  ],
+  proof_reconcile_snapshot_unavailable: [
+    [
+      19,
+      [
+        [1, Buffer.alloc(32, 0x21)],
+        [2, Buffer.alloc(32, 0x5e)],
+        [5, 13],
+      ],
+    ],
+  ],
   // Peer enrollment (T-peer / U9): public metadata only. Same request envelope
   // shape as the golden codec's `request`/`reply` helpers.
   proof_ensure_peer_coordinator_key: peerRequest(71, []),

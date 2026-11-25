@@ -23,6 +23,11 @@ pub(crate) struct Owner {
     pub(super) owner_state_dir: Option<std::path::PathBuf>,
     pub(super) retirement: Option<Retirement>,
     pub(super) storage: Storage,
+    /// The acknowledgement of the current restart reconciliation round. Cleared
+    /// on every rebind so a previous round's acknowledgement never survives.
+    pub(super) reconciliation: Option<super::reconciliation::Ack>,
+    /// `Unspecified` only after the owner acknowledged the hydrated sets.
+    pub(super) admission_error: crate::v1::ErrorCode,
     /// Active target transport. `None` only while a production owner is at rest
     /// between requests; every admitted request activates a resolved target.
     pub(crate) transport: Option<Transport>,

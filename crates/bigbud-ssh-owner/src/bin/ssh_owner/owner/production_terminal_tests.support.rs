@@ -70,6 +70,20 @@ impl Fixture {
         }));
         let mut input = Vec::new();
         Endpoint::Client.write_frame(&mut input, &payload).unwrap();
+        // A scripted pipe cannot know the random reconciliation round, so the
+        // test pins it and answers with an empty, acknowledged set.
+        crate::owner::reconciliation::pin_test_request_id([9; 32]);
+        let reconcile = encode_payload(Payload::ProofReconcileSnapshot(
+            crate::v1::ProofReconcileSnapshot {
+                request_id: vec![9; 32],
+                digest: vec![0; 32],
+                error: 0,
+                ..crate::v1::ProofReconcileSnapshot::default()
+            },
+        ));
+        Endpoint::Client
+            .write_frame(&mut input, &reconcile)
+            .unwrap();
         let lock = self.state.join("owner.lock");
         owner::bootstrap(
             &mut Pipe::new(input.as_slice(), Vec::new()),

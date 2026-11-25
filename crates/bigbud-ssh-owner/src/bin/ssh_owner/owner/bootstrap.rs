@@ -287,13 +287,15 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
     let owner_state_dir = profile_lock_path.parent().map(std::path::Path::to_path_buf);
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let owner_state_dir = None;
-    let owner = Owner {
+    let mut owner = Owner {
         target,
         epoch,
         generation,
         profile: profile.to_vec(),
         owner_state_dir,
         storage,
+        reconciliation: None,
+        admission_error: crate::v1::ErrorCode::Unspecified,
         retirement: retirement.clone(),
         transport,
         targets,
@@ -331,6 +333,14 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         #[cfg(target_os = "linux")]
         tracked_push,
     };
+    // Production admits only after the owner verified the backend's unresolved
+    // retirement mirror and retained pane bindings. The acknowledgement travels
+    // in HelloAccepted; a refusal keeps owner-side admission closed.
+    if owner.production {
+        let ack = super::reconciliation::reconcile(pipe, &owner.epoch, &[])?;
+        owner.admission_error = ack.error;
+        owner.reconciliation = Some(ack);
+    }
     owner.send_accepted(pipe)?;
     Ok((owner, attachment))
 }

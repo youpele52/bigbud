@@ -22,6 +22,13 @@ export type Frame =
       profileBinding: Uint8Array;
       /** W3.7: the owner has no pinned target and resolves one per request. */
       multiTarget: boolean;
+      /** The owner acknowledged the restart reconciliation set. */
+      reconciled: boolean;
+      reconciliationId: Uint8Array;
+      reconciliationDigest: Uint8Array;
+      retirementCount: number;
+      paneCount: number;
+      reconciliationError: number;
     }
   | {
       kind: "reply";
@@ -32,6 +39,12 @@ export type Frame =
     }
   | { kind: "grantReply"; requestId: Uint8Array; grant: Uint8Array; error: number }
   | { kind: "storageHydrate"; targetId: string }
+  | {
+      kind: "reconcileHydrate";
+      requestId: Uint8Array;
+      ownerEpoch: Uint8Array;
+      generation: Uint8Array;
+    }
   | { kind: "attachChallenge"; serverNonce: Uint8Array; proof: Uint8Array }
   | {
       kind: "storageTransition";
@@ -51,7 +64,13 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         generation = EMPTY,
         aliasDescriptor = EMPTY,
         profileBinding = EMPTY,
-        multiTarget = false;
+        multiTarget = false,
+        reconciled = false,
+        reconciliationId = EMPTY,
+        reconciliationDigest = EMPTY,
+        retirementCount = 0,
+        paneCount = 0,
+        reconciliationError = 0;
       decodeMessage(bytes, (number, wire, reader) => {
         if (number === 1) major = uintValue(wire, reader);
         else if (number === 2) minor = uintValue(wire, reader);
@@ -60,6 +79,12 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         else if (number === 5) aliasDescriptor = bytesValue(wire, reader);
         else if (number === 6) profileBinding = bytesValue(wire, reader);
         else if (number === 7) multiTarget = uintValue(wire, reader) === 1;
+        else if (number === 8) reconciled = uintValue(wire, reader) === 1;
+        else if (number === 9) reconciliationId = bytesValue(wire, reader);
+        else if (number === 10) reconciliationDigest = bytesValue(wire, reader);
+        else if (number === 11) retirementCount = uintValue(wire, reader);
+        else if (number === 12) paneCount = uintValue(wire, reader);
+        else if (number === 13) reconciliationError = uintValue(wire, reader);
         else reader.skip(wire);
       });
       return {
@@ -71,6 +96,12 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         aliasDescriptor,
         profileBinding,
         multiTarget,
+        reconciled,
+        reconciliationId,
+        reconciliationDigest,
+        retirementCount,
+        paneCount,
+        reconciliationError,
       };
     }
     case 4:
@@ -95,6 +126,19 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         else reader.skip(wire);
       });
       return { kind: "storageHydrate", targetId };
+    }
+    case 18: {
+      let requestId = EMPTY,
+        ownerEpoch = EMPTY,
+        generation = EMPTY;
+      decodeMessage(bytes, (number, wire, reader) => {
+        if (number === 1) requestId = bytesValue(wire, reader);
+        else if (number === 2) ownerEpoch = bytesValue(wire, reader);
+        else if (number === 3) generation = bytesValue(wire, reader);
+        else reader.skip(wire);
+      });
+      if (requestId.length !== PROOF_TOKEN_BYTES) return invalid();
+      return { kind: "reconcileHydrate", requestId, ownerEpoch, generation };
     }
     case 9: {
       let requestId = EMPTY,

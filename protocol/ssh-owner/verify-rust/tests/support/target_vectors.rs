@@ -20,6 +20,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
             proof_alias_descriptor: Vec::new(),
             profile_binding: vec![0, 0x61, 0xff],
             multi_target: false,
+            ..HelloAccepted::default()
         }),
     );
     assert_frame(
@@ -33,6 +34,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
             proof_alias_descriptor: Vec::new(),
             profile_binding: vec![0, 0x61, 0xff],
             multi_target: true,
+            ..HelloAccepted::default()
         }),
     );
     assert_frame(

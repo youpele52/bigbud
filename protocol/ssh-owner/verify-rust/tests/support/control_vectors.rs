@@ -2,9 +2,11 @@ use std::collections::BTreeMap;
 
 use super::{assert_frame, v1};
 use v1::{
-    AliasRouteKind, ErrorCode, ListAliases, ListFolders, ProofAliasEntry, ProofAliasUnsupported,
-    ProofAliases, ProofGrantReply, ProofStorageHydrate, ProofStorageResult, ProofStorageSnapshot,
-    ProofStorageTransition, Reply, Request, frame::Payload, reply::Outcome, request::Operation,
+    AliasRouteKind, ErrorCode, HelloAccepted, ListAliases, ListFolders, ProofAliasEntry,
+    ProofAliasUnsupported, ProofAliases, ProofGrantReply, ProofPaneBinding, ProofReconcileHydrate,
+    ProofReconcileSnapshot, ProofRetirementEntry, ProofStorageHydrate, ProofStorageResult,
+    ProofStorageSnapshot, ProofStorageTransition, Reply, Request, frame::Payload, reply::Outcome,
+    request::Operation,
 };
 
 pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
@@ -72,6 +74,81 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 request_id: id(),
                 error: ErrorCode::StorageUnavailable.into(),
                 ..ProofStorageResult::default()
+            }),
+        ),
+        (
+            "proof_reconcile_hydrate",
+            Payload::ProofReconcileHydrate(ProofReconcileHydrate {
+                request_id: vec![0x21; 32],
+                owner_epoch: b"\xaa\xbb".to_vec(),
+                generation: Vec::new(),
+            }),
+        ),
+        (
+            "proof_reconcile_snapshot",
+            Payload::ProofReconcileSnapshot(ProofReconcileSnapshot {
+                request_id: vec![0x21; 32],
+                digest: vec![0x5e; 32],
+                retirements: vec![ProofRetirementEntry {
+                    target_id: target(),
+                    kind: "owner".into(),
+                    state: "bound".into(),
+                    owner_epoch: "e".repeat(64),
+                    pid: 4242,
+                    start: 99,
+                    namespace: Some(7),
+                    detail: "prior owner".into(),
+                }],
+                panes: vec![ProofPaneBinding {
+                    owner_key: format!("terminal:{}", "b".repeat(64)),
+                    thread_id: "thread-1".into(),
+                    terminal_id: "terminal-1".into(),
+                    owner_epoch: "aa".into(),
+                    target_id: target(),
+                    generation: "generation".into(),
+                    lease_id: "reservation-1".into(),
+                    state: "prepared".into(),
+                    remote_shell_pid: Some(4242),
+                    terminated: false,
+                }],
+                error: ErrorCode::Unspecified.into(),
+            }),
+        ),
+        (
+            "proof_reconcile_snapshot_unavailable",
+            Payload::ProofReconcileSnapshot(ProofReconcileSnapshot {
+                request_id: vec![0x21; 32],
+                digest: vec![0x5e; 32],
+                error: ErrorCode::StorageUnavailable.into(),
+                ..ProofReconcileSnapshot::default()
+            }),
+        ),
+        (
+            "hello_accepted_reconciled",
+            Payload::HelloAccepted(HelloAccepted {
+                major: 1,
+                owner_epoch: b"\x00\x2a".to_vec(),
+                profile_binding: b"\x00\x61\xff".to_vec(),
+                multi_target: true,
+                reconciled: true,
+                reconciliation_id: (0u8..32).map(|i| 0x20 + i).collect(),
+                reconciliation_digest: (0u8..32).map(|i| 0x40 + i).collect(),
+                retirement_count: 1,
+                pane_count: 1,
+                ..HelloAccepted::default()
+            }),
+        ),
+        (
+            "hello_accepted_reconciliation_refused",
+            Payload::HelloAccepted(HelloAccepted {
+                major: 1,
+                owner_epoch: b"\x00\x2a".to_vec(),
+                profile_binding: b"\x00\x61\xff".to_vec(),
+                multi_target: true,
+                reconciliation_id: (0u8..32).map(|i| 0x20 + i).collect(),
+                reconciliation_digest: (0u8..32).map(|i| 0x40 + i).collect(),
+                reconciliation_error: ErrorCode::OwnerRetirementUnverified.into(),
+                ..HelloAccepted::default()
             }),
         ),
         (

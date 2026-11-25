@@ -2,6 +2,11 @@ use super::{ErrorCode, Operation, Owner, Request};
 
 impl Owner {
     pub(super) fn validate(&self, request: &Request) -> Result<Operation, ErrorCode> {
+        // Admission stays closed until the owner acknowledged the exact restart
+        // reconciliation round. The typed refusal is reported, never softened.
+        if self.admission_error != ErrorCode::Unspecified {
+            return Err(self.admission_error);
+        }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         if self
             .picker_cancel

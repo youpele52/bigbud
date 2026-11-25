@@ -1,6 +1,11 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 
 import type { SshOwnerProfile } from "./sshOwnerProductionArtifact.ts";
+import {
+  SshOwnerClientError,
+  sshOwnerUnavailableReason,
+} from "./sshOwnerProductionClient.errors.ts";
 import type { SshOwnerHydrationSnapshot } from "./sshOwnerProductionHydration.ts";
 import {
   LegacyEntryFencedError,
@@ -76,15 +81,24 @@ const closed = (
 const unavailableFrom = (
   step: SshOwnerBootStep,
   reason: SshOwnerUnavailableReason,
-  cause: unknown,
+  cause: Cause.Cause<unknown>,
 ): SshOwnerBootOutcome => {
-  if (cause instanceof SshOwnerUnavailableError) {
-    return { kind: "unavailable", step, error: cause };
+  const error = Cause.squash(cause);
+  if (error instanceof SshOwnerUnavailableError) {
+    return { kind: "unavailable", step, error };
   }
-  if (cause instanceof LegacyEntryFencedError) {
-    return { kind: "refused", error: cause };
+  if (error instanceof LegacyEntryFencedError) {
+    return { kind: "refused", error };
   }
-  const detail = cause instanceof Error ? cause.message : "unknown failure";
+  if (error instanceof SshOwnerClientError) {
+    // Keep the client's typed reason (retirement, pane, protocol) through boot.
+    return closed(
+      step,
+      sshOwnerUnavailableReason(error.failure),
+      `SSH admission stayed closed: ${error.message}`,
+    );
+  }
+  const detail = error instanceof Error ? error.message : "unknown failure";
   return closed(step, reason, `SSH admission stayed closed: ${detail}`);
 };
 

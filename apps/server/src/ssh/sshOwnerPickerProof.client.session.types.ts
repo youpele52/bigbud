@@ -21,6 +21,18 @@ export interface PickerProofSessionOptions {
   readonly targetId?: string;
   readonly sql: SqlClient.SqlClient;
   readonly major?: number;
+  /**
+   * Durable profile scope for the production restart reconciliation. The fixture
+   * handshake never reads it; a production owner that asks without it is refused.
+   */
+  readonly profileScope?: string;
+}
+
+/** The owner's acknowledgement of one exact restart reconciliation round. */
+export interface PickerProofReconciliation {
+  readonly acknowledged: boolean;
+  readonly retirements: number;
+  readonly panes: number;
 }
 
 export interface PickerProofHydratedStorage {
@@ -71,6 +83,10 @@ export interface PickerProofOwner
   readonly aliasDescriptor?: Uint8Array | undefined;
   /** The exact storage snapshot this session acknowledged during its handshake. */
   readonly hydratedStorage?: PickerProofHydratedStorage | undefined;
+  /** The owner acknowledged the restart reconciliation this session answered. */
+  readonly reconciliation?: PickerProofReconciliation | undefined;
+  /** The exact reconciliation snapshot this session sent (production only). */
+  readonly acknowledgedSnapshot?: import("./sshOwnerProductionHydration.ts").SshOwnerHydrationSnapshot;
   /** Fires once when the inherited channel is lost unexpectedly (not on detach). */
   onLost(listener: () => void): () => void;
   /** Binds one target for per-target requests (W3.7). */

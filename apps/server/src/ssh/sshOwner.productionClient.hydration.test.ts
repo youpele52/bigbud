@@ -227,7 +227,18 @@ describe("production owner client hydration", () => {
                 durableDisconnects: [],
                 aliasDescriptorBindings: [],
                 retirementMirror: [],
-                paneBindings: [{ ownerKey: "pane-1", state: "may-have-been-sent" }],
+                paneBindings: [
+                  {
+                    ownerKey: "pane-1",
+                    threadId: "thread-1",
+                    terminalId: "terminal-1",
+                    ownerEpoch: "",
+                    targetId: fixture.profile.target!.targetId,
+                    generation: "",
+                    leaseId: "reservation-1",
+                    state: "may-have-been-sent",
+                  },
+                ],
               }),
             owner: (started) => {
               handle = started;

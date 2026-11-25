@@ -26,6 +26,7 @@ mod production_agent_proxy_tests;
 pub(super) use posix_picker::is_disposable_picker;
 #[cfg(all(test, target_os = "macos"))]
 mod rebind_tests;
+pub(crate) mod reconciliation;
 mod reconnect;
 pub(crate) mod retirement;
 mod state;
@@ -134,6 +135,10 @@ impl Owner {
 
     pub(super) fn rebind<R: Read, W: Write>(&mut self, pipe: &mut Pipe<R, W>) -> RunResult<()> {
         self.reset_guarded_write();
+        // A new binding invalidates the previous reconciliation round; until this
+        // one is acknowledged, no request is admitted.
+        self.reconciliation = None;
+        self.admission_error = ErrorCode::OwnerUnavailable;
         let generation = random_token()?;
         // Cached target snapshots are stale after a writer rebind; each target
         // re-hydrates on its next admitted request. The bound target hydrates
@@ -161,6 +166,15 @@ impl Owner {
         self.storage = storage;
         self.generation = generation;
         self.reset_guarded_write();
+        // Production has no pinned target, so the multi-target reconciliation is
+        // the only admission gate. Fixture mode keeps its v1 storage handshake.
+        if self.production && self.targets.pinned().is_none() {
+            let ack = reconciliation::reconcile(pipe, &self.epoch, &[])?;
+            self.admission_error = ack.error;
+            self.reconciliation = Some(ack);
+        } else {
+            self.admission_error = ErrorCode::Unspecified;
+        }
         self.send_accepted(pipe)
     }
 
@@ -168,6 +182,7 @@ impl Owner {
         // A production owner has no pinned target: it reports no generation and
         // each target's generation is learned per request.
         let multi_target = self.targets.pinned().is_none();
+        let reconciliation = self.reconciliation.as_ref();
         pipe.send(Payload::HelloAccepted(HelloAccepted {
             major: MAJOR,
             minor: MINOR,
@@ -184,6 +199,12 @@ impl Owner {
                 .map_or_else(Vec::new, Vec::from),
             profile_binding: self.profile.clone(),
             multi_target,
+            reconciled: reconciliation.is_some_and(reconciliation::Ack::acknowledged),
+            reconciliation_id: reconciliation.map_or_else(Vec::new, |ack| ack.request_id.clone()),
+            reconciliation_digest: reconciliation.map_or_else(Vec::new, |ack| ack.digest.clone()),
+            retirement_count: reconciliation.map_or(0, |ack| ack.retirements),
+            pane_count: reconciliation.map_or(0, |ack| ack.panes),
+            reconciliation_error: self.admission_error as i32,
         }))
     }
 

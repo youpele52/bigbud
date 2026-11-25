@@ -22,6 +22,8 @@ import {
   readSshOwnerHydrationSnapshot,
   type SshOwnerHydrationSnapshot,
 } from "./sshOwnerProductionHydration.ts";
+import { assertSshOwnerHydrationAcknowledged } from "./sshOwnerProductionClient.hydration.ts";
+import type { PickerProofReconciliation } from "./sshOwnerPickerProof.client.session.types.ts";
 import { resolveSshOwnerLaunchFacts } from "./sshOwnerProductionClient.launch.ts";
 import { startOrAttachSshOwnerProduction } from "./sshOwnerProductionClient.ts";
 import { makeProductionFixture } from "./sshOwnerProductionClient.fixture.ts";
@@ -49,8 +51,16 @@ const emptySnapshot: SshOwnerHydrationSnapshot = {
 function bootInput(
   sql: SqlClient.SqlClient,
   order: string[],
-  options: { readonly hydrationFails?: boolean; readonly admitted?: boolean } = {},
+  options: {
+    readonly hydrationFails?: boolean;
+    readonly admitted?: boolean;
+    readonly owner?: SshOwnerProductionOwner;
+    readonly snapshot?: SshOwnerHydrationSnapshot;
+    readonly reconciliation?: PickerProofReconciliation;
+    readonly acknowledgedSnapshot?: SshOwnerHydrationSnapshot;
+  } = {},
 ) {
+  const handle = options.owner ?? owner;
   return {
     acquireStateLock: Effect.sync(() => {
       order.push("lock");
@@ -67,13 +77,32 @@ function bootInput(
     ),
     startOrAttachOwner: Effect.sync(() => {
       order.push("owner");
-      return owner;
+      return handle;
     }),
-    hydrate: (handle: SshOwnerProductionOwner) =>
+    hydrate: (started: SshOwnerProductionOwner) =>
       Effect.suspend(() => {
         order.push("hydrate");
         if (options.hydrationFails) return Effect.fail(new Error("hydration failed"));
-        return handle.hydrate(emptySnapshot);
+        if (options.snapshot === undefined) return started.hydrate(emptySnapshot);
+        // The boot gate is the owner's acknowledgement, never the local
+        // category check alone.
+        if (options.reconciliation === undefined)
+          return Effect.fail(new Error("no owner acknowledgement"));
+        return Effect.try({
+          try: () =>
+            assertSshOwnerHydrationAcknowledged({
+              snapshot: options.snapshot!,
+              storage: undefined,
+              aliasDescriptor: undefined,
+              ...(options.reconciliation === undefined
+                ? {}
+                : { reconciliation: options.reconciliation }),
+              ...(options.acknowledgedSnapshot === undefined
+                ? {}
+                : { acknowledgedSnapshot: options.acknowledgedSnapshot }),
+            }),
+          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+        });
       }),
     openAdmission: () =>
       Effect.sync(() => {
@@ -139,6 +168,19 @@ it.effect("keeps admission closed when hydration fails", () =>
   }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
 );
 
+const unresolvedRetirement = {
+  profileScope: profile,
+  targetId: "ssh:a",
+  ownerEpoch: "",
+  generation: "",
+  state: "intent" as const,
+  pid: null,
+  startTime: null,
+  namespace: null,
+  detail: "pre-spawn",
+  updatedAt: 7,
+};
+
 it.effect("stays closed and launches nothing when the state lock is not held", () =>
   Effect.gen(function* () {
     const sql = yield* migrated;
@@ -185,6 +227,33 @@ it.effect("never evaluates the owner when the W3.6 state machine refuses", () =>
   }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
 );
 
+it.effect("admits on the owner acknowledgement of rows the backend cannot resolve alone", () =>
+  Effect.gen(function* () {
+    const sql = yield* migrated;
+    yield* commitLegacyRetirement(sql, {
+      profileScope: profile,
+      artifactId: "build-a",
+      decision: "drain-now",
+      drainedLeases: [],
+      pendingItems: [],
+    });
+    const snapshot: SshOwnerHydrationSnapshot = {
+      ...emptySnapshot,
+      retirementMirror: [unresolvedRetirement],
+    };
+    const order: string[] = [];
+    const outcome = yield* runSshOwnerBootSequence(
+      bootInput(sql, order, {
+        snapshot,
+        acknowledgedSnapshot: snapshot,
+        reconciliation: { acknowledged: true, retirements: 1, panes: 0 },
+      }),
+    );
+    assert.equal(outcome.kind, "open");
+    assert.deepEqual(order, ["lock", "marker", "owner", "hydrate", "admission"]);
+  }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
+);
+
 it.effect("hydrates all four durable categories", () =>
   Effect.gen(function* () {
     const sql = yield* migrated;
@@ -206,7 +275,18 @@ it.effect("hydrates all four durable categories", () =>
     ]);
     assert.equal(snapshot.retirementMirror.length, 1);
     assert.equal(snapshot.retirementMirror[0]?.state, "intent");
-    assert.deepEqual(snapshot.paneBindings, [{ ownerKey: "pane-1", state: "prepared" }]);
+    assert.deepEqual(snapshot.paneBindings, [
+      {
+        ownerKey: "pane-1",
+        threadId: "",
+        terminalId: "",
+        ownerEpoch: "",
+        targetId: "",
+        generation: "",
+        leaseId: "reservation-1",
+        state: "prepared",
+      },
+    ]);
   }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
 );
 

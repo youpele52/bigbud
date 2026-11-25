@@ -143,6 +143,12 @@ function makeHandle(input: {
             snapshot,
             storage: input.owner.hydratedStorage,
             aliasDescriptor: input.owner.aliasDescriptor,
+            ...(input.owner.reconciliation === undefined
+              ? {}
+              : { reconciliation: input.owner.reconciliation }),
+            ...(input.owner.acknowledgedSnapshot === undefined
+              ? {}
+              : { acknowledgedSnapshot: input.owner.acknowledgedSnapshot }),
           }),
         catch: (cause) =>
           cause instanceof SshOwnerClientError
@@ -176,6 +182,7 @@ async function tryAttach(
   try {
     return await attachSshOwnerProduction({
       profileBinding: input.facts.profileBinding,
+      profileScope: input.facts.stateDirectory,
       ...(input.facts.target === undefined ? {} : { targetId: input.facts.target.targetId }),
       sql: input.sql,
       descriptor,
@@ -221,11 +228,9 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
     });
     if (descriptor?.socketPath === facts.socketPath) {
       if (descriptor.profileBinding !== facts.profileBindingText) {
-        return yield* Effect.fail(
-          clientError(
-            "profile-mismatch",
-            "The SSH owner attach descriptor belongs to a different profile; refusing to adopt it.",
-          ),
+        return yield* clientError(
+          "profile-mismatch",
+          "The SSH owner attach descriptor belongs to a different profile; refusing to adopt it.",
         );
       }
       const attached = yield* Effect.tryPromise({

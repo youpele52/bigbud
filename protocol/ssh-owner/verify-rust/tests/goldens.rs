@@ -15,6 +15,8 @@ mod control_vectors;
 mod grant_vectors;
 #[path = "support/native_lease_vectors.rs"]
 mod native_lease_vectors;
+#[path = "support/opencode_vectors.rs"]
+mod opencode_vectors;
 #[path = "support/operands.rs"]
 mod operands;
 #[path = "support/peer_enrollment_vectors.rs"]
@@ -38,7 +40,7 @@ mod v1 {
 }
 
 use v1::{
-    ApproveTrust, ConnectionState, Empty, Error, ErrorCode, Folder, Folders, Frame, HelloAccepted,
+    ApproveTrust, ConnectionState, Empty, Error, ErrorCode, Folder, Folders, Frame,
     ListFolders, Reply, Request, Trust, TrustState, frame::Payload, reply::Outcome,
     request::Operation,
 };
@@ -136,6 +138,7 @@ fn assert_frame(values: &mut BTreeMap<&str, Vec<u8>>, name: &str, payload: Paylo
             | Payload::ProofGrantReply(_)
             | Payload::ProofStorageHydrate(_)
             | Payload::ProofStorageTransition(_)
+            | Payload::ProofReconcileHydrate(_)
     ) {
         OWNER_FRAME_MAX
     } else {
@@ -272,6 +275,7 @@ fn s1_wire_goldens() {
             "owner_retirement_unverified",
             ErrorCode::OwnerRetirementUnverified,
         ),
+        ("pane_unrecoverable", ErrorCode::PaneUnrecoverable),
     ] {
         assert_frame(
             &mut values,

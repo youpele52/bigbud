@@ -1,4 +1,5 @@
 import { makeProofProviderProbe } from "./sshOwnerPickerProof.client.providerLease.ts";
+import * as Effect from "effect/Effect";
 import { makePickerProofHealthClient } from "./sshOwnerPickerProof.client.health.ts";
 import {
   makePickerProofListClient,
@@ -26,7 +27,15 @@ import { makePickerProofDeploymentClient } from "./sshOwnerPickerProof.deploymen
 import { makeProofTrackedGitClient } from "./sshOwnerPickerProof.client.trackedPush.ts";
 import type { ProofOpencodeOperation } from "./sshOwnerPickerProof.codec.opencode.ts";
 import { hydratePickerProofTarget } from "./sshOwnerPickerProof.storage.ts";
-import { acceptPickerProofHello } from "./sshOwnerPickerProof.client.hello.ts";
+import {
+  acceptPickerProofHello,
+  type ExpectedReconciliation,
+} from "./sshOwnerPickerProof.client.hello.ts";
+import { encodeReconcileSnapshot } from "./sshOwnerPickerProof.codec.reconciliation.ts";
+import {
+  readSshOwnerHydrationSnapshot,
+  type SshOwnerHydrationSnapshot,
+} from "./sshOwnerProductionHydration.ts";
 import {
   createSessionExchange,
   EMPTY,
@@ -45,6 +54,12 @@ export type {
   PickerProofSessionOptions,
 } from "./sshOwnerPickerProof.client.session.types.ts";
 
+const EMPTY_SNAPSHOT: SshOwnerHydrationSnapshot = {
+  durableDisconnects: [],
+  aliasDescriptorBindings: [],
+  retirementMirror: [],
+  paneBindings: [],
+};
 export async function openPickerProofSession(
   pipe: PickerProofPipe,
   {
@@ -52,8 +67,9 @@ export async function openPickerProofSession(
     sql,
     major,
     profileBinding,
-  }: Required<Omit<PickerProofSessionOptions, "targetId">> &
-    Pick<PickerProofSessionOptions, "targetId">,
+    profileScope,
+  }: Required<Omit<PickerProofSessionOptions, "targetId" | "profileScope">> &
+    Pick<PickerProofSessionOptions, "targetId" | "profileScope">,
   handshake: () => ReturnType<PickerProofPipe["exchange"]>,
   sendPickerCancel?: SendPickerCancel,
   onLost?: (listener: () => void) => () => void,
@@ -66,9 +82,31 @@ export async function openPickerProofSession(
   let ownerMultiTarget = false;
   let aliasDescriptor: Uint8Array | undefined;
   let defaultTarget: TargetState | undefined;
+  let reconciliation: PickerProofOwner["reconciliation"];
+  let acknowledgedSnapshot: SshOwnerHydrationSnapshot | undefined;
   try {
-    const first = await handshake();
+    let first = await handshake();
     if (major !== OWNER_MAJOR) throw new PickerProofOwnerError("versionIncompatible");
+    // A production owner requests the restart reconciliation before it accepts
+    // the session. Answer every round; the acknowledgement is bound to the last.
+    let expected: ExpectedReconciliation | undefined;
+    let reconciliationFailed = false;
+    while (first.kind === "reconcileHydrate") {
+      const round = first;
+      if (profileScope === undefined) return invalidProtocol();
+      let snapshot: SshOwnerHydrationSnapshot = EMPTY_SNAPSHOT;
+      let error: "storageUnavailable" | undefined;
+      try {
+        snapshot = await Effect.runPromise(readSshOwnerHydrationSnapshot(sql, profileScope));
+      } catch {
+        error = "storageUnavailable";
+        reconciliationFailed = true;
+      }
+      const encoded = encodeReconcileSnapshot(round.requestId, snapshot, error);
+      if (error === undefined) acknowledgedSnapshot = snapshot;
+      expected = { requestId: round.requestId, digest: encoded.digest };
+      first = await pipe.exchange(encoded.payload);
+    }
     let accepted: ReturnType<typeof acceptPickerProofHello>;
     if (first.kind === "storageHydrate") {
       // Pinned fixture handshake: storage first, then acceptance.
@@ -91,7 +129,8 @@ export async function openPickerProofSession(
     } else if (first.kind === "helloAccepted") {
       // Production owner without a pinned target: acceptance first; each target
       // hydrates on its first admitted request.
-      accepted = acceptPickerProofHello(first, major, profileBinding);
+      accepted = acceptPickerProofHello(first, major, profileBinding, expected);
+      if (reconciliationFailed && accepted.reconciliation !== undefined) return invalidProtocol();
       if (accepted.multiTarget) {
         if (primary) {
           primary.generation = EMPTY;
@@ -105,6 +144,14 @@ export async function openPickerProofSession(
     } else return invalidProtocol();
     ({ ownerEpoch, aliasDescriptor } = accepted);
     ownerMultiTarget = accepted.multiTarget;
+    reconciliation =
+      accepted.reconciliation === undefined
+        ? undefined
+        : {
+            acknowledged: accepted.reconciliation.acknowledged,
+            retirements: accepted.reconciliation.retirements,
+            panes: accepted.reconciliation.panes,
+          };
   } catch (error) {
     await pipe.close();
     if (
@@ -116,17 +163,14 @@ export async function openPickerProofSession(
     }
     throw error;
   }
-
   let closed = false;
   let active: Promise<unknown> | undefined;
   let activeKind: PickerProofOperation["kind"] | undefined;
   let proxyCloseWaiting = false;
-
   const failClosed = () => {
     closed = true;
     void pipe.close();
   };
-
   const exchange = createSessionExchange({
     pipe,
     sql,
@@ -135,7 +179,6 @@ export async function openPickerProofSession(
     failClosed,
   });
   const run = exchange.run;
-
   const execute = async (
     operation: PickerProofOperation,
     beforeDispatch?: (id: Uint8Array) => void,
@@ -294,6 +337,8 @@ export async function openPickerProofSession(
     get hydratedStorage() {
       return hydrated(defaultTarget?.snapshot);
     },
+    ...(reconciliation === undefined ? {} : { reconciliation }),
+    ...(acknowledgedSnapshot === undefined ? {} : { acknowledgedSnapshot }),
     onLost: onLost ?? (() => () => {}),
     bindTarget,
     inspectTrust: () => trust({ kind: "inspectTrust" }),

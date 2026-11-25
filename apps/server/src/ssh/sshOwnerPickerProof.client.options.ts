@@ -6,6 +6,7 @@ export function copyPickerProofSessionOptions({
   targetId,
   sql,
   major = OWNER_MAJOR,
+  profileScope,
 }: PickerProofSessionOptions) {
   if (
     !Number.isInteger(major) ||
@@ -13,7 +14,8 @@ export function copyPickerProofSessionOptions({
     major > 0xffff_ffff ||
     profileBinding.length === 0 ||
     profileBinding.length > 128 ||
-    (targetId !== undefined && (!targetId || Buffer.byteLength(targetId) > 1_024))
+    (targetId !== undefined && (!targetId || Buffer.byteLength(targetId) > 1_024)) ||
+    (profileScope !== undefined && Buffer.byteLength(profileScope) > 4_096)
   )
     throw new PickerProofOwnerError("invalidOperands");
   return {
@@ -21,5 +23,6 @@ export function copyPickerProofSessionOptions({
     ...(targetId === undefined ? {} : { targetId }),
     sql,
     major,
+    ...(profileScope === undefined ? {} : { profileScope }),
   };
 }

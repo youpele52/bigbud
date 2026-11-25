@@ -31,6 +31,8 @@ export type SshOwnerClientFailure =
   | "hydration-alias-mismatch"
   | "hydration-retirement-unresolved"
   | "hydration-pane-unbound"
+  | "retirement-unverifiable"
+  | "pane-unrecoverable"
   | "owner-died";
 
 export class SshOwnerClientError extends Data.TaggedError("SshOwnerClientError")<{
@@ -62,8 +64,17 @@ const reasonByFailure: Record<SshOwnerClientFailure, SshOwnerUnavailableReason> 
   "hydration-alias-mismatch": "hydration-failed",
   "hydration-retirement-unresolved": "hydration-failed",
   "hydration-pane-unbound": "hydration-failed",
+  "retirement-unverifiable": "retirement-unverifiable",
+  "pane-unrecoverable": "pane-unrecoverable",
   "owner-died": "owner-died",
 };
+
+/** Converts a client failure into the composition's typed unavailable result. */
+export function sshOwnerUnavailableReason(
+  failure: SshOwnerClientFailure,
+): SshOwnerUnavailableReason {
+  return reasonByFailure[failure];
+}
 
 /** Converts a client failure into the composition's typed unavailable result. */
 export function toSshOwnerUnavailable(
@@ -98,6 +109,20 @@ export function fromPickerProofError(error: unknown): SshOwnerClientError {
   }
   if (code === "invalidOperands") {
     return new SshOwnerClientError("invalid-profile", message, error);
+  }
+  if (code === "ownerRetirementUnverified") {
+    return new SshOwnerClientError(
+      "retirement-unverifiable",
+      "The SSH owner refused an unresolved retirement record; admission stays closed.",
+      error,
+    );
+  }
+  if (code === "paneUnrecoverable") {
+    return new SshOwnerClientError(
+      "pane-unrecoverable",
+      "The SSH owner refused a malformed retained pane binding; admission stays closed.",
+      error,
+    );
   }
   return new SshOwnerClientError("owner-start-failed", message, error);
 }

@@ -82,6 +82,51 @@ pub(super) struct Identity {
     pub(super) namespace: Option<u64>,
 }
 
+/// Read-only verdict for one backend retirement-mirror row.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Hydrated {
+    /// A pre-spawn intent with no exact identity: unresolved evidence.
+    Unresolved,
+    /// The exact recorded instance is not running.
+    Gone,
+    /// The exact recorded instance is still alive.
+    Live,
+    /// The PID now belongs to a different process (or the namespace differs).
+    Reused,
+}
+
+/// Applies the journal's own read-only rules to a hydrated row. It never
+/// signals, adopts or clears anything: only `Gone` may be admitted.
+pub(crate) fn observe_hydrated(
+    state: &str,
+    pid: u32,
+    start: u64,
+    namespace: Option<u64>,
+) -> Result<Hydrated, ErrorCode> {
+    let state = match state {
+        "intent" => return Ok(Hydrated::Unresolved),
+        "bound" => State::Bound,
+        _ => return Err(DENIED),
+    };
+    let record = Record {
+        epoch: String::new(),
+        kind: None,
+        state,
+        pid,
+        start,
+        namespace,
+    };
+    Ok(match observe(&record)? {
+        Observed::Exact => Hydrated::Live,
+        Observed::Gone => Hydrated::Gone,
+        Observed::Mismatch => Hydrated::Reused,
+    })
+}
+
+pub(crate) fn epoch_hex(token: &Token) -> String {
+    codec::hex(token)
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Retirement {
     root: PathBuf,
@@ -323,6 +368,11 @@ pub(crate) fn report_refusal(code: ErrorCode) {
 }
 
 pub(crate) use recover::maybe_run as maybe_run_recovery;
+
+#[cfg(test)]
+pub(crate) fn test_identity(pid: u32) -> Option<(u32, u64, Option<u64>)> {
+    identity::read_identity(pid).map(|found| (found.pid, found.start, found.namespace))
+}
 
 #[cfg(test)]
 #[path = "retirement_recover_tests.rs"]

@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
-use super::{assert_frame, reply, request, v1};
+use super::{assert_frame, opencode_vectors, reply, request, v1};
 use v1::{
     ProofAgentProxyClose, ProofAgentProxyOpen, ProofAgentProxyStatus, ProofPrepareTerminal,
     ProofTerminalCwd, ProofTerminalInput, ProofTerminalLease, ProofTerminalOpen,
     ProofTerminalReplay, ProofTerminalReplayChunk, ProofTerminalReplayRequest,
     ProofTerminalReservation, ProofTerminalResize, reply::Outcome, request::Operation,
 };
+use v1::proof_workspace_mode_inspection::Result;
 
 pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
@@ -20,74 +21,8 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         reply(Outcome::ProofSyntheticPosixPasswordUnlocked(v1::Empty {})),
     );
 
-    let lease = vec![92; 32];
-    assert_frame(
-        values,
-        "proof_opencode_open",
-        request(Operation::ProofOpencodeOpen(v1::ProofOpencodeOpen {
-            scope: Some(v1::ProofProviderScope {
-                thread_id: "thread-opencode".into(),
-                session_epoch: 7,
-                cwd: "/fixture/work".into(),
-                binary: "/fixture/bin/opencode".into(),
-                session_file: None,
-            }),
-            lease: lease.clone(),
-            service_scope: None,
-        })),
-    );
-    assert_frame(
-        values,
-        "proof_opencode_service_open",
-        request(Operation::ProofOpencodeOpen(v1::ProofOpencodeOpen {
-            scope: None,
-            lease: lease.clone(),
-            service_scope: Some(v1::ProviderServiceScope {
-                thread_id: "thread-opencode".into(),
-                session_epoch: 7,
-                cwd: "/fixture/work".into(),
-            }),
-        })),
-    );
-    assert_frame(
-        values,
-        "proof_opencode_status",
-        request(Operation::ProofOpencodeStatus(v1::ProofOpencodeLease {
-            lease: lease.clone(),
-        })),
-    );
-    assert_frame(
-        values,
-        "proof_opencode_close",
-        request(Operation::ProofOpencodeClose(v1::ProofOpencodeLease {
-            lease: lease.clone(),
-        })),
-    );
-    for (name, phase, local_port) in [
-        (
-            "proof_opencode_ready",
-            v1::ProofOpencodePhase::Ready,
-            Some(49152),
-        ),
-        (
-            "proof_opencode_closed",
-            v1::ProofOpencodePhase::Closed,
-            None,
-        ),
-    ] {
-        assert_frame(
-            values,
-            name,
-            reply(Outcome::ProofOpencode(v1::ProofOpencodeState {
-                lease: lease.clone(),
-                phase: phase.into(),
-                local_port,
-                exit_code: None,
-            })),
-        );
-    }
+    opencode_vectors::verify(values);
 
-    use v1::proof_workspace_mode_inspection::Result;
     assert_frame(
         values,
         "proof_workspace_mode_publish",

@@ -39,6 +39,10 @@ message Frame {
     ProofAttachProbe proof_attach_probe = 11;
     ProofAttachChallenge proof_attach_challenge = 12;
     ProofAttachHello proof_attach_hello = 13;
+    // Owner-initiated restart reconciliation. The owner asks before it accepts
+    // the session; the backend answers from durable storage only.
+    ProofReconcileHydrate proof_reconcile_hydrate = 18;
+    ProofReconcileSnapshot proof_reconcile_snapshot = 19;
   }
 }
 
@@ -79,6 +83,19 @@ message HelloAccepted {
   // generation of each target is reported per request. Absent or false keeps
   // the single pinned fixture target and its handshake generation.
   bool multi_target = 7;
+  // W3.7 restart reconciliation. A multi-target owner admits only after it
+  // validated the backend's unresolved retirement mirror and direct pane
+  // bindings. `reconciliation_id` echoes ProofReconcileHydrate.request_id and
+  // `reconciliation_digest` echoes ProofReconcileSnapshot.digest, so an
+  // acknowledgement is bound to one exact set. A refused set keeps admission
+  // closed with `reconciliation_error` (retirement or pane) and the session
+  // must not be used.
+  bool reconciled = 8;
+  bytes reconciliation_id = 9;
+  bytes reconciliation_digest = 10;
+  uint32 retirement_count = 11;
+  uint32 pane_count = 12;
+  ErrorCode reconciliation_error = 13;
 }
 
 // The owner validates the stable request ID, current epoch and target
@@ -508,6 +525,10 @@ enum ErrorCode {
   // The descriptor, grant or request disagree about the exact target (or its
   // resolved policy digest). A grant for one target never satisfies another.
   ERROR_CODE_TARGET_MISMATCH = 35;
+  // A retained direct pane binding cannot be reconciled: its reservation
+  // identity is malformed or names an unknown state. Distinct from a retirement
+  // refusal; an uncertain but well-formed reservation is retained, not refused.
+  ERROR_CODE_PANE_UNRECOVERABLE = 36;
 }
 
 message Trust {
@@ -642,6 +663,67 @@ message ProofStorageResult {
   uint64 seq = 2;
   bool committed = 3;
   ErrorCode error = 4;
+}
+
+// Owner-initiated restart reconciliation (W3.7). A production owner sends this
+// before HelloAccepted, and again after every writer rebind or generation
+// rotation. `request_id` correlates this exact round; the backend echoes it in
+// the snapshot and the owner echoes it in HelloAccepted, so a previous round's
+// acknowledgement is never accepted.
+message ProofReconcileHydrate {
+  bytes request_id = 1;
+  // This owner epoch and the generation the round applies to (empty for the
+  // multi-target at-rest state, exactly like HelloAccepted.multi_target).
+  bytes owner_epoch = 2;
+  bytes generation = 3;
+}
+
+// One unresolved backend retirement-mirror row. Read-only evidence: the owner
+// verifies the exact instance and never signals, adopts or clears it here.
+message ProofRetirementEntry {
+  string target_id = 1;
+  // "owner" for the pre-spawn owner intent; "master" or "connector" when the
+  // backend recorded an exact child instance.
+  string kind = 2;
+  // "intent" (unresolved) or "bound" (exact identity recorded).
+  string state = 3;
+  string owner_epoch = 4;
+  uint32 pid = 5;
+  uint64 start = 6;
+  // Linux PID-namespace dev/ino; absent where the platform has no namespaces.
+  optional uint64 namespace = 7;
+  // Bounded operator-facing detail; never used to infer process identity.
+  string detail = 8;
+}
+
+// One retained direct pane binding. The owner classifies it without spawning:
+// a live reservation is attach-only, unprovable ownership is host-lost, and a
+// verified-gone recorded shell is closed. Uncertain reservations are retained.
+message ProofPaneBinding {
+  string owner_key = 1;
+  string thread_id = 2;
+  string terminal_id = 3;
+  string owner_epoch = 4;
+  string target_id = 5;
+  string generation = 6;
+  string lease_id = 7;
+  // "prepared", "may-have-been-sent" or "outcome-unknown".
+  string state = 8;
+  // Recorded remote login shell PID, when the backend journal has it.
+  optional uint32 remote_shell_pid = 9;
+  // A trusted lifecycle receipt recorded confirmed termination for this exact
+  // reservation. Never inferred from a missing socket, lock or process.
+  bool terminated = 10;
+}
+
+message ProofReconcileSnapshot {
+  bytes request_id = 1;
+  // SHA-256 over the canonical reconciliation rows below. The owner echoes it
+  // in HelloAccepted so the backend proves the owner acknowledged this exact set.
+  bytes digest = 2;
+  repeated ProofRetirementEntry retirements = 3;
+  repeated ProofPaneBinding panes = 4;
+  ErrorCode error = 5;
 }
 
 // The private Unix socket requires OS peer identification and mutual proof

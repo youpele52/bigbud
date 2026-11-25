@@ -42,4 +42,5 @@ export const errorCases = {
   error_owner_retirement_unverified: error(31),
   error_target_unknown: error(34),
   error_target_mismatch: error(35),
+  error_pane_unrecoverable: error(36),
 } satisfies Record<string, Message>;

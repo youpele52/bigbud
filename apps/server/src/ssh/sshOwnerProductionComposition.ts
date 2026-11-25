@@ -229,13 +229,11 @@ function startProductionOwner(
 export const startSshOwnerAfterConfigurationForTest = (sql: SqlClient.SqlClient) =>
   Effect.gen(function* () {
     if (configuration.kind !== "configured") {
-      return yield* Effect.fail(
-        new SshOwnerUnavailableError({
-          code: "sshOwnerUnavailable",
-          reason: "owner-profile-unavailable",
-          message: "No verified SSH owner configuration is available.",
-        }),
-      );
+      return yield* new SshOwnerUnavailableError({
+        code: "sshOwnerUnavailable",
+        reason: "owner-profile-unavailable",
+        message: "No verified SSH owner configuration is available.",
+      });
     }
     return yield* startProductionOwner(configuration.artifact, sql, launchProfile);
   });

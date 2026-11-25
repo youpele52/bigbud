@@ -51,6 +51,7 @@ const wireErrorCodes = [
   "shellCancelled",
   "targetUnknown",
   "targetMismatch",
+  "paneUnrecoverable",
 ] as const;
 
 export type PickerProofOwnerErrorCode =

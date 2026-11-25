@@ -87,6 +87,14 @@ impl<T: PickerTransport> Session<T> {
             // Windows keeps its single pinned target until native multi-target
             // evidence exists (plan W6).
             multi_target: false,
+            // Windows has no restart reconciliation yet; its pinned fixture
+            // handshake keeps the v1 storage exchange.
+            reconciled: false,
+            reconciliation_id: Vec::new(),
+            reconciliation_digest: Vec::new(),
+            retirement_count: 0,
+            pane_count: 0,
+            reconciliation_error: 0,
         }))?;
         Ok(session)
     }

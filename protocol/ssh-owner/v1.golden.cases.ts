@@ -93,6 +93,38 @@ export const wireCases: Record<string, Message> = {
       ],
     ],
   ],
+  // A production owner acknowledged the exact restart reconciliation round.
+  hello_accepted_reconciled: [
+    [
+      2,
+      [
+        [1, 1],
+        [3, bytes("002a")],
+        [6, bytes("0061ff")],
+        [7, true],
+        [8, true],
+        [9, sequence(32)],
+        [10, sequence(64)],
+        [11, 1],
+        [12, 1],
+      ],
+    ],
+  ],
+  // A refused retirement row keeps admission closed with a typed code (31).
+  hello_accepted_reconciliation_refused: [
+    [
+      2,
+      [
+        [1, 1],
+        [3, bytes("002a")],
+        [6, bytes("0061ff")],
+        [7, true],
+        [9, sequence(32)],
+        [10, sequence(64)],
+        [13, 31],
+      ],
+    ],
+  ],
   hello_attach_bootstrap: [[1, [...attachHello, [4, sequence(0)]]]],
   attach_probe: [[11, [[1, sequence(32)]]]],
   attach_challenge: [

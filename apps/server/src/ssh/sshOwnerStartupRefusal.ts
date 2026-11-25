@@ -63,6 +63,8 @@ export type SshOwnerUnavailableReason =
   | "retirement-read-failed"
   | "owner-start-failed"
   | "hydration-failed"
+  | "retirement-unverifiable"
+  | "pane-unrecoverable"
   | "admission-failed";
 
 export class SshOwnerUnavailableError extends Data.TaggedError("SshOwnerUnavailableError")<{

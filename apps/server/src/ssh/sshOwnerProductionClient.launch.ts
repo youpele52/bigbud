@@ -178,6 +178,7 @@ export async function spawnSshOwnerProduction(
     lockFile: facts.lockFile,
     sshBinary: SSH_OWNER_SYSTEM_SSH,
     keyscanBinary: SSH_OWNER_SYSTEM_KEYSCAN,
+    profileScope: facts.stateDirectory,
     ...(facts.target === undefined ? {} : { targetId: facts.target.targetId }),
     ...(facts.workspaceRoot === undefined ? {} : { workspaceRoot: facts.workspaceRoot }),
     attachment: { socketPath: facts.socketPath, capability: input.capability },
@@ -197,6 +198,7 @@ export async function attachSshOwnerProduction(
     profileBinding: input.profileBinding,
     ...(input.targetId === undefined ? {} : { targetId: input.targetId }),
     sql: input.sql,
+    ...(input.profileScope === undefined ? {} : { profileScope: input.profileScope }),
     socketPath: input.descriptor.socketPath,
     capability: input.descriptor.capability,
   });
@@ -230,6 +232,12 @@ export function classifyStartupError(error: unknown): SshOwnerClientError {
     }
     if (error.code === "invalidOperands") {
       return new SshOwnerClientError("invalid-profile", error.message, error);
+    }
+    if (error.code === "ownerRetirementUnverified") {
+      return new SshOwnerClientError("retirement-unverifiable", error.message, error);
+    }
+    if (error.code === "paneUnrecoverable") {
+      return new SshOwnerClientError("pane-unrecoverable", error.message, error);
     }
     return new SshOwnerClientError("owner-start-failed", error.message, error);
   }

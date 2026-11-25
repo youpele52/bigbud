@@ -41,23 +41,33 @@ const frame = (field: number, payload: Buffer) => {
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);
 };
+const readVarint = (payload: Buffer, start: number): [number, number] => {
+  let value = 0;
+  let shift = 0;
+  let offset = start;
+  for (;;) {
+    const byte = payload[offset++];
+    if (byte === undefined) throw new Error("truncated varint");
+    value += (byte & 127) * 2 ** shift;
+    if ((byte & 128) === 0) return [value, offset];
+    shift += 7;
+  }
+};
 const readBytesField = (payload: Buffer, field: number): Buffer | undefined => {
   let offset = 0;
   while (offset < payload.length) {
-    const key = payload[offset]!;
-    offset += 1;
-    if ((key & 7) !== 2) return undefined;
-    if (key >> 3 === field) {
-      let length = 0;
-      for (;;) {
-        const byte = payload[offset++]!;
-        length |= (byte & 127) << 0;
-        if ((byte & 128) === 0) break;
-        length <<= 7;
-      }
-      return payload.subarray(offset, offset + length);
-    }
-    return undefined;
+    const [key, afterKey] = readVarint(payload, offset);
+    offset = afterKey;
+    const wire = key & 7;
+    if (wire === 2) {
+      const [length, afterLength] = readVarint(payload, offset);
+      offset = afterLength;
+      if (key >> 3 === field) return payload.subarray(offset, offset + length);
+      offset += length;
+    } else if (wire === 0) {
+      const [, afterValue] = readVarint(payload, offset);
+      offset = afterValue;
+    } else return undefined;
   }
   return undefined;
 };
@@ -76,6 +86,7 @@ async function makeFakeAttachOwner(input: {
   echoProfileBinding?: Buffer;
 }): Promise<FakeAttachOwner> {
   const epoch = Buffer.alloc(32, 3);
+  const reconciliationId = Buffer.alloc(32, 6);
   let accepted = 0;
   const sockets = new Set<Socket>();
   const server: Server = createServer((socket) => {
@@ -112,8 +123,25 @@ async function makeFakeAttachOwner(input: {
           );
           stage = 1;
         } else if (stage === 1 && readBytesField(body, 13)) {
-          // Production is multi-target: acceptance first, no pinned target and
-          // no generation. Each target hydrates on its first request.
+          // Production is multi-target but admits only after reconciling the
+          // backend's retirement mirror and retained pane bindings.
+          socket.write(
+            frame(
+              18,
+              Buffer.concat([
+                bytesField(1, reconciliationId),
+                bytesField(2, epoch),
+                Buffer.alloc(0),
+              ]),
+            ),
+          );
+          stage = 2;
+        } else if (stage === 2) {
+          const snapshot = readBytesField(body, 19);
+          if (!snapshot) return;
+          const requested = readBytesField(snapshot, 1) ?? Buffer.alloc(0);
+          const digest = readBytesField(snapshot, 2) ?? Buffer.alloc(0);
+          if (!requested.equals(reconciliationId)) return;
           stage = 3;
           accepted += 1;
           const hello = Buffer.concat([
@@ -123,6 +151,11 @@ async function makeFakeAttachOwner(input: {
             bytesField(4, Buffer.alloc(0)),
             bytesField(6, input.echoProfileBinding ?? input.profileBinding),
             uintField(7, 1),
+            uintField(8, 1),
+            bytesField(9, reconciliationId),
+            bytesField(10, digest),
+            uintField(11, 0),
+            uintField(12, 0),
           ]);
           socket.write(frame(2, hello));
         }
