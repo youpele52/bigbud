@@ -9,6 +9,11 @@ import * as NodeSqliteClient from "../persistence/NodeSqliteClient.ts";
 import { createRemoteExecutionTargetDisconnectsTable } from "../persistence/RemoteExecutionTargetDisconnects.schema.ts";
 import { commitLegacyRetirement } from "../persistence/Layers/LegacyRetirement.ts";
 import {
+  configureSshOwner,
+  resetSshOwnerProductionStateForTest,
+  startSshOwnerAfterConfigurationForTest,
+} from "./sshOwnerProductionComposition.ts";
+import {
   readSshOwnerStartupState,
   startSshOwnerAfterLegacyGate,
 } from "./sshOwnerStartupRefusal.ts";
@@ -242,4 +247,41 @@ it.effect("opens admission with the real production client on the success path",
     assert.deepEqual(order, ["lock", "marker", "owner", "hydrate", "admission"]);
     if (outcome.kind === "open") yield* outcome.owner.shutdown?.() ?? Effect.void;
   }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
+);
+
+it.effect(
+  "activation with a derived profile reaches owner start, not owner-profile-unavailable",
+  () =>
+    Effect.gen(function* () {
+      resetSshOwnerProductionStateForTest();
+      yield* Effect.addFinalizer(() => Effect.sync(resetSshOwnerProductionStateForTest));
+      const sql = yield* migrated;
+      yield* commitLegacyRetirement(sql, {
+        profileScope: profile,
+        artifactId: "build-a",
+        decision: "drain-now",
+        drainedLeases: [],
+        pendingItems: [],
+      });
+      const fixture = yield* Effect.promise(() => makeProductionFixture());
+      yield* Effect.addFinalizer(() => Effect.promise(() => fixture.dispose()));
+      const path = yield* Effect.promise(() => fixture.fakeOwner("success"));
+      const configuration = yield* configureSshOwner(
+        { mode: "desktop", devUrl: undefined, stateDir: fixture.stateDirectory },
+        "file:///unused-entry.mjs",
+        {
+          activation: true,
+          artifactOverride: fixture.artifact(path, "desktop-packaged"),
+          ownerProfile: { ...fixture.profile, kind: "desktop-packaged" },
+        },
+      );
+      assert.equal(configuration.kind, "configured");
+      const handle = yield* startSshOwnerAfterConfigurationForTest(sql);
+      assert.equal(handle.mode, "spawned");
+      assert.equal(handle.state(), "open");
+      const observation = yield* Effect.promise(() => fixture.observation());
+      assert.equal(observation.argv[2], "--production");
+      assert.match(String(observation.argv[4]), /^bbso1:desktop-packaged:[0-9a-f]{64}$/);
+      yield* handle.shutdown();
+    }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
 );

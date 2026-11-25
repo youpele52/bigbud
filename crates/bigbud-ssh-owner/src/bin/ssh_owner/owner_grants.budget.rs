@@ -87,6 +87,15 @@ impl Budget {
         Self::from_fixture_capacity(raw.as_deref())
     }
 
+    /// Fixture override when dev; production always uses the default bound budget.
+    pub(crate) fn for_startup(production: bool) -> Self {
+        if production {
+            Self::default()
+        } else {
+            Self::from_startup_env()
+        }
+    }
+
     fn from_fixture_capacity(raw: Option<&str>) -> Self {
         let Some(capacity) = raw
             .and_then(|value| value.parse::<usize>().ok())

@@ -176,6 +176,7 @@ fn s1_wire_goldens() {
                 owner_epoch: vec![0, 0x2a],
                 proof_target_generation: Vec::new(),
                 proof_alias_descriptor: Vec::new(),
+                profile_binding: vec![0, 0x61, 0xff],
             }),
         ),
         ("inspect_trust", request(Operation::InspectTrust(Empty {}))),

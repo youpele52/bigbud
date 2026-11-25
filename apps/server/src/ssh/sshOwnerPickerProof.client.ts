@@ -9,7 +9,7 @@ import { makeProofCodexClient } from "./sshOwnerPickerProof.client.codex.ts";
 import { validateProofProviderFixture } from "./sshOwnerPickerProof.codec.provider.ts";
 
 import { makeProofClientRelay } from "./sshOwnerPickerProof.client.relay.ts";
-import { isIPv4 } from "node:net";
+import { isIP, isIPv4 } from "node:net";
 import { dirname, isAbsolute } from "node:path";
 import { randomBytes } from "node:crypto";
 
@@ -22,6 +22,7 @@ import {
 import { makeProofAgentProxyClient } from "./sshOwnerPickerProof.client.agentProxy.ts";
 import { makeProofOpencodeOwner } from "./sshOwnerPickerProof.client.opencode.ts";
 import { proofAliasStartupArgs } from "./sshOwnerPickerProof.client.alias.ts";
+import { pickerProofLaunchArgs } from "./sshOwnerPickerProof.client.args.ts";
 import { copyPickerProofSessionOptions } from "./sshOwnerPickerProof.client.options.ts";
 import {
   openPickerProofSession,
@@ -84,6 +85,7 @@ export async function startPickerProofOwner(
   const session = copyPickerProofSessionOptions(options);
   const { profileBinding, targetId, major } = session;
   const { binary, host, port, user, workspaceRoot } = options;
+  const production = options.productionLaunch;
   if (
     ![
       binary,
@@ -96,7 +98,9 @@ export async function startPickerProofOwner(
     (workspaceRoot !== undefined && (!isAbsolute(workspaceRoot) || workspaceRoot.includes("\0"))) ||
     (options.devInteractiveTerminal === true &&
       (process.platform !== "darwin" || workspaceRoot === undefined)) ||
-    (host !== "::1" && !(isIPv4(host) && host.startsWith("127."))) ||
+    (production === undefined
+      ? host !== "::1" && !(isIPv4(host) && host.startsWith("127."))
+      : host.length === 0 || host.length > 255 || isIP(host) === 0) ||
     !Number.isInteger(port) ||
     port < 1 ||
     port > 65_535 ||
@@ -181,84 +185,40 @@ export async function startPickerProofOwner(
   }
   const attachment = options.attachment && copyPickerProofAttachment(options.attachment);
   if (attachment) await assertPrivatePickerProofSocketDirectory(attachment.socketPath);
+  const launchArgs = pickerProofLaunchArgs(options, {
+    profileBindingHex: profileBinding.toString("hex"),
+    ...(attachment ? { attachmentSocket: attachment.socketPath } : {}),
+    aliasArgs,
+    ...(agentFixture ? { agentFixture } : {}),
+    ...(installed === undefined ? {} : { installedAgentState: installed }),
+    ...(agentPath === undefined ? {} : { identityAgentPath: agentPath }),
+    ...(provider ? { provider: { ...provider, codex: codex !== undefined } } : {}),
+    ...(opencode ? { opencode } : {}),
+    ...(relay ? { relay } : {}),
+    scopedArgs: scoped.args,
+  });
   let pipe: ReturnType<typeof spawnPickerProofPipe>;
   try {
     pipe = spawnPickerProofPipe(
       binary,
-      [
-        profileBinding.toString("hex"),
-        targetId,
-        options.lockFile,
-        options.sshBinary,
-        options.keyscanBinary,
-        host,
-        String(port),
-        user,
-        options.identityFile,
-        options.knownHostsFile,
-        ...aliasArgs,
-        ...(attachment ? ["--attach-socket", attachment.socketPath] : []),
-        ...(workspaceRoot === undefined ? [] : ["--workspace-root", workspaceRoot]),
-        ...(options.devInteractiveTerminal ? ["--dev-interactive-terminal"] : []),
-        ...(agentFixture
-          ? ["--agent-fixture", agentFixture.binaryPath, "--agent-sha256", agentFixture.sha256]
-          : []),
-        ...(installed === undefined ? [] : ["--installed-agent-state", installed]),
-        ...(options.providerService
-          ? ["--provider-service", options.providerService.kind, options.providerService.binaryPath]
-          : []),
-        ...(options.opencodeService
-          ? ["--opencode-service", options.opencodeService.binaryPath]
-          : []),
-        ...(provider
-          ? [
-              codex ? "--codex-fixture" : "--pi-fixture",
-              provider.binaryPath,
-              provider.sha256,
-              provider.cwd,
-              provider.threadId,
-              String(provider.sessionEpoch),
-            ]
-          : []),
-        ...(agentPath ? ["--identity-agent-path", agentPath] : []),
-        ...scoped.args,
-        ...(opencode
-          ? [
-              "--opencode-v1-fixture",
-              opencode.binaryPath,
-              opencode.sha256,
-              opencode.cwd,
-              opencode.threadId,
-              String(opencode.sessionEpoch),
-            ]
-          : []),
-        ...(relay
-          ? [
-              "--client-relay-fixture",
-              relay.nodeBinary,
-              relay.nodeSha256,
-              relay.helperEntry,
-              relay.helperSha256,
-              relay.authorityId,
-            ]
-          : []),
-      ],
+      launchArgs,
       dirname(options.lockFile),
-      agentFixture !== undefined ||
-        relay !== undefined ||
-        provider !== undefined ||
-        options.providerService !== undefined ||
-        scoped.peer !== undefined ||
-        scoped.git !== undefined ||
-        scoped.gitUpload !== undefined,
-      scoped.pickerCancellation,
-      Boolean(attachment && options.devInteractiveTerminal),
-      options.productionLaunch === undefined
+      !production &&
+        (agentFixture !== undefined ||
+          relay !== undefined ||
+          provider !== undefined ||
+          options.providerService !== undefined ||
+          scoped.peer !== undefined ||
+          scoped.git !== undefined ||
+          scoped.gitUpload !== undefined),
+      !production && scoped.pickerCancellation,
+      !production && Boolean(attachment && options.devInteractiveTerminal),
+      production === undefined
         ? {}
         : {
-            environment: { BIGBUD_SSH_OWNER_PICKER_PROOF: "1" },
+            environment: {},
             clearEnvironment: true,
-            startupDeadlineMs: options.productionLaunch.startupDeadlineMs,
+            startupDeadlineMs: production.startupDeadlineMs,
           },
     );
   } catch {

@@ -52,10 +52,11 @@ afterEach(async () => {
 });
 
 describe("production owner client spawn", () => {
-  it("handshakes, keeps a private env allowlist, and never accepts caller argv or shell", async () => {
+  it("handshakes in production mode with the derived profile, state dir and fixed facts only", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
     vi.stubEnv("BIGBUD_TEST_ENV_SENTINEL", "leak");
+    vi.stubEnv("BIGBUD_SSH_OWNER_PICKER_PROOF", "1");
     const path = await fixture.fakeOwner("success");
     await withPersistence(fixture, (sql) =>
       Effect.gen(function* () {
@@ -64,26 +65,37 @@ describe("production owner client spawn", () => {
         expect(handle.mode).toBe("spawned");
         expect(handle.state()).toBe("open");
         expect(handle.ownerEpoch).toHaveLength(32);
-        // Cleared environment plus the explicit production allowlist. macOS adds
-        // one non-secret process-encoding value; caller variables must not leak.
-        const allowed = ["BIGBUD_SSH_OWNER_PICKER_PROOF"];
-        if (process.platform === "darwin") allowed.push("__CF_USER_TEXT_ENCODING");
-        expect(Object.keys(observation.env).toSorted()).toEqual(allowed.toSorted());
-        expect(observation.env.BIGBUD_SSH_OWNER_PICKER_PROOF).toBe("1");
+        const facts = resolveSshOwnerLaunchFacts(profileOf(fixture));
+        // Cleared environment: neither the caller sentinel nor the old proof
+        // environment reaches the production owner.
         expect(observation.env).not.toHaveProperty("BIGBUD_TEST_ENV_SENTINEL");
-        // No caller-supplied argv tail, no shell wrapper: profile plus the ten
-        // fixed launch facts plus the owned attachment socket pair.
-        expect(observation.argv.slice(2)).toHaveLength(12);
-        expect(observation.argv[2]).toMatch(/^[0-9a-f]{64}$/);
-        expect(observation.argv[5]).toBe("/usr/bin/ssh");
-        expect(observation.argv[6]).toBe("/usr/bin/ssh-keyscan");
-        expect(observation.argv[12]).toBe("--attach-socket");
+        expect(observation.env).not.toHaveProperty("BIGBUD_SSH_OWNER_PICKER_PROOF");
+        expect(observation.argv[2]).toBe("--production");
+        expect(observation.argv[3]).toBe("--profile");
+        expect(observation.argv[4]).toBe(facts.profileBindingText);
+        expect(observation.argv[5]).toBe("--state-dir");
+        expect(observation.argv[6]).toBe(fixture.stateDirectory);
+        expect(observation.argv.slice(7, 15)).toEqual([
+          facts.targetId,
+          "/usr/bin/ssh",
+          "/usr/bin/ssh-keyscan",
+          "127.0.0.1",
+          "2222",
+          "tester",
+          facts.identityFile,
+          facts.knownHostsFile,
+        ]);
+        expect(observation.argv[15]).toBe("--attach-socket");
+        expect(observation.argv).toHaveLength(17);
         const descriptor = yield* Effect.promise(() =>
           readSshOwnerAttachmentDescriptor(
             resolveSshOwnerLaunchFacts(profileOf(fixture)).attachFile,
           ),
         );
-        expect(descriptor).toMatchObject({ version: 1 });
+        expect(descriptor).toMatchObject({
+          version: 1,
+          profileBinding: facts.profileBindingText,
+        });
         expect(descriptor?.capability).toHaveLength(32);
         yield* handle.hydrate({
           durableDisconnects: [],

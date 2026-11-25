@@ -23,6 +23,7 @@ export type SshOwnerClientFailure =
   | "startup-timeout"
   | "version-incompatible"
   | "capability-missing"
+  | "profile-mismatch"
   | "wire-limit-exceeded"
   | "wire-protocol-invalid"
   | "hydration-failed"
@@ -53,6 +54,7 @@ const reasonByFailure: Record<SshOwnerClientFailure, SshOwnerUnavailableReason> 
   "startup-timeout": "owner-startup-timeout",
   "version-incompatible": "owner-version-incompatible",
   "capability-missing": "owner-capability-missing",
+  "profile-mismatch": "owner-profile-mismatch",
   "wire-limit-exceeded": "owner-protocol-invalid",
   "wire-protocol-invalid": "owner-protocol-invalid",
   "hydration-failed": "hydration-failed",
@@ -83,6 +85,13 @@ export function fromPickerProofError(error: unknown): SshOwnerClientError {
   const message = error instanceof Error ? error.message : "SSH owner startup failed.";
   if (code === "versionIncompatible") {
     return new SshOwnerClientError("version-incompatible", message, error);
+  }
+  if (code === "profileMismatch") {
+    return new SshOwnerClientError(
+      "profile-mismatch",
+      "The SSH owner reported a different profile binding; refusing the session.",
+      error,
+    );
   }
   if (code === "protocolError") {
     return new SshOwnerClientError("wire-protocol-invalid", message, error);

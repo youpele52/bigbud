@@ -32,6 +32,7 @@ const varint = (value: number) => {
   return Buffer.from(bytes);
 };
 const tag = (field: number, wire: number) => varint((field << 3) | wire);
+const uintField = (field: number, value: number) => Buffer.concat([tag(field, 0), varint(value)]);
 const bytesField = (field: number, value: Buffer) =>
   Buffer.concat([tag(field, 2), varint(value.length), value]);
 const frame = (field: number, payload: Buffer) => {
@@ -73,6 +74,7 @@ async function makeFakeAttachOwner(input: {
   targetId: string;
   rejectProof?: boolean;
   aliasDescriptor?: Buffer;
+  echoProfileBinding?: Buffer;
 }): Promise<FakeAttachOwner> {
   const epoch = Buffer.alloc(32, 3);
   const generation = Buffer.alloc(32, 4);
@@ -117,14 +119,14 @@ async function makeFakeAttachOwner(input: {
         } else if (stage === 2 && readBytesField(body, 8)) {
           stage = 3;
           accepted += 1;
-          const acceptedBody = [
-            bytesField(1, Buffer.from([1])),
+          const hello = Buffer.concat([
+            uintField(1, 1),
+            uintField(2, 0),
             bytesField(3, epoch),
             bytesField(4, generation),
+            bytesField(6, input.echoProfileBinding ?? input.profileBinding),
             ...(input.aliasDescriptor ? [bytesField(5, input.aliasDescriptor)] : []),
-          ];
-          // Major/minor are varint fields, not repeated messages.
-          const hello = Buffer.concat([Buffer.from([0x08, 1, 0x10, 0]), ...acceptedBody.slice(1)]);
+          ]);
           socket.write(frame(2, hello));
         }
       }
@@ -170,6 +172,7 @@ async function fixtureWithDescriptor(fixture: ProductionFixture) {
     version: 1,
     socketPath: facts.socketPath,
     capability,
+    profileBinding: facts.profileBindingText,
   });
   return { facts, capability };
 }
@@ -274,6 +277,55 @@ describe("production owner client attach", () => {
         const second = yield* start(fixture, sql);
         expect(server.accepted()).toBe(2);
         yield* second.shutdown();
+      }),
+    );
+  });
+
+  it("refuses an attach descriptor that names another profile", async () => {
+    const fixture = await makeProductionFixture();
+    cleanup.push(fixture.dispose);
+    const { facts, capability } = await fixtureWithDescriptor(fixture);
+    const server = await makeFakeAttachOwner({
+      socketPath: facts.socketPath,
+      capability,
+      profileBinding: facts.profileBinding,
+      targetId: facts.targetId,
+    });
+    cleanup.push(server.close);
+    await writeSshOwnerAttachmentDescriptor(facts.attachFile, {
+      version: 1,
+      socketPath: facts.socketPath,
+      capability,
+      profileBinding: `bbso1:standalone:${"0".repeat(64)}`,
+    });
+    await withPersistence(fixture, (sql) =>
+      Effect.gen(function* () {
+        const failure = yield* start(fixture, sql).pipe(Effect.flip);
+        expect(failure).toMatchObject({ failure: "profile-mismatch" });
+        expect(server.accepted()).toBe(0);
+        expect(yield* Effect.promise(() => fixture.exists(fixture.observationFile))).toBe(false);
+      }),
+    );
+  });
+
+  it("refuses an owner that echoes a different profile binding and shuts it down", async () => {
+    const fixture = await makeProductionFixture();
+    cleanup.push(fixture.dispose);
+    const { facts, capability } = await fixtureWithDescriptor(fixture);
+    const server = await makeFakeAttachOwner({
+      socketPath: facts.socketPath,
+      capability,
+      profileBinding: facts.profileBinding,
+      targetId: facts.targetId,
+      echoProfileBinding: Buffer.alloc(32, 0xee),
+    });
+    cleanup.push(server.close);
+    await withPersistence(fixture, (sql) =>
+      Effect.gen(function* () {
+        const failure = yield* start(fixture, sql).pipe(Effect.flip);
+        expect(failure).toMatchObject({ failure: "profile-mismatch" });
+        expect(server.accepted()).toBe(1);
+        expect(yield* Effect.promise(() => fixture.exists(fixture.observationFile))).toBe(false);
       }),
     );
   });

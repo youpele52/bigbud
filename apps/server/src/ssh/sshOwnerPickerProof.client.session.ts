@@ -52,7 +52,7 @@ const sameBytes = (left: Uint8Array, right: Uint8Array) => Buffer.from(left).equ
 
 export async function openPickerProofSession(
   pipe: PickerProofPipe,
-  { targetId, sql, major }: Required<PickerProofSessionOptions>,
+  { targetId, sql, major, profileBinding }: Required<PickerProofSessionOptions>,
   handshake: () => ReturnType<PickerProofPipe["exchange"]>,
   sendPickerCancel?: SendPickerCancel,
   onLost?: (listener: () => void) => () => void,
@@ -75,6 +75,7 @@ export async function openPickerProofSession(
     const accepted = acceptPickerProofHello(
       await pipe.exchange(encodeStorageSnapshot(targetId, snapshot)),
       major,
+      profileBinding,
     );
     ({ ownerEpoch, generation, aliasDescriptor } = accepted);
   } catch (error) {

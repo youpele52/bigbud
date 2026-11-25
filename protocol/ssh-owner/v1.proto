@@ -69,6 +69,10 @@ message HelloAccepted {
   // owner was not started from an alias. Opaque to the backend: compared only
   // against the profile-scoped binding recorded when the alias was saved.
   bytes proof_alias_descriptor = 5;
+  // Echo of the client's startup profile binding (Hello.profile_binding). The
+  // production client refuses a session whose echo differs, and the owner
+  // refuses a Hello whose binding differs from its startup profile.
+  bytes profile_binding = 6;
 }
 
 // The owner validates the stable request ID, current epoch and target

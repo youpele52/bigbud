@@ -59,6 +59,7 @@ pub(crate) struct RouteFacts {
     #[cfg(any(test, target_os = "linux"))]
     pub(super) allow_jump: bool,
     connector: Option<ConnectorApproval>,
+    production: bool,
 }
 
 impl RouteFacts {
@@ -69,7 +70,18 @@ impl RouteFacts {
             #[cfg(any(test, target_os = "linux"))]
             allow_jump: false,
             connector: None,
+            production: false,
         }
+    }
+
+    /// Production startup facts admit real destinations and no fixture aliases.
+    pub(crate) fn with_production(mut self) -> Self {
+        self.production = true;
+        self
+    }
+
+    pub(crate) fn production(&self) -> bool {
+        self.production
     }
 
     /// Trusted approval for the restricted connector; never read from config.

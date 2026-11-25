@@ -24,6 +24,12 @@ import {
 import type { SshOwnerProductionProfile } from "./sshOwnerProductionClient.launch.ts";
 import { toSshOwnerUnavailable } from "./sshOwnerProductionClient.errors.ts";
 import {
+  deriveSshOwnerProfileBinding,
+  SshOwnerProfileError,
+  type SshOwnerProfileBinding,
+} from "./sshOwnerProductionProfile.ts";
+import { isSshOwnerDevFixtureSelected } from "./sshOwnerSelection.ts";
+import {
   readSshOwnerStartupState,
   SshOwnerUnavailableError,
   type LegacyEntryFencedError,
@@ -39,9 +45,10 @@ import type { TrustedStandaloneSshOwnerManifestEntry } from "./sshOwnerExecutabl
  *
  * 1. Flip `SSH_OWNER_PRODUCTION_ACTIVATION` in
  *    `packages/shared/src/SshOwnerActivation.ts` to `true`.
- * 2. Supply the trusted `ownerProfile` binding (the W2 T-alias profile source)
- *    when calling `configureSshOwner`; the native client itself is composed and
- *    starts, attaches, hydrates and shuts down a real owner.
+ * 2. Supply the trusted endpoint facts (`ownerProfile`) for the active profile
+ *    when calling `configureSshOwner`; the profile **binding** itself is always
+ *    derived from `config.stateDir` and the resolved artifact profile and can
+ *    never be overridden by the caller or the environment.
  * 3. Delete cutover inventory rows 1–51, the D1–D5 type dependents, the dev
  *    fixture selector (`sshOwnerDevMode.fixture.ts`) and every remaining
  *    `sshOwnerSelection.ts` fence call site that guards deleted legacy code.
@@ -82,15 +89,23 @@ export interface ConfigureSshOwnerOptions {
   readonly arch?: string;
   readonly trustedManifestEntry?: TrustedStandaloneSshOwnerManifestEntry;
   /**
-   * Profile binding for the native owner client. Production W7 supplies the
-   * verified endpoint; without it the owner cannot start and SSH stays closed.
+   * Trusted endpoint facts for the native owner client. The profile binding is
+   * always derived from `config.stateDir` and the resolved artifact profile; a
+   * caller can never supply or override it.
    */
   readonly ownerProfile?: SshOwnerProductionProfile;
+  /** Test-only artifact override; production always resolves and verifies. */
+  readonly artifactOverride?: SshOwnerArtifact;
+}
+
+interface LaunchProfile {
+  readonly endpoint?: SshOwnerProductionProfile;
+  readonly binding: SshOwnerProfileBinding;
 }
 
 let configuration: SshOwnerProductionConfiguration = { kind: "inactive" };
 let admission: SshOwnerAdmission = { kind: "inactive" };
-let launchProfile: SshOwnerProductionProfile | undefined;
+let launchProfile: LaunchProfile | undefined;
 
 export const readSshOwnerProductionConfiguration = () => configuration;
 export const readSshOwnerAdmission = () => admission;
@@ -109,7 +124,7 @@ export function resetSshOwnerProductionStateForTest(): void {
  * keep local features running with SSH closed.
  */
 export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
-  config: Pick<ServerConfigShape, "mode" | "devUrl">,
+  config: Pick<ServerConfigShape, "mode" | "devUrl" | "stateDir">,
   entryUrl: string = import.meta.url,
   options: ConfigureSshOwnerOptions = {},
 ) {
@@ -120,8 +135,65 @@ export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
     launchProfile = undefined;
     return configuration;
   }
-  launchProfile = options.ownerProfile;
-  const resolution = yield* resolveSshOwnerArtifact({
+  const resolution = yield* resolveArtifact(config, entryUrl, options);
+  if (resolution.kind === "unavailable") {
+    configuration = { kind: "unavailable", error: resolution.error };
+    admission = { kind: "closed", step: "configuration", error: resolution.error };
+    launchProfile = undefined;
+    return configuration;
+  }
+  const environment = options.environment ?? process.env;
+  const binding = yield* Effect.try({
+    try: () =>
+      deriveSshOwnerProfileBinding({
+        kind: resolution.artifact.profile,
+        stateDirectory: config.stateDir,
+        environment,
+        devFixtureGate: isSshOwnerDevFixtureSelected(),
+      }),
+    catch: (cause) =>
+      cause instanceof SshOwnerProfileError
+        ? cause
+        : new SshOwnerProfileError(
+            "owner-profile-unavailable",
+            "The SSH owner profile binding could not be derived.",
+            cause,
+          ),
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed(
+        new SshOwnerUnavailableError({
+          code: "sshOwnerUnavailable",
+          reason: error.reason,
+          message: error.message,
+        }),
+      ),
+    ),
+  );
+  if (binding instanceof SshOwnerUnavailableError) {
+    configuration = { kind: "unavailable", error: binding };
+    admission = { kind: "closed", step: "configuration", error: binding };
+    launchProfile = undefined;
+    return configuration;
+  }
+  launchProfile = {
+    ...(options.ownerProfile === undefined
+      ? {}
+      : { endpoint: { ...options.ownerProfile, kind: resolution.artifact.profile } }),
+    binding,
+  };
+  configuration = { kind: "configured", artifact: resolution.artifact };
+  return configuration;
+});
+
+function resolveArtifact(
+  config: Pick<ServerConfigShape, "mode" | "devUrl" | "stateDir">,
+  entryUrl: string,
+  options: ConfigureSshOwnerOptions,
+) {
+  if (options.artifactOverride)
+    return Effect.succeed({ kind: "resolved" as const, artifact: options.artifactOverride });
+  return resolveSshOwnerArtifact({
     config,
     entryUrl,
     ...(options.environment ? { environment: options.environment } : {}),
@@ -129,33 +201,44 @@ export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
     ...(options.arch ? { arch: options.arch } : {}),
     ...(options.trustedManifestEntry ? { trustedManifestEntry: options.trustedManifestEntry } : {}),
   });
-  if (resolution.kind === "unavailable") {
-    configuration = { kind: "unavailable", error: resolution.error };
-    admission = { kind: "closed", step: "configuration", error: resolution.error };
-    return configuration;
-  }
-  configuration = { kind: "configured", artifact: resolution.artifact };
-  return configuration;
-});
+}
 
 function startProductionOwner(
   artifact: SshOwnerArtifact,
   sql: SqlClient.SqlClient,
-  profile: SshOwnerProductionProfile | undefined,
+  launch: LaunchProfile | undefined,
 ): Effect.Effect<SshOwnerProductionHandle, SshOwnerUnavailableError> {
-  if (!profile) {
+  if (!launch?.endpoint) {
     return Effect.fail(
       new SshOwnerUnavailableError({
         code: "sshOwnerUnavailable",
         reason: "owner-profile-unavailable",
-        message: `The verified ${artifact.profile} SSH owner has no production profile binding; SSH stays unavailable and local work continues.`,
+        message: `The verified ${artifact.profile} SSH owner has no trusted endpoint profile; SSH stays unavailable and local work continues.`,
       }),
     );
   }
-  return startProductionOwnerForBoot({ artifact, profile, sql }).pipe(
-    Effect.mapError((error) => toSshOwnerUnavailable(error, artifact.profile)),
-  );
+  return startProductionOwnerForBoot({
+    artifact,
+    profile: launch.endpoint,
+    binding: launch.binding,
+    sql,
+  }).pipe(Effect.mapError((error) => toSshOwnerUnavailable(error, artifact.profile)));
 }
+
+/** Test-only boot probe: starts the owner from the last trusted configuration. */
+export const startSshOwnerAfterConfigurationForTest = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    if (configuration.kind !== "configured") {
+      return yield* Effect.fail(
+        new SshOwnerUnavailableError({
+          code: "sshOwnerUnavailable",
+          reason: "owner-profile-unavailable",
+          message: "No verified SSH owner configuration is available.",
+        }),
+      );
+    }
+    return yield* startProductionOwner(configuration.artifact, sql, launchProfile);
+  });
 
 /** Owner death after admission is typed-closed; it never falls back to legacy. */
 export function closeSshOwnerAdmissionOnOwnerDeath(): void {

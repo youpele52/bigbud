@@ -54,6 +54,7 @@ const wireErrorCodes = [
 export type PickerProofOwnerErrorCode =
   | Exclude<(typeof wireErrorCodes)[number], undefined>
   | "versionIncompatible"
+  | "profileMismatch"
   | "protocolError";
 
 const jumpStages = [

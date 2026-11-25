@@ -21,6 +21,8 @@ export interface SshOwnerAttachmentDescriptor {
   readonly version: 1;
   readonly socketPath: string;
   readonly capability: Buffer;
+  /** Startup profile binding that owns this descriptor; another profile never matches. */
+  readonly profileBinding: string;
 }
 
 const invalid = (message: string, cause?: unknown) =>
@@ -87,6 +89,7 @@ export async function readSshOwnerAttachmentDescriptor(
       (parsed as { version?: unknown }).version !== 1 ||
       typeof (parsed as { socketPath?: unknown }).socketPath !== "string" ||
       typeof (parsed as { capability?: unknown }).capability !== "string" ||
+      typeof (parsed as { profileBinding?: unknown }).profileBinding !== "string" ||
       !/^[0-9a-f]{64}$/.test((parsed as { capability: string }).capability)
     ) {
       throw new SshOwnerClientError(
@@ -105,6 +108,7 @@ export async function readSshOwnerAttachmentDescriptor(
       version: 1,
       socketPath,
       capability: Buffer.from((parsed as { capability: string }).capability, "hex"),
+      profileBinding: (parsed as { profileBinding: string }).profileBinding,
     };
   } catch (cause) {
     if (cause instanceof SshOwnerClientError) throw cause;
@@ -130,6 +134,7 @@ export async function writeSshOwnerAttachmentDescriptor(
       version: 1,
       socketPath: descriptor.socketPath,
       capability: descriptor.capability.toString("hex"),
+      profileBinding: descriptor.profileBinding,
     }),
     { flag: "wx", mode: 0o600 },
   );

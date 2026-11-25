@@ -15,6 +15,8 @@ export interface FakeOwnerOptions {
   readonly mode: FakeOwnerMode;
   readonly observationFile: string;
   readonly aliasDescriptor?: Buffer;
+  /** Simulates an owner that echoes a different startup profile binding. */
+  readonly echoBindingHex?: string;
 }
 
 const SCRIPT = String.raw`#!__EXEC__
@@ -43,16 +45,22 @@ const frame = (payload) => {
   return Buffer.concat([header, payload]);
 };
 const send = (field, payload) => fs.writeSync(1, frame(bytesField(field, payload)));
-const target = process.argv[3];
-const host = process.argv[7];
-const port = process.argv[8];
-const user = process.argv[9];
-const identity = process.argv[10];
-const knownHosts = process.argv[11];
+const argv = process.argv;
+const production = argv[2] === "--production";
+const profileHex = production ? String(argv[4]).split(":")[2] : argv[2];
+const target = production ? argv[7] : argv[3];
+const echoHex = config.echoBindingHex || profileHex;
+const echoBinding = Buffer.from(echoHex, "hex");
 const epoch = Buffer.alloc(32, 7);
 const generation = Buffer.alloc(32, 9);
 const helloAccepted = (major) => {
-  const parts = [uintField(1, major), uintField(2, 0), bytesField(3, epoch), bytesField(4, generation)];
+  const parts = [
+    uintField(1, major),
+    uintField(2, 0),
+    bytesField(3, epoch),
+    bytesField(4, generation),
+    bytesField(6, echoBinding),
+  ];
   if (config.aliasDescriptor) parts.push(bytesField(5, Buffer.from(config.aliasDescriptor, "hex")));
   return Buffer.concat(parts);
 };
@@ -101,8 +109,6 @@ process.stdin.on("end", () => {});
 process.stdin.on("error", () => {});
 process.stdin.resume();
 keepAlive();
-// Fixture-owned route facts are only read so a typo cannot silently pass.
-void host; void port; void user; void identity; void knownHosts;
 `;
 
 export async function writeFakeSshOwnerBinary(
@@ -116,6 +122,7 @@ export async function writeFakeSshOwnerBinary(
     ...(options.aliasDescriptor === undefined
       ? {}
       : { aliasDescriptor: options.aliasDescriptor.toString("hex") }),
+    ...(options.echoBindingHex === undefined ? {} : { echoBindingHex: options.echoBindingHex }),
   };
   await writeFile(
     path,

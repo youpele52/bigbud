@@ -124,8 +124,9 @@ pub(super) fn resolve_for_startup(
     system_path: Option<&Path>,
     alias: &str,
     facts: &RouteFacts,
+    allow_non_loopback: bool,
 ) -> Result<ResolvedConfig, ErrorCode> {
-    resolve_with_facts(path, system_path, alias, facts)
+    resolve_with_facts(path, system_path, alias, facts, allow_non_loopback)
         .map_err(|failure| startup::report_rejection(failure, std::io::stderr().lock()))
 }
 
@@ -144,14 +145,16 @@ fn resolve_with_diagnostic(
         system_path,
         alias,
         &RouteFacts::new(account, RouteOverrides::default()),
+        false,
     )
 }
 
-fn resolve_with_facts(
+pub(super) fn resolve_with_facts(
     path: &Path,
     system_path: Option<&Path>,
     alias: &str,
     facts: &RouteFacts,
+    allow_non_loopback: bool,
 ) -> Result<ResolvedConfig, ConfigFailure> {
     if !safe_host(alias) {
         return Err(UNSUPPORTED.into());
@@ -164,7 +167,7 @@ fn resolve_with_facts(
         .host
         .parse::<IpAddr>()
         .ok()
-        .filter(IpAddr::is_loopback)
+        .filter(|host| allow_non_loopback || host.is_loopback())
         .ok_or_else(|| match &settings.host {
             Some(host) => host.diagnostic.reject(UNSUPPORTED),
             None => UNSUPPORTED.into(),

@@ -78,11 +78,11 @@ impl JumpPicker {
                 workspace_root: None,
                 dev_interactive_terminal: false,
             };
-            let transport = Transport::new_with_policy(hop_config, |_| Ok(Some(hop)))?;
+            let transport = Transport::new_with_policy(hop_config, false, |_| Ok(Some(hop)))?;
             transport.images.require_mounted_linux_fixture()?;
             hops.push(transport);
         }
-        let destination = Transport::new_with_policy(config, |_| Ok(Some(destination)))?;
+        let destination = Transport::new_with_policy(config, false, |_| Ok(Some(destination)))?;
         destination.images.require_mounted_linux_fixture()?;
         Ok((
             destination,

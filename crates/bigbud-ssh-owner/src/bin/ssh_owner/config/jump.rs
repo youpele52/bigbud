@@ -115,7 +115,7 @@ pub(crate) fn resolve_chain(
     mut facts: RouteFacts,
 ) -> Result<Vec<ResolvedConfig>, ConfigFailure> {
     facts.allow_jump = true;
-    let destination = resolve_with_facts(path, system, alias, &facts)?;
+    let destination = resolve_with_facts(path, system, alias, &facts, false)?;
     let Some(route) = &destination.jump else {
         return Err(UNSUPPORTED.into());
     };
@@ -131,7 +131,7 @@ pub(crate) fn resolve_chain(
             return Err(reject(UNSUPPORTED));
         }
         let overrides = RouteOverrides::new(None, hop.user.as_deref(), hop.port).map_err(reject)?;
-        let leg = resolve_with_facts(path, system, &hop.host, &facts.for_hop(overrides))
+        let leg = resolve_with_facts(path, system, &hop.host, &facts.for_hop(overrides), false)
             .map_err(|failure| failure.at_jump_hop(index + 1))?;
         if !endpoints.insert((leg.host, leg.port)) || !key_only(&leg) {
             return Err(reject(UNSUPPORTED));

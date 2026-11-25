@@ -19,6 +19,7 @@ export type Frame =
       ownerEpoch: Uint8Array;
       generation: Uint8Array;
       aliasDescriptor: Uint8Array;
+      profileBinding: Uint8Array;
     }
   | {
       kind: "reply";
@@ -46,16 +47,26 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         minor = 0,
         ownerEpoch = EMPTY,
         generation = EMPTY,
-        aliasDescriptor = EMPTY;
+        aliasDescriptor = EMPTY,
+        profileBinding = EMPTY;
       decodeMessage(bytes, (number, wire, reader) => {
         if (number === 1) major = uintValue(wire, reader);
         else if (number === 2) minor = uintValue(wire, reader);
         else if (number === 3) ownerEpoch = bytesValue(wire, reader);
         else if (number === 4) generation = bytesValue(wire, reader);
         else if (number === 5) aliasDescriptor = bytesValue(wire, reader);
+        else if (number === 6) profileBinding = bytesValue(wire, reader);
         else reader.skip(wire);
       });
-      return { kind: "helloAccepted", major, minor, ownerEpoch, generation, aliasDescriptor };
+      return {
+        kind: "helloAccepted",
+        major,
+        minor,
+        ownerEpoch,
+        generation,
+        aliasDescriptor,
+        profileBinding,
+      };
     }
     case 4:
       return readReply(bytes);

@@ -272,6 +272,8 @@ pub(super) struct Blockers {
     pub connector: bool,
     pub snapshot_cancel: bool,
     pub tracked_push_or_opencode: bool,
+    /// Production mode never selects a fixture guarded-write installation.
+    pub production: bool,
 }
 
 /// Fixture-only guarded-write selection, kept out of `bootstrap`.
@@ -289,6 +291,7 @@ pub(super) fn for_startup(
         || blockers.connector
         || blockers.snapshot_cancel
         || blockers.tracked_push_or_opencode
+        || blockers.production
     {
         return None;
     }

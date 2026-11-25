@@ -130,12 +130,19 @@ impl Transport {
         config: TransportConfig,
         facts: &config::RouteFacts,
     ) -> Result<Self, ErrorCode> {
-        let mut transport = Self::new_with_policy(config, |config| {
+        let production = facts.production();
+        let mut transport = Self::new_with_policy(config, production, |config| {
             config
                 .alias_config
                 .as_ref()
                 .map(|(path, alias)| {
-                    config::resolve_for_startup(path, config.system_config.as_deref(), alias, facts)
+                    config::resolve_for_startup(
+                        path,
+                        config.system_config.as_deref(),
+                        alias,
+                        facts,
+                        production,
+                    )
                 })
                 .transpose()
         })?;
@@ -157,9 +164,10 @@ impl Transport {
 
     fn new_with_policy(
         config: TransportConfig,
+        allow_non_loopback: bool,
         resolve: impl FnOnce(&TransportConfig) -> Result<Option<ResolvedConfig>, ErrorCode>,
     ) -> Result<Self, ErrorCode> {
-        if !config.host.is_loopback()
+        if (!allow_non_loopback && !config.host.is_loopback())
             || config.port == 0
             || config.user.is_empty()
             || config.user.len() > 64

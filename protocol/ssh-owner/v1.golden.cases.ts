@@ -59,6 +59,7 @@ export const wireCases: Record<string, Message> = {
       [
         [1, 1],
         [3, bytes("002a")],
+        [6, bytes("0061ff")],
       ],
     ],
   ],

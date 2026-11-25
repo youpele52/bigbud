@@ -57,7 +57,12 @@ export interface PickerProofOwnerOptions
    * Production launch only: use the cleared environment allowlist and bound the
    * handshake. Callers never supply the executable, argv or environment.
    */
-  readonly productionLaunch?: { readonly startupDeadlineMs: number };
+  readonly productionLaunch?: {
+    readonly startupDeadlineMs: number;
+    /** `bbso1:<kind>:<hex>`; the owner validates it against `stateDirectory`. */
+    readonly profileBindingText: string;
+    readonly stateDirectory: string;
+  };
 }
 
 export type PickerProofAttachOptions = PickerProofSessionOptions & PickerProofAttachment;

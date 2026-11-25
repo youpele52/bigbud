@@ -5,7 +5,7 @@ fn fact(uid: u32, name: &str) -> io::Result<LocalAccountFact> {
 }
 
 fn resolve_route(fixture: &Fixture, facts: &RouteFacts) -> Result<ResolvedConfig, ConfigFailure> {
-    resolve_with_facts(&fixture.0.join("config"), None, "picker", facts)
+    resolve_with_facts(&fixture.0.join("config"), None, "picker", facts, false)
 }
 
 fn secure_home(fixture: &Fixture) -> io::Result<()> {

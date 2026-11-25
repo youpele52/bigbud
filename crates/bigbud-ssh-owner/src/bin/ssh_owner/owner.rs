@@ -51,7 +51,7 @@ use crate::{
     RunResult, Token,
     owner_agent_proxy::AgentProxyFixture,
     owner_attachment::Attachment,
-    owner_grants::Grants,
+    owner_grants::{Grants, budget::Budget},
     owner_pipe::{Pipe, protocol_error},
     owner_storage::Storage,
     owner_trust::TrustApproval,
@@ -119,6 +119,7 @@ pub(super) fn bootstrap<R: Read, W: Write>(
         return Err(protocol_error().into());
     };
     if !valid_hello(&hello, profile) {
+        crate::startup_profile::report_hello_if_production(route_facts.production());
         return Err(protocol_error().into());
     }
     #[cfg(target_os = "macos")]
@@ -179,6 +180,7 @@ pub(super) fn bootstrap<R: Read, W: Write>(
                 || opencode_service.is_some(),
             #[cfg(not(target_os = "linux"))]
             tracked_push_or_opencode: false,
+            production: route_facts.production(),
         },
     );
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -197,9 +199,9 @@ pub(super) fn bootstrap<R: Read, W: Write>(
         .map(|binding| tracked_push::TrackedPushState::start(binding, &config, &target, generation))
         .transpose()?;
     #[cfg(target_os = "linux")]
-    let (mut transport, jump_picker) = if std::env::var_os("BIGBUD_SSH_OWNER_PICKER_JUMP")
-        .as_deref()
-        == Some(std::ffi::OsStr::new("approved-disposable"))
+    let (mut transport, jump_picker) = if !route_facts.production()
+        && std::env::var_os("BIGBUD_SSH_OWNER_PICKER_JUMP").as_deref()
+            == Some(std::ffi::OsStr::new("approved-disposable"))
     {
         if posix_picker.is_some()
             || attach_path.is_some()
@@ -272,7 +274,7 @@ pub(super) fn bootstrap<R: Read, W: Write>(
         storage,
         retirement: retirement.clone(),
         transport,
-        grants: Grants::new(crate::owner_grants::budget::Budget::from_startup_env()),
+        grants: Grants::new(Budget::for_startup(route_facts.production())),
         trust: TrustApproval::default(),
         reconnect: ReconnectAdmission::default(),
         #[cfg(target_os = "linux")]
@@ -372,6 +374,7 @@ impl Owner {
                 .transport
                 .alias_descriptor()
                 .map_or_else(Vec::new, Vec::from),
+            profile_binding: self.profile.clone(),
         }))
     }
 

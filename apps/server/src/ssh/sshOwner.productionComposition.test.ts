@@ -187,7 +187,7 @@ describe("production SSH owner composition", () => {
   it.effect("keeps today's behaviour while the activation constant is off", () =>
     Effect.gen(function* () {
       const configuration = yield* configureSshOwner(
-        { mode: "desktop", devUrl: undefined },
+        { mode: "desktop", devUrl: undefined, stateDir: root },
         pathToFileURL(join(root, "server/dist/bin.mjs")).href,
       );
       expect(SSH_OWNER_PRODUCTION_ACTIVATION).toBe(false);
@@ -199,7 +199,7 @@ describe("production SSH owner composition", () => {
   it.effect("keeps local features working when the activated owner is missing", () =>
     Effect.gen(function* () {
       const configuration = yield* configureSshOwner(
-        { mode: "desktop", devUrl: undefined },
+        { mode: "desktop", devUrl: undefined, stateDir: root },
         pathToFileURL(join(root, "server/dist/bin.mjs")).href,
         {
           activation: true,
@@ -228,7 +228,7 @@ describe("production SSH owner composition", () => {
       const owner = join(root, "server/ssh-owner/bin/bigbud-ssh-owner");
       yield* Effect.promise(() => stage(owner, nativeHeader("darwin", "arm64")));
       const configuration = yield* configureSshOwner(
-        { mode: "desktop", devUrl: undefined },
+        { mode: "desktop", devUrl: undefined, stateDir: root },
         pathToFileURL(join(root, "server/dist/bin.mjs")).href,
         {
           activation: true,

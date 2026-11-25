@@ -83,6 +83,7 @@ impl<T: PickerTransport> Session<T> {
             proof_target_generation: session.generation.to_vec(),
             // The Windows fixture does not yet qualify the saved-alias binding.
             proof_alias_descriptor: Vec::new(),
+            profile_binding: profile.to_vec(),
         }))?;
         Ok(session)
     }

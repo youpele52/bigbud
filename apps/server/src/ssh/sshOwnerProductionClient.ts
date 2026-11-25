@@ -167,6 +167,13 @@ async function tryAttach(
     const code = cause instanceof PickerProofOwnerError ? cause.code : "";
     // No listener: the descriptor is stale. Only then may this backend spawn.
     if (code === "ownerUnavailable") return undefined;
+    if (code === "profileMismatch") {
+      throw clientError(
+        "profile-mismatch",
+        "The live SSH owner reported a different profile binding; refusing the attachment.",
+        cause,
+      );
+    }
     if (code === "operationDenied") {
       throw clientError(
         "attachment-refused",
@@ -196,6 +203,14 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
       catch: (cause) => fromPickerProofError(cause),
     });
     if (descriptor?.socketPath === facts.socketPath) {
+      if (descriptor.profileBinding !== facts.profileBindingText) {
+        return yield* Effect.fail(
+          clientError(
+            "profile-mismatch",
+            "The SSH owner attach descriptor belongs to a different profile; refusing to adopt it.",
+          ),
+        );
+      }
       const attached = yield* Effect.tryPromise({
         try: () => tryAttach(input, descriptor),
         catch: (cause) => fromPickerProofError(cause),
@@ -248,6 +263,7 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
             version: 1,
             socketPath: facts.socketPath,
             capability,
+            profileBinding: facts.profileBindingText,
           });
         } catch (cause) {
           await spawned.retireSpawned().catch(() => undefined);
@@ -273,11 +289,15 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
 export const startProductionOwnerForBoot = (input: {
   readonly artifact: SshOwnerArtifact;
   readonly profile: Parameters<typeof resolveSshOwnerLaunchFacts>[0];
+  readonly binding?: Parameters<typeof resolveSshOwnerLaunchFacts>[1];
   readonly sql: SqlClient.SqlClient;
 }): Effect.Effect<SshOwnerProductionHandle, SshOwnerClientError> =>
   Effect.gen(function* () {
     const facts = yield* Effect.try({
-      try: () => resolveSshOwnerLaunchFacts(input.profile),
+      try: () =>
+        input.binding === undefined
+          ? resolveSshOwnerLaunchFacts(input.profile)
+          : resolveSshOwnerLaunchFacts(input.profile, input.binding),
       catch: (cause) => fromPickerProofError(cause),
     });
     return yield* startOrAttachSshOwnerProduction({

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import { join } from "node:path";
 
 import {
@@ -14,7 +14,7 @@ import {
   PickerProofStartupConfigError,
   PickerProofStartupRetirementError,
 } from "./sshOwnerPickerProof.startupDiagnostic.ts";
-import type { SshOwnerArtifact } from "./sshOwnerProductionArtifact.ts";
+import type { SshOwnerArtifact, SshOwnerProfile } from "./sshOwnerProductionArtifact.ts";
 import {
   absolutePath,
   ensurePrivateSshOwnerDirectory,
@@ -22,6 +22,10 @@ import {
   type SshOwnerAttachmentDescriptor,
 } from "./sshOwnerProductionClient.attachment.ts";
 import { SshOwnerClientError } from "./sshOwnerProductionClient.errors.ts";
+import {
+  deriveSshOwnerProfileBinding,
+  type SshOwnerProfileBinding,
+} from "./sshOwnerProductionProfile.ts";
 import { SSH_OWNER_WIRE_LIMITS } from "./sshOwnerProductionClient.negotiate.ts";
 
 /**
@@ -49,23 +53,27 @@ export interface SshOwnerProductionProfile {
   /** Private state directory whose `ssh-owner/` child holds the profile's owner facts. */
   readonly stateDirectory: string;
   readonly targetId: string;
-  /** The current disposable/production owner image is loopback-bound. */
-  readonly host: "127.0.0.1" | "::1";
+  /** A real user-configured destination; production is not loopback-bound. */
+  readonly host: string;
   readonly port: number;
   readonly user: string;
   readonly identityFile: string;
   readonly knownHostsFile: string;
   readonly workspaceRoot?: string;
+  /** Exact initiating profile kind; omitted in fixtures, defaults to `desktop-dev`. */
+  readonly kind?: SshOwnerProfile;
 }
 
 export interface SshOwnerLaunchFacts {
   readonly profileBinding: Buffer;
+  readonly profileBindingText: string;
+  readonly stateDirectory: string;
   readonly targetId: string;
   readonly directory: string;
   readonly lockFile: string;
   readonly socketPath: string;
   readonly attachFile: string;
-  readonly host: "127.0.0.1" | "::1";
+  readonly host: string;
   readonly port: number;
   readonly user: string;
   readonly identityFile: string;
@@ -79,6 +87,7 @@ const invalid = (message: string, cause?: unknown) =>
 /** Validates the profile before a single child process or file is created. */
 export function resolveSshOwnerLaunchFacts(
   profile: SshOwnerProductionProfile,
+  binding?: SshOwnerProfileBinding,
 ): SshOwnerLaunchFacts {
   if (process.platform !== "darwin" && process.platform !== "linux") {
     throw new SshOwnerClientError(
@@ -90,7 +99,8 @@ export function resolveSshOwnerLaunchFacts(
     !absolutePath(profile.stateDirectory) ||
     !profile.targetId ||
     Buffer.byteLength(profile.targetId) > 1_024 ||
-    (profile.host !== "127.0.0.1" && profile.host !== "::1") ||
+    !profile.host ||
+    isIP(profile.host) === 0 ||
     !Number.isInteger(profile.port) ||
     profile.port < 1 ||
     profile.port > 65_535 ||
@@ -99,29 +109,26 @@ export function resolveSshOwnerLaunchFacts(
     !absolutePath(profile.knownHostsFile) ||
     (profile.workspaceRoot !== undefined && !absolutePath(profile.workspaceRoot))
   ) {
-    throw invalid("The SSH owner production profile is not a valid loopback launch binding.");
+    throw invalid("The SSH owner production profile is not a valid launch binding.");
   }
-  const directory = join(profile.stateDirectory, OWNER_DIRECTORY);
+  const identity =
+    binding ??
+    deriveSshOwnerProfileBinding({
+      kind: profile.kind ?? "desktop-dev",
+      stateDirectory: profile.stateDirectory,
+    });
+  if (identity.stateDirectory !== profile.stateDirectory) {
+    throw invalid("The SSH owner profile binding names a different state directory.");
+  }
+  const directory = join(identity.stateDirectory, OWNER_DIRECTORY);
   const socketPath = join(directory, SOCKET_FILE);
   if (Buffer.byteLength(socketPath) > MAX_SOCKET_BYTES) {
     throw invalid("The SSH owner attachment socket path exceeds the platform limit.");
   }
-  const profileBinding = createHash("sha256")
-    .update(
-      JSON.stringify([
-        "bigbud.ssh-owner.production-launch.v1",
-        profile.stateDirectory,
-        profile.targetId,
-        profile.host,
-        profile.port,
-        profile.user,
-        profile.identityFile,
-        profile.knownHostsFile,
-      ]),
-    )
-    .digest();
   return {
-    profileBinding,
+    profileBinding: identity.digest,
+    profileBindingText: identity.text,
+    stateDirectory: identity.stateDirectory,
     targetId: profile.targetId,
     directory,
     lockFile: join(directory, LOCK_FILE),
@@ -146,6 +153,8 @@ export interface SshOwnerLaunchInput extends Omit<PickerProofSessionOptions, "ma
 const productionLaunchOptions = (input: SshOwnerLaunchInput) => ({
   productionLaunch: {
     startupDeadlineMs: input.deadlineMs ?? SSH_OWNER_WIRE_LIMITS.startupDeadlineMs,
+    profileBindingText: input.facts.profileBindingText,
+    stateDirectory: input.facts.stateDirectory,
   },
 });
 
@@ -204,6 +213,13 @@ export function classifyStartupError(error: unknown): SshOwnerClientError {
   if (error instanceof PickerProofOwnerError) {
     if (error.code === "versionIncompatible") {
       return new SshOwnerClientError("version-incompatible", error.message, error);
+    }
+    if (error.code === "profileMismatch") {
+      return new SshOwnerClientError(
+        "profile-mismatch",
+        "The SSH owner reported a different profile binding; refusing the session.",
+        error,
+      );
     }
     if (error.code === "protocolError") {
       return new SshOwnerClientError("wire-protocol-invalid", error.message, error);
