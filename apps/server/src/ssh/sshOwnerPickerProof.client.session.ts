@@ -14,6 +14,7 @@ import {
 import { makePickerProofWorkspaceClient } from "./sshOwnerPickerProof.client.workspace.ts";
 import { waitForProofAgentAdmission } from "./sshOwnerPickerProof.client.agentProxy.ts";
 import { makePickerProofTerminalClient } from "./sshOwnerPickerProof.client.terminal.ts";
+import { makePickerProofProductionProxyClient } from "./sshOwnerPickerProof.client.productionProxy.ts";
 import { makePickerProofShellClient } from "./sshOwnerPickerProof.client.shell.ts";
 import { makePickerProofAgentActionClient } from "./sshOwnerPickerProof.client.agentAction.ts";
 import { makePickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.client.peerEnrollment.ts";
@@ -222,6 +223,7 @@ export async function openPickerProofSession(
         (beforeDispatch) => runBound({ kind: "proofSampleHealth" }, beforeDispatch),
         sendPickerCancel,
       ),
+      ...makePickerProofProductionProxyClient((operation) => runBound(operation)),
     };
   };
 

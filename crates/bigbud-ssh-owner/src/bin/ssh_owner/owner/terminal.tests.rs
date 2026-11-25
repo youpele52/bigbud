@@ -95,6 +95,8 @@ impl Fixture {
                 workspace_snapshot_cancel: None,
                 attach_path: None,
                 agent_fixture: None,
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                agent_service: None,
                 identity_agent_path: None,
                 stage: None,
                 #[cfg(target_os = "linux")]

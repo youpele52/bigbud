@@ -28,6 +28,10 @@ mod session;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub(crate) use session::agent::open as open_agent_session;
+pub(crate) use session::agent::{AgentIo, RemoteExit, read_exit};
+
 use link::{Binding, LinkMode, TrustRead};
 use master::Master;
 

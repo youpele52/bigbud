@@ -45,11 +45,46 @@ fn production_admits_terminal_verbs_and_keeps_fixture_only_verbs_refused() {
             )))
             .is_ok()
     );
+    // Agent proxy leases now have a real per-target provider; admission is open
+    // and a missing master/owner-selected agent refuses in dispatch.
+    assert!(
+        owner
+            .validate(&envelope(Operation::ProofAgentProxyOpen(
+                crate::v1::ProofAgentProxyOpen::default()
+            )))
+            .is_ok()
+    );
+    assert!(
+        owner
+            .validate(&envelope(Operation::ProofAgentProxyStatus(
+                ProofTerminalLease::default()
+            )))
+            .is_ok()
+    );
+    assert!(
+        owner
+            .validate(&envelope(Operation::ProofAgentProxyClose(
+                crate::v1::ProofAgentProxyClose::default()
+            )))
+            .is_ok()
+    );
+    // OpenCode is Linux-only in v1; every other POSIX host keeps the refusal.
+    #[cfg(not(target_os = "linux"))]
     for refused in [
-        Operation::ProofAgentProxyStatus(ProofTerminalLease::default()),
-        Operation::ProofAgentProxyClose(crate::v1::ProofAgentProxyClose::default()),
         Operation::ProofOpencodeOpen(crate::v1::ProofOpencodeOpen::default()),
         Operation::ProofOpencodeClose(crate::v1::ProofOpencodeLease::default()),
+    ] {
+        assert_eq!(
+            owner.validate(&envelope(refused)).err(),
+            Some(ErrorCode::OperationDenied)
+        );
+    }
+    // Verbs without a production provider stay refused at admission.
+    for refused in [
+        Operation::ProofPeerRelayOpen(crate::v1::ProofPeerRelayOpen::default()),
+        Operation::ProofGitAdvertisementOpen(crate::v1::ProofGitAdvertisementOpen::default()),
+        Operation::ProofGitUploadOpen(crate::v1::ProofGitUploadOpen::default()),
+        Operation::ProofCodexOpen(crate::v1::ProofProviderScope::default()),
     ] {
         assert_eq!(
             owner.validate(&envelope(refused)).err(),

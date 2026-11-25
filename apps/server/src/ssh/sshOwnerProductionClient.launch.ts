@@ -66,6 +66,14 @@ export interface SshOwnerProductionProfile {
   readonly workspaceRoot?: string;
   /** Exact initiating profile kind; omitted in fixtures, defaults to `desktop-dev`. */
   readonly kind?: SshOwnerProfile;
+  /** Owner-selected installed agent for production per-target proxies. */
+  readonly agentService?: {
+    readonly binaryPath: string;
+    readonly sha256: string;
+    readonly stateDir: string;
+  };
+  /** Owner-selected OpenCode executable; its listener is bound per target. */
+  readonly opencodeService?: { readonly binaryPath: string };
 }
 
 export interface SshOwnerLaunchFacts {
@@ -78,6 +86,12 @@ export interface SshOwnerLaunchFacts {
   readonly attachFile: string;
   readonly workspaceRoot?: string;
   readonly target?: SshOwnerTargetDescriptor;
+  readonly agentService?: {
+    readonly binaryPath: string;
+    readonly sha256: string;
+    readonly stateDir: string;
+  };
+  readonly opencodeService?: { readonly binaryPath: string };
 }
 
 const invalid = (message: string, cause?: unknown) =>
@@ -131,6 +145,8 @@ export function resolveSshOwnerLaunchFacts(
     attachFile: join(directory, ATTACH_FILE),
     ...(profile.workspaceRoot === undefined ? {} : { workspaceRoot: profile.workspaceRoot }),
     ...(profile.target === undefined ? {} : { target: profile.target }),
+    ...(profile.agentService === undefined ? {} : { agentService: profile.agentService }),
+    ...(profile.opencodeService === undefined ? {} : { opencodeService: profile.opencodeService }),
   };
 }
 
@@ -165,6 +181,8 @@ export async function spawnSshOwnerProduction(
     ...(facts.target === undefined ? {} : { targetId: facts.target.targetId }),
     ...(facts.workspaceRoot === undefined ? {} : { workspaceRoot: facts.workspaceRoot }),
     attachment: { socketPath: facts.socketPath, capability: input.capability },
+    ...(facts.agentService === undefined ? {} : { agentService: facts.agentService }),
+    ...(facts.opencodeService === undefined ? {} : { opencodeService: facts.opencodeService }),
     ...productionLaunchOptions(input),
   });
 }

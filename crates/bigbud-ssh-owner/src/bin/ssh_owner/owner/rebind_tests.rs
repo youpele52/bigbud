@@ -100,6 +100,8 @@ fn snapshot_fixture_scopes_cancellation_to_one_admitted_request() {
             workspace_snapshot_cancel: Some(SnapshotCancelInbox::new(reader.into())),
             attach_path: None,
             agent_fixture: None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            agent_service: None,
             identity_agent_path: None,
             stage: None,
         },
@@ -217,6 +219,8 @@ fn connected_rebind_fences_old_requests_without_stranding_posix_picker() {
             workspace_snapshot_cancel: None,
             attach_path: None,
             agent_fixture: None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            agent_service: None,
             identity_agent_path: None,
             stage: None,
         },

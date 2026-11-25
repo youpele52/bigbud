@@ -35,6 +35,7 @@ exec /usr/bin/python3 -I -c "$supervisor" "$cwd" "$nonce" "$host" "$port" "$mode
 "#,
 );
 
+#[derive(Debug)]
 pub(crate) struct ProductRecipe {
     binary: String,
     root: String,

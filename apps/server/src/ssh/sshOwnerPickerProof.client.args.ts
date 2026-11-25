@@ -72,6 +72,20 @@ export function pickerProofLaunchArgs(
       options.keyscanBinary,
       ...attach,
       ...workspace,
+      // Owner-selected provider bindings. A request never supplies these.
+      ...(options.agentService
+        ? [
+            "--agent-binary",
+            options.agentService.binaryPath,
+            "--agent-sha256",
+            options.agentService.sha256,
+            "--agent-state",
+            options.agentService.stateDir,
+          ]
+        : []),
+      ...(options.opencodeService
+        ? ["--opencode-service", options.opencodeService.binaryPath]
+        : []),
     ];
   }
   const target = facts.target;

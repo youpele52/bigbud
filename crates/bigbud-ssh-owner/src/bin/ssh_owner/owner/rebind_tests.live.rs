@@ -68,6 +68,8 @@ fn live_picker_master_retires_before_storage_rebind_acknowledgement() {
             // Exercise the internal rebind without widening supported bootstrap combinations.
             attach_path: None,
             agent_fixture: None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            agent_service: None,
             identity_agent_path: None,
             stage: None,
         },

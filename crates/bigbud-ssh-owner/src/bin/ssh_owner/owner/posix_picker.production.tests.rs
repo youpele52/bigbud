@@ -139,3 +139,27 @@ fn a_stale_generation_cannot_reuse_or_retire_a_production_master() {
     assert_eq!(first.retire(), Ok(()));
     assert_eq!(second.admit([2; 32]), Ok(()));
 }
+
+#[test]
+fn production_agent_session_uses_the_bound_master_image_before_any_dial() {
+    let fixture = Fixture::new();
+    let transport = fixture.transport("/test-no-ssh");
+    let mut picker = MasterPicker::production(fixture.0.clone(), None);
+    // The agent lane rides the same verified master; a non-system image is
+    // refused while constructing the link, so no master and no second SSH
+    // connection exists.
+    assert_eq!(
+        picker
+            .open_production_agent_session(&transport, [1; 32], "/owner/agent --proxy")
+            .err(),
+        Some(ErrorCode::ConfigUnsupported)
+    );
+    assert!(!picker.slot.has_live_master());
+    // A stale generation is fenced before the master is consulted again.
+    assert_eq!(
+        picker
+            .open_production_agent_session(&transport, [2; 32], "/owner/agent --proxy")
+            .err(),
+        Some(ErrorCode::StaleGeneration)
+    );
+}

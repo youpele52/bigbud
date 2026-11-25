@@ -9,6 +9,7 @@ use super::{
     ErrorCode, Folders, Instant, MasterMode, MasterPicker, PICKER_DEADLINE, Token, Transport,
 };
 use crate::owner::retirement::Retirement;
+use crate::transport::posix_master::AgentIo;
 use std::path::PathBuf;
 
 impl MasterPicker {
@@ -55,5 +56,27 @@ impl MasterPicker {
             .ok_or(ErrorCode::OwnerUnavailable)?;
         self.slot
             .open_and_list_production_folders(transport, generation, path, deadline, root)
+    }
+
+    /// Open one per-target agent session over the target's verified master. The
+    /// master is reused across folder lists and agent sessions; only this
+    /// session's control stream and private pipes belong to the caller.
+    pub(crate) fn open_production_agent_session(
+        &mut self,
+        transport: &Transport,
+        generation: Token,
+        command: &str,
+    ) -> Result<(u32, AgentIo), ErrorCode> {
+        self.admit(generation)?;
+        let deadline = Instant::now() + PICKER_DEADLINE;
+        let root = self
+            .production_root
+            .as_deref()
+            .ok_or(ErrorCode::OwnerUnavailable)?;
+        let result = self
+            .slot
+            .open_production_agent_session(transport, generation, command, deadline, root);
+        self.record_observation(generation, result.as_ref().err().copied());
+        result
     }
 }

@@ -160,6 +160,59 @@ fn rejects_every_fixture_flag() {
 }
 
 #[test]
+fn parses_owner_selected_provider_bindings() {
+    let root = root();
+    let state = std::path::Path::new("/tmp/bb-agent-state");
+    let sha256 = "0".repeat(64);
+    let parsed = parse(
+        args(
+            &root,
+            &[
+                "--agent-binary",
+                "/opt/bigbud-agent",
+                "--agent-sha256",
+                &sha256,
+                "--agent-state",
+                state.to_str().unwrap(),
+            ],
+        )
+        .into_iter(),
+    )
+    .expect("owner-selected agent binding");
+    assert!(parsed.agent_service.is_some());
+    #[cfg(target_os = "linux")]
+    assert!(parsed.opencode_service.is_none());
+    #[cfg(target_os = "linux")]
+    {
+        let workspace = root.join("workspace");
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&workspace)
+            .unwrap();
+        let parsed = parse(
+            args(
+                &root,
+                &[
+                    "--workspace-root",
+                    workspace.to_str().unwrap(),
+                    "--opencode-service",
+                    "/opt/opencode",
+                ],
+            )
+            .into_iter(),
+        )
+        .expect("owner-selected OpenCode binding");
+        assert!(parsed.opencode_service.is_some());
+    }
+    // A partial triple is a conflict, never a silently ignored binding.
+    assert_eq!(
+        parse(args(&root, &["--agent-binary", "/opt/bigbud-agent"]).into_iter()).unwrap_err(),
+        ProfileRefusal::Conflict
+    );
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn a_system_config_requires_an_alias_scope() {
     let root = root();
     let system = root.join("ssh_config");

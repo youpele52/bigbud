@@ -139,6 +139,19 @@ export async function startPickerProofOwner(
   const pi = options.piFixture && validateProofProviderFixture(options.piFixture);
   const provider = codex ?? pi;
   validateProviderServiceStartup([options.providerService, options.opencodeService], workspaceRoot);
+  const productionAgent = options.agentService;
+  if (
+    productionAgent !== undefined &&
+    (production === undefined ||
+      process.platform === "win32" ||
+      !isAbsolute(productionAgent.binaryPath) ||
+      productionAgent.binaryPath.includes("\0") ||
+      !/^[a-f0-9]{64}$/.test(productionAgent.sha256) ||
+      !isAbsolute(productionAgent.stateDir) ||
+      productionAgent.stateDir.includes("\0"))
+  ) {
+    throw new PickerProofOwnerError("invalidOperands");
+  }
   if (
     options.providerService?.kind !== undefined &&
     options.providerService.kind !== "pi" &&

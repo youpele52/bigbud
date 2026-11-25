@@ -1,6 +1,8 @@
 use super::{ErrorCode, Owner};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::{owner_agent_proxy::ProductionProxy, random_token};
 use crate::{
-    owner_agent_proxy::{AgentProxyFixture, ProviderKind, ScopedDuplex},
+    owner_agent_proxy::{AgentProxy, AgentProxyFixture, ProviderKind, ScopedDuplex},
     v1::{
         ProofAgentProxyOpen, ProofAgentProxyStatus, ProofClientRelayOpen, ProofProviderScope,
         ProofProviderVersion,
@@ -12,7 +14,54 @@ impl Owner {
         &mut self,
         request: &ProofAgentProxyOpen,
     ) -> Result<ProofAgentProxyStatus, ErrorCode> {
+        if self.production {
+            return self.open_production_agent_proxy(request);
+        }
         self.open_duplex(|fixture, transport| fixture.open(transport, request))
+    }
+
+    /// Production opens one private mux session over the target's verified
+    /// master. The request selects no executable, digest, command or environment;
+    /// the owner's startup binding supplies them, so a non-empty request is a
+    /// refusal rather than an unverified launch.
+    fn open_production_agent_proxy(
+        &mut self,
+        request: &ProofAgentProxyOpen,
+    ) -> Result<ProofAgentProxyStatus, ErrorCode> {
+        if !request.binary_path.is_empty() || !request.sha256.is_empty() {
+            return Err(ErrorCode::OperationDenied);
+        }
+        if self.lanes.agent_proxy.is_some() {
+            return Err(ErrorCode::OperationDenied);
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            let recipe = self
+                .agent_service
+                .as_ref()
+                .ok_or(ErrorCode::ConfigUnsupported)?;
+            let transport = super::present(&self.transport)?;
+            let generation = self.generation;
+            let picker = self
+                .lanes
+                .master
+                .as_mut()
+                .ok_or(ErrorCode::OwnerUnavailable)?;
+            let (pid, io) =
+                picker.open_production_agent_session(transport, generation, recipe.command())?;
+            let token = random_token().map_err(|_| ErrorCode::OwnerUnavailable)?;
+            let proxy = ProductionProxy::new(token, pid, io)?;
+            self.lanes.agent_proxy = Some(AgentProxy::Production(proxy));
+            self.lanes
+                .agent_proxy
+                .as_mut()
+                .ok_or(ErrorCode::OwnerUnavailable)?
+                .status()
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            Err(ErrorCode::ConfigUnsupported)
+        }
     }
 
     pub(super) fn open_client_relay(
@@ -72,7 +121,7 @@ impl Owner {
             .ok_or(ErrorCode::OperationDenied)?;
         match open(fixture, super::present(&self.transport)?) {
             Ok(lease) => {
-                let proxy = self.lanes.agent_proxy.insert(lease);
+                let proxy = self.lanes.agent_proxy.insert(AgentProxy::Fixture(lease));
                 proxy.status()
             }
             Err(error) => {

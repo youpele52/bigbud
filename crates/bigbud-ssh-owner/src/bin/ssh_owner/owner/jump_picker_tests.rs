@@ -67,6 +67,8 @@ fn bound_alias_browses_through_selected_owner_dispatch() {
             workspace_snapshot_cancel: None,
             attach_path: None,
             agent_fixture: None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            agent_service: None,
             identity_agent_path: None,
             stage: None,
             opencode_recipe: None,

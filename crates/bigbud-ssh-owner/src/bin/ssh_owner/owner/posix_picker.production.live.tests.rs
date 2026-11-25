@@ -147,3 +147,87 @@ fn production_master_is_reused_and_the_login_pty_round_trips() {
     picker.retire().expect("checked master reap");
     assert!(!picker.slot.has_live_master());
 }
+
+/// Host-gated: the production agent proxy must open one mux session over the
+/// already-verified master, carry framed bytes both ways, confirm an explicit
+/// exit and reuse the same master process for a second target session.
+#[test]
+#[ignore = "requires a separately approved, running throwaway loopback sshd with generated keys"]
+fn production_agent_proxy_reuses_the_verified_master_and_confirms_exit() {
+    use crate::owner_agent_proxy::ProductionProxy;
+
+    assert_eq!(
+        std::env::var("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE").as_deref(),
+        Ok("approved-disposable")
+    );
+    let root = PathBuf::from(required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_ROOT"));
+    assert_eq!(root.parent(), Some(Path::new("/private/tmp")));
+    let port = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_PORT")
+        .parse::<u16>()
+        .expect("numeric fixture port");
+    let user = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_USER");
+    let public = fs::read_to_string(root.join("host-key.pub")).expect("generated host key");
+    let mut fields = public.split_ascii_whitespace();
+    let key_type = fields.next().expect("fixture key type");
+    let key = fields.next().expect("fixture key blob");
+    let mut known_hosts = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(root.join("known_hosts"))
+        .expect("explicit fixture pin");
+    known_hosts
+        .write_all(format!("[127.0.0.1]:{port} {key_type} {key}\n").as_bytes())
+        .expect("write pin");
+    let transport = Transport::new(TransportConfig {
+        ssh: "/usr/bin/ssh".into(),
+        keyscan: "/usr/bin/ssh-keyscan".into(),
+        host: Ipv4Addr::LOCALHOST.into(),
+        port,
+        user,
+        identity: root.join("identity"),
+        known_hosts: root.join("known_hosts"),
+        alias_config: None,
+        system_config: None,
+        workspace_root: None,
+        dev_interactive_terminal: false,
+    })
+    .expect("production-shaped transport");
+
+    let generation = [8; 32];
+    let mut picker = MasterPicker::production(root.clone(), None);
+    let command = "printf 'agent-hello\\n'";
+    let (pid, io) = picker
+        .open_production_agent_session(&transport, generation, command)
+        .expect("agent session over the master");
+    let mut first = ProductionProxy::new([1; 32], pid, io).expect("bounded proxy");
+    first.grant_output_credit(256).expect("reader credit");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut output = Vec::new();
+    while Instant::now() < deadline && !output.windows(11).any(|w| w == b"agent-hello") {
+        if let Some(chunk) = first.receive().expect("framed output") {
+            output.extend(chunk);
+        } else {
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+    assert!(
+        output.windows(11).any(|window| window == b"agent-hello"),
+        "no framed hello over the production master"
+    );
+    let status = first.close(true, 5_000).expect("confirmed proxy exit");
+    assert!(status.closed);
+    assert_eq!(status.code, Some(0));
+
+    // A second session reuses the same verified master process.
+    let (second_pid, second_io) = picker
+        .open_production_agent_session(&transport, generation, command)
+        .expect("second agent session");
+    assert_eq!(second_pid, pid, "the master was re-dialled");
+    let mut second = ProductionProxy::new([2; 32], second_pid, second_io).expect("bounded proxy");
+    second.grant_output_credit(256).expect("reader credit");
+    let _ = second.close(false, 5_000);
+    assert_eq!(picker.test_live_pid(), Some(pid));
+    picker.retire().expect("checked master reap");
+}

@@ -1,5 +1,6 @@
 //! Only the disposable folder picker, on an already verified mux v4 stream.
 
+pub(super) mod agent;
 #[cfg(any(test, target_os = "linux"))]
 pub(super) mod forward;
 mod stdio;
@@ -170,7 +171,7 @@ impl FinalReply {
     }
 }
 
-fn words(bytes: &[u8; 16]) -> [u32; 4] {
+pub(super) fn words(bytes: &[u8; 16]) -> [u32; 4] {
     let [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p] = *bytes;
     [[a, b, c, d], [e, f, g, h], [i, j, k, l], [m, n, o, p]].map(u32::from_be_bytes)
 }

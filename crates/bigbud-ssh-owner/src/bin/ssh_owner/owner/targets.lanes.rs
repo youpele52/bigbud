@@ -15,7 +15,7 @@ use crate::owner::opencode;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::owner::posix_picker;
 use crate::owner::terminal;
-use crate::owner_agent_proxy::AgentProxyLease;
+use crate::owner_agent_proxy::AgentProxy;
 
 /// The exact target and generation a live lease belongs to. A stale generation
 /// or a different target cannot attach to, replay or close the lease.
@@ -48,7 +48,7 @@ pub(crate) struct Lanes {
     pub(crate) preparation: Option<terminal::TerminalPreparation>,
     /// Terminal writes are ambiguous until positively settled.
     pub(crate) terminal_uncertain: bool,
-    pub(crate) agent_proxy: Option<AgentProxyLease>,
+    pub(crate) agent_proxy: Option<AgentProxy>,
     pub(crate) agent_close_uncertain: bool,
     #[cfg(target_os = "linux")]
     pub(crate) opencode: Option<opencode::Lease>,

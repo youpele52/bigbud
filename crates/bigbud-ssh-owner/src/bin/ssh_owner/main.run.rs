@@ -299,6 +299,8 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
             workspace_snapshot_cancel,
             attach_path: attach_path.as_deref(),
             agent_fixture,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            agent_service: None,
             identity_agent_path: identity_agent_path.as_deref(),
             stage,
             #[cfg(target_os = "linux")]

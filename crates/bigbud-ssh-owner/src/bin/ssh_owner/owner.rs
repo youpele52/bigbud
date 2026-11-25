@@ -19,6 +19,9 @@ pub(super) use picker_cancel::CancelInbox as SnapshotCancelInbox;
 mod picker_dispatch;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod posix_picker;
+#[cfg(test)]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod production_agent_proxy_tests;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use posix_picker::is_disposable_picker;
 #[cfg(all(test, target_os = "macos"))]
@@ -78,6 +81,8 @@ pub(super) struct OwnerStartup<'a> {
     pub(super) workspace_snapshot_cancel: Option<SnapshotCancelInbox>,
     pub(super) attach_path: Option<&'a Path>,
     pub(super) agent_fixture: Option<AgentProxyFixture>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) agent_service: Option<crate::owner_agent_proxy::ServiceRecipe>,
     pub(super) identity_agent_path: Option<&'a Path>,
     pub(super) stage: Option<StageBinding>,
     #[cfg(target_os = "linux")]

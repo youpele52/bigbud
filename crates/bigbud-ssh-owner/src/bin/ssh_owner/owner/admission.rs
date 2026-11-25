@@ -78,18 +78,18 @@ impl Owner {
             return Err(ErrorCode::OperationDenied);
         }
         #[cfg(target_os = "linux")]
-        if self.opencode_recipe.is_some()
-            || self.opencode_service.is_some()
-                && !matches!(
-                    operation,
-                    Operation::ProofOpencodeOpen(_)
-                        | Operation::ProofOpencodeStatus(_)
-                        | Operation::ProofOpencodeClose(_)
-                        | Operation::InspectTrust(_)
-                        | Operation::ApproveTrust(_)
-                        | Operation::Connect(_)
-                        | Operation::Disconnect(_)
-                )
+        if !self.production
+            && (self.opencode_recipe.is_some() || self.opencode_service.is_some())
+            && !matches!(
+                operation,
+                Operation::ProofOpencodeOpen(_)
+                    | Operation::ProofOpencodeStatus(_)
+                    | Operation::ProofOpencodeClose(_)
+                    | Operation::InspectTrust(_)
+                    | Operation::ApproveTrust(_)
+                    | Operation::Connect(_)
+                    | Operation::Disconnect(_)
+            )
         {
             return Err(ErrorCode::OperationDenied);
         }
@@ -165,26 +165,47 @@ impl Owner {
 ///
 /// Masters and PTY leases now have real per-target providers: production opens
 /// a verified master under the owner's state root for folder listing and runs
-/// the target's login shell for a reserved terminal. The agent proxy and
-/// OpenCode recipe are still fixture-only, so those verbs remain refused.
+/// the target's login shell for a reserved terminal. The agent proxy opens one
+/// private mux session per target over that same master, and (on Linux) OpenCode
+/// binds one owner-selected listener per target.
 fn production_verb(operation: &Operation) -> bool {
-    matches!(
+    // Agent proxy leases are per target and require no startup-transferred pipe
+    // set; they are admitted on every POSIX production host.
+    let agent = matches!(
         operation,
-        Operation::InspectTrust(_)
-            | Operation::ApproveTrust(_)
-            | Operation::Connect(_)
-            | Operation::Disconnect(_)
-            | Operation::ListFolders(_)
-            | Operation::ListAliases(_)
-            | Operation::ProofSampleHealth(_)
-            | Operation::ProofPrepareTerminal(_)
-            | Operation::ProofCancelTerminalReservation(_)
-            | Operation::ProofOpenTerminal(_)
-            | Operation::ProofTerminalStatus(_)
-            | Operation::ProofTerminalReplay(_)
-            | Operation::ProofTerminalInput(_)
-            | Operation::ProofTerminalResize(_)
-            | Operation::ProofTerminalCwd(_)
-            | Operation::ProofCloseTerminal(_)
-    )
+        Operation::ProofAgentProxyOpen(_)
+            | Operation::ProofAgentProxyStatus(_)
+            | Operation::ProofAgentProxyClose(_)
+    );
+    // OpenCode remains platform-gated: only Linux has the product recipe.
+    #[cfg(target_os = "linux")]
+    let opencode = matches!(
+        operation,
+        Operation::ProofOpencodeOpen(_)
+            | Operation::ProofOpencodeStatus(_)
+            | Operation::ProofOpencodeClose(_)
+    );
+    #[cfg(not(target_os = "linux"))]
+    let opencode = false;
+    agent
+        || opencode
+        || matches!(
+            operation,
+            Operation::InspectTrust(_)
+                | Operation::ApproveTrust(_)
+                | Operation::Connect(_)
+                | Operation::Disconnect(_)
+                | Operation::ListFolders(_)
+                | Operation::ListAliases(_)
+                | Operation::ProofSampleHealth(_)
+                | Operation::ProofPrepareTerminal(_)
+                | Operation::ProofCancelTerminalReservation(_)
+                | Operation::ProofOpenTerminal(_)
+                | Operation::ProofTerminalStatus(_)
+                | Operation::ProofTerminalReplay(_)
+                | Operation::ProofTerminalInput(_)
+                | Operation::ProofTerminalResize(_)
+                | Operation::ProofTerminalCwd(_)
+                | Operation::ProofCloseTerminal(_)
+        )
 }

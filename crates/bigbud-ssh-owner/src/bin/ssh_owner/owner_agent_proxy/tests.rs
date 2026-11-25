@@ -5,6 +5,7 @@ use std::net::Ipv4Addr;
 use std::os::fd::IntoRawFd;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt, symlink};
 use std::os::unix::net::UnixStream;
+use std::time::Duration;
 
 const PIN: &str = "[127.0.0.1]:2200 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n";
 const FAKE_SSH: &str = r#"#!/bin/sh

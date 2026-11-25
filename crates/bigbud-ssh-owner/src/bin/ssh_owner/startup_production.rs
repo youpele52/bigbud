@@ -37,6 +37,12 @@ pub(super) struct ProductionBindings {
     pub(super) alias_config: Option<PathBuf>,
     pub(super) attach_path: Option<PathBuf>,
     pub(super) workspace_root: Option<PathBuf>,
+    /// Owner-selected installed agent for the per-target production proxy.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) agent_service: Option<crate::owner_agent_proxy::ServiceRecipe>,
+    /// Owner-selected OpenCode executable; its listener is per target.
+    #[cfg(target_os = "linux")]
+    pub(super) opencode_service: Option<crate::owner_opencode_v1::ProductRecipe>,
 }
 
 impl ProductionBindings {
@@ -60,6 +66,11 @@ struct Parsed {
     alias_config: Option<PathBuf>,
     attach_path: Option<PathBuf>,
     workspace_root: Option<PathBuf>,
+    agent_binary: Option<PathBuf>,
+    agent_sha256: Option<String>,
+    agent_state: Option<PathBuf>,
+    #[cfg(target_os = "linux")]
+    opencode_binary: Option<PathBuf>,
 }
 
 fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings, ProfileRefusal> {
@@ -72,6 +83,11 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         alias_config: None,
         attach_path: None,
         workspace_root: None,
+        agent_binary: None,
+        agent_sha256: None,
+        agent_state: None,
+        #[cfg(target_os = "linux")]
+        opencode_binary: None,
     };
     while let Some(argument) = args.next() {
         let Some(flag) = argument.to_str() else {
@@ -140,6 +156,35 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
                         .map_err(|_| ProfileRefusal::MissingFlag)?,
                 );
             }
+            "--agent-binary" if parsed.agent_binary.is_none() => {
+                parsed.agent_binary = Some(
+                    take()
+                        .map(PathBuf::from)
+                        .map_err(|_| ProfileRefusal::MissingFlag)?,
+                );
+            }
+            "--agent-sha256" if parsed.agent_sha256.is_none() => {
+                parsed.agent_sha256 = Some(
+                    take()?
+                        .into_string()
+                        .map_err(|_| ProfileRefusal::MalformedProfile)?,
+                );
+            }
+            "--agent-state" if parsed.agent_state.is_none() => {
+                parsed.agent_state = Some(
+                    take()
+                        .map(PathBuf::from)
+                        .map_err(|_| ProfileRefusal::MissingFlag)?,
+                );
+            }
+            #[cfg(target_os = "linux")]
+            "--opencode-service" if parsed.opencode_binary.is_none() => {
+                parsed.opencode_binary = Some(
+                    take()
+                        .map(PathBuf::from)
+                        .map_err(|_| ProfileRefusal::MissingFlag)?,
+                );
+            }
             // Every fixture flag and every unknown flag is a conflict.
             _ => return Err(ProfileRefusal::Conflict),
         }
@@ -166,6 +211,10 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         parsed.alias_config.as_ref(),
         parsed.attach_path.as_ref(),
         parsed.workspace_root.as_ref(),
+        parsed.agent_binary.as_ref(),
+        parsed.agent_state.as_ref(),
+        #[cfg(target_os = "linux")]
+        parsed.opencode_binary.as_ref(),
     ]
     .into_iter()
     .flatten()
@@ -174,6 +223,33 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
             return Err(ProfileRefusal::MalformedProfile);
         }
     }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let agent_service = match (
+        parsed.agent_binary.clone(),
+        parsed.agent_sha256.clone(),
+        parsed.agent_state.clone(),
+    ) {
+        (None, None, None) => None,
+        (Some(binary), Some(sha256), Some(state)) => Some(
+            crate::owner_agent_proxy::ServiceRecipe::new(&binary, &sha256, &state)
+                .map_err(|_| ProfileRefusal::MalformedProfile)?,
+        ),
+        _ => return Err(ProfileRefusal::Conflict),
+    };
+    #[cfg(target_os = "linux")]
+    let opencode_service = match parsed.opencode_binary.clone() {
+        None => None,
+        Some(binary) => {
+            let root = parsed
+                .workspace_root
+                .as_deref()
+                .ok_or(ProfileRefusal::Conflict)?;
+            Some(
+                crate::owner_opencode_v1::ProductRecipe::new(&binary, root)
+                    .map_err(|_| ProfileRefusal::MalformedProfile)?,
+            )
+        }
+    };
     Ok(ProductionBindings {
         profile,
         state_directory,
@@ -183,6 +259,10 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         alias_config: parsed.alias_config,
         attach_path: parsed.attach_path,
         workspace_root: parsed.workspace_root,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        agent_service,
+        #[cfg(target_os = "linux")]
+        opencode_service,
     })
 }
 
@@ -219,6 +299,8 @@ pub(super) fn run(mut args: impl Iterator<Item = OsString>) -> RunResult<()> {
         workspace_snapshot_cancel: None,
         attach_path: bindings.attach_path.as_deref(),
         agent_fixture: None,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        agent_service: bindings.agent_service,
         identity_agent_path: None,
         stage: None,
         #[cfg(target_os = "linux")]
@@ -226,7 +308,7 @@ pub(super) fn run(mut args: impl Iterator<Item = OsString>) -> RunResult<()> {
         #[cfg(target_os = "linux")]
         opencode_recipe: None,
         #[cfg(target_os = "linux")]
-        opencode_service: None,
+        opencode_service: bindings.opencode_service,
     };
     let (mut owner, attachment) = super::owner::bootstrap(&mut pipe, startup)?;
     owner.supervised_terminal = false;

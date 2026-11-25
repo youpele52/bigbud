@@ -1,6 +1,8 @@
 import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { PROXY_HANDLER_SCRIPT } from "./sshOwnerProductionClient.fakeOwner.proxy.ts";
+
 /**
  * Test support: a disposable owner binary that speaks just enough of the v1
  * frame protocol to exercise the production client's spawn handshake. It is
@@ -247,10 +249,15 @@ const handleTerminal = (requestId, target, operation) => {
       return reply(requestId, target, 10, uintField(1, 2));
   }
 };
+${PROXY_HANDLER_SCRIPT}
 const handleOperation = (requestId, target, operation) => {
   if (!operation) return reply(requestId, target, 10, uintField(1, 2));
   if (operation.field === 10) return reply(requestId, target, 11, trustVerified());
   if (operation.field === 14) return reply(requestId, target, 13, bytesField(1, "/home/fixture"));
+  if (operation.field === 29 || operation.field === 30 || operation.field === 31)
+    return handleAgentProxy(requestId, target, operation);
+  if (operation.field === 50 || operation.field === 51 || operation.field === 52)
+    return handleOpencode(requestId, target, operation);
   return handleTerminal(requestId, target, operation);
 };
 const handleRequest = (request) => {

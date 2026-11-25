@@ -10,6 +10,7 @@ import type { PickerProofDeploymentClient } from "./sshOwnerPickerProof.deployme
 import type { PickerProofShellClient } from "./sshOwnerPickerProof.client.shell.ts";
 import type { PickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.client.peerEnrollment.ts";
 import type { PickerProofAliasClient } from "./sshOwnerPickerProof.client.aliases.ts";
+import type { PickerProofProductionProxyClient } from "./sshOwnerPickerProof.client.productionProxy.ts";
 
 export interface PickerProofSessionOptions {
   readonly profileBinding: Uint8Array;
@@ -35,7 +36,11 @@ export interface PickerProofHydratedStorage {
  * request for another.
  */
 export interface PickerProofBoundTarget
-  extends PickerProofListClient, PickerProofHealthClient, PickerProofTerminalClient {
+  extends
+    PickerProofListClient,
+    PickerProofHealthClient,
+    PickerProofTerminalClient,
+    PickerProofProductionProxyClient {
   readonly targetId: string;
   /** Current generation; rotates on Connect/Disconnect. */
   readonly generation: Uint8Array;

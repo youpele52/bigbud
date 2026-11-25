@@ -4,6 +4,10 @@ package bigbud.ssh_owner.v1;
 
 // This proof opens one preapproved local loopback artifact. Data is carried
 // only on inherited byte pipes, not on this control channel.
+//
+// Production per-target proxies reuse the same message with both fields empty:
+// the owner selects the installed agent and opens one private mux session over
+// that target's verified master. Any non-empty value is refused in production.
 message ProofAgentProxyOpen {
   string binary_path = 1;
   string sha256 = 2;

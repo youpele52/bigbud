@@ -324,20 +324,21 @@ Run the W1 and W2 tracks in parallel. T-agent waits on E7. T-peer needs the root
 
 All twelve decisions are recorded below (W0.3): U1–U12, each mapped to its work item. There is no open product decision.
 
-| #   | Decision                                                                                                               | Work item       |
-| --- | ---------------------------------------------------------------------------------------------------------------------- | --------------- |
-| U1  | Debian stock `GSSAPIAuthentication yes` admitted as inert under versioned policy v3, with parity and negative fixtures | W1.6            |
-| U2  | Keyboard-interactive is unqualified: typed refusal, no cached password, release note                                   | W1.5            |
-| U3  | Windows ships key-only, with `windowsPasswordUnsupported` returned before collection                                   | W1.4, W6        |
-| U4  | N: Linux x64/arm64, macOS arm64/x64, Windows x64 (no Windows arm64). R: x64/arm64                                      | W5              |
-| U5  | Drain at cutover with notice and consent; no survival guarantee                                                        | W3.2            |
-| U6  | Remote-agent terminals keep honoring keep mode; settings copy names the direct SSH exclusion                           | W2 T-term       |
-| U7  | Product Git and `gh` use an owner-controlled transport; unported verbs stay refused                                    | W2 T-git        |
-| U8  | Pane-listing consent dialog; Cancel blocks the upgrade                                                                 | W3.2            |
-| U9  | `ensurePeerCoordinatorKey` moves into the owner; no `ssh-keygen` allowlist entry                                       | W2 T-peer, W3.1 |
-| U10 | Rootful disposable VM fixture for Linux C14; helper guard unchanged                                                    | W2 T-peer       |
-| U11 | `backend.lock` held by every DB-opening CLI subcommand; `SSH_AUTH_SOCK` only on D/V                                    | W3.5            |
-| U12 | systemd `ExecStop` drain; terminal-host `inventory`/`retireSshSpawn` in Build A, otherwise B requires host exit        | W3.3, W3.4      |
+| #   | Decision                                                                                                                                                                                                        | Work item       |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| U1  | Debian stock `GSSAPIAuthentication yes` admitted as inert under versioned policy v3, with parity and negative fixtures                                                                                          | W1.6            |
+| U2  | Keyboard-interactive is unqualified: typed refusal, no cached password, release note                                                                                                                            | W1.5            |
+| U3  | Windows ships key-only, with `windowsPasswordUnsupported` returned before collection                                                                                                                            | W1.4, W6        |
+| U4  | N: Linux x64/arm64, macOS arm64/x64, Windows x64 (no Windows arm64). R: x64/arm64                                                                                                                               | W5              |
+| U5  | Drain at cutover with notice and consent; no survival guarantee                                                                                                                                                 | W3.2            |
+| U6  | Remote-agent terminals keep honoring keep mode; settings copy names the direct SSH exclusion                                                                                                                    | W2 T-term       |
+| U7  | Product Git and `gh` use an owner-controlled transport; unported verbs stay refused                                                                                                                             | W2 T-git        |
+| U8  | Pane-listing consent dialog; Cancel blocks the upgrade                                                                                                                                                          | W3.2            |
+| U9  | `ensurePeerCoordinatorKey` moves into the owner; no `ssh-keygen` allowlist entry                                                                                                                                | W2 T-peer, W3.1 |
+| U10 | Rootful disposable VM fixture for Linux C14; helper guard unchanged                                                                                                                                             | W2 T-peer       |
+| U11 | `backend.lock` held by every DB-opening CLI subcommand; `SSH_AUTH_SOCK` only on D/V                                                                                                                             | W3.5            |
+| U12 | systemd `ExecStop` drain; terminal-host `inventory`/`retireSshSpawn` in Build A, otherwise B requires host exit                                                                                                 | W3.3, W3.4      |
+| U13 | OpenCode: port the v2 SSH bootstrap onto the owner first, verify it, then delete the v1 transport so only one path remains. v2 currently refuses SSH ("not yet verified"), so v1 is not removed before v2 works | W2 T-prov, W3.7 |
 
 ## 5. External prerequisites
 

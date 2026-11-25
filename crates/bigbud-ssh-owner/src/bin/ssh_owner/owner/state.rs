@@ -42,6 +42,9 @@ pub(crate) struct Owner {
     pub(super) jump_picker: Option<crate::transport::jump_binding::JumpPicker>,
     pub(crate) supervised_terminal: bool,
     pub(super) agent_fixture: Option<AgentProxyFixture>,
+    /// Owner-selected installed agent for a production per-target proxy.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) agent_service: Option<std::sync::Arc<crate::owner_agent_proxy::ServiceRecipe>>,
     pub(crate) agent_actions: crate::owner_agent_proxy::agent_action::Operations,
     pub(super) stage: Option<StageBinding>,
     pub(super) deployment_operation: Option<DeploymentOperation>,

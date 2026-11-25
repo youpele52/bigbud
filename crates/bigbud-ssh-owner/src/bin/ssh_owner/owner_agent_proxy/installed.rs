@@ -64,6 +64,7 @@ validate 2>/dev/null || exit 126
 BIGBUD_AGENT_STATE_DIR=$state exec "$fd" --proxy
 "#;
 
+#[derive(Debug)]
 pub(super) struct Recipe(String);
 
 impl Recipe {

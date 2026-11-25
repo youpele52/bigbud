@@ -52,6 +52,15 @@ export interface PickerProofOwnerOptions
   };
   /** Product OpenCode v1 service: the only owner-selected forwarding authority. */
   readonly opencodeService?: { readonly binaryPath: string };
+  /**
+   * Production only: owner-selected installed agent used by per-target proxy
+   * leases. The owner validates the digest and state directory itself.
+   */
+  readonly agentService?: {
+    readonly binaryPath: string;
+    readonly sha256: string;
+    readonly stateDir: string;
+  };
   readonly piFixture?: PickerProofProviderFixture;
   readonly opencodeFixture?: PickerProofProviderFixture;
   readonly identityAgentPath?: string;

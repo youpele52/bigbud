@@ -44,6 +44,9 @@ export interface ProofAgentProxyStatus {
 }
 
 export function validateProofAgentFixture({ binaryPath, sha256 }: PickerProofAgentFixture) {
+  // The production owner selects the installed agent itself. An empty pair is
+  // exactly that request: the owner refuses it unless its own binding exists.
+  if (binaryPath === "" && sha256 === "") return { binaryPath, sha256 };
   if (
     !isAbsolute(binaryPath) ||
     binaryPath.includes("\0") ||

@@ -39,6 +39,8 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         workspace_snapshot_cancel,
         attach_path,
         agent_fixture,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        agent_service,
         identity_agent_path,
         stage,
         #[cfg(target_os = "linux")]
@@ -62,7 +64,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
                 return Err(protocol_error().into());
             }
             #[cfg(target_os = "linux")]
-            if tracked_push.is_some() || opencode_recipe.is_some() || opencode_service.is_some() {
+            if tracked_push.is_some() || opencode_recipe.is_some() {
                 return Err(protocol_error().into());
             }
             (String::new(), None, Some(authority))
@@ -301,6 +303,8 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         jump_picker,
         supervised_terminal: false,
         agent_fixture,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        agent_service: agent_service.map(std::sync::Arc::new),
         agent_actions: Default::default(),
         stage,
         deployment_operation: None,
