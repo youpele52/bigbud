@@ -5,7 +5,7 @@
  */
 import { Effect, Option, Path } from "effect";
 
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import { type GitCoreShape } from "../Services/GitCore.ts";
 import { type GitHelpers } from "./GitCoreExecutor.ts";
 import { GitCommandError } from "@bigbud/contracts";
@@ -50,7 +50,7 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
 ) {
   const { executeGit, runGit, runGitStdout } = helpers;
   const initiatingTransportDisabled = () => isInitiatingGitTransportDisabled(lane);
-  const selectedTarget = () => lane === "target" && isDevSshOwnerSelected();
+  const selectedTarget = () => lane === "target" && isSshOwnerDevFixtureSelected();
 
   const remoteOps = makeRemoteOps(helpers, path);
   const upstreamOps = yield* makeUpstreamOps(helpers, path, remoteOps, initiatingTransportDisabled);

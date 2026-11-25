@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect, Path } from "effect";
 import { expect, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
 import { InitiatingFetchOwner } from "./GitCore.initiatingTransport.ts";

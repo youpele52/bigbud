@@ -5,7 +5,7 @@ vi.mock("./sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 import { runSshCommand } from "./sshProcess.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.client.ts";
 import { RemoteTargetDisconnectedError } from "./sshTargetDisconnects.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import {
   runTypedSshToolCommand,
   type TypedSshToolCapability,

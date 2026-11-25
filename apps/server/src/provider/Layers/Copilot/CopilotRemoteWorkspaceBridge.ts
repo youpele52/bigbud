@@ -3,7 +3,7 @@ import type { SessionConfig, SessionFsConfig, Tool, ToolResultObject } from "@gi
 import { createRemoteWorkspaceSessionFsBridge } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type { SessionFsOwnerCapability } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ownerProvider.ts";
-import { isDevSshOwnerSelected } from "../../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../../ssh/sshOwnerSelection.ts";
 import {
   runToolCommand,
   resolveToolTransportTarget,
@@ -49,7 +49,7 @@ function normalizeRemoteCommandResult(output: string, exitCode: number): ToolRes
 
 function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command: string }> {
   const transportTarget = resolveToolTransportTarget(workspaceTarget);
-  const selected = isDevSshOwnerSelected();
+  const selected = isSshOwnerDevFixtureSelected();
   return {
     name: "bash",
     description: selected

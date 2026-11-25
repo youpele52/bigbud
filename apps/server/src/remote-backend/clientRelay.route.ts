@@ -12,7 +12,7 @@ import { clientRelayAllowedOrigins } from "./clientRelay.origins.ts";
 import { openRemoteBackendRelayProfileOwner } from "./clientRelay.profileOwner.ts";
 import { makeSelectedClientRelayOwner } from "./clientRelay.route.selected.ts";
 import type { ClientRelaySshOwner } from "./clientRelay.ssh.owner.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import { sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
 import { makeWsRpcRemoteBackendRelayHandlers } from "../ws/wsRpcHandlers.remoteBackendRelay.ts";
 
@@ -24,7 +24,7 @@ const noProtocolClients = async (): Promise<ReadonlySet<number>> => new Set();
  * product wiring rather than a test-only injection.
  */
 const selectedRelayOwner = Effect.fn("selectedRelayOwner")(function* () {
-  if (!isDevSshOwnerSelected()) return undefined;
+  if (!isSshOwnerDevFixtureSelected()) return undefined;
   const runtime = yield* Effect.serviceOption(DevSshOwnerRuntime);
   if (runtime._tag === "None" || !runtime.value.session) return undefined;
   const session = runtime.value.session;

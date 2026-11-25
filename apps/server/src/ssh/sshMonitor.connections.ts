@@ -2,7 +2,7 @@ import { runProcess } from "../utils/processRunner.ts";
 import { remoteReadOnlyInvocation } from "../terminal/Layers/Manager.remote-inspection.ts";
 import type { SshMonitorHealthOwner } from "./sshMonitor.healthOwner.ts";
 import { validSshMonitorTarget } from "./sshMonitor.target.ts";
-import { isDevSshOwnerSelected } from "./sshOwnerDevMode.ts";
+import { isSshOwnerSelected } from "./sshOwnerSelection.ts";
 
 interface HealthProbe {
   readonly abort: AbortController;
@@ -144,7 +144,7 @@ export async function isConnectedSshMonitorTarget(
   if (signal?.aborted) return false;
   const connection = connections.get(target);
   const lease = connection?.owners.get(callerId);
-  if (!connection || !lease || (!owner && isDevSshOwnerSelected())) return false;
+  if (!connection || !lease || (!owner && isSshOwnerSelected())) return false;
 
   let check: HealthCheck = connection;
   if (owner) {

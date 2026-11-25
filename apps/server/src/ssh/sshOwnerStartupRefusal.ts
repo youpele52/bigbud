@@ -42,10 +42,21 @@ export class LegacyEntryFencedError extends Data.TaggedError("LegacyEntryFencedE
   }
 }
 
+export type SshOwnerUnavailableReason =
+  | "owner-missing"
+  | "owner-unverified"
+  | "owner-incompatible"
+  | "owner-client-not-composed"
+  | "state-lock-failed"
+  | "retirement-read-failed"
+  | "owner-start-failed"
+  | "hydration-failed"
+  | "admission-failed";
+
 export class SshOwnerUnavailableError extends Data.TaggedError("SshOwnerUnavailableError")<{
   /** Distinct from `legacyEntryFenced` and from a schema-too-new refusal. */
   readonly code: "sshOwnerUnavailable";
-  readonly reason: "owner-missing" | "owner-unverified";
+  readonly reason: SshOwnerUnavailableReason;
   readonly message: string;
 }> {}
 

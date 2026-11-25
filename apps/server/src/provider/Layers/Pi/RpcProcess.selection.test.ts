@@ -8,7 +8,7 @@ import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { createPiOrchestrationBridge } from "../../../orchestration-tools/PiOrchestrationBridge.ts";
 import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
-import { activateDevSshOwner } from "../../../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../../../ssh/sshOwnerDevMode.fixture.ts";
 import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { makePiStartSession } from "./Adapter.methods.startSession.ts";

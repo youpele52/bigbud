@@ -10,7 +10,10 @@ vi.mock("node:child_process", async (importOriginal) => {
   return { ...actual, spawn: spawnMock };
 });
 
-import { assertLegacySshLaunchAllowed, activateDevSshOwner } from "../../../ssh/sshOwnerDevMode.ts";
+import {
+  assertLegacySshLaunchAllowed,
+  activateDevSshOwner,
+} from "../../../ssh/sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime } from "../../../ssh/sshOwnerDevRuntime.ts";
 import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
@@ -187,9 +190,9 @@ describe("selected OpenCode v1 SSH owner composition", () => {
         executionTargetId: targetId,
         binaryPath,
       }),
-    ).rejects.toThrow(/source-dev SSH owner/);
+    ).rejects.toThrow(/selected SSH owner/);
     expect(spawnMock).not.toHaveBeenCalled();
-    expect(() => assertLegacySshLaunchAllowed()).toThrow(/source-dev SSH owner/);
+    expect(() => assertLegacySshLaunchAllowed()).toThrow(/selected SSH owner/);
     // The retired v1 manager still refuses starts outright before any launcher.
     await expect(
       makeOpencodeServerManager({}).acquire({ executionTargetId: targetId, binaryPath }),

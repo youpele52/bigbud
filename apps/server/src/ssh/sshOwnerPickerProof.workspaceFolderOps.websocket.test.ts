@@ -13,7 +13,7 @@ import { makeRoutesLayer } from "../server.routes.ts";
 import { buildAppUnderTest } from "../server.test.app.ts";
 import { serverHttpTestLayer } from "../server.test.http.ts";
 import { getWsServerUrl, serverTestLayer, withWsRpcClient } from "../server.test.rpc.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime, makeDevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { pickerProofOptedIn, storageScope } from "./sshOwnerPickerProof.integration.ts";
 import { SSH_HOST_TRUST_REQUIRED_PREFIX } from "./sshTargetUnavailable.ts";

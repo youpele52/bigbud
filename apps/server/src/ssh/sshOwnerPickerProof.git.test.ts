@@ -8,7 +8,7 @@ import { expect, it, vi } from "vitest";
 import { makeRemoteGitOps } from "../git/Layers/GitCore.remoteOps.ts";
 import { RemoteAgentGitExecutorService } from "../remote-agent/remoteAgentGit.ts";
 import { makeConfiguredRemoteAgentLayers } from "../remote-agent/remoteAgentServerLayer.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { makeSshOwnerDevPicker } from "./sshOwnerDevPicker.ts";
 import { DevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";

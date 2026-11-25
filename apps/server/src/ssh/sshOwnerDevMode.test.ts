@@ -21,7 +21,7 @@ import {
   activateDevSshOwner,
   isDevSshOwnerSelected,
   LegacySshDisabledError,
-} from "./sshOwnerDevMode.ts";
+} from "./sshOwnerDevMode.fixture.ts";
 import { runSshCommand } from "./sshProcess.ts";
 
 const children = vi.hoisted(() => ({

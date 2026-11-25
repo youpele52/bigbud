@@ -1,4 +1,4 @@
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import type { ProcessRunResult } from "../utils/processRunner.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { runToolCommand, resolveToolTransportTarget } from "../tool-transport/toolTransport.ts";
@@ -66,7 +66,11 @@ export function assertRemoteWorkspaceBridgeOperationSupported(
 ): void {
   // This entry point has no selected owner capability; it must not dispatch
   // generic shell or managed-agent operations as a substitute.
-  if (isDevSshOwnerSelected() && workspaceTarget.location === "remote" && !hasBoundCapability) {
+  if (
+    isSshOwnerDevFixtureSelected() &&
+    workspaceTarget.location === "remote" &&
+    !hasBoundCapability
+  ) {
     throw new SelectedSshOwnerWorkspaceBridgeError(operation);
   }
 }

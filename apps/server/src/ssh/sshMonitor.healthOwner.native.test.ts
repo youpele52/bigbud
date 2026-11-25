@@ -13,7 +13,7 @@ import { ProjectionProjectRepository } from "../persistence/Services/ProjectionP
 import { makeSshMonitorHandlers } from "../ws/wsSshMonitor.handlers.ts";
 import { makeWsSshOwnerDevHandlers } from "../ws/wsSshOwnerDev.ts";
 import { forgetSshMonitorInstance, sshMonitorLease } from "./sshMonitor.connections.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime, makeDevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { pickerProofOptedIn, storageScope } from "./sshOwnerPickerProof.integration.ts";
 import { SSH_HOST_TRUST_REQUIRED_PREFIX } from "./sshTargetUnavailable.ts";

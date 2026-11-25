@@ -14,6 +14,7 @@ import {
   readSshOwnerStartupState,
   startSshOwnerAfterLegacyGate,
 } from "./sshOwnerStartupRefusal.ts";
+import { runSshOwnerBootSequence } from "./sshOwnerProductionBoot.ts";
 
 const profile = "state-dir";
 const migrated = Effect.gen(function* () {
@@ -174,4 +175,59 @@ it.effect("offers the drain action without running it during startup", () =>
     yield* gate.drainIdentified();
     assert.equal(drains, 1);
   }),
+);
+
+it.effect("production boot gate refuses before owner start when the marker is missing", () =>
+  Effect.gen(function* () {
+    const sql = yield* migrated;
+    const order: string[] = [];
+    const outcome = yield* runSshOwnerBootSequence({
+      acquireStateLock: Effect.sync(() => {
+        order.push("lock");
+      }),
+      readState: readSshOwnerStartupState(sql, {
+        profileScope: profile,
+        ownerPresent: Effect.succeed(true),
+      }),
+      startOrAttachOwner: Effect.sync(() => {
+        order.push("owner");
+        return { profile: "desktop-packaged", artifactPath: "/owner", hydrate: () => Effect.void };
+      }),
+      hydrate: () => Effect.sync(() => order.push("hydrate")),
+      openAdmission: () => Effect.sync(() => order.push("admission")),
+    });
+    assert.equal(outcome.kind, "refused");
+    assert.deepEqual(order, ["lock"]);
+  }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
+);
+
+it.effect("production boot gate opens admission only after hydration", () =>
+  Effect.gen(function* () {
+    const sql = yield* migrated;
+    yield* commitLegacyRetirement(sql, {
+      profileScope: profile,
+      artifactId: "build-a",
+      decision: "drain-now",
+      drainedLeases: [],
+      pendingItems: [],
+    });
+    const order: string[] = [];
+    const outcome = yield* runSshOwnerBootSequence({
+      acquireStateLock: Effect.sync(() => {
+        order.push("lock");
+      }),
+      readState: readSshOwnerStartupState(sql, {
+        profileScope: profile,
+        ownerPresent: Effect.succeed(true),
+      }),
+      startOrAttachOwner: Effect.sync(() => {
+        order.push("owner");
+        return { profile: "desktop-packaged", artifactPath: "/owner", hydrate: () => Effect.void };
+      }),
+      hydrate: () => Effect.sync(() => order.push("hydrate")),
+      openAdmission: () => Effect.sync(() => order.push("admission")),
+    });
+    assert.equal(outcome.kind, "open");
+    assert.deepEqual(order, ["lock", "owner", "hydrate", "admission"]);
+  }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
 );

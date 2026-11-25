@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { makePickerProofShellClient } from "../ssh/sshOwnerPickerProof.client.shell.ts";
 import { readProofShellResult } from "../ssh/sshOwnerPickerProof.codec.shell.ts";
 import { runToolCommand } from "../tool-transport/toolTransport.ts";

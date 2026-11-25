@@ -5,7 +5,7 @@ import path from "node:path";
 import { Effect, Option } from "effect";
 
 import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
-import { isDevSshOwnerSelected, LegacySshDisabledError } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerSelected, LegacySshDisabledError } from "../../ssh/sshOwnerSelection.ts";
 import { PtySpawnError, type PtySpawnInput } from "../Services/PTY";
 import { makeBoundedShellFileCheck } from "./PtyShellExecutable.pending";
 
@@ -49,7 +49,7 @@ export const ensureLocalShellExecutable = (
   timeoutMs = LOCAL_SHELL_CHECK_TIMEOUT_MS,
   check: typeof isLocalShellExecutable = isLocalShellExecutable,
 ): Effect.Effect<void, PtySpawnError> => {
-  if (isDevSshOwnerSelected() && parseSshExecutionTarget(input.executionTargetId)) {
+  if (isSshOwnerSelected() && parseSshExecutionTarget(input.executionTargetId)) {
     return Effect.fail(ptySpawnErrorFromThrown(adapter, new LegacySshDisabledError()));
   }
   return process.platform === "win32"

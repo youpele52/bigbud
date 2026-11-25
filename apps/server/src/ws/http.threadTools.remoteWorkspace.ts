@@ -10,7 +10,7 @@ import {
 } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveToolTransportTarget, runToolCommand } from "../tool-transport/toolTransport.ts";
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import {
   isFixedProviderShellCommand,
   PROVIDER_SHELL_REFUSAL,
@@ -168,7 +168,7 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
 
   const authorizedTarget = binding?.executionTargetId ?? executionTargetId;
   const authorizedCwd = binding?.cwd ?? cwd;
-  if (isDevSshOwnerSelected()) {
+  if (isSshOwnerDevFixtureSelected()) {
     if (input.request.remoteStdin !== undefined) {
       return yield* new ThreadToolRequestError({
         status: 400,

@@ -14,7 +14,7 @@ import { serverHttpTestLayer } from "../server.test.http.ts";
 import { attemptRawUpgrade } from "../server.test.remote.ts";
 import { getWsServerUrl, serverTestLayer, withWsRpcClient } from "../server.test.rpc.ts";
 import * as connections from "./sshMonitor.connections.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { makeSshOwnerDevPicker } from "./sshOwnerDevPicker.ts";
 import { DevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";

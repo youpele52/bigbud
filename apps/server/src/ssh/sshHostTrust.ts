@@ -10,7 +10,7 @@ import type {
 
 import { formatSshDestination, parseSshExecutionTarget } from "./sshExecutionTarget.ts";
 import { describeSshLocalCommandFailure, runSshLocalCommand } from "./sshLocalCommand.ts";
-import { assertLegacySshLaunchAllowed } from "./sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "./sshOwnerSelection.ts";
 import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 import {
   buildSshHostTrustRequiredMessage,

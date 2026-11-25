@@ -10,10 +10,10 @@ import {
   type AcpOwnerExit,
   type SelectedAcpTerminalOwner,
 } from "./remoteWorkspaceAcpTerminal.owner.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { createRemoteWorkspaceAcpTerminal } from "./remoteWorkspaceAcpTerminal.ts";
 
-vi.mock("../ssh/sshOwnerDevMode.ts", () => ({ isDevSshOwnerSelected: vi.fn() }));
+vi.mock("../ssh/sshOwnerDevMode.fixture.ts", () => ({ isDevSshOwnerSelected: vi.fn() }));
 
 const { launchSsh, createAgentPty, spawn } = vi.hoisted(() => ({
   launchSsh: vi.fn(),

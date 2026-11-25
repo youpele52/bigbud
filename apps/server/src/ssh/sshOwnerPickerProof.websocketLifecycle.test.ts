@@ -20,7 +20,7 @@ import {
   withWsRpcClient,
   type WsRpcClient,
 } from "../server.test.rpc.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { makeSshOwnerDevPicker } from "./sshOwnerDevPicker.ts";
 import { DevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";

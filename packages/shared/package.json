@@ -323,6 +323,10 @@
       "types": "./src/DevLauncher.ts",
       "import": "./src/DevLauncher.ts"
     },
+    "./SshOwnerActivation": {
+      "types": "./src/SshOwnerActivation.ts",
+      "import": "./src/SshOwnerActivation.ts"
+    },
     "./releaseChannel": {
       "types": "./src/releaseChannel.ts",
       "import": "./src/releaseChannel.ts"

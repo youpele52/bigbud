@@ -11,7 +11,7 @@ import {
   runSshLocalCommand,
   SSH_CONNECT_TIMEOUT_SECONDS,
 } from "../ssh/sshLocalCommand.ts";
-import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerSelection.ts";
 import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import {
   acquireOwnedCodexAppServer,

@@ -6,7 +6,7 @@ import {
 } from "@bigbud/shared/DevLauncher";
 import path from "node:path";
 import type { ServerConfigShape } from "./startup/config.ts";
-import { activateDevSshOwner } from "./ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./ssh/sshOwnerDevMode.fixture.ts";
 import { developmentGraphOverridesAllowed } from "./remote-backend/developmentOverrides.ts";
 
 /** The Bun dev entry and Electron dev bundle are beside the checkout's server source. */

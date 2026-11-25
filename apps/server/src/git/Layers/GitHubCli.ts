@@ -3,7 +3,7 @@ import { PositiveInt, TrimmedNonEmptyString } from "@bigbud/contracts";
 
 import { runProcess } from "../../utils/processRunner";
 import { GitHubCliError } from "@bigbud/contracts";
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerSelected } from "../../ssh/sshOwnerSelection.ts";
 import { initiatingGitOwnerUnavailable } from "./GitCore.initiatingFence.ts";
 import {
   githubCliOwnerDenied,
@@ -172,7 +172,7 @@ const makeGitHubCli = Effect.sync(() => {
   const execute: GitHubCliShape["execute"] = (input) =>
     Effect.gen(function* () {
       const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-      if (isDevSshOwnerSelected()) {
+      if (isSshOwnerSelected()) {
         const owner = yield* Effect.serviceOption(GitHubCliOwnerTransport);
         if (Option.isNone(owner)) {
           return yield* new GitHubCliError({

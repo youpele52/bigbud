@@ -6,7 +6,7 @@ import {
   resolveAcpSessionFsOwner,
 } from "../provider/Layers/AcpRemoteWorkspace.session.ts";
 import type { AcpSessionRuntimeShape } from "../provider/acp/AcpSessionRuntime.ts";
-import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
 import type { SessionFsOwnerWorkspace } from "./remoteWorkspaceSessionFsBridge.owner.ts";
 

@@ -3,7 +3,7 @@ import {
   formatSshDestination,
   parseSshExecutionTarget,
 } from "./sshExecutionTarget.ts";
-import { assertLegacySshLaunchAllowed } from "./sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "./sshOwnerSelection.ts";
 import { buildSshPasswordSessionTransportArgs } from "./sshSession.ts";
 import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 

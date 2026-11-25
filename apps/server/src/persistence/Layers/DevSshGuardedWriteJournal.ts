@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 
 const maxRecords = 1_024;
 const maxWriteBytes = 512 * 1_024;
@@ -80,7 +80,7 @@ const matches = (row: JournalRow, binding: DevSshGuardedWriteBinding) =>
   row.byteSize === binding.byteSize;
 
 const ensureAutocommit = Effect.fn("ensureDevSshGuardedWriteJournalAutocommit")(function* () {
-  if (!isDevSshOwnerSelected()) {
+  if (!isSshOwnerDevFixtureSelected()) {
     return yield* Effect.fail(new DevSshGuardedWriteJournalError("Source-dev SSH owner required"));
   }
   // A savepoint inside an ambient transaction cannot authorize an external dispatch: the

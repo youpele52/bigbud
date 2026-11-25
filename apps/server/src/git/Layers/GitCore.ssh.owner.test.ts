@@ -1,7 +1,7 @@
 import { Deferred, Effect, Fiber, Path } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import * as devMode from "../../ssh/sshOwnerDevMode.ts";
+import * as devMode from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { runSshCommand } from "../../ssh/sshProcess.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeRemoteGitOps } from "./GitCore.remoteOps.ts";

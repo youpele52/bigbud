@@ -5,7 +5,7 @@ import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
 import { parseSshExecutionTarget } from "../ssh/sshExecutionTarget.ts";
 import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import { inspectSshHostTrust } from "../ssh/sshHostTrust.ts";
-import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerSelection.ts";
 import { hasLocalSupervisorServiceControls } from "./localSupervisorService.paths.ts";
 import { ownClientRelaySshChild } from "./clientRelay.ssh.child.ts";
 

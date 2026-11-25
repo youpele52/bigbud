@@ -15,7 +15,7 @@ import {
   createRemoteWorkspaceAcpBridge,
   type RemoteWorkspaceAcpBridge,
 } from "../../remote-workspace-bridge/remoteWorkspaceAcpBridge.ts";
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import type { SessionFsOwnerWorkspace } from "../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.owner.ts";
 import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
 import { isRemoteWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
@@ -24,7 +24,7 @@ import { resolveProviderExecutionContext } from "../providerExecutionContext.ts"
 import type { RemoteWorkspaceReadinessProbe } from "../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
 export const resolveAcpSessionFsOwner = Effect.fn("resolveAcpSessionFsOwner")(function* () {
-  if (!isDevSshOwnerSelected()) return undefined;
+  if (!isSshOwnerDevFixtureSelected()) return undefined;
   const runtime = yield* Effect.serviceOption(DevSshOwnerRuntime);
   const session = runtime._tag === "Some" ? runtime.value.session : undefined;
   if (session?.kind !== "unix" && session?.kind !== "retained-unix") return undefined;
@@ -68,7 +68,7 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
 
     let remoteBridge: RemoteWorkspaceAcpBridge | undefined;
     if (isRemoteWorkspaceTarget(executionContext.workspaceTarget)) {
-      const selected = isDevSshOwnerSelected();
+      const selected = isSshOwnerDevFixtureSelected();
       const useRemoteAgentPty =
         !selected &&
         input.ptyResolver !== undefined &&

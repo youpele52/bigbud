@@ -20,7 +20,7 @@ import { buildAppUnderTest } from "../server.test.app.ts";
 import { serverHttpTestLayer } from "../server.test.http.ts";
 import { getWsServerUrl, serverTestLayer, withWsRpcClient } from "../server.test.rpc.ts";
 import { toDispatchCommandError } from "../ws/wsDispatchCommandError.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { DEV_OWNER_SSH_CONFIG } from "./sshOwnerDevRuntime.profileConfig.ts";
 import { DevSshOwnerRuntime, makeDevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { pickerProofOptedIn, storageScope } from "./sshOwnerPickerProof.integration.ts";

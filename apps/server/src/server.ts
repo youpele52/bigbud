@@ -28,6 +28,11 @@ import { withOwnershipShutdown } from "./startup/ownershipShutdown";
 import { prepareProviderServicePath } from "./provider-provisioning/servicePath.runtime.ts";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { configureDevSshOwner } from "./server.sshOwnerDev.ts";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
+import {
+  configureSshOwner,
+  SshOwnerProductionBootLive,
+} from "./ssh/sshOwnerProductionComposition.ts";
 import { DevSshOwnerRuntimeLive } from "./ssh/sshOwnerDevRuntime.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
@@ -216,9 +221,10 @@ const RuntimeDependenciesWithDrainLive = SshLegacyDrainHandlerLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),
 );
 
-const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
-  Layer.provideMerge(RuntimeDependenciesWithDrainLive),
-);
+const RuntimeServicesLive = Layer.mergeAll(
+  ServerRuntimeStartupLive,
+  SshOwnerProductionBootLive,
+).pipe(Layer.provideMerge(RuntimeDependenciesWithDrainLive));
 
 const RemoteServerLive = withRemoteCallbackRuntime(
   // Runtime updates (M3 WP-4D) need runtime services and serve on the client routes.
@@ -286,7 +292,11 @@ type ServerApplicationLayer = Layer.Layer<
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
-    yield* Effect.sync(() => configureDevSshOwner(config, import.meta.url));
+    if (SSH_OWNER_PRODUCTION_ACTIVATION) {
+      yield* configureSshOwner(config, import.meta.url);
+    } else {
+      yield* Effect.sync(() => configureDevSshOwner(config, import.meta.url));
+    }
     if (config.mode === "remote") {
       yield* Effect.try({
         try: () => {

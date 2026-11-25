@@ -11,7 +11,7 @@ vi.mock("../tool-transport/toolTransport.ts", async (load) => ({
   }),
 }));
 
-import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { runToolCommand } from "../tool-transport/toolTransport.ts";
 import { resolveWorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { createRemoteWorkspaceSessionFsBridge } from "../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ts";

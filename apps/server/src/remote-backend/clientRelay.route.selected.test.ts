@@ -4,7 +4,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { buildTestServerConfig } from "../server.test.app.config.ts";
-import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { ServerConfig } from "../startup/config.ts";
 import {
   RemoteBackendRelayProfiles,

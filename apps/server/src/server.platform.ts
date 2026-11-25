@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 
 import { ServerConfig } from "./startup/config.ts";
-import { isDevSshOwnerSelected } from "./ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "./ssh/sshOwnerSelection.ts";
 
 function tcpHttpServerLive(port: number, host: string | undefined) {
   return Layer.unwrap(
@@ -31,7 +31,10 @@ function tcpHttpServerLive(port: number, host: string | undefined) {
 export const HttpServerLive = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
-    return tcpHttpServerLive(config.port, isDevSshOwnerSelected() ? "127.0.0.1" : config.host);
+    return tcpHttpServerLive(
+      config.port,
+      isSshOwnerDevFixtureSelected() ? "127.0.0.1" : config.host,
+    );
   }),
 );
 

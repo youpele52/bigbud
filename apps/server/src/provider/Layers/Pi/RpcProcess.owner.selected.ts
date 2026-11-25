@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 
-import { isDevSshOwnerSelected } from "../../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../../ssh/sshOwnerSelection.ts";
 import type { DevSshOwnerRuntime } from "../../../ssh/sshOwnerDevRuntime.ts";
 import type { PiRpcOwner, SelectedPiRpcOwner } from "./RpcProcess.owner.ts";
 
@@ -34,7 +34,7 @@ function readPiRpcOwner(client: object): PiRpcOwner | undefined {
 export async function resolveSelectedPiRpcOwner(
   session: SelectedDevOwnerSession | undefined,
 ): Promise<SelectedPiRpcOwner | undefined> {
-  if (!isDevSshOwnerSelected() || !session) return undefined;
+  if (!isSshOwnerDevFixtureSelected() || !session) return undefined;
   const { targetId } = session;
   const client = await session.picker.withOwner(targetId, async (owner) => owner as object);
   const owner = readPiRpcOwner(client);
@@ -46,7 +46,7 @@ export async function resolveSelectedPiRpcOwner(
  * imported lazily so an unselected or local-only graph never loads the owner fixture stack.
  */
 export const selectedDevPiRpcOwner = Effect.fn("selectedDevPiRpcOwner")(function* () {
-  if (!isDevSshOwnerSelected()) return undefined;
+  if (!isSshOwnerDevFixtureSelected()) return undefined;
   const { DevSshOwnerRuntime: Runtime } = yield* Effect.promise(
     () => import("../../../ssh/sshOwnerDevRuntime.ts"),
   );

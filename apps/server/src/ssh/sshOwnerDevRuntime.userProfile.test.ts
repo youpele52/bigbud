@@ -11,7 +11,7 @@ import { expect, it, vi } from "vitest";
 
 import { makeWsSshOwnerDevHandlers } from "../ws/wsSshOwnerDev.ts";
 import { resolveProfileAliases } from "./sshConfigProfileAliases.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import {
   DEV_OWNER_SSH_CONFIG,
   bindDevOwnerAlias,

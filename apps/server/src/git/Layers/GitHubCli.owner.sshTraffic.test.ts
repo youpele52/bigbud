@@ -2,7 +2,7 @@ import { PassThrough } from "node:stream";
 import { Effect, Layer } from "effect";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { runProcess } from "../../utils/processRunner";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { GitHubCliLive } from "./GitHubCli.ts";

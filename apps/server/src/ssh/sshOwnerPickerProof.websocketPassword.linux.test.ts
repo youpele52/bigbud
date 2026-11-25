@@ -10,7 +10,7 @@ import { makeRoutesLayer } from "../server.routes.ts";
 import { buildAppUnderTest } from "../server.test.app.ts";
 import { serverHttpTestLayer } from "../server.test.http.ts";
 import { getWsServerUrl, serverTestLayer, withWsRpcClient } from "../server.test.rpc.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { makeSshOwnerDevPicker, SYNTHETIC_SSH_UNLOCK_INTENT } from "./sshOwnerDevPicker.ts";
 import { DevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import {

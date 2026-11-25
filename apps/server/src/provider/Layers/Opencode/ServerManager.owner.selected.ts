@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 
-import { isDevSshOwnerSelected } from "../../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../../ssh/sshOwnerSelection.ts";
 import type { DevSshOwnerRuntime } from "../../../ssh/sshOwnerDevRuntime.ts";
 import type { ProviderExecutionContext } from "../../providerExecutionContext.ts";
 import type { OpencodeServerHandle } from "../../Services/Opencode/ServerManager.ts";
@@ -49,7 +49,7 @@ function readOpencodeOwner(client: object): OpencodeSshOwner | undefined {
 export async function resolveSelectedOpencodeOwner(
   session: SelectedDevOwnerSession | undefined,
 ): Promise<SelectedOpencodeOwner | undefined> {
-  if (!isDevSshOwnerSelected() || !session) return undefined;
+  if (!isSshOwnerDevFixtureSelected() || !session) return undefined;
   const { targetId } = session;
   const client = await session.picker.withOwner(targetId, async (owner) => owner as object);
   const owner = readOpencodeOwner(client);
@@ -84,7 +84,7 @@ export const startSelectedOpencodeOwnerServer = Effect.fn("startSelectedOpencode
     readonly executionContext: ProviderExecutionContext;
   }) {
     if (
-      !isDevSshOwnerSelected() ||
+      !isSshOwnerDevFixtureSelected() ||
       input.executionContext.providerRuntimeTarget.location === "local"
     ) {
       return undefined;

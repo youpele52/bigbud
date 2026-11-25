@@ -1,4 +1,4 @@
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerSelected } from "../ssh/sshOwnerSelection.ts";
 
 /** Selected owner domains have no generic SSH command runner; typed verbs are separate. */
 export class SelectedSshToolTransportError extends Error {
@@ -13,5 +13,5 @@ export class SelectedSshToolTransportError extends Error {
 }
 
 export function assertSelectedSshToolTransportAvailable(): void {
-  if (isDevSshOwnerSelected()) throw new SelectedSshToolTransportError();
+  if (isSshOwnerSelected()) throw new SelectedSshToolTransportError();
 }

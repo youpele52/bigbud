@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { expect, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { runProcess } from "../../utils/processRunner";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { GitHubCliLive } from "./GitHubCli.ts";

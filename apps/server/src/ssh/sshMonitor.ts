@@ -2,7 +2,7 @@ import type { MonitorSnapshot } from "@bigbud/contracts/system-monitor/types";
 import { runProcess } from "../utils/processRunner.ts";
 import { remoteReadOnlyInvocation } from "../terminal/Layers/Manager.remote-inspection.ts";
 import { parseSshMonitor } from "./sshMonitor.parse.ts";
-import { assertLegacySshLaunchAllowed } from "./sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "./sshOwnerSelection.ts";
 
 // All commands read kernel or user-visible metadata. No remote files are created or modified.
 const COMMAND = `sh -c 'printf "###OS###\\n"; uname -s; printf "###HOST###\\n"; hostname; printf "###ARCH###\\n"; uname -m; printf "###KERNEL###\\n"; uname -r; printf "###CPU1###\\n"; head -n 65 /proc/stat; sleep 0.25; printf "###CPU2###\\n"; head -n 65 /proc/stat; printf "###MEM###\\n"; cat /proc/meminfo; printf "###UPTIME###\\n"; cat /proc/uptime; printf "###DF###\\n"; df -Pk; printf "###NET###\\n"; cat /proc/net/dev; printf "###PROCESS###\\n"; ps -eo pid=,ppid=,comm=,rss=,vsz=,stat=,etimes=,pcpu= --sort=-%cpu 2>/dev/null | head -n 1001; printf "###TEMP###\\n"; for file in /sys/class/thermal/thermal_zone*/temp; do if [ -r "$file" ]; then printf "%s " "$file"; cat "$file"; fi; done; printf "###END###\\n"'`;

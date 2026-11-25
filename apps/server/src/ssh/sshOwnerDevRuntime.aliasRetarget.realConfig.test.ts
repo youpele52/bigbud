@@ -7,7 +7,7 @@ import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { DEV_OWNER_SSH_CONFIG } from "./sshOwnerDevRuntime.profileConfig.ts";
 import { makeDevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { pickerProofOptedIn, storageScope } from "./sshOwnerPickerProof.integration.ts";

@@ -36,7 +36,10 @@ vi.mock("./PiRemoteWorkspaceBridge.ts", () => ({
   }),
 }));
 
-import { activateDevSshOwner, isDevSshOwnerSelected } from "../../../ssh/sshOwnerDevMode.ts";
+import {
+  activateDevSshOwner,
+  isDevSshOwnerSelected,
+} from "../../../ssh/sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime } from "../../../ssh/sshOwnerDevRuntime.ts";
 import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";

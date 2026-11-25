@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import type { RemoteAgentPtyResolver } from "../remote-agent/remoteAgentPtyAdapter.ts";
 import { createRemoteAgentWorkspacePty } from "../remote-agent/remoteAgentPtyAdapter.ts";
 import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import {
   AcpTerminalOwnerError,
   createOwnedAcpTerminal,
@@ -80,7 +80,7 @@ export async function createRemoteWorkspaceAcpTerminal(input: {
   }
   // Selection does not depend on the caller supplying a capability. Neither
   // legacy SSH nor a managed-agent PTY can substitute for the missing owner.
-  if (isDevSshOwnerSelected()) throw new AcpTerminalOwnerError("ssh-owner-unavailable");
+  if (isSshOwnerDevFixtureSelected()) throw new AcpTerminalOwnerError("ssh-owner-unavailable");
   if (input.ptyResolver) {
     return createRemoteAgentWorkspacePty(
       {

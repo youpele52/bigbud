@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";
 import { makePickerProofShellClient } from "./sshOwnerPickerProof.client.shell.ts";
 import {

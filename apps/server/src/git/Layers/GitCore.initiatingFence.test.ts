@@ -4,7 +4,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { expect, vi } from "vitest";
 
 import { RemoteAgentGitExecutorService } from "../../remote-agent/remoteAgentGit.ts";
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { makeGitCoreLayerLive } from "./GitComposition.ts";
 import { InitiatingFetchOwner } from "./GitCore.initiatingTransport.ts";

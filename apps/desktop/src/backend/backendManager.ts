@@ -24,6 +24,7 @@ import {
   resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
   resolvePackagedWorkspaceAgentBinary,
+  resolvePackagedSshOwnerBinary,
   resolvePackagedDesktopSupervisorBinary,
 } from "../env/pathResolver";
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
@@ -209,6 +210,7 @@ export async function startBackend(): Promise<void> {
           packagedBundledSkillsDir,
           packagedBundledAgentsDir,
           packagedWorkspaceAgentBinary,
+          packagedSshOwnerBinary: resolvePackagedSshOwnerBinary(),
           packagedDesktopSupervisorBinary,
           computerUseRuntimeEnv,
           backendNodeExecutable,

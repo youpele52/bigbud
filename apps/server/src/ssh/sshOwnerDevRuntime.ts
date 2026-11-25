@@ -8,7 +8,7 @@ import { access, constants, readFile, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { makeRemoteAgentRuntimeBindings } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
 import { makeSshOwnerDevTerminal } from "./sshOwnerDevTerminal.ts";
-import { isDevSshOwnerSelected } from "./sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "./sshOwnerSelection.ts";
 import { makeSshOwnerDevPicker } from "./sshOwnerDevPicker.ts";
 import { SshOwnerDevPickerError } from "./sshOwnerDevPicker.errors.ts";
 import { installDevSshOwnerSandbox } from "./sshOwnerDevPicker.sandbox.ts";
@@ -76,7 +76,7 @@ const fallbackAlias = retainedAlias;
 
 /** One fixture, one owner and one storage writer per authenticated WebSocket route. */
 export const makeDevSshOwnerRuntime = Effect.fn("makeDevSshOwnerRuntime")(function* () {
-  if (!isDevSshOwnerSelected()) return undefined;
+  if (!isSshOwnerDevFixtureSelected()) return undefined;
   const binary = process.env.BIGBUD_SSH_OWNER_BIN;
   if (
     !["darwin", "linux", "win32"].includes(process.platform) ||

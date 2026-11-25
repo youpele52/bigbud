@@ -15,7 +15,7 @@ import {
 import { sshConfigHostsFromOwnerAliases } from "../ssh/sshConfigDiscovery.ts";
 import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
 import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import {
   forgetSshMonitorTarget,
   recordVerifiedSshMonitorTarget,
@@ -27,7 +27,7 @@ import type { SshMonitorRpcOptions } from "./wsSshMonitor.handlers.ts";
 export const makeWsSshOwnerDevHandlers = Effect.fn("makeWsSshOwnerDevHandlers")(function* (
   monitorInstanceId?: string,
 ) {
-  if (!isDevSshOwnerSelected()) return undefined;
+  if (!isSshOwnerDevFixtureSelected()) return undefined;
   const runtime = yield* Effect.serviceOption(DevSshOwnerRuntime);
   if (runtime._tag === "None" || !runtime.value.session)
     return yield* Effect.die(new Error("Missing Rust SSH owner development service"));

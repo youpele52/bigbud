@@ -15,7 +15,7 @@ import { isAbsolute, join } from "node:path";
 import type { Duplex } from "node:stream";
 
 import { parsePinnedHostKey } from "../peer-orchestration/peerSshKey.ts";
-import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerSelection.ts";
 import { ownClientRelaySshChild } from "./clientRelay.ssh.child.ts";
 
 export interface PeerRelaySshTarget {

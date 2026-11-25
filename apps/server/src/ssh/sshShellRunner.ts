@@ -4,7 +4,7 @@ import {
   ThreadShellRunnerError,
   type ThreadShellRunnerShape,
 } from "../shell/Services/ThreadShellRunner.ts";
-import { isDevSshOwnerSelected } from "./sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "./sshOwnerSelection.ts";
 import {
   THREAD_SHELL_DEFAULT_TIMEOUT_MS,
   THREAD_SHELL_MAX_TIMEOUT_MS,
@@ -101,7 +101,7 @@ export function makeSshShellRunner(
   executionTargetId: string,
   ownerAccess?: SshShellOwnerAccess,
 ): ThreadShellRunnerShape {
-  if (isDevSshOwnerSelected()) {
+  if (isSshOwnerDevFixtureSelected()) {
     return makeOwnerRunner(executionTargetId, ownerAccess);
   }
   const activeThreads = new Set<string>();

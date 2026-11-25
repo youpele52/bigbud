@@ -20,7 +20,7 @@ import {
   createSelectedSessionFsProvider,
   type SessionFsOwnerCapability,
 } from "./remoteWorkspaceSessionFsBridge.ownerProvider.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 export {
   createErrnoError,
   REMOTE_WORKSPACE_SESSION_STATE_PATH,
@@ -50,7 +50,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
   readinessProbe: RemoteWorkspaceReadinessProbe = probeRemoteWorkspaceReadiness,
   sessionFsOwner?: SessionFsOwnerCapability,
 ): Promise<RemoteWorkspaceSessionFsBridge> {
-  const selected = isDevSshOwnerSelected() && workspaceTarget.location === "remote";
+  const selected = isSshOwnerDevFixtureSelected() && workspaceTarget.location === "remote";
   // A provider-supplied readiness probe cannot grant authority to the legacy session FS.
   assertRemoteWorkspaceBridgeOperationSupported(
     workspaceTarget,

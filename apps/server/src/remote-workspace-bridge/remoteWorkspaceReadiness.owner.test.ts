@@ -1,7 +1,7 @@
 import { beforeAll, expect, it, vi } from "vitest";
 
 import { createCopilotRemoteWorkspaceBridge } from "../provider/Layers/Copilot/CopilotRemoteWorkspaceBridge.ts";
-import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { runToolCommand } from "../tool-transport/toolTransport.ts";
 import { resolveWorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { createRemoteWorkspaceBridge } from "./remoteWorkspaceBridge.ts";

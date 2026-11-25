@@ -6,7 +6,7 @@ import {
   type RemoteAgentGitExecutor,
 } from "../../remote-agent/remoteAgentGit.ts";
 import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
 import type { LaunchedPickerProofOwner } from "../../ssh/sshOwnerPickerProof.client.ts";
 import { workspaceGitForPickerProof } from "../../ssh/sshOwnerPickerProof.git.ts";
@@ -106,7 +106,7 @@ export function makeSelectedDevGitLayer<E = never, R = never>(
         const port = owner && directPort(owner);
         const execute = port && makeSshGitExecutor(port);
         return (input) => {
-          if (!isDevSshOwnerSelected()) {
+          if (!isSshOwnerDevFixtureSelected()) {
             return agent && isRemoteAgentExecutionTarget(input.executionTargetId)
               ? agent(input)
               : unselected(input);

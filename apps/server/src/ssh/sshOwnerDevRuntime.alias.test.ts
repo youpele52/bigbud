@@ -9,7 +9,7 @@ import { Effect, Schema } from "effect";
 import { expect, it, vi } from "vitest";
 
 import { makeWsSshOwnerDevHandlers } from "../ws/wsSshOwnerDev.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime, makeDevSshOwnerRuntime } from "./sshOwnerDevRuntime.ts";
 import { pickerProofOptedIn, storageScope } from "./sshOwnerPickerProof.integration.ts";
 import { SSH_HOST_TRUST_REQUIRED_PREFIX } from "./sshTargetUnavailable.ts";

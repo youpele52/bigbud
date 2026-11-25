@@ -1,12 +1,12 @@
 import { GitCommandError } from "@bigbud/contracts/workspace/git.errors.ts";
 
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerSelected } from "../../ssh/sshOwnerSelection.ts";
 import type { ExecuteGitInput } from "../Services/GitCore.ts";
 
 export type GitExecutionLane = "initiating" | "target";
 
 export function isInitiatingGitTransportDisabled(lane: GitExecutionLane): boolean {
-  return lane === "initiating" && isDevSshOwnerSelected();
+  return lane === "initiating" && isSshOwnerSelected();
 }
 
 export const WORKSPACE_GIT_HARDENED_CONFIG_ARGS = [

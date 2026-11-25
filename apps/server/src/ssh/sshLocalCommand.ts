@@ -11,9 +11,9 @@ import { spawn, spawnSync } from "node:child_process";
 import { killProcessTree } from "../utils/killProcessTree.ts";
 import {
   assertLegacySshLaunchAllowed,
-  isDevSshOwnerSelected,
+  isSshOwnerSelected,
   LegacySshDisabledError,
-} from "./sshOwnerDevMode.ts";
+} from "./sshOwnerSelection.ts";
 
 /** Overall deadline for one unlock, covering every command it runs. */
 export const SSH_UNLOCK_DEADLINE_MS = 20_000;
@@ -63,7 +63,7 @@ export function runSshLocalCommand(
   args: ReadonlyArray<string>,
   options: SshLocalCommandOptions,
 ): Promise<SshLocalCommandResult> {
-  if (isDevSshOwnerSelected()) return Promise.reject(new LegacySshDisabledError());
+  if (isSshOwnerSelected()) return Promise.reject(new LegacySshDisabledError());
   if (options.timeoutMs <= 0) {
     return Promise.resolve({
       status: null,

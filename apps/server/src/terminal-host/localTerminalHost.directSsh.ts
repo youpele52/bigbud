@@ -24,7 +24,7 @@ import type { RemoteAgentOwner } from "../remote-agent/remoteAgentOwners.ts";
 import type { RemoteAgentPtyCreateDefaults } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
 import type { RemoteAgentCommandLaunch } from "../remote-agent/remoteAgentTerminalLaunch.ts";
 import { parseSshExecutionTarget } from "../ssh/sshExecutionTarget.ts";
-import { isDevSshOwnerSelected, LegacySshDisabledError } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerSelected, LegacySshDisabledError } from "../ssh/sshOwnerSelection.ts";
 import type { OwnedPtyRuntime } from "../terminal/Services/OwnedPtyRuntime.ts";
 import {
   PtySpawnError,
@@ -166,7 +166,7 @@ export function makeLocalTerminalHostDirectSsh(
 
   const spawn: PtyAdapterShape["spawn"] = Effect.fn("localTerminalHost.directSsh.spawn")(
     function* (input) {
-      if (isDevSshOwnerSelected()) return yield* directSshSpawnError(new LegacySshDisabledError());
+      if (isSshOwnerSelected()) return yield* directSshSpawnError(new LegacySshDisabledError());
       if (!input.ownerKey) return yield* options.fallback.spawn(input);
       let command: RemoteAgentCommandLaunch | undefined;
       if (!input.recoverOnly) {

@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { layer } from "../NodeSqliteClient.ts";
 import {
   type DevSshGuardedWriteBinding,
@@ -14,7 +14,7 @@ import {
   initializeDevSshGuardedWriteJournal,
 } from "./DevSshGuardedWriteJournal.ts";
 
-vi.mock("../../ssh/sshOwnerDevMode.ts", () => ({ isDevSshOwnerSelected: vi.fn() }));
+vi.mock("../../ssh/sshOwnerDevMode.fixture.ts", () => ({ isDevSshOwnerSelected: vi.fn() }));
 
 const binding: DevSshGuardedWriteBinding = {
   operationId: "op-1",
@@ -195,7 +195,7 @@ it("fences an acknowledged claim after the process exits without closing SQLite 
   const script = `
     import * as Effect from 'effect/Effect';
     import { SqlClient } from 'effect/unstable/sql/SqlClient';
-    import { activateDevSshOwner } from ${JSON.stringify(new URL("../../ssh/sshOwnerDevMode.ts", import.meta.url).href)};
+    import { activateDevSshOwner } from ${JSON.stringify(new URL("../../ssh/sshOwnerDevMode.fixture.ts", import.meta.url).href)};
     import { layer } from ${JSON.stringify(new URL("../NodeSqliteClient.ts", import.meta.url).href)};
     import { initializeDevSshGuardedWriteJournal } from ${JSON.stringify(new URL("./DevSshGuardedWriteJournal.ts", import.meta.url).href)};
     activateDevSshOwner();

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
 import { initializeDevSshGuardedWriteJournal } from "../persistence/Layers/DevSshGuardedWriteJournal.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";
 import { applyGuardedWriteWithJournal } from "./sshOwnerPickerProof.guardedWriteJournal.ts";
 import { MAX_GUARDED_WRITE_BYTES } from "./sshOwnerPickerProof.guardedWriteStage.ts";

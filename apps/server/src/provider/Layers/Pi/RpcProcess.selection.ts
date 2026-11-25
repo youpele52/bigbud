@@ -1,5 +1,5 @@
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
-import { isDevSshOwnerSelected } from "../../../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../../../ssh/sshOwnerSelection.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import type { PiRpcProcessOptions } from "./RpcProcess.types.ts";
 
@@ -27,7 +27,7 @@ export function getPiRpcCapabilityDenial(
   operation: "rpc-start" | "version-probe",
   ownerAvailable = false,
 ): SelectedSshOwnerPiCapabilityError | undefined {
-  if (!isDevSshOwnerSelected()) return undefined;
+  if (!isSshOwnerDevFixtureSelected()) return undefined;
 
   if (!isLocalProviderRuntimeTarget(targets.providerRuntimeTarget)) {
     // The native Pi proof's pinned, one-shot fixture grant is not a product provider grant.

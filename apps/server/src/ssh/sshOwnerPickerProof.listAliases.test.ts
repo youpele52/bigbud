@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeWsSshOwnerDevHandlers } from "../ws/wsSshOwnerDev.ts";
-import { activateDevSshOwner } from "./sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "./sshOwnerDevMode.fixture.ts";
 import { resolveProfileAliases } from "./sshConfigProfileAliases.ts";
 import { startPickerProofOwner, type PickerProofOwner } from "./sshOwnerPickerProof.client.ts";
 import {

@@ -1,7 +1,7 @@
 import { Effect, Path } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
 import {

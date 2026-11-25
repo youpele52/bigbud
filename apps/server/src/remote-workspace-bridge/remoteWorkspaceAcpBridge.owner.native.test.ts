@@ -12,7 +12,7 @@ import { makeStartSessionEffect as startCursor } from "../provider/Layers/Cursor
 import type { DevinSessionContext } from "../provider/Layers/Devin/Adapter.helpers.ts";
 import { makeStartSessionEffect as startDevin } from "../provider/Layers/Devin/Adapter.startSession.ts";
 import { createFakeAcpSessionRuntime } from "../provider/acp/AcpSessionRuntime.test.helpers.ts";
-import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.ts";
+import { activateDevSshOwner } from "../ssh/sshOwnerDevMode.fixture.ts";
 import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
 import { startPickerProofOwner } from "../ssh/sshOwnerPickerProof.client.ts";
 import {

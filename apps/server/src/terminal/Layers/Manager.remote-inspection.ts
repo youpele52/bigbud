@@ -2,7 +2,7 @@ import { Effect } from "effect";
 
 import { runProcess } from "../../utils/processRunner.ts";
 import { buildSshTransportArgs } from "../../ssh/sshCommand.ts";
-import { assertLegacySshLaunchAllowed } from "../../ssh/sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "../../ssh/sshOwnerSelection.ts";
 import { buildPasswordSessionControlPath } from "../../ssh/sshSession.ts";
 import { formatSshDestination, parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { validSshMonitorTarget } from "../../ssh/sshMonitor.target.ts";

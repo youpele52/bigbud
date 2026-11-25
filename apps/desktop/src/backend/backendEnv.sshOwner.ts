@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 import { isDevSshOwnerProfile } from "@bigbud/shared/DevLauncher";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
 
 export function resolveDesktopSshOwnerDevProfile(
   isPackaged: boolean,
@@ -20,4 +21,19 @@ export function resolveDesktopSshOwnerDevProfile(
     return undefined;
   }
   return profile;
+}
+
+/**
+ * Production owner path for a packaged desktop build. The server re-verifies
+ * the artifact's native target and fails closed with `sshOwnerUnavailable`, so
+ * this is a locator, not a trust decision. Off while the build-time activation
+ * constant is off, which keeps today's packaged environment unchanged.
+ */
+export function resolveDesktopSshOwnerProductionBinary(input: {
+  readonly isPackaged: boolean;
+  readonly packagedBinary: string | null;
+  readonly activation?: boolean;
+}): string | undefined {
+  const activated = input.activation ?? SSH_OWNER_PRODUCTION_ACTIVATION;
+  return activated && input.isPackaged ? (input.packagedBinary ?? undefined) : undefined;
 }

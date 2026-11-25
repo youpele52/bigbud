@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { App } from "electron";
 import { buildBackendChildEnvironment } from "./backendEnv";
+import {
+  resolveDesktopSshOwnerDevProfile,
+  resolveDesktopSshOwnerProductionBinary,
+} from "./backendEnv.sshOwner";
 import { resolveDesktopMainConfig } from "../main.config";
+import { resolvePackagedSshOwnerPlan } from "../env/pathResolver.platform";
 
 const profile = "/tmp/bigbud-ssh-owner-dev-9KZCS5";
 const settings = {
@@ -22,12 +27,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-function backendEnv(isPackaged: boolean) {
+function backendEnv(isPackaged: boolean, packagedSshOwnerBinary: string | null = null) {
   return buildBackendChildEnvironment({
     packagedOpencodeBinDir: null,
     packagedBundledSkillsDir: null,
     packagedBundledAgentsDir: null,
     packagedWorkspaceAgentBinary: null,
+    packagedSshOwnerBinary,
     packagedDesktopSupervisorBinary: null,
     computerUseRuntimeEnv: {},
     backendNodeExecutable: process.execPath,
@@ -72,4 +78,45 @@ it.each([
   const env = backendEnv(false);
   for (const key of Object.keys(settings)) expect(env).not.toHaveProperty(key);
   expect(mainConfig(false).isolatedUserDataPath).toBeUndefined();
+});
+
+it("exports the packaged owner path independently of dev selection", () => {
+  const plan = resolvePackagedSshOwnerPlan("darwin", "/Applications/bigbud.app/Contents/Resources");
+  expect(plan.binaryPath).toBe(
+    "/Applications/bigbud.app/Contents/Resources/server/ssh-owner/bin/bigbud-ssh-owner",
+  );
+  expect(resolvePackagedSshOwnerPlan("win32", "C:/bigbud/resources").binaryPath).toBe(
+    "C:/bigbud/resources/server/ssh-owner/bin/bigbud-ssh-owner.exe",
+  );
+  // Dev selection returns undefined for a packaged app, so this proves a second route exists.
+  expect(resolveDesktopSshOwnerDevProfile(true, {})).toBeUndefined();
+  expect(
+    resolveDesktopSshOwnerProductionBinary({
+      isPackaged: true,
+      packagedBinary: plan.binaryPath,
+      activation: true,
+    }),
+  ).toBe(plan.binaryPath);
+  expect(
+    resolveDesktopSshOwnerProductionBinary({
+      isPackaged: true,
+      packagedBinary: plan.binaryPath,
+      activation: false,
+    }),
+  ).toBeUndefined();
+  expect(
+    resolveDesktopSshOwnerProductionBinary({
+      isPackaged: false,
+      packagedBinary: plan.binaryPath,
+      activation: true,
+    }),
+  ).toBeUndefined();
+});
+
+it("does not pass the packaged owner locator while activation stays off", () => {
+  const env = backendEnv(
+    true,
+    "/Applications/bigbud.app/Contents/Resources/server/ssh-owner/bin/bigbud-ssh-owner",
+  );
+  expect(env.BIGBUD_SSH_OWNER_BIN).toBeUndefined();
 });

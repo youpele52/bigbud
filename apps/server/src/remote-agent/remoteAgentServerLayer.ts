@@ -2,7 +2,7 @@ import { Layer, ServiceMap } from "effect";
 
 import type { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
 import { makeShellRunnerLayer } from "./remoteAgentServerLayer.shell.ts";
-import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import { makeSelectedDevGitLayer } from "../git/Layers/GitCore.ssh.selected.ts";
 import { RemoteAgentGitOwnership } from "./remoteAgentGit.ts";
 import type { RemoteAgentPtyResolver } from "./remoteAgentPtyAdapter.ts";
@@ -342,7 +342,7 @@ export function makeConfiguredRemoteAgentLayers<E = never, R = never>(
         Layer.succeed(RemoteAgentGitOwnership, "external"),
         // Preserve the previous no-composition behavior outside the selected
         // development domain; selected direct shell authority needs the owner.
-        ...(isDevSshOwnerSelected() ? [makeShellRunnerLayer(devOwner)] : []),
+        ...(isSshOwnerDevFixtureSelected() ? [makeShellRunnerLayer(devOwner)] : []),
       ),
       workspace: WorkspaceRuntimeLayerLive,
       ptyResolver: undefined as RemoteAgentPtyResolver | undefined,

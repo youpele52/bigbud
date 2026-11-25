@@ -5,7 +5,7 @@ import readline from "node:readline";
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
-import { assertLegacySshLaunchAllowed } from "../../../ssh/sshOwnerDevMode.ts";
+import { assertLegacySshLaunchAllowed } from "../../../ssh/sshOwnerSelection.ts";
 import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { normalizeManagedServerStartError } from "./ServerManager.errors.ts";
 import type { ProcessLedgerShape } from "../../../process-ledger/Services/ProcessLedger.ts";
