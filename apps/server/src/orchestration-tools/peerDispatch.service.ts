@@ -34,6 +34,8 @@ export interface PeerDispatchServiceShape {
   }) => Effect.Effect<PeerToolResult, Error>;
   /** Starts followers for every unsettled dispatch; returns how many. */
   readonly resume: () => Effect.Effect<number, Error>;
+  /** Drains every unsettled dispatch through the real coordinator cancel path. */
+  readonly drainFollowers: () => Effect.Effect<number, Error>;
   /** After the user fixed a pin or grant: clear the setup error and resume that worker. */
   readonly kick: (workerAuthorityId: string) => Effect.Effect<void, Error>;
   readonly deps: PeerCoordinatorDeps;
@@ -213,6 +215,22 @@ export const makePeerDispatchService = Effect.fn("makePeerDispatchService")(func
       return unsettled.length;
     }).pipe(Effect.mapError(asError));
 
+  const drainFollowers: PeerDispatchServiceShape["drainFollowers"] = () =>
+    Effect.gen(function* () {
+      const unsettled = yield* deps.dispatches.listUnsettled(UNSETTLED_LIMIT);
+      for (const dispatch of unsettled) {
+        const outcome = yield* requestPeerCancel(deps, {
+          callerThreadId: dispatch.coordinatorThreadId,
+          dispatchId: dispatch.dispatchId,
+        });
+        if (outcome._tag === "unknown")
+          return yield* Effect.fail(new Error(`Unknown dispatch ${dispatch.dispatchId}.`));
+        if (outcome.dispatch.state === "cancel-pending")
+          yield* ensureFollower(outcome.dispatch.dispatchId, true);
+      }
+      return unsettled.length;
+    }).pipe(Effect.mapError(asError));
+
   const kick: PeerDispatchServiceShape["kick"] = (workerAuthorityId) =>
     Effect.gen(function* () {
       deps.setupErrors.delete(workerAuthorityId);
@@ -222,5 +240,13 @@ export const makePeerDispatchService = Effect.fn("makePeerDispatchService")(func
           yield* ensureFollower(dispatch.dispatchId, true);
     }).pipe(Effect.mapError(asError));
 
-  return { delegate, status, cancel, resume, kick, deps } satisfies PeerDispatchServiceShape;
+  return {
+    delegate,
+    status,
+    cancel,
+    resume,
+    drainFollowers,
+    kick,
+    deps,
+  } satisfies PeerDispatchServiceShape;
 });

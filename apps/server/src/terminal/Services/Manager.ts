@@ -138,6 +138,14 @@ export interface TerminalIdleWork {
   readonly quietSince: number | null;
 }
 
+export interface TerminalDrainPane {
+  readonly threadId: string;
+  readonly terminalId: string;
+  readonly executionTargetId: string;
+  readonly surface: "local" | "direct-ssh" | "remote-agent";
+  readonly keepMode: boolean;
+}
+
 export interface TerminalManagerShape {
   readonly remoteInventory?: (
     input: TerminalRemoteInventoryInput,
@@ -181,6 +189,8 @@ export interface TerminalManagerShape {
     input: TerminalRecoveryInput,
   ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;
   readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
+  /** Live panes for the W3.2 drain; classification is exact and session-scoped. */
+  readonly listDrainPanes?: () => Effect.Effect<ReadonlyArray<TerminalDrainPane>>;
   /** Terminal sessions currently tracked for one execution target, for targeted shutdown. */
   readonly listExecutionTargetSessions?: (
     executionTargetId: string,

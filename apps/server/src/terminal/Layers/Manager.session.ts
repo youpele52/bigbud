@@ -16,6 +16,8 @@ import { makeTerminalOutputHold } from "./Manager.session.outputHold";
 import { TerminalSearchIndex } from "./Manager.search";
 import { captureTerminalRecovery } from "./Manager.recoveryRpc";
 import { makeListTerminalShellProfiles } from "./Manager.shell.inventory";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -69,6 +71,23 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         Effect.map((sessions) =>
           sessions.some((session) => session.status === "running" || session.hasRunningSubprocess),
         ),
+      ),
+    listDrainPanes: () =>
+      modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(
+        Effect.map((sessions) => {
+          const keepMode = ctx.keepRunningAfterQuit?.() === true;
+          return sessions.map((session) => ({
+            threadId: session.threadId,
+            terminalId: session.terminalId,
+            executionTargetId: session.executionTargetId,
+            surface: isRemoteAgentExecutionTarget(session.executionTargetId)
+              ? ("remote-agent" as const)
+              : parseSshExecutionTarget(session.executionTargetId) !== null
+                ? ("direct-ssh" as const)
+                : ("local" as const),
+            keepMode,
+          }));
+        }),
       ),
     listExecutionTargetSessions: (executionTargetId) =>
       modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(

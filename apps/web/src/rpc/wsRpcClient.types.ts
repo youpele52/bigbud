@@ -6,6 +6,7 @@ import type { DetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import type { DatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import type { RemoteRuntimeUpdateRpcMethods } from "./wsRpcClient.remoteBackendUpdate";
 import type { MetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
+import type { BackendDrainRpcMethods } from "./wsRpcClient.backendDrain";
 import {
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
@@ -110,9 +111,9 @@ export interface StreamSubscriptionOptions {
   readonly shouldRetry?: (error: unknown) => boolean;
 }
 
-export type RpcUnaryMethod<TTag extends RpcTag> =
+export type RpcUnaryMethod<TTag extends RpcTag, TOptions extends unknown[] = []> =
   RpcMethod<TTag> extends (input: any, options?: any) => Effect.Effect<infer TSuccess, any, any>
-    ? (input: RpcInput<TTag>) => Promise<TSuccess>
+    ? (input: RpcInput<TTag>, ...options: TOptions) => Promise<TSuccess>
     : never;
 
 export type RpcUnaryNoArgMethod<TTag extends RpcTag> =
@@ -274,7 +275,10 @@ export interface WsRpcClient {
         input: ServerSetThreadRetentionPolicyInput,
       ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverSetThreadRetentionPolicy>>;
       readonly setThreadPinned: RpcUnaryMethod<typeof WS_METHODS.serverSetThreadPinned>;
-      readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
+      readonly readDocumentUrl: RpcUnaryMethod<
+        typeof WS_METHODS.serverReadDocumentUrl,
+        [options?: { readonly signal?: AbortSignal }]
+      >;
       readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
       readonly retryTextGeneration: (
         input: import("@bigbud/contracts/server/rpc.textGeneration.ts").RetryThreadTextGenerationInput,
@@ -335,7 +339,8 @@ export interface WsRpcClient {
       readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
     } & WsRpcMonitorMethods &
     WsRpcRemoteAgentMethods &
-    MetadataWarningRpcMethods;
+    MetadataWarningRpcMethods &
+    BackendDrainRpcMethods;
   readonly orchestration: DetailPagingRpcMethods &
     BranchCopyRpcMethods & {
       readonly getSidebarThreadCatalog: RpcUnaryMethod<

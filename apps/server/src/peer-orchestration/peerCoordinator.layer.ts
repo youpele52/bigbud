@@ -6,6 +6,7 @@
  * @module peerCoordinator.layer
  */
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 
 import { Effect, Layer, Option } from "effect";
 
@@ -35,6 +36,11 @@ import {
   peerCoordinatorKeyDirectory,
   scanPeerHostKeys,
 } from "./peerCoordinator.transport.ts";
+import {
+  makeSelectedPeerOwnerAdapters,
+  type SelectedPeerOwnerSession,
+} from "./peerCoordinator.owner.selected.ts";
+import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
 import type { PeerPairingDeps } from "./peerPairing.ts";
 
 export interface PeerCoordinatorRegistration {
@@ -52,13 +58,33 @@ export const PeerCoordinatorLive = Layer.effectDiscard(
     const config = yield* ServerConfig;
     const identity = yield* Effect.serviceOption(RemoteBackendIdentityService);
     const engine = yield* OrchestrationEngineService;
-    const keyDirectory = peerCoordinatorKeyDirectory(config.stateDir);
+    const pairings = yield* PeerPairingRepository;
+    // The selected dev owner session supplies the peer owner ports. Without it
+    // the coordinator still registers, but peer relay, key and host inspection
+    // refuse typed; there is no TypeScript SSH fallback.
+    const devOwner = yield* Effect.serviceOption(DevSshOwnerRuntime);
+    const session = Option.isSome(devOwner) ? devOwner.value.session : undefined;
+    // The owner provisions the key under its own profile state; read the public
+    // sidecar from there instead of auto-provisioning on a status request.
+    const keyDirectory = session
+      ? join(session.fixture.root, "peer-coordinator")
+      : peerCoordinatorKeyDirectory(config.stateDir);
+    const adapters = session
+      ? makeSelectedPeerOwnerAdapters(
+          {
+            targetId: session.targetId,
+            // The admitted session client is the same object the picker owns.
+            withOwner: session.picker.withOwner as unknown as SelectedPeerOwnerSession["withOwner"],
+          },
+          (pairingId) => Effect.runPromise(pairings.get(pairingId)),
+        )
+      : undefined;
     const deps: PeerCoordinatorDeps = {
       coordinatorAuthorityId: Option.isSome(identity) ? identity.value.authority.authorityId : null,
       dispatches: yield* PeerDispatchRepository,
       requests: yield* PeerDispatchRequestRepository,
-      pairings: yield* PeerPairingRepository,
-      transport: makeSshPeerTransport({ keyDirectory }),
+      pairings,
+      transport: makeSshPeerTransport({ owner: adapters?.relayOwner }),
       deliver: makeEnginePeerDeliver(engine),
       callerRuntimeMode: (threadId) =>
         loadPeerChildThread(engine, threadId).pipe(
@@ -80,7 +106,19 @@ export const PeerCoordinatorLive = Layer.effectDiscard(
         coordinator: deps,
         keyDirectory,
         kick: service.kick,
-        scanHostKeys: scanPeerHostKeys,
+        ...(adapters
+          ? {
+              peerOwner: adapters.keyOwner,
+              hostKeyOwner: adapters.hostKeyOwner,
+              ensureKey: async (_directory: string) => ({
+                publicKey: {
+                  fingerprint: (await adapters.keyOwner.ensurePeerCoordinatorKey()).fingerprint,
+                },
+              }),
+              scanHostKeys: (host: string, port: number) =>
+                scanPeerHostKeys(adapters.hostKeyOwner, host, port),
+            }
+          : {}),
       },
     };
     setThreadPeerToolHandler(service);

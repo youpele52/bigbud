@@ -2,6 +2,8 @@ import type { SessionConfig, SessionFsConfig, Tool, ToolResultObject } from "@gi
 
 import { createRemoteWorkspaceSessionFsBridge } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
+import type { SessionFsOwnerCapability } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ownerProvider.ts";
+import { isDevSshOwnerSelected } from "../../../ssh/sshOwnerDevMode.ts";
 import {
   runToolCommand,
   resolveToolTransportTarget,
@@ -47,9 +49,12 @@ function normalizeRemoteCommandResult(output: string, exitCode: number): ToolRes
 
 function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command: string }> {
   const transportTarget = resolveToolTransportTarget(workspaceTarget);
+  const selected = isDevSshOwnerSelected();
   return {
     name: "bash",
-    description: "Run a shell command in the remote workspace through bigbud.",
+    description: selected
+      ? "Shell commands are unavailable with the selected SSH owner; use file tools."
+      : "Run a shell command in the remote workspace through bigbud.",
     parameters: {
       type: "object",
       properties: {
@@ -60,6 +65,11 @@ function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command:
     },
     overridesBuiltInTool: true,
     handler: async ({ command }, invocation) => {
+      if (selected)
+        return normalizeRemoteCommandResult(
+          "Arbitrary shell commands are unavailable with the selected SSH owner. Use the typed file and search tools instead.",
+          1,
+        );
       const result = await runToolCommand({
         invocationId: `copilot-tool:${invocation.sessionId}:${invocation.toolCallId}`,
         target: transportTarget,
@@ -90,6 +100,7 @@ export interface CopilotRemoteWorkspaceBridge {
 export async function createCopilotRemoteWorkspaceBridge(
   workspaceTarget: WorkspaceTarget,
   readinessProbe?: RemoteWorkspaceReadinessProbe,
+  sessionFsOwner?: SessionFsOwnerCapability,
 ): Promise<CopilotRemoteWorkspaceBridge> {
   const bridge = await createRemoteWorkspaceSessionFsBridge(
     workspaceTarget,
@@ -100,6 +111,7 @@ export async function createCopilotRemoteWorkspaceBridge(
       "",
     ],
     readinessProbe,
+    sessionFsOwner,
   );
 
   return {

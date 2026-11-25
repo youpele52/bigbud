@@ -27,13 +27,16 @@ export type TerminalQuitDecision =
   | { readonly kind: "detach"; readonly why: "no-hint" | "keep" }
   | { readonly kind: "close"; readonly reason: "quit" | "update" };
 
+const quitReason = (intent: AppQuitIntentRecord): "quit" | "update" =>
+  intent.reason === "update" ? "update" : "quit";
+
 export function decideTerminalQuit(
   intent: Option.Option<AppQuitIntentRecord>,
   keepRunningAfterQuit: boolean,
 ): TerminalQuitDecision {
   if (Option.isNone(intent)) return { kind: "detach", why: "no-hint" };
   if (keepRunningAfterQuit) return { kind: "detach", why: "keep" };
-  return { kind: "close", reason: intent.value.reason === "update" ? "update" : "quit" };
+  return { kind: "close", reason: quitReason(intent.value) };
 }
 
 /** Host close-alls with one deadline; resolves with how many closed and how many did not answer. */
@@ -45,7 +48,7 @@ export interface TerminalQuitCloser {
 }
 
 const closeWithin = (
-  label: "local" | "remote",
+  label: "local" | "remote" | "native",
   closer: TerminalQuitCloser,
   reason: "quit" | "update",
   deadline: number,
@@ -87,27 +90,37 @@ export const applyTerminalQuitPolicy = Effect.fn("terminal.applyQuitPolicy")(fun
   readonly runtime: () => OwnedPtyRuntime | undefined;
   /** Remote-agent hosts, addressed per connection (absent when none can be closed). */
   readonly remote?: (TerminalQuitCloser & { readonly hasHosts: () => boolean }) | undefined;
+  /**
+   * Direct SSH PTYs of the dev-only native SSH owner, closed by exact lease only. They close on
+   * every hinted quit, keep mode included (user decision); a hintless stop still detaches them.
+   */
+  readonly native?: (TerminalQuitCloser & { readonly hasHosts: () => boolean }) | undefined;
   readonly deadlineMs?: number;
 }) {
   const generations = input.runtime()?.hostGenerations;
   const remote = input.remote?.hasHosts() ? input.remote : undefined;
-  if (!generations && !remote) return { kind: "detach", why: "no-hint" } as TerminalQuitDecision;
+  const native = input.native?.hasHosts() ? input.native : undefined;
+  if (!generations && !remote && !native)
+    return { kind: "detach", why: "no-hint" } as TerminalQuitDecision;
   const intent = input.resolveIntent ? yield* input.resolveIntent : Option.none();
   const decision = decideTerminalQuit(intent, input.keepRunningAfterQuit());
   yield* Effect.annotateCurrentSpan({
     "terminal.quit_decision": decision.kind === "close" ? decision.reason : decision.why,
   });
+  const deadline = input.deadlineMs ?? TERMINAL_QUIT_CLOSE_DEADLINE_MS;
   if (decision.kind === "detach") {
     yield* Effect.logInfo("terminal hosts keep their terminals after this backend stops", {
       why: decision.why,
     });
+    if (native && Option.isSome(intent))
+      yield* closeWithin("native", native, quitReason(intent.value), deadline);
     return decision;
   }
-  const deadline = input.deadlineMs ?? TERMINAL_QUIT_CLOSE_DEADLINE_MS;
   yield* Effect.all(
     [
       ...(generations ? [closeWithin("local", generations, decision.reason, deadline)] : []),
       ...(remote ? [closeWithin("remote", remote, decision.reason, deadline)] : []),
+      ...(native ? [closeWithin("native", native, decision.reason, deadline)] : []),
     ],
     { concurrency: "unbounded", discard: true },
   );

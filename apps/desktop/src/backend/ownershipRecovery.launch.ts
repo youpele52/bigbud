@@ -20,10 +20,7 @@ export function recordOwnershipLaunch(
     cwd: string;
   },
 ): NodeJS.ProcessEnv {
-  const base = resolveOwnershipBaseDir(
-    input.env.BIGBUD_HOME ?? input.env.T3CODE_HOME ?? input.baseDir,
-    input.cwd,
-  );
+  const base = resolveOwnershipBaseDir(input.env.BIGBUD_HOME ?? input.baseDir, input.cwd);
   const stateDir = ownershipStateDir(base, input.env.VITE_DEV_SERVER_URL !== undefined);
   launch = {
     generation: input.generation,

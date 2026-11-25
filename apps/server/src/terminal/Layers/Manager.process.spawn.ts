@@ -32,6 +32,7 @@ export function trySpawnWith(
   shellCandidates: ReadonlyArray<LaunchCandidate>,
   spawnEnv: NodeJS.ProcessEnv,
   hostLifecycle: PtySpawnHostLifecycle | undefined = undefined,
+  replaceTerminalOwner = false,
   index = 0,
   lastError: PtySpawnError | null = null,
 ): Effect.Effect<
@@ -86,6 +87,7 @@ export function trySpawnWith(
           : spawnTerminalPty(ctx, session, {
               ownerKey: JSON.stringify([session.threadId, session.terminalId]),
               recoverOnly: session.remoteOwnerRecoveryRequired === true,
+              replaceTerminalOwner,
               expectedRemoteResourceId: session.expectedRemoteResourceId,
               ...(candidate.shellLaunch ? { shellLaunch: candidate.shellLaunch } : {}),
               ...(candidate.identity ? { shellProfile: candidate.identity } : {}),
@@ -143,6 +145,7 @@ export function trySpawnWith(
       shellCandidates,
       spawnEnv,
       hostLifecycle,
+      replaceTerminalOwner,
       index + 1,
       spawnError,
     );

@@ -8,28 +8,24 @@ import {
   type WorkspaceFileRangeResult,
   type WorkspaceFileSystemShape,
 } from "../Services/WorkspaceFileSystem.ts";
+import type { WorkspaceFileReadOwnerShape } from "../Services/WorkspaceFileReadOwner.ts";
 import { type WorkspacePathsShape } from "../Services/WorkspacePaths.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
-import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
+import {
+  runToolCommand,
+  resolveToolTransportTarget,
+  type ToolTransportTarget,
+} from "../../tool-transport/toolTransport.ts";
 import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 
 const DEFAULT_FILE_RANGE_MAX_BYTES = 512 * 1024;
 const REMOTE_RANGE_SCRIPT =
   'file="$1"; offset="$2"; count="$3"; size=$(wc -c < "$file") || exit 1; printf "%s\\n" "$size"; if [ "$count" -gt 0 ]; then dd if="$file" bs=1 skip="$offset" count="$count" 2>/dev/null | base64 | tr -d "\\n"; fi';
 
-async function readRemoteFileRange(input: {
-  readonly executionTargetId: string;
-  readonly cwd: string;
-  readonly relativePath: string;
-  readonly offset: number;
-  readonly maxBytes: number;
-}): Promise<Omit<WorkspaceFileRangeResult, "relativePath">> {
-  const target = resolveToolTransportTarget(
-    resolveWorkspaceTarget({
-      executionTargetId: input.executionTargetId,
-      cwd: input.cwd,
-    }),
-  );
+async function readRemoteFileRange(
+  target: ToolTransportTarget,
+  input: Pick<WorkspaceFileRangeInput, "relativePath" | "offset" | "maxBytes">,
+): Promise<Omit<WorkspaceFileRangeResult, "relativePath">> {
   const result = await runToolCommand({
     target,
     command: "sh",
@@ -69,6 +65,7 @@ async function readRemoteFileRange(input: {
 
 export function makeWorkspaceFileRange(
   workspacePaths: WorkspacePathsShape,
+  readOwner: WorkspaceFileReadOwnerShape | undefined,
 ): WorkspaceFileSystemShape["readFileRange"] {
   return Effect.fn("WorkspaceFileSystem.readFileRange")(function* (input: WorkspaceFileRangeInput) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
@@ -85,14 +82,16 @@ export function makeWorkspaceFileRange(
         Math.max(0, Math.floor(input.maxBytes)),
       );
       const result = yield* Effect.tryPromise({
-        try: () =>
-          readRemoteFileRange({
-            executionTargetId,
-            cwd: input.cwd,
-            relativePath: target.relativePath,
-            offset,
-            maxBytes,
-          }),
+        try: async () => {
+          const toolTarget = resolveToolTransportTarget(
+            resolveWorkspaceTarget({ executionTargetId, cwd: input.cwd }),
+          );
+          const range = { relativePath: target.relativePath, offset, maxBytes };
+          if (readOwner && toolTarget.transport === "ssh") {
+            return readOwner.readFileRange({ ...range, executionTargetId, cwd: input.cwd });
+          }
+          return readRemoteFileRange(toolTarget, range);
+        },
         catch: (cause) =>
           new WorkspaceFileSystemError({
             cwd: input.cwd,

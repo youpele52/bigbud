@@ -306,6 +306,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,
+      directSshCwdOwner: options.directSshCwdOwner,
       directShellOwners: options.directShellOwners,
       resolveShellProfile: options.resolveShellProfile,
       preflightRemoteShellProfile: options.preflightRemoteShellProfile,

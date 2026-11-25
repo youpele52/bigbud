@@ -199,6 +199,42 @@ describe("RemoteAgentConnectionPool disconnect", () => {
     expect(reconnected).toBe(created[1]);
   });
 
+  it("discards a late successful startup after Disconnect, even if create ignores cancellation", async () => {
+    const entered = Promise.withResolvers<void>();
+    const startup = Promise.withResolvers<RemoteAgentConnection>();
+    const late = pooledConnection();
+    const fresh = pooledConnection();
+    const create = vi
+      .fn<() => Promise<RemoteAgentConnection>>()
+      .mockImplementationOnce(() => {
+        entered.resolve();
+        return startup.promise;
+      })
+      .mockResolvedValue(fresh as unknown as RemoteAgentConnection);
+    const pool = new RemoteAgentConnectionPool({ create });
+    try {
+      const first = pool.get(target);
+      const second = pool.get(target);
+      const settled = Promise.allSettled([first, second]);
+      await entered.promise;
+      await markSshTargetDisconnected(target);
+      pool.disconnect(target, new RemoteTargetDisconnectedError(target));
+      startup.resolve(late as unknown as RemoteAgentConnection);
+      expect((await settled).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+      expect(late.close).toHaveBeenCalledOnce();
+      expect(pool.liveConnection(target)).toBeNull();
+      await expect(pool.get(target)).rejects.toBeInstanceOf(RemoteTargetDisconnectedError);
+      expect(create).toHaveBeenCalledOnce();
+
+      await clearSshTargetDisconnected(target);
+      await expect(pool.get(target)).resolves.toBe(fresh);
+      expect(create).toHaveBeenCalledTimes(2);
+    } finally {
+      startup.resolve(late as unknown as RemoteAgentConnection);
+      pool.closeAll();
+    }
+  });
+
   it("keeps the agent epoch when transport loss invalidates a completed setup", async () => {
     let releaseHandshake!: () => void;
     const handshakeGate = new Promise<void>((resolve) => (releaseHandshake = resolve));

@@ -28,6 +28,8 @@ describe("TerminalLifecycleSettings", () => {
     const markup = renderToStaticMarkup(<TerminalLifecycleSettings platform="MacIntel" />);
     expect(markup).toContain("Keep terminals running after quitting");
     expect(markup).toContain("Idle terminals still close after 10 minutes.");
+    expect(markup).toContain("direct SSH terminals close on quit, restart, or update.");
+    expect(markup).toContain("Use tmux or screen on the remote host to keep work running.");
     expect(markup).toContain('aria-checked="false"');
     expect(markup).not.toContain("Not available on Windows yet.");
     expect(markup).not.toContain(HOST_OFF);

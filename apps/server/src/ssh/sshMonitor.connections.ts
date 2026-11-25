@@ -1,11 +1,43 @@
 import { runProcess } from "../utils/processRunner.ts";
 import { remoteReadOnlyInvocation } from "../terminal/Layers/Manager.remote-inspection.ts";
+import type { SshMonitorHealthOwner } from "./sshMonitor.healthOwner.ts";
 import { validSshMonitorTarget } from "./sshMonitor.target.ts";
+import { isDevSshOwnerSelected } from "./sshOwnerDevMode.ts";
 
-interface Connection {
-  owners: Map<string, object>;
+interface HealthProbe {
+  readonly abort: AbortController;
+  readonly readers: Set<(healthy: boolean) => void>;
+}
+
+interface HealthCheck {
   lastSuccess: number;
-  probe: Promise<boolean> | undefined;
+  probe: HealthProbe | undefined;
+}
+
+/** A cancelled reader detaches immediately without cancelling peers on the same probe. */
+function readProbe(check: HealthCheck, probe: HealthProbe, signal?: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    const finish = (healthy: boolean) => {
+      signal?.removeEventListener("abort", cancel);
+      probe.readers.delete(finish);
+      resolve(healthy);
+    };
+    const cancel = () => {
+      finish(false);
+      if (check.probe === probe && probe.readers.size === 0) {
+        check.probe = undefined;
+        probe.abort.abort();
+      }
+    };
+    probe.readers.add(finish);
+    signal?.addEventListener("abort", cancel, { once: true });
+    if (signal?.aborted) cancel();
+  });
+}
+
+interface Connection extends HealthCheck {
+  owners: Map<string, object>;
+  ownerChecks?: WeakMap<SshMonitorHealthOwner, HealthCheck>;
 }
 const connections = new Map<string, Connection>();
 const CHECK_INTERVAL_MS = 5_000;
@@ -86,46 +118,76 @@ export function recordSshMonitorSample(
   connection.lastSuccess = Math.max(connection.lastSuccess, sampledAtMs);
 }
 
-/** Coalesced read-only health checks across tabs; a failed probe revokes all caller leases. */
+async function sampleLegacyHealth(target: string): Promise<"reachable" | "unreachable"> {
+  try {
+    const invocation = remoteReadOnlyInvocation(target, "sh -c 'true'");
+    await runProcess(invocation.command, invocation.args, {
+      shell: false,
+      timeoutMs: 3_000,
+      settleOnTimeout: true,
+      maxBufferBytes: 4_096,
+      outputMode: "error",
+    });
+    return "reachable";
+  } catch {
+    return "unreachable";
+  }
+}
+
+/** Coalesced health checks across tabs; only confirmed failure can revoke caller leases. */
 export async function isConnectedSshMonitorTarget(
   target: string,
   callerId: string,
+  owner?: SshMonitorHealthOwner,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  if (signal?.aborted) return false;
   const connection = connections.get(target);
   const lease = connection?.owners.get(callerId);
-  if (!connection || !lease) return false;
-  if (Date.now() - connection.lastSuccess < CHECK_INTERVAL_MS) return true;
-  if (connection.probe)
-    return connection.probe.then(
-      (connected) => connected && sshMonitorLease(target, callerId) === lease,
-    );
-  const startedAt = Date.now();
-  const probe = (async () => {
-    try {
-      const invocation = remoteReadOnlyInvocation(target, "sh -c 'true'");
-      await runProcess(invocation.command, invocation.args, {
-        shell: false,
-        timeoutMs: 3_000,
-        settleOnTimeout: true,
-        maxBufferBytes: 4_096,
-        outputMode: "error",
-      });
-      if (connections.get(target) !== connection) return false;
-      // Health belongs to the host; admission still belongs to each caller lease.
-      connection.lastSuccess = Date.now();
-      return true;
-    } catch {
-      if (connections.get(target) !== connection) return false;
-      // A successful monitor sample after this probe began supersedes its failed result.
+  if (!connection || !lease || (!owner && isDevSshOwnerSelected())) return false;
+
+  let check: HealthCheck = connection;
+  if (owner) {
+    // A selected owner must establish its own freshness, independent of the legacy path.
+    const ownerChecks = (connection.ownerChecks ??= new WeakMap());
+    const existing = ownerChecks.get(owner);
+    check = existing ?? { lastSuccess: -Infinity, probe: undefined };
+    if (!existing) ownerChecks.set(owner, check);
+  }
+  if (Date.now() - check.lastSuccess < CHECK_INTERVAL_MS) return true;
+  let probe = check.probe;
+  if (!probe) {
+    const active: HealthProbe = { abort: new AbortController(), readers: new Set() };
+    check.probe = probe = active;
+    const startedAt = Date.now();
+    const run = async () => {
+      try {
+        const health = owner
+          ? await owner.sampleHealth(target, active.abort.signal)
+          : await sampleLegacyHealth(target);
+        if (active.abort.signal.aborted || connections.get(target) !== connection) return false;
+        if (health === "reachable") {
+          check.lastSuccess = Date.now();
+          return true;
+        }
+        if (health !== "unreachable") return false;
+      } catch {
+        // An unavailable owner is not evidence that the transport died.
+        return false;
+      }
+      // A successful monitor sample or verification after the probe began supersedes its failure.
       if (connection.lastSuccess > startedAt) return true;
       forgetSshMonitorTarget(target);
       return false;
-    }
-  })();
-  connection.probe = probe;
-  try {
-    return (await probe) && sshMonitorLease(target, callerId) === lease;
-  } finally {
-    if (connections.get(target) === connection) connection.probe = undefined;
+    };
+    void run().then((healthy) => {
+      if (check.probe === active) check.probe = undefined;
+      for (const finish of active.readers) finish(healthy);
+    });
   }
+  return (
+    (await readProbe(check, probe, owner ? signal : undefined)) &&
+    !signal?.aborted &&
+    sshMonitorLease(target, callerId) === lease
+  );
 }

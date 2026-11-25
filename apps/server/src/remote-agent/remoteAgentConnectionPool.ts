@@ -16,7 +16,11 @@ import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
 import { remoteAgentRuntimeEqual, type RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import { makeRemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
 import { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
-import { type Entry, makeRemoteAgentPoolEntry } from "./remoteAgentConnectionPool.entry.ts";
+import {
+  type Entry,
+  makeRemoteAgentPoolEntry,
+  samePoolBinding,
+} from "./remoteAgentConnectionPool.entry.ts";
 import {
   remoteAgentPoolBindingKey,
   remoteAgentPoolEntryKey,
@@ -29,6 +33,7 @@ export interface RemoteAgentRuntimeBinding {
   readonly connectionId?: string;
   readonly runtime: RemoteAgentRuntime;
   readonly expectedEpoch: string;
+  readonly expectedInstanceId?: string;
 }
 
 export interface RemoteAgentConnectionPoolFactory {
@@ -347,12 +352,7 @@ export class RemoteAgentConnectionPool {
     const key = remoteAgentPoolEntryKey(executionTargetId, binding);
     const existing = this.entries.get(key);
     if (existing) {
-      if (
-        (existing.binding && binding
-          ? !remoteAgentRuntimeEqual(existing.binding.runtime, binding.runtime)
-          : existing.binding !== binding) ||
-        existing.binding?.expectedEpoch !== binding?.expectedEpoch
-      )
+      if (!samePoolBinding(existing.binding, binding))
         throw new Error("Runtime binding identity changed for an existing resource.");
       return existing;
     }

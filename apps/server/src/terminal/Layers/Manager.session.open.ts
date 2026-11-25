@@ -9,18 +9,23 @@ import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
 import { createTerminalSessionState } from "./Manager.session.state.ts";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
-import { makeResolveTerminalFolder } from "./Manager.cwd";
+import { makeResolveTerminalFolder, type ResolvedTerminalFolder } from "./Manager.cwd";
 import { prepareTerminalRestart } from "./Manager.session.restart";
 import { reattachRunningTerminalSession } from "./Manager.session.open.reattach.ts";
 import {
   endedTerminalSnapshot,
+  hostLostPane,
   openTerminalAttachOnly,
   rejectTerminalHostLimit,
 } from "./Manager.session.open.host.ts";
 import { resolveTerminalEvictLifecycle } from "./Manager.hostLimit.ts";
 import { terminalHostClosedSession } from "./Manager.hostLifecycle.ts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
-import { resolveOwnedTerminalRecoverOnly } from "./OwnedPtyRuntime.owner.ts";
+import {
+  findNativeTerminalHostLoss,
+  findNativeTerminalRecovery,
+  resolveOwnedTerminalRecoverOnly,
+} from "./OwnedPtyRuntime.owner.ts";
 import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
 import {
@@ -35,21 +40,6 @@ import {
 } from "./Manager.shell.profile";
 
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
-
-function hostLostPane(
-  ctx: SessionApiContext,
-  request: Parameters<TerminalManagerShape["open"]>[0],
-  terminalId: string,
-): boolean {
-  return (
-    ctx.hostLimit
-      ?.roster()
-      .some(
-        (entry) =>
-          entry.lost && entry.threadId === request.threadId && entry.terminalId === terminalId,
-      ) === true
-  );
-}
 
 export function makeTerminalOpen(ctx: SessionApiContext) {
   const {
@@ -73,6 +63,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
     undefined,
     undefined,
     ctx.resolveRuntimePathIdentity,
+    ctx.directSshCwdOwner,
   );
 
   const resolveShellProfile = makeResolveTerminalShellProfile(
@@ -116,15 +107,40 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
           : undefined;
         if (closedReason) return endedTerminalSnapshot(ctx, request, terminalId, closedReason);
         const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
+        const ownedRuntime = sessionOwnedPtyRuntime(ctx, executionTargetId);
+        const lost = yield* findNativeTerminalHostLoss(ownedRuntime, request.threadId, terminalId);
+        if (lost) {
+          if (expectedRemoteResourceId && lost.resourceId !== expectedRemoteResourceId)
+            return yield* unconfirmed();
+          return endedTerminalSnapshot(
+            ctx,
+            request,
+            terminalId,
+            "host-lost",
+            yield* ctx.readHistory(request.threadId, terminalId),
+          );
+        }
         const attachOnly = () =>
           openTerminalAttachOnly({ ctx, request, terminalId, executionTargetId, existing });
         // A restored pane whose PTY the host lost opens read-only with its cold screen.
         if (request.attachOnly && Option.isNone(existing) && hostLostPane(ctx, request, terminalId))
           return yield* attachOnly();
+        const nativeRecovery = yield* findNativeTerminalRecovery(
+          ownedRuntime,
+          request,
+          terminalId,
+        ).pipe(Effect.mapError(unconfirmed));
+        if (
+          nativeRecovery &&
+          expectedRemoteResourceId &&
+          nativeRecovery.resourceId !== expectedRemoteResourceId
+        )
+          return yield* unconfirmed();
+        const recoveryLease = nativeRecovery?.resourceId ?? expectedRemoteResourceId;
         const recoverOnly =
-          Boolean(expectedRemoteResourceId) ||
+          Boolean(recoveryLease) ||
           (yield* resolveOwnedTerminalRecoverOnly({
-            runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
+            runtime: ownedRuntime,
             threadId: request.threadId,
             terminalId,
             existing,
@@ -142,14 +158,16 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
           terminalId,
           executionTargetId,
         });
-        const folder = yield* resolveFolder({
-          threadId: request.threadId,
-          terminalId,
-          executionTargetId,
-          cwd: request.cwd,
-          worktreePath: request.worktreePath,
-          env: request.env,
-        });
+        const folder: ResolvedTerminalFolder = nativeRecovery
+          ? { cwd: request.cwd }
+          : yield* resolveFolder({
+              threadId: request.threadId,
+              terminalId,
+              executionTargetId,
+              cwd: request.cwd,
+              worktreePath: request.worktreePath,
+              env: request.env,
+            });
         const localDefault =
           !request.shellSelection &&
           Option.isNone(existing) &&
@@ -223,7 +241,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
 
           const createdSession = session;
           session.remoteOwnerRecoveryRequired = recoverOnly;
-          session.expectedRemoteResourceId = expectedRemoteResourceId;
+          session.expectedRemoteResourceId = recoveryLease;
           if (recoverOnly) session.history = yield* ctx.readHistory(input.threadId, terminalId);
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
@@ -284,8 +302,8 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         }
 
         const liveSession = existing.value;
-        if (expectedRemoteResourceId) {
-          liveSession.expectedRemoteResourceId = expectedRemoteResourceId;
+        if (recoveryLease) {
+          liveSession.expectedRemoteResourceId = recoveryLease;
           liveSession.remoteOwnerRecoveryRequired = true;
         }
         const nextRuntimeEnv = normalizedRuntimeEnv(input.env);
@@ -369,9 +387,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         return snapshot(liveSession);
       }),
     );
-    // A queued caller owns its own deadline; it must not wait another full
-    // recovery budget after acquiring the thread lock. Cancellation reaches
-    // both warm confirmation and provisional cold attachment observers.
+    // Bound the whole queued recovery, including warm confirmation and cold attachment.
     return expectedRemoteResourceId
       ? operation.pipe(
           Effect.timeoutOrElse({ duration: 15_000, orElse: () => Effect.fail(unconfirmed()) }),

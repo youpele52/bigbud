@@ -90,6 +90,10 @@ export interface RemoteAgentOwnerStore extends RemoteAgentConnectionBindings {
     owner: RemoteAgentOwner,
     replaceTerminal?: boolean,
     expectedTarget?: string,
+    expectedTerminal?: Pick<
+      RemoteAgentOwner,
+      "resourceId" | "reservationId" | "epoch" | "connectionId"
+    >,
   ) => Promise<RemoteAgentOwner>;
   readonly rollbackPrepared?: (
     ownerKey: string,

@@ -11,9 +11,16 @@ import {
   type RemoteSessionFsShellOptions,
 } from "./remoteWorkspaceSessionFsBridge.handler.ts";
 import {
+  assertRemoteWorkspaceBridgeOperationSupported,
+  makeSelectedOwnerReadinessProbe,
   probeRemoteWorkspaceReadiness,
   type RemoteWorkspaceReadinessProbe,
 } from "./remoteWorkspaceReadiness.ts";
+import {
+  createSelectedSessionFsProvider,
+  type SessionFsOwnerCapability,
+} from "./remoteWorkspaceSessionFsBridge.ownerProvider.ts";
+import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
 export {
   createErrnoError,
   REMOTE_WORKSPACE_SESSION_STATE_PATH,
@@ -41,8 +48,18 @@ export async function createRemoteWorkspaceSessionFsBridge(
   prefix: string,
   readmeLines: ReadonlyArray<string>,
   readinessProbe: RemoteWorkspaceReadinessProbe = probeRemoteWorkspaceReadiness,
+  sessionFsOwner?: SessionFsOwnerCapability,
 ): Promise<RemoteWorkspaceSessionFsBridge> {
-  const readiness = await readinessProbe(workspaceTarget);
+  const selected = isDevSshOwnerSelected() && workspaceTarget.location === "remote";
+  // A provider-supplied readiness probe cannot grant authority to the legacy session FS.
+  assertRemoteWorkspaceBridgeOperationSupported(
+    workspaceTarget,
+    "session-filesystem",
+    selected && sessionFsOwner !== undefined,
+  );
+  const readiness =
+    selected && sessionFsOwner ? makeSelectedOwnerReadinessProbe(sessionFsOwner) : readinessProbe;
+  const readinessResult = await readiness(workspaceTarget);
   const bridge = await createRemoteWorkspaceBridge({ workspaceTarget, prefix, readmeLines });
   const stateRoot = path.join(bridge.bridgeDir, "session-state");
   await fs.mkdir(stateRoot, { recursive: true });
@@ -74,14 +91,21 @@ export async function createRemoteWorkspaceSessionFsBridge(
       conventions: "posix",
     },
     createSessionFsHandler: (sessionId = "bigbud-session-fs") =>
-      createRemoteSessionFsProvider({
-        sessionId,
-        initialCwd,
-        bridgeCwd: bridge.cwd,
-        stateRoot,
-        readiness,
-        runRemoteShell,
-      }),
+      selected && sessionFsOwner
+        ? createSelectedSessionFsProvider({
+            capability: sessionFsOwner,
+            initialCwd,
+            bridgeCwd: bridge.cwd,
+            stateRoot,
+          })
+        : createRemoteSessionFsProvider({
+            sessionId,
+            initialCwd,
+            bridgeCwd: bridge.cwd,
+            stateRoot,
+            readiness: readinessResult,
+            runRemoteShell,
+          }),
     cleanup: bridge.cleanup,
   };
 }

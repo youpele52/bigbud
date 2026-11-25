@@ -69,23 +69,7 @@ export interface BuildCliInput {
   readonly mockUpdateServerPort: Option.Option<string>;
 }
 
-const aliasedConfig = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
-  Config.all({
-    primary: primary.pipe(Config.option),
-    legacy: legacy.pipe(Config.option),
-  }).pipe(Config.map(({ primary, legacy }) => Option.firstSomeOf([primary, legacy])));
-
-const aliasedOptional = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
-  aliasedConfig(primary, legacy);
-
-const aliasedWithDefault = <A>(
-  primary: Config.Config<A>,
-  legacy: Config.Config<A>,
-  defaultValue: A,
-) =>
-  aliasedConfig(primary, legacy).pipe(
-    Config.map((value) => Option.getOrElse(value, () => defaultValue)),
-  );
+const optional = <A>(config: Config.Config<A>) => config.pipe(Config.option);
 
 function detectHostBuildPlatform(hostPlatform: string): typeof BuildPlatform.Type | undefined {
   if (hostPlatform === "darwin") return "mac";
@@ -194,55 +178,17 @@ export interface StagePackageJson {
 }
 
 const BuildEnvConfig = Config.all({
-  platform: aliasedOptional(
-    Config.schema(BuildPlatform, "BIGBUD_DESKTOP_PLATFORM"),
-    Config.schema(BuildPlatform, "T3CODE_DESKTOP_PLATFORM"),
-  ),
-  target: aliasedOptional(
-    Config.string("BIGBUD_DESKTOP_TARGET"),
-    Config.string("T3CODE_DESKTOP_TARGET"),
-  ),
-  arch: aliasedOptional(
-    Config.schema(BuildArch, "BIGBUD_DESKTOP_ARCH"),
-    Config.schema(BuildArch, "T3CODE_DESKTOP_ARCH"),
-  ),
-  version: aliasedOptional(
-    Config.string("BIGBUD_DESKTOP_VERSION"),
-    Config.string("T3CODE_DESKTOP_VERSION"),
-  ),
-  outputDir: aliasedOptional(
-    Config.string("BIGBUD_DESKTOP_OUTPUT_DIR"),
-    Config.string("T3CODE_DESKTOP_OUTPUT_DIR"),
-  ),
-  skipBuild: aliasedWithDefault(
-    Config.boolean("BIGBUD_DESKTOP_SKIP_BUILD"),
-    Config.boolean("T3CODE_DESKTOP_SKIP_BUILD"),
-    false,
-  ),
-  keepStage: aliasedWithDefault(
-    Config.boolean("BIGBUD_DESKTOP_KEEP_STAGE"),
-    Config.boolean("T3CODE_DESKTOP_KEEP_STAGE"),
-    false,
-  ),
-  signed: aliasedWithDefault(
-    Config.boolean("BIGBUD_DESKTOP_SIGNED"),
-    Config.boolean("T3CODE_DESKTOP_SIGNED"),
-    false,
-  ),
-  verbose: aliasedWithDefault(
-    Config.boolean("BIGBUD_DESKTOP_VERBOSE"),
-    Config.boolean("T3CODE_DESKTOP_VERBOSE"),
-    false,
-  ),
-  mockUpdates: aliasedWithDefault(
-    Config.boolean("BIGBUD_DESKTOP_MOCK_UPDATES"),
-    Config.boolean("T3CODE_DESKTOP_MOCK_UPDATES"),
-    false,
-  ),
-  mockUpdateServerPort: aliasedOptional(
-    Config.string("BIGBUD_DESKTOP_MOCK_UPDATE_SERVER_PORT"),
-    Config.string("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT"),
-  ),
+  platform: optional(Config.schema(BuildPlatform, "BIGBUD_DESKTOP_PLATFORM")),
+  target: optional(Config.string("BIGBUD_DESKTOP_TARGET")),
+  arch: optional(Config.schema(BuildArch, "BIGBUD_DESKTOP_ARCH")),
+  version: optional(Config.string("BIGBUD_DESKTOP_VERSION")),
+  outputDir: optional(Config.string("BIGBUD_DESKTOP_OUTPUT_DIR")),
+  skipBuild: Config.boolean("BIGBUD_DESKTOP_SKIP_BUILD").pipe(Config.withDefault(false)),
+  keepStage: Config.boolean("BIGBUD_DESKTOP_KEEP_STAGE").pipe(Config.withDefault(false)),
+  signed: Config.boolean("BIGBUD_DESKTOP_SIGNED").pipe(Config.withDefault(false)),
+  verbose: Config.boolean("BIGBUD_DESKTOP_VERBOSE").pipe(Config.withDefault(false)),
+  mockUpdates: Config.boolean("BIGBUD_DESKTOP_MOCK_UPDATES").pipe(Config.withDefault(false)),
+  mockUpdateServerPort: optional(Config.string("BIGBUD_DESKTOP_MOCK_UPDATE_SERVER_PORT")),
 });
 
 const resolveBooleanFlag = (flag: Option.Option<boolean>, envValue: boolean) =>

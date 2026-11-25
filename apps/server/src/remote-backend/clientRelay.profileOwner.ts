@@ -1,6 +1,7 @@
 import { openClientRelayOwner } from "./clientRelay.owner.ts";
 import { makeClientRelaySshChannels } from "./clientRelay.ssh.ts";
 import type { ResolvedRemoteBackendRelayProfile } from "./clientRelay.profiles.ts";
+import type { ClientRelaySshOwner } from "./clientRelay.ssh.owner.ts";
 
 export interface RemoteBackendRelayOwnedEndpoint {
   readonly baseUrl: string;
@@ -12,6 +13,7 @@ export async function openRemoteBackendRelayProfileOwner(
   profile: ResolvedRemoteBackendRelayProfile,
   allowedOrigins: ReadonlyArray<string>,
   signal: AbortSignal,
+  sshOwner?: ClientRelaySshOwner,
 ): Promise<RemoteBackendRelayOwnedEndpoint> {
   signal.throwIfAborted();
   if (
@@ -19,7 +21,7 @@ export async function openRemoteBackendRelayProfileOwner(
     profile.deployment.authorityId !== profile.profile.identity.authority.authorityId
   )
     throw new Error("Approved backend profile has inconsistent ownership.");
-  const ssh = makeClientRelaySshChannels(profile);
+  const ssh = makeClientRelaySshChannels({ ...profile, ...(sshOwner ? { sshOwner } : {}) });
   let owner: Awaited<ReturnType<typeof openClientRelayOwner>> | undefined;
   const abort = () => {
     owner?.dispose();

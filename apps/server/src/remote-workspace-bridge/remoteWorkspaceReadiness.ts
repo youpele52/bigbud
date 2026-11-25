@@ -1,3 +1,4 @@
+import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
 import type { ProcessRunResult } from "../utils/processRunner.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { runToolCommand, resolveToolTransportTarget } from "../tool-transport/toolTransport.ts";
@@ -16,6 +17,21 @@ export interface RemoteWorkspaceReadiness {
   readonly architecture: string;
 }
 
+/** A bound selected-owner capability. It is not a shell runner. */
+export interface SelectedWorkspaceOwnerCapability {
+  readonly targetId: string;
+  readonly workspaceRoot: string;
+  readonly withOwner: <A>(
+    targetId: string,
+    use: (owner: {
+      probeProofWorkspaceReadiness(input: {
+        executionTargetId: string;
+        workspaceRoot: string;
+      }): Promise<RemoteWorkspaceReadiness>;
+    }) => Promise<A>,
+  ) => Promise<A>;
+}
+
 export type RemoteWorkspaceCommandRunner = (input: {
   readonly workspaceTarget: WorkspaceTarget;
   readonly timeoutMs: number;
@@ -24,6 +40,36 @@ export type RemoteWorkspaceCommandRunner = (input: {
 export type RemoteWorkspaceReadinessProbe = (
   workspaceTarget: WorkspaceTarget,
 ) => Promise<RemoteWorkspaceReadiness>;
+
+type UnsupportedBridgeOperation = "readiness" | "session-filesystem";
+
+export class SelectedSshOwnerWorkspaceBridgeError extends Error {
+  readonly code = "unsupported-by-selected-ssh-owner";
+
+  constructor(
+    readonly operation: UnsupportedBridgeOperation,
+    detail?: string,
+  ) {
+    super(
+      detail
+        ? `Remote workspace ${operation} is unavailable with the source-dev SSH owner: ${detail}.`
+        : `Remote workspace ${operation} is unavailable with the source-dev SSH owner.`,
+    );
+    this.name = "SelectedSshOwnerWorkspaceBridgeError";
+  }
+}
+
+export function assertRemoteWorkspaceBridgeOperationSupported(
+  workspaceTarget: WorkspaceTarget,
+  operation: UnsupportedBridgeOperation,
+  hasBoundCapability = false,
+): void {
+  // This entry point has no selected owner capability; it must not dispatch
+  // generic shell or managed-agent operations as a substitute.
+  if (isDevSshOwnerSelected() && workspaceTarget.location === "remote" && !hasBoundCapability) {
+    throw new SelectedSshOwnerWorkspaceBridgeError(operation);
+  }
+}
 
 function normalizeRemoteOs(value: string): RemoteWorkspaceReadiness["os"] {
   switch (value.trim().toLowerCase()) {
@@ -58,6 +104,7 @@ export function makeRemoteWorkspaceReadinessProbe(
     }),
 ): RemoteWorkspaceReadinessProbe {
   return async (workspaceTarget) => {
+    assertRemoteWorkspaceBridgeOperationSupported(workspaceTarget, "readiness");
     if (!workspaceTarget.cwd) {
       throw new Error("Remote workspace readiness requires an explicit workspace root.");
     }
@@ -68,3 +115,42 @@ export function makeRemoteWorkspaceReadinessProbe(
 }
 
 export const probeRemoteWorkspaceReadiness = makeRemoteWorkspaceReadinessProbe();
+
+/** A selected caller supplies its admitted owner capability, never a shell runner. */
+export async function probeSelectedSshOwnerWorkspaceReadiness(
+  owner: {
+    probeProofWorkspaceReadiness(input: {
+      executionTargetId: string;
+      workspaceRoot: string;
+    }): Promise<RemoteWorkspaceReadiness>;
+  },
+  input: { executionTargetId: string; workspaceRoot: string },
+): Promise<RemoteWorkspaceReadiness> {
+  const { os, architecture } = await owner.probeProofWorkspaceReadiness(input);
+  return { os: normalizeRemoteOs(os), architecture: normalizeRemoteArchitecture(architecture) };
+}
+
+/** Readiness for a bound selected owner, without a provider-supplied shell probe. */
+export function makeSelectedOwnerReadinessProbe(
+  capability: SelectedWorkspaceOwnerCapability,
+): RemoteWorkspaceReadinessProbe {
+  return async (workspaceTarget) => {
+    if (
+      workspaceTarget.location !== "remote" ||
+      workspaceTarget.executionTargetId !== capability.targetId ||
+      workspaceTarget.cwd !== capability.workspaceRoot
+    ) {
+      throw new SelectedSshOwnerWorkspaceBridgeError("readiness");
+    }
+    const readiness = await capability.withOwner(capability.targetId, (owner) =>
+      owner.probeProofWorkspaceReadiness({
+        executionTargetId: capability.targetId,
+        workspaceRoot: capability.workspaceRoot,
+      }),
+    );
+    return {
+      os: normalizeRemoteOs(readiness.os),
+      architecture: normalizeRemoteArchitecture(readiness.architecture),
+    };
+  };
+}

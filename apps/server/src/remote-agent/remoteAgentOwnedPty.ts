@@ -58,6 +58,12 @@ export interface OwnedRemoteAgentPtyOptions {
   readonly commandLaunch?: (input: PtySpawnInput) => RemoteAgentCommandLaunch | undefined;
   /** Remote-agent PTYs expose their host's policy, close-all and events (never the local host). */
   readonly remoteHostControls?: boolean;
+  /** Protocol 1.10 X2 inventory identity for this pane. */
+  readonly paneIdentity?: (input: PtySpawnInput) => {
+    readonly threadId: string;
+    readonly paneId: string;
+    readonly kind: "local" | "managed-ssh";
+  };
 }
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
@@ -255,6 +261,7 @@ export function makeOwnedRemoteAgentPty(
           cols: input.cols,
           rows: input.rows,
           lifecycle,
+          ...(options.paneIdentity ? { paneIdentity: options.paneIdentity(input) } : {}),
           onRejected: releaseDefinitiveFailure,
         });
       }

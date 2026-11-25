@@ -9,6 +9,14 @@ import {
   prepareRemoteAgentWorkspacePty,
   type RemoteAgentPtyResolver,
 } from "../remote-agent/remoteAgentPtyAdapter.ts";
+import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { createRemoteWorkspaceBridge } from "./remoteWorkspaceBridge.ts";
+import {
+  bindSessionFsOwner,
+  decodeSessionFsText,
+  sessionFsUnavailable,
+  type SessionFsOwnerWorkspace,
+} from "./remoteWorkspaceSessionFsBridge.owner.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import {
   createRemoteWorkspaceSessionFsBridge,
@@ -19,6 +27,9 @@ import {
   createRemoteWorkspaceAcpTerminal,
   type AcpTerminalProcess,
 } from "./remoteWorkspaceAcpTerminal.ts";
+import type { AcpTerminalSshOwner } from "./remoteWorkspaceAcpTerminal.owner.ts";
+import { registerApprovedTerminalHandlers } from "./remoteWorkspaceAcpBridge.approvedTerminal.ts";
+import type { AcpTerminalApprovalProducer } from "./remoteWorkspaceAcpApproval.ts";
 
 const DEFAULT_TERMINAL_OUTPUT_BYTE_LIMIT = 64 * 1024;
 
@@ -35,9 +46,10 @@ export interface RemoteWorkspaceAcpBridge {
   readonly cwd: string;
   readonly initialCwd: string;
   readonly clientCapabilities: {
-    readonly fs: { readonly readTextFile: true; readonly writeTextFile: true };
-    readonly terminal: true;
+    readonly fs: { readonly readTextFile: true; readonly writeTextFile: boolean };
+    readonly terminal: boolean;
   };
+  bindCaller?(sessionId: string): void;
   registerHandlers(acp: AcpSessionRuntimeShape): Effect.Effect<void>;
   cleanup(): Promise<void>;
 }
@@ -77,7 +89,85 @@ export async function createRemoteWorkspaceAcpBridge(input: {
   readonly prefix: string;
   readonly readmeLines: ReadonlyArray<string>;
   readonly readinessProbe?: RemoteWorkspaceReadinessProbe;
+  readonly sessionFsOwner?: SessionFsOwnerWorkspace;
+  /**
+   * Composed approved-terminal producer. The selected bridge advertises
+   * `terminal` only when both the owner port and this producer exist.
+   */
+  readonly acpTerminal?: {
+    readonly owner: AcpTerminalSshOwner;
+    readonly producer: AcpTerminalApprovalProducer;
+    readonly threadId: string;
+    readonly sessionEpoch: number;
+  };
 }): Promise<RemoteWorkspaceAcpBridge> {
+  if (isDevSshOwnerSelected()) {
+    const reader = await bindSessionFsOwner(input.sessionFsOwner, input.workspaceTarget);
+    const bridge = await createRemoteWorkspaceBridge(input);
+    const denied = () => Effect.fail(acpInternalError(sessionFsUnavailable()));
+    const approved = input.acpTerminal;
+    const ownedTerminals = new Map<string, AcpRemoteTerminal>();
+    let callerSessionId: string | undefined;
+    return {
+      cwd: bridge.cwd,
+      initialCwd: reader.workspaceRoot,
+      clientCapabilities: {
+        fs: { readTextFile: true, writeTextFile: false },
+        terminal: approved !== undefined,
+      },
+      bindCaller: (sessionId) => {
+        callerSessionId = sessionId;
+        reader.bindCaller?.(sessionId);
+      },
+      registerHandlers: (acp) =>
+        Effect.gen(function* () {
+          yield* acp.handleReadTextFile((request) =>
+            Effect.tryPromise({
+              try: async () => ({
+                content: readTextLines(
+                  decodeSessionFsText(
+                    await reader.readBytes(request.sessionId, request.path, bridge.cwd),
+                  ),
+                  request.line,
+                  request.limit,
+                ),
+              }),
+              catch: acpInternalError,
+            }),
+          );
+          yield* acp.handleWriteTextFile(denied);
+          if (!approved) {
+            yield* acp.handleCreateTerminal(denied);
+            return;
+          }
+          yield* registerApprovedTerminalHandlers({
+            acp,
+            owner: approved.owner,
+            producer: approved.producer,
+            threadId: approved.threadId,
+            sessionEpoch: approved.sessionEpoch,
+            callerSessionId: () => callerSessionId,
+            executionTargetId: input.workspaceTarget.executionTargetId,
+            workspaceRoot: reader.workspaceRoot,
+            bridgeCwd: bridge.cwd,
+            resolveCwd: (cwd) => resolveSessionFsPath(cwd, reader.workspaceRoot, bridge.cwd).path,
+            terminals: ownedTerminals,
+            appendOutput: appendTerminalOutput,
+            defaultOutputByteLimit: DEFAULT_TERMINAL_OUTPUT_BYTE_LIMIT,
+          });
+        }),
+      cleanup: async () => {
+        await Promise.all(
+          [...ownedTerminals.values()].map((terminal) =>
+            terminal.process.close(true).catch(() => undefined),
+          ),
+        );
+        ownedTerminals.clear();
+        reader.close();
+        await bridge.cleanup();
+      },
+    };
+  }
   const sessionFs = await createRemoteWorkspaceSessionFsBridge(
     input.workspaceTarget,
     input.prefix,

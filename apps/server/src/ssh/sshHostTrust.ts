@@ -10,6 +10,7 @@ import type {
 
 import { formatSshDestination, parseSshExecutionTarget } from "./sshExecutionTarget.ts";
 import { describeSshLocalCommandFailure, runSshLocalCommand } from "./sshLocalCommand.ts";
+import { assertLegacySshLaunchAllowed } from "./sshOwnerDevMode.ts";
 import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 import {
   buildSshHostTrustRequiredMessage,
@@ -57,6 +58,7 @@ export async function inspectSshHostTrust(
   targetId: string,
   approvedPrompt?: string,
 ): Promise<void> {
+  assertLegacySshLaunchAllowed();
   assertSshTargetConnected(targetId);
   const target = parseSshExecutionTarget(targetId);
   if (!target) throw new Error(`Invalid SSH execution target '${targetId}'.`);

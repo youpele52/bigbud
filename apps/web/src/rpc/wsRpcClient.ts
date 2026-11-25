@@ -25,6 +25,7 @@ import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import { createMetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
+import { createBackendDrainRpcMethods } from "./wsRpcClient.backendDrain";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 import { resolveBoundWsRpcClient } from "./backendScope.state";
 
@@ -224,6 +225,7 @@ export function createWsRpcClient(
     server: {
       ...createDatabaseCompactionRpcMethods(transport),
       ...createMetadataWarningRpcMethods(transport),
+      ...createBackendDrainRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
@@ -256,8 +258,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.serverSetThreadRetentionPolicy](input)),
       setThreadPinned: (input) =>
         transport.request((client) => client[WS_METHODS.serverSetThreadPinned](input)),
-      readDocumentUrl: (input) =>
-        transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
+      readDocumentUrl: (input, options) =>
+        transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input), options),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
       retryTextGeneration: (input) =>

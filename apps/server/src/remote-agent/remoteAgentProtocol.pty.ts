@@ -7,6 +7,10 @@ import type {
 
 export interface RemoteAgentPtyCreateRequest extends RemoteAgentPtyCreateLifecycleFields {
   readonly requestId: string;
+  /** Added in 1.10; empty on a legacy create. */
+  readonly threadId?: string;
+  readonly paneId?: string;
+  readonly paneKind?: "local" | "managed-ssh";
   readonly ptyId: string;
   readonly requestDigest: Uint8Array;
   readonly workspaceHandle: string;

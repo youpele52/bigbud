@@ -29,6 +29,8 @@ export interface OwnedPtyRuntime {
    * runtime. Liveness and close address one owner's host PTY directly.
    */
   readonly localSshClient?: OwnedPtyLocalSshClient;
+  /** Startup-bound root of the selected native fixture, not a renderer path. */
+  readonly nativeSshWorkspaceRoot?: string;
   /**
    * Liveness and confirmed close (terminate, then a verified exit) of one owner's PTY in the local
    * terminal host, without attaching to it: a thread deletion closes host panes no view reopened.
@@ -40,6 +42,8 @@ export interface OwnedPtyRuntime {
 export type OwnedPtyHostedStatus = "live" | "gone" | "unknown";
 
 export interface OwnedPtyLocalSshClient {
+  /** Recognize this client's durable loss marker without calling or starting the host. */
+  readonly isHostLost?: (owner: RemoteAgentOwner) => boolean;
   readonly status: (owner: RemoteAgentOwner, signal?: AbortSignal) => Promise<OwnedPtyHostedStatus>;
   /** Close with terminate (the host's escalation) and confirm the exit; rejects otherwise. */
   readonly close: (owner: RemoteAgentOwner, signal?: AbortSignal) => Promise<void>;

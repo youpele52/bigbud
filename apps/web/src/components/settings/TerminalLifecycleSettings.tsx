@@ -6,7 +6,7 @@ import { SettingsRow } from "./settingsLayout";
 
 export const KEEP_TERMINALS_RUNNING_TITLE = "Keep terminals running after quitting";
 const KEEP_TERMINALS_RUNNING_DESCRIPTION =
-  "Terminals keep running in the background when you quit bigbud and reconnect the next time you open it. Idle terminals still close after 10 minutes.";
+  "Terminals keep running in the background when you quit bigbud and reconnect the next time you open it. Idle terminals still close after 10 minutes. When the native SSH owner is enabled, direct SSH terminals close on quit, restart, or update. Use tmux or screen on the remote host to keep work running.";
 const WINDOWS_UNAVAILABLE_DESCRIPTION = "Not available on Windows yet.";
 const TERMINAL_HOST_OFF_DESCRIPTION = "Available when the background terminal host is enabled.";
 

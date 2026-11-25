@@ -4,6 +4,8 @@ import path from "node:path";
 
 import { Effect, Option } from "effect";
 
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
+import { isDevSshOwnerSelected, LegacySshDisabledError } from "../../ssh/sshOwnerDevMode.ts";
 import { PtySpawnError, type PtySpawnInput } from "../Services/PTY";
 import { makeBoundedShellFileCheck } from "./PtyShellExecutable.pending";
 
@@ -43,11 +45,14 @@ export async function isLocalShellExecutable(input: {
 /** Fails with a retryable `PtySpawnError` when a local POSIX shell cannot be executed. */
 export const ensureLocalShellExecutable = (
   adapter: string,
-  input: Pick<PtySpawnInput, "shell" | "cwd">,
+  input: Pick<PtySpawnInput, "shell" | "cwd" | "executionTargetId">,
   timeoutMs = LOCAL_SHELL_CHECK_TIMEOUT_MS,
   check: typeof isLocalShellExecutable = isLocalShellExecutable,
-): Effect.Effect<void, PtySpawnError> =>
-  process.platform === "win32"
+): Effect.Effect<void, PtySpawnError> => {
+  if (isDevSshOwnerSelected() && parseSshExecutionTarget(input.executionTargetId)) {
+    return Effect.fail(ptySpawnErrorFromThrown(adapter, new LegacySshDisabledError()));
+  }
+  return process.platform === "win32"
     ? Effect.void
     : Effect.promise(() => check({ shell: input.shell, cwd: input.cwd })).pipe(
         Effect.timeoutOption(timeoutMs),
@@ -64,6 +69,7 @@ export const ensureLocalShellExecutable = (
               ),
         ),
       );
+};
 
 export function ptySpawnErrorFromThrown(adapter: string, cause: unknown): PtySpawnError {
   return new PtySpawnError({

@@ -4,6 +4,21 @@ import {
 } from "./remoteAgentComposition.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { parseSshExecutionTarget, parseSshExecutionTransport } from "../ssh/sshExecutionTarget.ts";
+import {
+  clearInstalledRemoteAgentStartups,
+  installedRemoteAgentStartup,
+  installedRemoteAgentStartupRefusal,
+  installedRemoteAgentStartups,
+  refuseInstalledRemoteAgentStartup,
+  registerInstalledRemoteAgentStartup,
+} from "./remoteAgentInstalledStartup.state.ts";
+
+export {
+  installedRemoteAgentStartup,
+  installedRemoteAgentStartupRefusal,
+  refuseInstalledRemoteAgentStartup,
+  registerInstalledRemoteAgentStartup,
+};
 
 export const DEFAULT_REMOTE_AGENT_BINARY = "$HOME/.bigbud/agent/bin/current";
 
@@ -58,7 +73,15 @@ export function isRemoteAgentExecutionTarget(
   );
 }
 
-export function getConfiguredRemoteAgentComposition(): RemoteAgentComposition | null {
+export function getConfiguredRemoteAgentComposition(
+  executionTargetId?: string,
+): RemoteAgentComposition | null {
+  // A verified installed startup wins for its exact endpoint: no fallback.
+  if (executionTargetId) {
+    if (installedRemoteAgentStartupRefusal(executionTargetId)) return null;
+    const installed = installedRemoteAgentStartup(executionTargetId);
+    if (installed) return installed;
+  }
   const configuration = resolveRemoteAgentConfiguration();
   if (!configuration.binaryPath) return null;
   const existing = compositions.get(configuration.binaryPath);
@@ -72,6 +95,10 @@ export function getConfiguredRemoteAgentComposition(): RemoteAgentComposition | 
 export function liveConfiguredRemoteAgentConnection(
   executionTargetId: string,
 ): RemoteAgentConnection | null {
+  for (const composition of installedRemoteAgentStartups().values()) {
+    const connection = composition.pool.liveConnection(executionTargetId);
+    if (connection) return connection;
+  }
   for (const composition of compositions.values()) {
     const connection = composition.pool.liveConnection(executionTargetId);
     if (connection) return connection;
@@ -84,12 +111,21 @@ export function disconnectConfiguredRemoteAgentTarget(
   executionTargetId: string,
   error: Error,
 ): void {
-  for (const composition of compositions.values()) {
+  for (const composition of [
+    ...installedRemoteAgentStartups().values(),
+    ...compositions.values(),
+  ]) {
     composition.pool.disconnect(executionTargetId, error);
   }
 }
 
 export function closeConfiguredRemoteAgentCompositions(): void {
-  for (const composition of compositions.values()) composition.pool.closeAll();
+  for (const composition of [
+    ...installedRemoteAgentStartups().values(),
+    ...compositions.values(),
+  ]) {
+    composition.pool.closeAll();
+  }
+  clearInstalledRemoteAgentStartups();
   compositions.clear();
 }

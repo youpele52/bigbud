@@ -19,6 +19,7 @@ import type { CopilotClientOptions, CopilotSession, SessionEvent } from "@github
 import { ProviderAdapterRequestError } from "../../Errors.ts";
 import { type EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
+import type { SessionFsOwnerCapability } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ownerProvider.ts";
 import type {
   ProviderThreadSnapshot,
   ProviderThreadTurnSnapshot,
@@ -102,6 +103,7 @@ export interface CopilotAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
   readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
+  readonly sessionFsOwner?: SessionFsOwnerCapability;
 }
 
 export function toMessage(cause: unknown, fallback: string): string {

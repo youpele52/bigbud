@@ -24,6 +24,7 @@ import type { RemoteAgentOwner } from "../remote-agent/remoteAgentOwners.ts";
 import type { RemoteAgentPtyCreateDefaults } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
 import type { RemoteAgentCommandLaunch } from "../remote-agent/remoteAgentTerminalLaunch.ts";
 import { parseSshExecutionTarget } from "../ssh/sshExecutionTarget.ts";
+import { isDevSshOwnerSelected, LegacySshDisabledError } from "../ssh/sshOwnerDevMode.ts";
 import type { OwnedPtyRuntime } from "../terminal/Services/OwnedPtyRuntime.ts";
 import {
   PtySpawnError,
@@ -38,6 +39,11 @@ import {
   localTerminalHostPlatform,
 } from "./localTerminalHost.launchSpec.ts";
 import { makeLocalTerminalHostSshClient } from "./localTerminalHost.directSsh.client.ts";
+import { paneIdentityForOwnerKey } from "./localTerminalHost.retirement.ts";
+import {
+  makeNativeDirectSshTerminal,
+  type NativeDirectSshTerminalOptions,
+} from "./localTerminalHost.directSsh.owner.ts";
 import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
 
 /** Lifecycle-managed like every host PTY; idle facts come from the server's owner hints. */
@@ -91,10 +97,26 @@ export interface LocalTerminalHostDirectSshOptions {
   readonly isClosed: () => boolean;
   readonly log?: (message: string, detail?: Record<string, unknown>) => void;
   readonly home?: string;
+  /** Isolated opt-in. The selected owner is the only direct SSH terminal authority. */
+  readonly nativeOwner?: NativeDirectSshTerminalOptions;
 }
 
-export function makeLocalTerminalHostDirectSsh(options: LocalTerminalHostDirectSshOptions) {
-  const { controller, runtime: base } = options;
+type DirectSshAdapter = Pick<PtyAdapterShape, "spawn"> & {
+  readonly runtimeForTarget: (targetId: string) => OwnedPtyRuntime | undefined;
+};
+
+export function makeLocalTerminalHostDirectSsh(
+  options: LocalTerminalHostDirectSshOptions & { readonly nativeOwner?: never },
+): DirectSshAdapter & { readonly runtime: OwnedPtyRuntime };
+export function makeLocalTerminalHostDirectSsh(
+  options: LocalTerminalHostDirectSshOptions,
+): DirectSshAdapter;
+export function makeLocalTerminalHostDirectSsh(
+  options: LocalTerminalHostDirectSshOptions,
+): DirectSshAdapter | (DirectSshAdapter & { readonly runtime: OwnedPtyRuntime }) {
+  const { controller, runtime: base, nativeOwner } = options;
+  if (nativeOwner)
+    return makeNativeDirectSshTerminal(nativeOwner, isDirectSshTerminalTarget, options.isClosed);
   const home = options.home ?? homedir();
   const runtime: OwnedPtyRuntime = Object.freeze({
     ...base,
@@ -125,6 +147,12 @@ export function makeLocalTerminalHostDirectSsh(options: LocalTerminalHostDirectS
       hostLifecycle: LOCAL_TERMINAL_HOST_DIRECT_SSH_LIFECYCLE,
       localLaunchEnvironment: (input) => localTerminalHostLaunchEnvironment(input.env, input.cwd),
       commandLaunch: (input) => ({ shell: input.shell, args: [...(input.args ?? [])] }),
+      paneIdentity: (input) =>
+        paneIdentityForOwnerKey(input.ownerKey, "managed-ssh") ?? {
+          threadId: "",
+          paneId: "",
+          kind: "managed-ssh",
+        },
     },
   );
   const retainedOwner = (input: PtySpawnInput) =>
@@ -138,6 +166,7 @@ export function makeLocalTerminalHostDirectSsh(options: LocalTerminalHostDirectS
 
   const spawn: PtyAdapterShape["spawn"] = Effect.fn("localTerminalHost.directSsh.spawn")(
     function* (input) {
+      if (isDevSshOwnerSelected()) return yield* directSshSpawnError(new LegacySshDisabledError());
       if (!input.ownerKey) return yield* options.fallback.spawn(input);
       let command: RemoteAgentCommandLaunch | undefined;
       if (!input.recoverOnly) {
@@ -190,7 +219,12 @@ export function makeLocalTerminalHostDirectSsh(options: LocalTerminalHostDirectS
       });
     },
   );
-  return { runtime, spawn };
+  return {
+    runtime,
+    runtimeForTarget: (targetId: string) =>
+      isDirectSshTerminalTarget(targetId) ? runtime : undefined,
+    spawn,
+  };
 }
 
 function directSshSpawnError(cause: unknown) {

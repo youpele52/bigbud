@@ -5,6 +5,7 @@ import type { PiOrchestrationBridge } from "../../../orchestration-tools/PiOrche
 import type { ProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
+import type { PiRpcOwnerBinding } from "./RpcProcess.owner.ts";
 
 export interface PiRpcImage {
   readonly type: "image";
@@ -331,12 +332,18 @@ export interface PiRpcProcessOptions {
   readonly sessionFile?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly orchestrationBridge?: PiOrchestrationBridge;
+  /**
+   * Selected dev SSH owner port plus its exact provider session scope. When present, remote Pi
+   * starts only through this typed lease; the legacy SSH child is never spawned.
+   */
+  readonly ownerBinding?: PiRpcOwnerBinding;
 }
 
 export interface PiRpcProcess {
   readonly supportsAgentSettled?: boolean;
   readonly supportsPromptDisposition?: boolean;
-  readonly child: ChildProcessWithoutNullStreams;
+  /** Present only for a locally spawned Pi child. Owner leases never fabricate one. */
+  readonly child?: ChildProcessWithoutNullStreams;
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly cwd?: string;
@@ -347,5 +354,10 @@ export interface PiRpcProcess {
   ) => Promise<PiRpcResponse<TData>>;
   readonly write: (command: PiRpcCommand) => Promise<void>;
   readonly subscribe: (listener: (message: PiRpcStdoutMessage) => void) => () => void;
+  /** Confirmed teardown of this exact transport (child signal path or owner lease cancel). */
   readonly stop: () => Promise<void>;
+  /** False once the transport ended, whatever ended it. */
+  readonly isAlive: () => boolean;
+  /** Observes the single transport end; returns an unsubscribe. */
+  readonly onExit: (listener: () => void) => () => void;
 }

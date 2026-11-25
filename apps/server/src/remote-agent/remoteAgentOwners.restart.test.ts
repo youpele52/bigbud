@@ -40,6 +40,7 @@ vi.mock("../ssh/sshVerification.ts", () => ({
 }));
 vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
+  buildSshTerminalCandidateInvocation: () => ({ command: "fixture", args: [] }),
 }));
 // A lost controller link is permanent here: give up reattaching at once instead of
 // retrying until the 24 h result retention would have expired.
@@ -354,9 +355,7 @@ describe("application terminal owner recovery after server services restart", ()
             outputSequence: 17,
           }));
         } else {
-          const attached = requests
-            .filter((entry) => entry.frame.type === "ptyAttachRequest")
-            .at(-1)!;
+          const attached = requests.findLast((entry) => entry.frame.type === "ptyAttachRequest")!;
           expect(
             attached.frame.type === "ptyAttachRequest" && attached.frame.value.afterSequence,
           ).toBe(17);

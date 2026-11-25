@@ -12,6 +12,12 @@ import { GitCommandError } from "@bigbud/contracts";
 import { type ExecuteGitInput, type ExecuteGitResult } from "../Services/GitCore.ts";
 import { quoteGitCommand, toGitCommandError } from "./GitCoreUtils.ts";
 import { createTrace2Monitor, StatusRemoteRefreshCacheKey } from "./GitCoreExecutor.trace2.ts";
+import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import {
+  initiatingGitDenied,
+  initiatingGitLocalEnv,
+  isInitiatingGitLocal,
+} from "./GitCore.initiatingFence.ts";
 
 export const DEFAULT_TIMEOUT_MS = 30_000;
 export const DEFAULT_MAX_OUTPUT_BYTES = 1_000_000;
@@ -112,10 +118,7 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
     input: ExecuteGitInput,
     onPhysicalExit?: () => void,
   ): Effect.fn.Return<ExecuteGitResult, GitCommandError, never> {
-    const commandInput = {
-      ...input,
-      args: [...input.args],
-    } as const;
+    const commandInput = input;
     const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const maxOutputBytes = input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
     const truncateOutputAtMaxBytes = input.truncateOutputAtMaxBytes ?? false;
@@ -138,6 +141,7 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
               ...process.env,
               ...input.env,
               ...trace2Monitor.env,
+              ...(isDevSshOwnerSelected() ? initiatingGitLocalEnv : undefined),
             },
           }),
         )
@@ -220,15 +224,20 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
       ),
     );
   });
-  return (input: ExecuteGitInput) => {
+  return Effect.fnUntraced(function* (request: ExecuteGitInput) {
+    const input = { ...request, args: [...request.args] };
+    // Check before Trace2, the reservation identity probe, or any process creation.
+    if (isDevSshOwnerSelected() && !isInitiatingGitLocal(input.args)) {
+      return yield* initiatingGitDenied(input);
+    }
     if (
       Option.isNone(workspaceSql) ||
       input.operation === "worktree.lifecycle" ||
       !gitNeedsWorkspaceReservation(input.args)
     )
-      return execute(input);
+      return yield* execute(input);
     let physicallySettled = false;
-    return execute({
+    return yield* execute({
       ...input,
       args: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
       operation: "worktree.access.identity",
@@ -249,7 +258,7 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
       ),
       Effect.mapError(toGitCommandError(input, "workspace mutation admission failed.")),
     );
-  };
+  });
 });
 
 // ---------------------------------------------------------------------------

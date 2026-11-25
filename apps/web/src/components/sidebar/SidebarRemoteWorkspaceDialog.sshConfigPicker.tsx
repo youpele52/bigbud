@@ -13,16 +13,9 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { SearchableMenuList } from "../ui/SearchableMenuList";
+import { sshConfigHostHint } from "./SidebarRemoteWorkspaceDialog.sshConfigHint";
 
-export function sshConfigHostHint(host: ServerSshConfigHost): string {
-  return [
-    host.hostName,
-    host.user ? `user ${host.user}` : null,
-    host.port ? `port ${host.port}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
+export { sshConfigHostHint };
 
 function groupBySource(hosts: ReadonlyArray<ServerSshConfigHost>) {
   const groups = new Map<string, ServerSshConfigHost[]>();

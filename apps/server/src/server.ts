@@ -27,6 +27,8 @@ import { StateDirLockLive } from "./startup/backendInstance";
 import { withOwnershipShutdown } from "./startup/ownershipShutdown";
 import { prepareProviderServicePath } from "./provider-provisioning/servicePath.runtime.ts";
 import { makeRoutesLayer } from "./server.routes.ts";
+import { configureDevSshOwner } from "./server.sshOwnerDev.ts";
+import { DevSshOwnerRuntimeLive } from "./ssh/sshOwnerDevRuntime.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
@@ -74,6 +76,7 @@ import {
   ReactorLayerLive,
 } from "./server.coreLayers.ts";
 import { AppQuitIntentLive } from "./lifecycle/AppQuitIntent.ts";
+import { SshLegacyDrainHandlerLive } from "./startup/backendDrain.live.ts";
 import { ProcessLedgerLive } from "./process-ledger/Layers/ProcessLedger.ts";
 import { makeProviderInfrastructureLayerLive } from "./server.providerLayers.ts";
 import { BackgroundMaintenanceLayerLive } from "./server.maintenanceLayers.ts";
@@ -90,7 +93,8 @@ import { RemoteTerminalAvailabilityLive } from "./remote-backend/terminalAvailab
 import { PtyAdapterLive } from "./server.pty.ts";
 import { TerminalActivityLive } from "./terminal/Layers/TerminalActivity.ts";
 
-const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
+const DevSshOwnerLayer = DevSshOwnerRuntimeLive.pipe(Layer.provide(PersistenceLayerLive));
+const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers(DevSshOwnerLayer);
 const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
 const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
 const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
@@ -106,6 +110,7 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
   : PtyAdapterLive;
 const TerminalLayerLive = TerminalManagerLive.pipe(
   Layer.provideMerge(TerminalActivityLive),
+  Layer.provide(DevSshOwnerLayer),
   Layer.provide(TerminalPtyLayerLive),
   Layer.provide(
     ShellLaunchPlannerLive.pipe(
@@ -124,7 +129,7 @@ const OrchestrationEngineLayerLive = withEngineTerminal(
   Layer.provide(ProfileVisibleBrowserControlLive),
   // One shared in-memory grant store; grants and challenges are lost on restart by design.
   Layer.provide(ThreadCoordinationGrantsLive),
-  Layer.provide(WorkspaceModeGateLive),
+  Layer.provide(WorkspaceModeGateLive.pipe(Layer.provide(DevSshOwnerLayer))),
 );
 
 const OrchestrationCommandLayerLive = CommandGatewayLive.pipe(
@@ -152,7 +157,7 @@ const CheckpointingLayerLive = Layer.empty.pipe(
 
 const ProviderInfrastructureLayerLive = makeProviderInfrastructureLayerLive(
   configuredRemoteAgentLayers,
-);
+).pipe(Layer.provide(DevSshOwnerLayer));
 
 const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
 const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
@@ -207,8 +212,12 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProcessLedgerLive),
 );
 
-const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
+const RuntimeDependenciesWithDrainLive = SshLegacyDrainHandlerLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),
+);
+
+const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
+  Layer.provideMerge(RuntimeDependenciesWithDrainLive),
 );
 
 const RemoteServerLive = withRemoteCallbackRuntime(
@@ -256,6 +265,7 @@ function localServerLayer(config: ServerConfigShape) {
 
   // The shutdown signal finalizes first, before routes close their WebSocket streams.
   return withServerShutdownSignal(serverApplicationLayer).pipe(
+    Layer.provideMerge(DevSshOwnerLayer),
     Layer.provideMerge(RuntimeServicesLive),
     Layer.provideMerge(HttpServerLive),
     // One backend per state directory: acquired before the port binds and persistence opens,
@@ -276,6 +286,7 @@ type ServerApplicationLayer = Layer.Layer<
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
+    yield* Effect.sync(() => configureDevSshOwner(config, import.meta.url));
     if (config.mode === "remote") {
       yield* Effect.try({
         try: () => {

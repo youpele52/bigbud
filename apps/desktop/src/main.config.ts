@@ -9,6 +9,7 @@ import {
   resolveTailscaleServeHttpsPort,
 } from "@bigbud/shared/desktopReleaseIdentity";
 
+import { resolveDesktopSshOwnerDevProfile } from "./backend/backendEnv.sshOwner";
 import { resolveCuaDriverHostBundleId } from "./backend/cuaDriver.hostIdentity";
 import {
   readLinuxGpuFallbackMarker,
@@ -23,7 +24,7 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
   const releaseIdentity = isDevelopment
     ? desktopReleaseIdentityForChannel("stable")
     : resolveDesktopReleaseIdentity(app.getVersion());
-  const configuredBaseDir = process.env.BIGBUD_HOME?.trim() || process.env.T3CODE_HOME?.trim();
+  const configuredBaseDir = process.env.BIGBUD_HOME?.trim() || undefined;
   const baseDir =
     configuredBaseDir ?? Path.join(OS.homedir(), ".bigbud", ...releaseIdentity.baseDirSuffix);
   // Same rule as the server (`deriveServerPaths`): development state lives in
@@ -37,8 +38,10 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
       ? "T3 Code (Alpha)"
       : null;
   const linuxGpuFallbackMarkerPath = resolveLinuxGpuFallbackMarkerPath(stateDir);
+  const sshOwnerProfile = resolveDesktopSshOwnerDevProfile(app.isPackaged, process.env);
 
   return {
+    isolatedUserDataPath: sshOwnerProfile ? Path.join(sshOwnerProfile, "electron") : undefined,
     appDisplayName,
     appUserModelId: releaseIdentity.appUserModelId,
     baseDir,

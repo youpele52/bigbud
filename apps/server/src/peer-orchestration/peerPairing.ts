@@ -26,17 +26,32 @@ import { Effect } from "effect";
 
 import { isTerminalPeerDispatchState } from "./peerDispatch.transition.ts";
 import type { PeerCoordinatorDeps } from "../orchestration-tools/peerDispatch.deps.ts";
-import { sshHostKeyFingerprint } from "./peerCoordinator.transport.ts";
-import { ensureCoordinatorPeerKey, parsePeerPublicKey } from "./peerSshKey.ts";
+import {
+  ensureCoordinatorPeerKey,
+  parsePeerPublicKey,
+  type PeerCoordinatorKeyOwner,
+} from "./peerSshKey.ts";
+import {
+  scanPeerHostKeys,
+  sshHostKeyFingerprint,
+  type PeerHostKeyInspectionOwner,
+} from "./peerCoordinator.transport.ts";
 
 export interface PeerPairingDeps {
   readonly coordinator: PeerCoordinatorDeps;
   readonly keyDirectory: string;
   readonly kick: (workerAuthorityId: string) => Effect.Effect<void, Error>;
-  readonly scanHostKeys: (host: string, port: number) => Promise<ReadonlyArray<PeerScannedHostKey>>;
+  readonly scanHostKeys?: (
+    host: string,
+    port: number,
+  ) => Promise<ReadonlyArray<PeerScannedHostKey>>;
   readonly ensureKey?: (
     directory: string,
   ) => Promise<{ readonly publicKey: { fingerprint: string } }>;
+  /** Owner port for the profile-bound coordinator identity. */
+  readonly peerOwner?: PeerCoordinatorKeyOwner;
+  /** Owner port for one-shot exact-target host-key inspection. */
+  readonly hostKeyOwner?: PeerHostKeyInspectionOwner;
 }
 
 const fail = (code: PeerPairingError["code"], message: string) =>
@@ -130,8 +145,9 @@ export const handlePeerPairingRequest = Effect.fn("peerPairing.handle")(function
     case "status":
       return yield* result(deps);
     case "ensure-key": {
+      const ensure = deps.ensureKey ?? (() => ensureCoordinatorPeerKey(deps.peerOwner));
       yield* Effect.tryPromise({
-        try: () => (deps.ensureKey ?? ensureCoordinatorPeerKey)(deps.keyDirectory),
+        try: () => ensure(deps.keyDirectory),
         catch: (cause) =>
           new PeerPairingError({
             code: "key-unavailable",
@@ -141,12 +157,18 @@ export const handlePeerPairingRequest = Effect.fn("peerPairing.handle")(function
       return yield* result(deps);
     }
     case "scan-host-key": {
+      const scan =
+        deps.scanHostKeys ??
+        ((host: string, port: number) => scanPeerHostKeys(deps.hostKeyOwner, host, port));
       const scannedHostKeys = yield* Effect.tryPromise({
-        try: () => deps.scanHostKeys(request.host, request.port),
-        catch: () =>
+        try: () => scan(request.host, request.port),
+        catch: (cause) =>
           new PeerPairingError({
             code: "host-key-scan-failed",
-            message: `Could not read host keys from ${request.host}:${request.port}.`,
+            message:
+              cause instanceof Error
+                ? cause.message
+                : `Could not read host keys from ${request.host}:${request.port}.`,
           }),
       });
       if (scannedHostKeys.length === 0)

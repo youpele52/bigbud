@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import { createRemoteWorkspaceExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Input } from "../ui/input";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
@@ -35,6 +36,10 @@ import { useSshConfigHosts } from "./SidebarRemoteWorkspaceDialog.sshConfigHosts
 import { useRemoteWorkspaceSourceInference } from "./SidebarRemoteWorkspaceDialog.sourceInference";
 import type { RemoteAgentInstallProgress } from "./Sidebar.remoteWorkspaceAgentInstall";
 import { SidebarRemoteAgentManualInstall } from "./SidebarRemoteAgentManualInstall";
+import {
+  devSshOwnerTargetId,
+  RemoteWorkspaceDevOwnerControls,
+} from "./SidebarRemoteWorkspaceDialog.owner";
 
 interface SidebarRemoteWorkspaceDialogProps {
   mode: "add" | "edit";
@@ -78,6 +83,13 @@ export function SidebarRemoteWorkspaceDialog({
   const isSshConfig = draft.connectionSource === "ssh-config";
   const agentTarget = isEditing ? remoteWorkspaceAgentTarget(draft) : null;
   const hosts = useSshConfigHosts(open && (isSshConfig || isEditing));
+  const devOwner = devSshOwnerTargetId(hosts);
+  const devOwnerBrowseOnly =
+    hosts.status === "ready" && hosts.result.developmentOwnerBrowseOnly === true;
+  const devOwnerPrePinnedJump =
+    hosts.status === "ready" && hosts.result.developmentOwnerPrePinnedJump === true;
+  const devOwnerTerminalUnsupported =
+    hosts.status === "ready" && hosts.result.developmentOwnerTerminalUnsupported === true;
   useRemoteWorkspaceSourceInference({
     open,
     mode,
@@ -163,6 +175,20 @@ export function SidebarRemoteWorkspaceDialog({
             </div>
           </div>
 
+          {devOwner ? <RemoteWorkspaceDevOwnerControls draft={draft} targetId={devOwner} /> : null}
+          {devOwnerTerminalUnsupported ? (
+            <p className="text-xs text-muted-foreground">
+              {devOwnerBrowseOnly
+                ? "This development target supports folder browsing only."
+                : "This development target supports browsing and file previews, not terminals."}
+            </p>
+          ) : null}
+          {devOwnerPrePinnedJump ? (
+            <p className="text-xs text-muted-foreground">
+              This jump route uses pre-approved fixture keys. First-use host key approval is
+              unavailable.
+            </p>
+          ) : null}
           <RemoteWorkspaceConnectionOptions draft={draft} onFieldChange={onFieldChange} />
 
           {isSshConfig ? (
@@ -221,7 +247,16 @@ export function SidebarRemoteWorkspaceDialog({
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" disabled={isSubmitting || isVerifying} onClick={onSubmit}>
+          <Button
+            size="sm"
+            disabled={
+              isSubmitting ||
+              isVerifying ||
+              devOwnerBrowseOnly ||
+              (devOwner !== undefined && createRemoteWorkspaceExecutionTargetId(draft) !== devOwner)
+            }
+            onClick={onSubmit}
+          >
             {isSubmitting
               ? isEditing
                 ? "Saving..."

@@ -27,7 +27,8 @@ import {
 } from "./Manager.session.close.hostRoster";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
-import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
+import { findNativeTerminalHostLoss, ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
+import { NativeSshPtyHostLostError } from "../Services/PTY.ts";
 import {
   annotateTerminalCloseSpan,
   DEFAULT_TERMINAL_CLOSE_REASON,
@@ -99,12 +100,22 @@ export function makeTerminalClose(
       },
       Option.getOrUndefined(session),
     );
-    // A recovered remote owner can outlive the server session map. History is its existing
-    // recovery marker; do not discard it or its lease while shutdown identity is unknown.
-    // Only the pane target's durable owner store can prove no owned process survives.
     const ownedRuntime = executionTargetId
       ? sessionOwnedPtyRuntime(ctx, resolveExecutionTargetId(executionTargetId))
       : undefined;
+    if (Option.isNone(session)) {
+      const lost = yield* findNativeTerminalHostLoss(ownedRuntime, threadId, terminalId);
+      if (lost)
+        return yield* new TerminalExecutionTargetError({
+          threadId,
+          terminalId,
+          executionTargetId: lost.target,
+          detail: new NativeSshPtyHostLostError().message,
+        });
+    }
+    // A recovered remote owner can outlive the server session map. History is its existing
+    // recovery marker; do not discard it or its lease while shutdown identity is unknown.
+    // Only the pane target's durable owner store can prove no owned process survives.
     if (
       Option.isNone(session) &&
       (onlyIfNotRunning || expectedGeneration !== undefined) &&

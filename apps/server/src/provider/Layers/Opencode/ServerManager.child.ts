@@ -5,6 +5,7 @@ import readline from "node:readline";
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
+import { assertLegacySshLaunchAllowed } from "../../../ssh/sshOwnerDevMode.ts";
 import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { normalizeManagedServerStartError } from "./ServerManager.errors.ts";
 import type { ProcessLedgerShape } from "../../../process-ledger/Services/ProcessLedger.ts";
@@ -122,6 +123,9 @@ async function startChild(input: {
   readonly ledger?: ProcessLedgerShape | undefined;
 }): Promise<RunningManagedServer> {
   const isLocal = input.executionTargetId === LOCAL_EXECUTION_TARGET_ID;
+  // A selected dev graph starts remote OpenCode only through its typed owner lease. This
+  // launcher must never become a silent legacy fallback for the selected domain.
+  if (!isLocal) assertLegacySshLaunchAllowed();
   const localPort = isLocal ? undefined : await allocateLocalPort();
   if (!isLocal) await assertSshExecutionTargetReadyAsync(input.executionTargetId);
   const invocation = isLocal

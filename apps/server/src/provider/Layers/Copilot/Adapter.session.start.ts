@@ -157,6 +157,7 @@ export const makeStartSession =
                 createCopilotRemoteWorkspaceBridge(
                   executionContext.workspaceTarget,
                   deps.options?.remoteWorkspaceReadinessProbe,
+                  deps.options?.sessionFsOwner,
                 ),
               catch: (cause) =>
                 new ProviderAdapterProcessError({

@@ -12,6 +12,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
+import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
 import { TerminalActivity } from "../Services/TerminalActivity.ts";
 import { AppQuitIntent } from "../../lifecycle/AppQuitIntent.ts";
 import {
@@ -21,7 +22,8 @@ import {
 } from "../shellIntegration/shellIntegration.ts";
 import { PtyAdapter } from "../Services/PTY";
 import { ShellLaunchPlanner } from "../Services/ShellLaunchPlanner";
-import { ShellProfiles } from "../Services/ShellProfiles";
+import { ShellProfileDiscoveryError, ShellProfiles } from "../Services/ShellProfiles";
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { preflightRemoteTerminalShellProfile } from "./Manager.shell.remote";
 import { makeDirectShellLaunchOwners } from "../../persistence/Layers/DirectShellLaunchOwners";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
@@ -48,6 +50,9 @@ export { makeTerminalManagerWithOptions } from "./Manager.process";
 const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   const { terminalLogsDir, stateDir } = yield* ServerConfig;
   const ptyAdapter = yield* PtyAdapter;
+  const devSshOwner = Option.getOrUndefined(
+    yield* Effect.serviceOption(DevSshOwnerRuntime),
+  )?.session;
   const shellLaunchPlanner = yield* ShellLaunchPlanner;
   const shellProfiles = yield* ShellProfiles;
   const settings = Option.getOrUndefined(yield* Effect.serviceOption(ServerSettingsService));
@@ -162,12 +167,21 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
         ? settings?.currentSnapshot?.()?.settings.terminalShells.hostDefaults.local
         : undefined,
     listLocalShellProfiles: () => shellProfiles.revalidate({ executionTargetId: "local" }),
-    ptyAdapter,
+    ptyAdapter: devSshOwner?.terminal?.wrapPtyAdapter(ptyAdapter) ?? ptyAdapter,
+    directSshCwdOwner: devSshOwner?.terminal?.cwdOwner,
     directShellOwners: yield* makeDirectShellLaunchOwners(),
-    listShellProfiles: shellProfiles.list,
-    preflightRemoteShellProfile: preflightRemoteTerminalShellProfile,
+    listShellProfiles: (target) =>
+      devSshOwner && parseSshExecutionTarget(target.executionTargetId)
+        ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+        : shellProfiles.list(target),
+    preflightRemoteShellProfile: (executionTargetId) =>
+      devSshOwner && parseSshExecutionTarget(executionTargetId)
+        ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+        : preflightRemoteTerminalShellProfile(executionTargetId),
     resolveShellProfile: (selection, target) =>
-      shellLaunchPlanner.resolveProfile({ target, selection }),
+      devSshOwner && parseSshExecutionTarget(target.executionTargetId)
+        ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+        : shellLaunchPlanner.resolveProfile({ target, selection }),
     resolveRuntimePathIdentity: (cwd) =>
       Effect.tryPromise({
         try: () => captureLocalRuntimePathIdentity(cwd),

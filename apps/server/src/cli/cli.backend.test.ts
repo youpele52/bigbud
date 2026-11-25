@@ -79,6 +79,26 @@ it("never enables startup without explicit confirmation", async () => {
     confirmStartup: true,
   });
 });
+it("passes --for-upgrade to stop only", async () => {
+  vi.mocked(runBackendNativeCli).mockReturnValue(
+    Effect.succeed({
+      authorityId: "a".repeat(32),
+      action: "stop",
+      output: "drained\n",
+    }),
+  );
+  await run(["stop", "--authority", "a".repeat(32), "--for-upgrade"]);
+  expect(runBackendNativeCli).toHaveBeenCalledWith({
+    authorityId: "a".repeat(32),
+    action: "stop",
+    confirmStartup: false,
+    forUpgrade: true,
+  });
+  vi.mocked(runBackendNativeCli).mockClear();
+  await run(["status", "--authority", "a".repeat(32), "--for-upgrade"]);
+  expect(runBackendNativeCli).not.toHaveBeenCalled();
+  expect(process.exitCode).toBe(1);
+});
 it("reports observed unit status without claiming backend readiness", async () => {
   vi.mocked(runBackendNativeCli).mockReturnValue(
     Effect.succeed({ authorityId: "a".repeat(32), action: "status", output: '{"active":false}' }),

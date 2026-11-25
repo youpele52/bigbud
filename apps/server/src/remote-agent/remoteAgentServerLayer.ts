@@ -1,9 +1,11 @@
 import { Layer, ServiceMap } from "effect";
 
-import { makeSshGitExecutor } from "../git/Layers/GitCore.ssh.ts";
-import { RemoteAgentGitExecutorService, RemoteAgentGitOwnership } from "./remoteAgentGit.ts";
+import type { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
+import { makeShellRunnerLayer } from "./remoteAgentServerLayer.shell.ts";
+import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import { makeSelectedDevGitLayer } from "../git/Layers/GitCore.ssh.selected.ts";
+import { RemoteAgentGitOwnership } from "./remoteAgentGit.ts";
 import type { RemoteAgentPtyResolver } from "./remoteAgentPtyAdapter.ts";
-import { RemoteAgentShellRunner } from "./remoteAgentShell.ts";
 import {
   buildRemoteAgentIdentityProbeCommand,
   RemoteAgentConnectionError,
@@ -40,7 +42,6 @@ import type { RemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.
 import { makeRemoteAgentRestart } from "./remoteAgentRestart.ts";
 import { RemoteAgentRestartService } from "./remoteAgentRestart.types.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
-import { makeSshShellRunner } from "../ssh/sshShellRunner.ts";
 import { makeRemoteAgentInstaller } from "./remoteAgentServerLayer.installer.ts";
 import { remoteAgentInstallOperationsLayer } from "./remoteAgentInstall.operation.live.ts";
 
@@ -329,14 +330,19 @@ export function makeRemoteAgentServerServices(
  * Default live composition for remote projects. The per-project target transport
  * selects the managed agent or the direct SSH implementation at operation time.
  */
-export function makeConfiguredRemoteAgentLayers() {
+export function makeConfiguredRemoteAgentLayers<E = never, R = never>(
+  devOwner?: Layer.Layer<DevSshOwnerRuntime, E, R>,
+) {
   const configuration = resolveRemoteAgentConfiguration();
   const composition = getConfiguredRemoteAgentComposition();
   if (!composition) {
     return {
-      services: Layer.merge(
-        Layer.succeed(RemoteAgentGitExecutorService, makeSshGitExecutor()),
+      services: Layer.mergeAll(
+        makeSelectedDevGitLayer(devOwner),
         Layer.succeed(RemoteAgentGitOwnership, "external"),
+        // Preserve the previous no-composition behavior outside the selected
+        // development domain; selected direct shell authority needs the owner.
+        ...(isDevSshOwnerSelected() ? [makeShellRunnerLayer(devOwner)] : []),
       ),
       workspace: WorkspaceRuntimeLayerLive,
       ptyResolver: undefined as RemoteAgentPtyResolver | undefined,
@@ -361,22 +367,12 @@ export function makeConfiguredRemoteAgentLayers() {
       return presence.stdout;
     },
   });
-  const directSshGitExecutor = makeSshGitExecutor();
   const services = Layer.mergeAll(
     composition.managed ? RemoteAgentRuntimeBindingsLive : Layer.empty,
     Layer.succeed(RemoteAgentGitOwnership, composition.managed ? "managed" : "external"),
     Layer.succeed(RemoteWorkspaceRuntime, composition.workspaceRuntime),
-    Layer.succeed(RemoteAgentGitExecutorService, (input) =>
-      isRemoteAgentExecutionTarget(input.executionTargetId)
-        ? composition.gitExecutor(input)
-        : directSshGitExecutor(input),
-    ),
-    Layer.succeed(RemoteAgentShellRunner, {
-      resolve: (executionTargetId) =>
-        isRemoteAgentExecutionTarget(executionTargetId)
-          ? composition.shellRunner.resolve(executionTargetId)
-          : makeSshShellRunner(executionTargetId),
-    }),
+    makeSelectedDevGitLayer(devOwner, composition.gitExecutor),
+    makeShellRunnerLayer(devOwner, composition.shellRunner),
     Layer.succeed(RemoteAgentHealthService, health),
     Layer.succeed(RemoteAgentInstallerService, installer),
     remoteAgentInstallOperationsLayer({ installer, updateCoordinator, pool: composition.pool }),

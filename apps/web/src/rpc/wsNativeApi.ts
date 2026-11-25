@@ -95,6 +95,9 @@ export function createWsNativeApiContext({
       searchFileContents: rpcClient.projects.searchFileContents,
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
+      entryActions: rpcClient.projects.entryActions,
+      createDirectory: rpcClient.projects.createDirectory,
+      deleteEntry: rpcClient.projects.deleteEntry,
     },
     search: {
       query: rpcClient.search.query,
@@ -195,6 +198,8 @@ export function createWsNativeApiContext({
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
       retryTextGeneration: rpcClient.server.retryTextGeneration,
+      getBackendDrainConsent: rpcClient.server.getBackendDrainConsent,
+      decideBackendDrainConsent: rpcClient.server.decideBackendDrainConsent,
       claimMetadataWarnings: rpcClient.server.claimMetadataWarnings,
       acknowledgeMetadataWarning: rpcClient.server.acknowledgeMetadataWarning,
       startHandoffJob: rpcClient.server.startHandoffJob,

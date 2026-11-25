@@ -31,6 +31,7 @@ const row = (
   deletedAt,
   createdAt: "2026-01-01",
   updatedAt: "2026-01-01",
+  workspaceRoot: "/fixture",
 });
 const id = (value: string) => value as ProjectId;
 
@@ -50,6 +51,7 @@ function repository(
           deletedAt: project.deletedAt,
           createdAt: project.createdAt,
           updatedAt: project.updatedAt,
+          workspaceRoot: project.workspaceRoot,
         })),
       ),
   } as unknown as ProjectionProjectRepositoryShape;
@@ -64,6 +66,52 @@ afterEach(() => {
 });
 
 describe("SSH monitor server authorization", () => {
+  it("cancels a selected list probe when its last RPC reader leaves and ignores late loss", async () => {
+    const projects = repository({ first: row(target) });
+    recordVerifiedSshMonitorTarget(target, clientA);
+    const late = Promise.withResolvers<"unreachable">();
+    const started = Promise.withResolvers<AbortSignal>();
+    const sampleHealth = vi
+      .fn<(id: string, signal: AbortSignal) => Promise<"reachable" | "unreachable">>()
+      .mockImplementationOnce((_id, signal) => {
+        started.resolve(signal);
+        return late.promise;
+      })
+      .mockResolvedValue("reachable");
+    const handlers = makeSshMonitorHandlers(
+      { projectionProjectRepository: Option.some(projects), monitorInstanceId: "server-one" },
+      {
+        targetId: target,
+        workspaceRoot: "/fixture",
+        sampleHealth,
+        subscribeStatus: () => ({
+          id: 0,
+          closed: true,
+          drain: () => [],
+          close: () => undefined,
+        }),
+        setStatusGeneration: () => undefined,
+        closeStatus: () => undefined,
+      },
+    );
+    const list = () => handlers[WS_METHODS.serverListConnectedSshMonitors]({}, { clientId: 1 });
+    const abort = new AbortController();
+    const cancelled = expect(
+      Effect.runPromise(list(), { signal: abort.signal }),
+    ).rejects.toBeDefined();
+    const probe = await started.promise;
+    abort.abort();
+    await cancelled;
+    expect(probe.aborted).toBe(true);
+    const expected = [{ projectId: id("first"), name: "Production", target }];
+    await expect(Effect.runPromise(list())).resolves.toEqual(expected);
+    late.resolve("unreachable");
+    await late.promise;
+    await expect(Effect.runPromise(list())).resolves.toEqual(expected);
+    expect(sampleHealth).toHaveBeenCalledTimes(2);
+    expect(runProcess).not.toHaveBeenCalled();
+    expect(sampleSshMonitor).not.toHaveBeenCalled();
+  });
   it("fails closed when RPC metadata contains no server-assigned caller id", async () => {
     const projects = repository({ first: row(target) });
     const handlers = makeSshMonitorHandlers({

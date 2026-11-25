@@ -6,8 +6,11 @@ import {
   TerminalExecutionTargetError,
 } from "@bigbud/contracts/workspace/terminal.ts";
 import { isLocalExecutionTarget } from "../../executionTargets";
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { runSshCommand } from "../../ssh/sshProcess";
+import { assertSshTargetConnected } from "../../ssh/sshTargetDisconnects.ts";
 import { assertSshExecutionTargetReadyAsync } from "../../ssh/sshVerification";
+import type { DirectSshTerminalCwdOwner } from "./Manager.cwd.owner.ts";
 import type { RuntimePathIdentity } from "./Manager.types";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
@@ -93,6 +96,44 @@ const probeRemoteFolder = Effect.fn("terminal.probeRemoteFolder")(function* (
   return cwd;
 });
 
+const probeOwnedRemoteFolder = Effect.fn("terminal.probeOwnedRemoteFolder")(function* (
+  owner: DirectSshTerminalCwdOwner,
+  input: TerminalFolderInput,
+  home: boolean,
+) {
+  const unavailable = () =>
+    new TerminalExecutionTargetError({
+      ...input,
+      detail: "Could not resolve the terminal folder through the selected SSH owner.",
+    });
+  const { executionTargetId, cwd } = input;
+  if (!cwd || cwd.includes("\0")) {
+    return yield* new TerminalExecutionTargetError({
+      ...input,
+      detail: "The SSH terminal folder path is invalid.",
+    });
+  }
+  const result = yield* Effect.tryPromise({
+    try: (signal) => {
+      assertSshTargetConnected(executionTargetId);
+      return owner.probeCwd({ executionTargetId, cwd, home }, signal);
+    },
+    catch: unavailable,
+  });
+  if (result?.kind === "noFolder") {
+    return yield* new TerminalCwdError({ cwd: home ? "~" : cwd, reason: "statFailed" });
+  }
+  if (
+    result?.kind !== "resolved" ||
+    typeof result.cwd !== "string" ||
+    !result.cwd.startsWith("/") ||
+    result.cwd.includes("\0")
+  ) {
+    return yield* unavailable();
+  }
+  return result.cwd;
+});
+
 /** Directory selection is bounded independently of PTY/lease failures; late probes cannot spawn. */
 export function makeResolveTerminalFolder(
   assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>,
@@ -101,6 +142,7 @@ export function makeResolveTerminalFolder(
   resolveRuntimePathIdentity?: (
     cwd: string,
   ) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>,
+  directSshCwdOwner?: DirectSshTerminalCwdOwner,
 ) {
   return Effect.fn("terminal.resolveFolder")(function* (
     input: TerminalFolderInput,
@@ -108,7 +150,26 @@ export function makeResolveTerminalFolder(
     if (isWslTerminalTargetId(input.executionTargetId))
       return yield* resolveWslTerminalFolder(input);
     const local = isLocalExecutionTarget(input.executionTargetId);
-    if (!local) {
+    const sshTarget =
+      directSshCwdOwner && !local && parseSshExecutionTarget(input.executionTargetId);
+    const transport = sshTarget
+      ? (sshTarget.transport ??
+        (yield* Effect.tryPromise({
+          // The optional owner must not load the agent composition on the legacy path.
+          try: async () => {
+            const { resolveRemoteAgentConfiguration } =
+              await import("../../remote-agent/remoteAgentDefault.ts");
+            return resolveRemoteAgentConfiguration().transport;
+          },
+          catch: () =>
+            new TerminalExecutionTargetError({
+              ...input,
+              detail: "Could not resolve the SSH transport for terminal folder validation.",
+            }),
+        })))
+      : undefined;
+    const owned = transport === "direct-ssh" ? directSshCwdOwner : undefined;
+    if (!local && !owned) {
       yield* Effect.tryPromise({
         try: () => assertSshExecutionTargetReadyAsync(input.executionTargetId),
         catch: () =>
@@ -130,9 +191,12 @@ export function makeResolveTerminalFolder(
                 : undefined;
               return { cwd, runtimePathIdentity };
             })
-          : remoteProbe(input, home, () => {
-              remoteFolderProbeReady = true;
-            }).pipe(Effect.map((cwd) => ({ cwd, runtimePathIdentity: undefined })))
+          : (owned
+              ? probeOwnedRemoteFolder(owned, input, home)
+              : remoteProbe(input, home, () => {
+                  remoteFolderProbeReady = true;
+                })
+            ).pipe(Effect.map((cwd) => ({ cwd, runtimePathIdentity: undefined })))
       ).pipe(
         Effect.timeoutOrElse({
           duration: TERMINAL_FOLDER_TIMEOUT_MS,
@@ -144,8 +208,9 @@ export function makeResolveTerminalFolder(
               : Effect.fail(
                   new TerminalExecutionTargetError({
                     ...input,
-                    detail:
-                      "The SSH target did not connect within 10 seconds. Check its connection and authentication.",
+                    detail: owned
+                      ? "The selected SSH owner did not resolve the terminal folder within 10 seconds."
+                      : "The SSH target did not connect within 10 seconds. Check its connection and authentication.",
                   }),
                 ),
         }),

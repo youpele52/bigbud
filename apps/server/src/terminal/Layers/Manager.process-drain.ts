@@ -18,6 +18,7 @@ import { buildWslTerminalShellCandidate } from "./Manager.wsl.invocation";
 import { enqueueProcessEvent, type ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import { type TerminalSessionState, type TerminalStartInput } from "./Manager.types";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
+import { resetSessionHistory } from "./Manager.session.state.ts";
 import { TerminalDeviceQueries } from "./TerminalDeviceQueries";
 import { observeTerminalProcessError } from "./Manager.process.error";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
@@ -158,11 +159,14 @@ export function startSessionWith(
               shellCandidates,
               terminalEnv,
               input.hostLifecycle,
+              eventType === "restarted" && session.remoteOwnerRecoveryRequired !== true,
             );
             ptyProcess = spawnResult.process;
-            // A durable remote owner resumes after its acknowledged output cut,
-            // not from process birth. Empty local history is not a valid baseline.
-            session.historyUnavailable = ptyProcess.recovered === true;
+            // Only a verified birth-to-cut replay replaces retained local history.
+            // Other reattachments resume after a remote cursor and have no baseline.
+            const fromStart = ptyProcess.recovered && ptyProcess.recoveredHistoryFromStart;
+            if (fromStart) resetSessionHistory(session);
+            session.historyUnavailable = ptyProcess.recovered === true && !fromStart;
             startRecoveryModel(session, ptyProcess.recovered === true, ptyProcess);
             startedShell = spawnResult.shellLabel;
             startedDropPathMode = spawnResult.dropPathMode;

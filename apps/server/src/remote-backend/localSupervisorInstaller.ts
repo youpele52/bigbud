@@ -33,9 +33,30 @@ import {
   type RemoteAgentRuntime,
 } from "../remote-agent/remoteAgentRuntime.ts";
 import type { RemoteAgentRegistry } from "../remote-agent/remoteAgentInstall.registry.ts";
-import type { RunSshCommandInput } from "../ssh/sshProcess.ts";
 import type { LocalSupervisorControl } from "./localSupervisorControl.ts";
 import { verifyManagedLocalSupervisor } from "./localSupervisorBinary.ts";
+
+/**
+ * Local structural contract for the supervisor's own command envelope (D5).
+ *
+ * This module used to import the legacy SSH process input type. The owner
+ * migration deletes that module, so the shape consumed here is declared
+ * locally instead. A legacy SSH runner still satisfies it, but this installer
+ * never starts SSH: `control.run` is the local supervisor transport.
+ */
+export interface LocalSupervisorCommandEnvelope {
+  readonly executionTargetId: string | null | undefined;
+  readonly cwd?: string;
+  readonly env?: Readonly<Record<string, string>>;
+  readonly command: string;
+  readonly args?: ReadonlyArray<string>;
+  readonly allocateTty?: boolean;
+  readonly shellMode?: "login" | "clean-posix" | "non-login-posix" | undefined;
+  readonly stdin?: string;
+  readonly signal?: AbortSignal | undefined;
+  readonly timeoutMs?: number;
+  readonly maxBufferBytes?: number;
+}
 
 function assertSignedSource(source: RemoteAgentInstallSource) {
   if (source.allowUntrustedDevelopmentArtifact)
@@ -96,7 +117,7 @@ export function makeLocalSupervisorInstaller(input: {
     };
   };
   // These are shared internal command envelopes, not arbitrary SSH invocations. Never call SSH.
-  const execute = async (command: RunSshCommandInput) => {
+  const execute = async (command: LocalSupervisorCommandEnvelope) => {
     assertTarget(command.executionTargetId);
     if (
       command.command !== "sh" ||

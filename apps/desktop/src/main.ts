@@ -106,10 +106,11 @@ const desktopAppIdentity = {
 // Electron user-data location (including legacy-profile migration).
 app.setPath(
   "userData",
-  resolveUserDataPath({
-    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
-    userDataDirName: USER_DATA_DIR_NAME,
-  }),
+  mainConfig.isolatedUserDataPath ??
+    resolveUserDataPath({
+      legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+      userDataDirName: USER_DATA_DIR_NAME,
+    }),
 );
 desktopPreferences = new DesktopPreferencesStore(app.getPath("userData"), logHeader);
 // Quit teardown stops the backend and every main-process service, once (see main.quitTeardown).

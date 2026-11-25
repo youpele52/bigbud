@@ -29,6 +29,22 @@ export class ServerListRemoteFoldersError extends Schema.TaggedErrorClass<Server
   "ServerListRemoteFoldersError",
   {
     message: TrimmedNonEmptyString,
+    code: Schema.optional(
+      Schema.Literals([
+        "sshOwnerUnavailable",
+        "sshConfigUnsupported",
+        "sshAliasChanged",
+        "sshRouteUnavailable",
+        "sshHostKeyChanged",
+        "sshTrustStoreReadOnly",
+        "sshAuthenticationRejected",
+        "sshTransportLost",
+        "sshSessionQuota",
+        "sshWindowsPasswordUnsupported",
+        "sshKeyboardInteractiveUnsupported",
+        "sshOwnerRetirementUnverified",
+      ]),
+    ),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

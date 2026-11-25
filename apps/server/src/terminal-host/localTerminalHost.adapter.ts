@@ -13,6 +13,7 @@ import {
   makeLocalTerminalHostDirectSsh,
 } from "./localTerminalHost.directSsh.ts";
 import { makeLocalTerminalHostSshClient } from "./localTerminalHost.directSsh.client.ts";
+import { paneIdentityForOwnerKey } from "./localTerminalHost.retirement.ts";
 import { makeLocalTerminalHostGenerations } from "./localTerminalHost.generations.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
 import {
@@ -113,6 +114,12 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
       hostLifecycle: LOCAL_TERMINAL_HOST_LIFECYCLE,
       localLaunchEnvironment: (spawnInput) =>
         localTerminalHostLaunchEnvironment(spawnInput.env, spawnInput.cwd),
+      paneIdentity: (spawnInput) =>
+        paneIdentityForOwnerKey(spawnInput.ownerKey, "local") ?? {
+          threadId: "",
+          paneId: "",
+          kind: "local",
+        },
     },
   );
   // Direct SSH panes (M7) run their local ssh client in the same host and owner table.

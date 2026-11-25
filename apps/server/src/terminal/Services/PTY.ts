@@ -21,6 +21,13 @@ export class PtySpawnError extends Schema.TaggedErrorClass<PtySpawnError>()("Pty
   cause: Schema.optional(Schema.Defect),
 }) {}
 
+/** Loss of the exact native SSH owner channel; never evidence of child exit. */
+export class NativeSshPtyHostLostError extends Error {
+  constructor() {
+    super("sshOwnerUnavailable: The native SSH terminal host was lost; its pane stays reserved.");
+  }
+}
+
 export interface PtyExitEvent {
   exitCode: number;
   signal: number | null;
@@ -29,8 +36,10 @@ export interface PtyExitEvent {
 export interface PtyProcess {
   /** PID belongs to the Rust execution host, never its proxy; ownedRuntime declares its namespace. */
   readonly pidDomain?: "remote";
-  /** Attached to an existing process whose earlier output is not replayed by this adapter. */
+  /** Attached to an existing process; earlier output is unknown unless explicitly replayed. */
   readonly recovered?: boolean;
+  /** The exact native lease delivers a verified gap-free byte replay from process birth on onData. */
+  readonly recoveredHistoryFromStart?: true;
   /** Durable resource identity for generation-fenced attach-only discovery. */
   readonly remoteResourceId?: string;
   /** Explicit remote launch evidence only; missing evidence is unknown, never confirmed. */
@@ -181,6 +190,8 @@ export interface PtySpawnHostLifecycle {
 export interface PtySpawnInput {
   readonly ownerKey?: string;
   readonly recoverOnly?: boolean;
+  /** Explicit user restart may replace a confirmed terminal owner, never a live reservation. */
+  readonly replaceTerminalOwner?: boolean;
   /** Caller cancellation for attach-only recovery; never authority to stop the child. */
   readonly recoverySignal?: AbortSignal;
   readonly expectedRemoteResourceId?: string | undefined;

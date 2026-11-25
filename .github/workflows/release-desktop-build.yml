@@ -232,6 +232,19 @@ jobs:
           fi
           bun run verify:packaged-desktop-supervisor -- "${args[@]}"
 
+      - name: Verify packaged SSH owner without activation
+        if: (matrix.platform == 'mac' && matrix.arch == 'arm64') || (matrix.platform == 'win' && matrix.arch == 'x64')
+        shell: bash
+        env:
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          set -euo pipefail
+          args=(release "${{ matrix.platform }}" "${{ matrix.arch }}")
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
+            args+=(--require-code-signature)
+          fi
+          node scripts/verify-packaged-ssh-owner.ts "${args[@]}"
+
       - name: Smoke test Windows installer update over a running helper
         if: matrix.platform == 'win'
         shell: pwsh

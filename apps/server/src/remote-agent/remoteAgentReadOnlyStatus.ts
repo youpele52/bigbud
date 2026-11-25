@@ -1,4 +1,5 @@
-import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import { runSshCommand } from "../ssh/sshProcess.ts";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import {
   MAX_REMOTE_AGENT_REGISTRY_BYTES,
@@ -27,7 +28,7 @@ export function buildRemoteAgentRegistryReadOnlyProbe(): string {
 /** `null` when there is no registry; throws when the registry exists but cannot be parsed. */
 export async function readRemoteAgentRegistryReadOnly(
   executionTargetId: string,
-  run: (input: RunSshCommandInput) => Promise<unknown> = runSshCommand,
+  run: RemoteAgentCommandRunner = runSshCommand,
   timeoutMs = 15_000,
 ): Promise<RemoteAgentRegistry | null> {
   const { stdout } = await runRemoteAgentDiagnosedCommand(run, "preflight", {
@@ -90,7 +91,7 @@ export function summarizeRemoteAgentRegistry(
 
 export async function remoteAgentReadOnlyStatus(
   executionTargetId: string,
-  run?: (input: RunSshCommandInput) => Promise<unknown>,
+  run?: RemoteAgentCommandRunner,
   timeoutMs?: number,
 ): Promise<RemoteAgentReadOnlyStatus> {
   return summarizeRemoteAgentRegistry(

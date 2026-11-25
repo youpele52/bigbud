@@ -15,6 +15,7 @@ import { isAbsolute, join } from "node:path";
 import type { Duplex } from "node:stream";
 
 import { parsePinnedHostKey } from "../peer-orchestration/peerSshKey.ts";
+import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerDevMode.ts";
 import { ownClientRelaySshChild } from "./clientRelay.ssh.child.ts";
 
 export interface PeerRelaySshTarget {
@@ -148,6 +149,7 @@ export function makePeerRelaySshChannels(input: {
   let disposed = false;
   return {
     async openChannel(signal: AbortSignal): Promise<PeerRelayChannel> {
+      assertLegacySshLaunchAllowed();
       signal.throwIfAborted();
       if (disposed) throw new Error("Peer relay owner is disposed.");
       const knownHosts = await writePinnedKnownHosts(input.knownHostsDirectory, input.target);

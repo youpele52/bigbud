@@ -4,6 +4,7 @@ import { GitCommandError } from "@bigbud/contracts/workspace/git.errors.ts";
 
 import { runSshCommand } from "../../ssh/sshProcess.ts";
 import { type ExecuteGitInput, type ExecuteGitResult } from "../Services/GitCore.ts";
+import { type DirectWorkspaceGitOwner, executeOwnedWorkspaceGit } from "./GitCore.ssh.owner.ts";
 import { quoteGitCommand } from "./GitCoreUtils.ts";
 import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS } from "./GitCoreExecutor.ts";
 
@@ -36,7 +37,7 @@ function safeEnvironment(input: ExecuteGitInput): Record<string, string> {
   return environment;
 }
 
-export function makeSshGitExecutor() {
+export function makeSshGitExecutor(owner?: DirectWorkspaceGitOwner) {
   return (input: ExecuteGitInput): Effect.Effect<ExecuteGitResult, GitCommandError> => {
     if (!input.executionTargetId) {
       return Effect.fail(
@@ -47,6 +48,9 @@ export function makeSshGitExecutor() {
           detail: "A remote Git execution target is required.",
         }),
       );
+    }
+    if (owner !== undefined) {
+      return executeOwnedWorkspaceGit(owner, input, input.executionTargetId);
     }
     return Effect.tryPromise({
       try: () =>

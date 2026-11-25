@@ -1,3 +1,4 @@
+import type { DirectSshTerminalCwdOwner } from "./Manager.cwd.owner.ts";
 import type { TerminalWorkSink } from "./Manager.workSignals.ts";
 import type * as Effect from "effect/Effect";
 import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
@@ -207,6 +208,7 @@ export interface TerminalManagerOptions {
   resolveRuntimePathIdentity?: (
     cwd: string,
   ) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>;
+  directSshCwdOwner?: DirectSshTerminalCwdOwner | undefined;
   logsDir: string;
   historyLineLimit?: number;
   ptyAdapter: PtyAdapterShape;

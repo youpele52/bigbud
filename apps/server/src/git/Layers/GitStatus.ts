@@ -3,8 +3,9 @@
  *
  * @module GitStatus
  */
-import { Effect, Path } from "effect";
+import { Effect, Option, Path } from "effect";
 
+import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
 import { type GitCoreShape } from "../Services/GitCore.ts";
 import { type GitHelpers } from "./GitCoreExecutor.ts";
 import { GitCommandError } from "@bigbud/contracts";
@@ -15,7 +16,17 @@ import { makeCommitOps } from "./GitStatus.commit.ts";
 import { makeReadStatusDetails } from "./GitStatus.details.ts";
 import { gitMutationOperationId } from "./GitCoreExecutor.ts";
 import { makeDiscardSelectedChanges } from "./GitStatus.discard.ts";
-import type { WorkspaceTrash } from "../../workspace/Layers/WorkspaceTrash.ts";
+import { makeSelectedPullThroughOwner } from "./GitStatus.pull.ts";
+import { InitiatingFetchOwner, fetchThroughSelectedOwner } from "./GitCore.initiatingTransport.ts";
+import {
+  makeSystemWorkspaceTrash,
+  type WorkspaceTrash,
+} from "../../workspace/Layers/WorkspaceTrash.ts";
+import {
+  initiatingGitDenied,
+  isInitiatingGitTransportDisabled,
+  type GitExecutionLane,
+} from "./GitCore.initiatingFence.ts";
 
 export interface GitStatusOps {
   statusDetails: GitCoreShape["statusDetails"];
@@ -34,13 +45,15 @@ export interface GitStatusOps {
 export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
   helpers: GitHelpers,
   path: Path.Path,
-  /** Local repositories move discarded untracked files to the Trash; remote targets delete. */
-  trash?: WorkspaceTrash,
+  lane: GitExecutionLane,
+  trashOverride?: WorkspaceTrash,
 ) {
   const { executeGit, runGit, runGitStdout } = helpers;
+  const initiatingTransportDisabled = () => isInitiatingGitTransportDisabled(lane);
+  const selectedTarget = () => lane === "target" && isDevSshOwnerSelected();
 
   const remoteOps = makeRemoteOps(helpers, path);
-  const upstreamOps = yield* makeUpstreamOps(helpers, path, remoteOps);
+  const upstreamOps = yield* makeUpstreamOps(helpers, path, remoteOps, initiatingTransportDisabled);
   const { prepareCommitContext, commit, readRangeContext, readConfigValue } =
     makeCommitOps(helpers);
 
@@ -61,10 +74,17 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     executeGit,
     runGitStdout,
     originRemoteExists,
-    computeAheadCountAgainstBase,
+    computeAheadCountAgainstBase: (cwd, branch) =>
+      selectedTarget() ? Effect.succeed(0) : computeAheadCountAgainstBase(cwd, branch),
+    allowPathNumstat: () => !selectedTarget(),
+    allowUntrackedCount: selectedTarget,
   });
 
   const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {
+    // The selected owner already supplies upstream tracking data in porcelain status.
+    // Do not probe or fetch independently of that read-only recipe.
+    if (selectedTarget()) return yield* readStatusDetails(cwd, "GitCore.statusDetails");
+
     yield* refreshStatusUpstreamIfStale(cwd).pipe(
       Effect.catchIf(isMissingGitCwdError, () => Effect.void),
       Effect.ignoreCause({ log: true }),
@@ -101,6 +121,9 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
 
   const pushCurrentBranch: GitCoreShape["pushCurrentBranch"] = Effect.fn("pushCurrentBranch")(
     function* (cwd, fallbackBranch, _executionTargetId, operationId) {
+      if (initiatingTransportDisabled()) {
+        return yield* initiatingGitDenied({ operation: "GitCore.pushCurrentBranch", cwd });
+      }
       const details = yield* statusDetails(cwd);
       const branch = details.branch ?? fallbackBranch;
       if (!branch) {
@@ -204,8 +227,21 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     },
   );
 
+  const pullThroughSelectedOwner = makeSelectedPullThroughOwner({
+    statusDetailsLocal,
+    resolveCurrentUpstream,
+    executeGit,
+    runGitStdout,
+  });
+
   const pullCurrentBranch: GitCoreShape["pullCurrentBranch"] = Effect.fn("pullCurrentBranch")(
     function* (cwd, _executionTargetId, operationId) {
+      if (initiatingTransportDisabled()) {
+        if (Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))) {
+          return yield* initiatingGitDenied({ operation: "GitCore.pullCurrentBranch", cwd });
+        }
+        return yield* pullThroughSelectedOwner(cwd, operationId);
+      }
       const details = yield* statusDetails(cwd);
       const branch = details.branch;
       if (!branch) {
@@ -261,6 +297,12 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
 
   const fetch: GitCoreShape["fetch"] = Effect.fn("fetch")(
     function* (cwd, _executionTargetId, operationId) {
+      if (
+        initiatingTransportDisabled() &&
+        Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))
+      ) {
+        return yield* initiatingGitDenied({ operation: "GitCore.fetch", cwd });
+      }
       const hasOrigin = yield* originRemoteExists(cwd);
       if (!hasOrigin) {
         return yield* new GitCommandError({
@@ -269,6 +311,16 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
           cwd,
           detail: 'No "origin" remote configured.',
         });
+      }
+
+      if (initiatingTransportDisabled()) {
+        yield* fetchThroughSelectedOwner({
+          cwd,
+          remoteName: "origin",
+          refspecs: [],
+          timeoutMs: 30_000,
+        });
+        return { status: "fetched" as const };
       }
 
       yield* executeGit("GitCore.fetch", cwd, ["fetch", "--quiet"], {
@@ -288,7 +340,8 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
       readStatusDetails(cwd, "GitCore.statusDetailsLocal").pipe(
         Effect.map((details) => details.workingTree.files.map((file) => file.path)),
       ),
-    trash,
+    // Only the initiating lane runs on this machine; remote targets delete through git.
+    trash: lane === "initiating" ? (trashOverride ?? makeSystemWorkspaceTrash()) : undefined,
   });
 
   const discardChanges: GitCoreShape["discardChanges"] = Effect.fn("discardChanges")(

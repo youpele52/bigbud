@@ -15,6 +15,10 @@ import type {
   ServerSshConfigSource,
 } from "@bigbud/contracts/server/server.sshConfig";
 
+import type {
+  PickerProofAliasEntry,
+  PickerProofAliasList,
+} from "./sshOwnerPickerProof.codec.aliases.ts";
 import { parseSshConfig } from "./sshConfigParse.ts";
 import {
   defaultSshConfigRoots,
@@ -212,5 +216,52 @@ export async function discoverSshConfigHosts(
     machineName: options.machineName ?? (os.hostname().trim() || "this computer"),
     hosts: [...state.hosts.values()],
     sources: state.sources,
+  };
+}
+
+function ownerRoute(entry: PickerProofAliasEntry): string {
+  switch (entry.routeKind) {
+    case "jump":
+      return `via ${entry.jumpHops} ${entry.jumpHops === 1 ? "hop" : "hops"}`;
+    case "restrictedConnector":
+      return "restricted connector";
+    default:
+      return "direct";
+  }
+}
+
+/**
+ * Map owner-reported alias metadata onto the read-only discovery contract.
+ * The owner never returns a filesystem path, so `sourcePath` is the caller's
+ * display label for the profile it started the owner from.
+ */
+export function sshConfigHostFromOwnerAlias(
+  entry: PickerProofAliasEntry,
+  displaySourcePath: string,
+): ServerSshConfigHost {
+  return {
+    alias: entry.alias,
+    sourcePath: displaySourcePath,
+    line: entry.line,
+    hostName: entry.hostName,
+    ...(entry.user ? { user: entry.user } : {}),
+    port: String(entry.port),
+    ...(entry.hostKeyAlias ? { hostKeyAlias: entry.hostKeyAlias } : {}),
+    route: ownerRoute(entry),
+    supported: entry.unsupported === undefined,
+    ...(entry.unsupported ? { unsupportedReason: entry.unsupported.remedy } : {}),
+  };
+}
+
+/** Build the connection-UI result from the owner list for the selected domain. */
+export function sshConfigHostsFromOwnerAliases(
+  aliases: PickerProofAliasList,
+  displaySourcePath: string,
+  machineName: string,
+): ServerListSshConfigHostsResult {
+  return {
+    machineName,
+    hosts: aliases.entries.map((entry) => sshConfigHostFromOwnerAlias(entry, displaySourcePath)),
+    sources: [],
   };
 }

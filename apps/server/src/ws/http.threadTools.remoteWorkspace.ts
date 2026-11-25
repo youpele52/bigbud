@@ -10,6 +10,12 @@ import {
 } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveToolTransportTarget, runToolCommand } from "../tool-transport/toolTransport.ts";
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget.ts";
+import { isDevSshOwnerSelected } from "../ssh/sshOwnerDevMode.ts";
+import {
+  isFixedProviderShellCommand,
+  PROVIDER_SHELL_REFUSAL,
+  type SelectedProviderWorkspaceShell,
+} from "./remoteWorkspaceProviderShell.ts";
 import type { RemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import type { ThreadToolWorkspaceBinding } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { ThreadToolRequestError } from "./http.threadTools.schema.ts";
@@ -54,6 +60,7 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
   readonly workspaceBinding?: ThreadToolWorkspaceBinding | undefined;
   readonly executionOwner?: RemoteWorkspaceExecutions | undefined;
   readonly executionGeneration?: number | undefined;
+  readonly selectedProviderShell?: SelectedProviderWorkspaceShell | undefined;
   readonly request: RemoteWorkspaceProcessRequest;
 }) {
   const owner = input.executionOwner;
@@ -158,6 +165,89 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
       message:
         "Remote command owner is unavailable. Reconnect workspace tools before running commands.",
     });
+
+  const authorizedTarget = binding?.executionTargetId ?? executionTargetId;
+  const authorizedCwd = binding?.cwd ?? cwd;
+  if (isDevSshOwnerSelected()) {
+    if (input.request.remoteStdin !== undefined) {
+      return yield* new ThreadToolRequestError({
+        status: 400,
+        message: "The selected provider workspace shell does not accept stdin.",
+      });
+    }
+    if (args.length > 0) {
+      return yield* new ThreadToolRequestError({
+        status: 400,
+        message:
+          "The selected provider workspace shell accepts one remote command text, not caller-selected argv.",
+      });
+    }
+    if (isFixedProviderShellCommand(command)) {
+      return yield* new ThreadToolRequestError({ status: 400, message: PROVIDER_SHELL_REFUSAL });
+    }
+    const selected = input.selectedProviderShell;
+    if (
+      !selected ||
+      selected.targetId !== authorizedTarget ||
+      selected.workspaceRoot !== authorizedCwd
+    ) {
+      return yield* new ThreadToolRequestError({
+        status: 409,
+        message:
+          "Only the exact selected SSH workspace admits a provider shell. No command was dispatched and no legacy fallback was used.",
+      });
+    }
+    const result = yield* Effect.tryPromise({
+      try: (signal) => {
+        const run = (runSignal?: AbortSignal) =>
+          selected.run(
+            {
+              workspaceRoot: selected.workspaceRoot,
+              cwd: authorizedCwd,
+              provider: "thread-tool",
+              sessionId: input.callerThreadId,
+              invocationId,
+              command,
+              timeoutMs,
+            },
+            runSignal,
+          );
+        return owner ? owner.run(invocationId, run, signal) : run();
+      },
+      catch: (cause) =>
+        new ThreadToolRequestError({
+          status:
+            cause instanceof Error && "code" in cause && cause.code === "shellTimedOut" ? 504 : 502,
+          message:
+            cause instanceof Error ? cause.message : "Remote provider shell execution failed.",
+        }),
+    });
+    if (result.timedOut) {
+      return yield* new ThreadToolRequestError({
+        status: 504,
+        message: "The remote provider shell timed out and was not replayed.",
+      });
+    }
+    if (result.exitCode !== 0 && input.request.remoteAllowNonZeroExit !== true) {
+      return yield* new ThreadToolRequestError({
+        status: 502,
+        message: `Remote provider shell exited with code ${result.exitCode}.`,
+      });
+    }
+    let stdout = result.output;
+    if (Buffer.byteLength(stdout) > maxBufferBytes) {
+      stdout = Buffer.from(stdout).subarray(0, maxBufferBytes).toString("utf8");
+    }
+    return {
+      stdout,
+      stderr: "",
+      code: result.exitCode,
+      signal: null,
+      timedOut: false,
+      ...(result.truncated ? { stdoutTruncated: true } : {}),
+    };
+  }
+
   const run = (signal?: AbortSignal) =>
     runToolCommand({
       ...(signal ? { signal } : {}),
@@ -167,8 +257,8 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
       target: resolveToolTransportTarget({
         location: "remote",
         // Dispatch the authorized snapshot, never re-resolve mutable project settings.
-        executionTargetId: binding?.executionTargetId ?? executionTargetId,
-        cwd: binding?.cwd ?? cwd,
+        executionTargetId: authorizedTarget,
+        cwd: authorizedCwd,
       }),
       command,
       args,

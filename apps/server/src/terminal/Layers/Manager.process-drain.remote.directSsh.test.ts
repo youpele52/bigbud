@@ -141,6 +141,31 @@ describe("Direct SSH PTYs in the local terminal host", () => {
     expect(f.viewChanged).toHaveBeenCalledTimes(2);
   });
 
+  it.each([100, undefined])(
+    "treats native-owner process inspection as unavailable (shell PID %s)",
+    async (remoteShellPid) => {
+      const { session } = hostSession(remoteShellPid);
+      const f = fixture(session, "100 1 100 100 -zsh");
+      f.ctx.ptyAdapter = {
+        ...adapter,
+        ownedRuntimeForTarget: (candidate) =>
+          candidate === target ? { ...hostRuntime, nativeSshWorkspaceRoot: "/srv" } : undefined,
+      };
+      session.subprocessAssessedGeneration = session.runtimeGeneration;
+      session.subprocessAssessedEpoch = session.runtimeEpoch;
+      session.host!.ownerBusyHint = "idle";
+      const process = session.process;
+
+      await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+
+      expect(f.remoteProcessInspector).not.toHaveBeenCalled();
+      expect(session.subprocessAssessedGeneration).toBeUndefined();
+      expect(session.host?.ownerBusyHint).toBe("unknown");
+      expect(session.status).toBe("running");
+      expect(session.process).toBe(process);
+    },
+  );
+
   it("never inspects without the shell PID, so the hint stays unknown (busy)", async () => {
     const { session } = hostSession(undefined);
     const f = fixture(session, "100 1 100 100 -zsh");

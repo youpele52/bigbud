@@ -1,9 +1,73 @@
 import { it, describe, expect } from "@effect/vitest";
-import { Effect, Option, Stream } from "effect";
+import { Deferred, Effect, Fiber, Option, Stream } from "effect";
 
 import { createRemoteDirectoryPollingStream } from "./WorkspaceFileSystem.remoteWatch.ts";
 
 describe("createRemoteDirectoryPollingStream", () => {
+  it.effect("keeps invalidations in order when a slow consumer fills the bounded queue", () =>
+    Effect.gen(function* () {
+      let reads = 0;
+      const stream = createRemoteDirectoryPollingStream({
+        cwd: "/remote/project",
+        relativePath: "src",
+        pollIntervalMs: 10,
+        readSnapshot: async () => String(reads++),
+      });
+      const events = yield* Stream.runCollect(
+        stream.pipe(
+          Stream.tap(() => Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 50)))),
+          Stream.take(14),
+        ),
+      ).pipe(Effect.timeout("5 seconds"));
+      expect(events.map((event) => event.generation)).toEqual(
+        Array.from({ length: 14 }, (_, index) => index + 1),
+      );
+    }),
+  );
+
+  it.effect("stops polling when a full watcher is cancelled", () =>
+    Effect.gen(function* () {
+      let reads = 0;
+      const stream = createRemoteDirectoryPollingStream({
+        cwd: "/remote/project",
+        relativePath: "src",
+        pollIntervalMs: 10,
+        readSnapshot: async () => String(reads++),
+      });
+      yield* Stream.runCollect(
+        stream.pipe(
+          Stream.tap(() =>
+            Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 250))),
+          ),
+          Stream.take(1),
+        ),
+      ).pipe(Effect.timeout("5 seconds"));
+      const afterCancel = reads;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 100)));
+      expect(reads).toBe(afterCancel);
+    }),
+  );
+  it.effect("signals an outstanding snapshot when the subscriber ends", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<AbortSignal>();
+      const pending = Promise.withResolvers<string>();
+      const stream = createRemoteDirectoryPollingStream({
+        cwd: "/remote/project",
+        relativePath: "src",
+        readSnapshot: (signal) => {
+          Deferred.doneUnsafe(started, Effect.succeed(signal));
+          return pending.promise;
+        },
+      });
+      const subscriber = yield* Effect.forkScoped(Stream.runDrain(stream));
+      const signal = yield* Deferred.await(started);
+      expect(signal.aborted).toBe(false);
+      yield* Fiber.interrupt(subscriber);
+      expect(signal.aborted).toBe(true);
+      pending.resolve("late snapshot");
+    }).pipe(Effect.timeout("5 seconds")),
+  );
+
   it.effect("emits an invalidation when the remote directory snapshot changes", () =>
     Effect.gen(function* () {
       let reads = 0;

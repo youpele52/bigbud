@@ -3,10 +3,11 @@ import type {
   ProjectSearchFileContentsInput,
   ProjectSearchFileContentsResult,
 } from "@bigbud/contracts/workspace/project.ts";
-import { Cause, Data, Effect, Exit } from "effect";
+import { Cause, Data, Effect, Exit, Schema } from "effect";
 
 import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
 import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
+import type { WorkspaceContentSearchOwnerShape } from "../Services/WorkspaceContentSearchOwner.ts";
 import { WorkspaceFileSystemError } from "../Services/WorkspaceFileSystem.ts";
 
 class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSearchCommandError")<{
@@ -18,6 +19,8 @@ class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSearchComma
   }
 }
 
+const REMOTE_SEARCH_OPERATION = "workspaceFileSystem.searchFileContentsRemote";
+const SEARCH_COMMAND_OPERATION = "workspaceFileSystem.searchFileContentsCommand";
 const WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS = 10_000;
 const WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES = 512 * 1024;
 const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
@@ -36,8 +39,18 @@ function normalizeMatchedPath(pathValue: string): string {
   return pathValue.replace(/^\.\//, "").replaceAll("\\", "/");
 }
 
-function isRipgrepCommandNotFound(error: WorkspaceSearchCommandError): boolean {
-  return error.message === "Command not found: rg";
+function searchFailure(cwd: string, operation: string, cause: unknown): WorkspaceFileSystemError {
+  if (Schema.is(WorkspaceFileSystemError)(cause)) return cause;
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  const missingRipgrep = detail === "Command not found: rg";
+  return new WorkspaceFileSystemError({
+    cwd,
+    operation: missingRipgrep ? REMOTE_SEARCH_OPERATION : operation,
+    detail: missingRipgrep
+      ? "Remote content search requires ripgrep on the SSH host, or the bigbud agent."
+      : detail,
+    cause,
+  });
 }
 
 function normalizeSearchCommandError(error: unknown): WorkspaceSearchCommandError {
@@ -114,17 +127,38 @@ function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
   return matches;
 }
 
+export function limitSearchResult(
+  result: ProjectSearchFileContentsResult,
+  requestedLimit: number,
+): ProjectSearchFileContentsResult {
+  const limit = Math.max(0, Math.floor(requestedLimit));
+  return {
+    ...result,
+    matches: result.matches.slice(0, limit),
+    truncated: result.truncated || result.matches.length > limit,
+  };
+}
+
 /**
- * Direct-SSH hosts (no managed agent) keep `rg` on the host (plan Q5). Results carry the
- * `use-managed-agent` notice so the client can suggest the faster agent search. Matching is literal
- * (`--fixed-strings`) and always case-insensitive (`--ignore-case`, not smart case), like the
- * agent's engine, so `a.b(` finds that text instead of being read as a regular expression.
+ * Direct-SSH hosts (no managed agent) keep `rg` on the host (plan Q5). Legacy matching is literal
+ * and case-insensitive, like the agent's engine, so `a.b(` is text rather than a regular expression.
  */
 export const searchRemoteFileContentsViaSsh = Effect.fn("WorkspaceFileSystem.searchRemoteViaSsh")(
-  function* (input: ProjectSearchFileContentsInput & { readonly executionTargetId: string }) {
+  function* (
+    input: ProjectSearchFileContentsInput & { executionTargetId: string },
+    owner?: WorkspaceContentSearchOwnerShape,
+  ) {
     const toolTransportTarget = resolveToolTransportTarget(
       resolveWorkspaceTarget({ executionTargetId: input.executionTargetId, cwd: input.cwd }),
     );
+    if (owner && toolTransportTarget.transport === "ssh") {
+      const result = yield* Effect.tryPromise({
+        try: () => owner.searchFileContents(input),
+        catch: (cause) => searchFailure(input.cwd, REMOTE_SEARCH_OPERATION, cause),
+      });
+      return limitSearchResult(result, input.limit);
+    }
+
     const searchResultOrError = yield* Effect.exit(
       Effect.tryPromise({
         try: () =>
@@ -152,33 +186,25 @@ export const searchRemoteFileContentsViaSsh = Effect.fn("WorkspaceFileSystem.sea
 
     if (Exit.isFailure(searchResultOrError)) {
       const failure = normalizeSearchCommandError(Cause.squash(searchResultOrError.cause));
-      return yield* new WorkspaceFileSystemError({
-        cwd: input.cwd,
-        operation: isRipgrepCommandNotFound(failure)
-          ? "workspaceFileSystem.searchFileContentsRemote"
-          : "workspaceFileSystem.searchFileContentsCommand",
-        detail: isRipgrepCommandNotFound(failure)
-          ? "Remote content search requires ripgrep on the SSH host, or the bigbud agent."
-          : failure.message,
-        cause: failure,
-      });
+      return yield* searchFailure(input.cwd, SEARCH_COMMAND_OPERATION, failure);
     }
 
     const searchResult = searchResultOrError.value;
     if (searchResult.code !== 0 && searchResult.code !== 1) {
       return yield* new WorkspaceFileSystemError({
         cwd: input.cwd,
-        operation: "workspaceFileSystem.searchFileContentsCommand",
+        operation: SEARCH_COMMAND_OPERATION,
         detail: searchResult.stderr.trim() || "Workspace file content search failed.",
       });
     }
 
-    const matches = parseRipgrepJsonMatches(searchResult.stdout);
-    const limit = Math.max(0, Math.floor(input.limit));
-    return {
-      matches: matches.slice(0, limit),
-      truncated: (searchResult.stdoutTruncated ?? false) || matches.length > limit,
-      notice: "use-managed-agent",
-    } satisfies ProjectSearchFileContentsResult;
+    return limitSearchResult(
+      {
+        matches: parseRipgrepJsonMatches(searchResult.stdout),
+        truncated: searchResult.stdoutTruncated ?? false,
+        notice: "use-managed-agent",
+      },
+      input.limit,
+    );
   },
 );

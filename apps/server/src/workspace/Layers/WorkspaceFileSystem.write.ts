@@ -15,6 +15,7 @@ import {
   WORKSPACE_FILE_ALREADY_EXISTS,
   WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
 } from "../Services/WorkspaceFileSystem.ts";
+import type { WorkspaceMutationWatchOwnerShape } from "../Services/WorkspaceMutationWatchOwner.ts";
 import type { WorkspacePathsShape } from "../Services/WorkspacePaths.ts";
 import {
   ConditionalWriteConflict,
@@ -32,6 +33,7 @@ export function makeWorkspaceWriteFile(input: {
   readonly path: Path.Path;
   readonly workspacePaths: WorkspacePathsShape;
   readonly workspaceEntries: WorkspaceEntriesShape;
+  readonly mutationWatchOwner: WorkspaceMutationWatchOwnerShape | undefined;
   readonly sql?: SqlClient.SqlClient;
 }): WorkspaceFileSystemShape["writeFile"] {
   // Serialize cooperating local writes across the hash check and mutation.
@@ -90,9 +92,18 @@ export function makeWorkspaceWriteFile(input: {
           writeDisposition: "not-dispatched",
         });
       }
+      const owner = toolTransportTarget.transport === "ssh" ? input.mutationWatchOwner : undefined;
       yield* Effect.tryPromise({
-        try: () =>
-          runToolCommand({
+        try: async () => {
+          if (owner) {
+            return owner.writeFile({
+              executionTargetId,
+              cwd: value.cwd,
+              relativePath: target.relativePath,
+              contents: value.contents,
+            });
+          }
+          return runToolCommand({
             target: toolTransportTarget,
             command: "sh",
             args: ["-lc", 'mkdir -p "$(dirname -- "$1")" && cat > "$1"', "sh", target.relativePath],
@@ -100,13 +111,15 @@ export function makeWorkspaceWriteFile(input: {
             timeoutMs: 30_000,
             maxBufferBytes: 256 * 1024,
             outputMode: "truncate",
-          }),
+          });
+        },
         catch: (cause) =>
           new WorkspaceFileSystemError({
             cwd: value.cwd,
             relativePath: value.relativePath,
             operation: "workspaceFileSystem.writeFileRemote",
             detail: cause instanceof Error ? cause.message : String(cause),
+            ...(owner ? { writeDisposition: "unknown" as const } : {}),
             cause,
           }),
       });

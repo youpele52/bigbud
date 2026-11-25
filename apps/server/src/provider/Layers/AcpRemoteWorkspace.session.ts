@@ -15,10 +15,31 @@ import {
   createRemoteWorkspaceAcpBridge,
   type RemoteWorkspaceAcpBridge,
 } from "../../remote-workspace-bridge/remoteWorkspaceAcpBridge.ts";
+import { isDevSshOwnerSelected } from "../../ssh/sshOwnerDevMode.ts";
+import type { SessionFsOwnerWorkspace } from "../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.owner.ts";
+import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
 import { isRemoteWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import { resolveProviderExecutionContext } from "../providerExecutionContext.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
+
+export const resolveAcpSessionFsOwner = Effect.fn("resolveAcpSessionFsOwner")(function* () {
+  if (!isDevSshOwnerSelected()) return undefined;
+  const runtime = yield* Effect.serviceOption(DevSshOwnerRuntime);
+  const session = runtime._tag === "Some" ? runtime.value.session : undefined;
+  if (session?.kind !== "unix" && session?.kind !== "retained-unix") return undefined;
+  const boundWorkspace =
+    "guardedWorkspace" in session && session.guardedWorkspace
+      ? session.guardedWorkspace
+      : {
+          targetId: session.targetId,
+          workspaceRoot: session.fixture.folder,
+          withOwner: session.picker.withOwner,
+        };
+  const { targetId, workspaceRoot, withOwner } = boundWorkspace;
+  const workspace: SessionFsOwnerWorkspace = { targetId, workspaceRoot, withOwner };
+  return workspace;
+});
 
 export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorkspaceSession")(
   function* (input: {
@@ -26,6 +47,7 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
     readonly sessionInput: ProviderSessionStartInput;
     readonly ptyResolver: RemoteAgentPtyResolver | undefined;
     readonly orchestrationCleanup: () => Promise<void>;
+    readonly sessionFsOwner?: SessionFsOwnerWorkspace;
     readonly readinessProbe?: RemoteWorkspaceReadinessProbe;
   }) {
     const executionContext = resolveProviderExecutionContext({
@@ -46,7 +68,9 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
 
     let remoteBridge: RemoteWorkspaceAcpBridge | undefined;
     if (isRemoteWorkspaceTarget(executionContext.workspaceTarget)) {
+      const selected = isDevSshOwnerSelected();
       const useRemoteAgentPty =
+        !selected &&
         input.ptyResolver !== undefined &&
         isRemoteAgentExecutionTarget(executionContext.workspaceTarget.executionTargetId);
       remoteBridge = yield* Effect.tryPromise({
@@ -57,12 +81,15 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
             prefix: `bigbud-${input.provider}-remote-workspace-`,
             readmeLines: [
               `This directory runs ${input.provider} against a remote workspace.`,
-              useRemoteAgentPty
-                ? "ACP filesystem and terminal requests are routed through the bigbud remote agent."
-                : "ACP filesystem and terminal requests are routed directly over SSH.",
+              selected
+                ? "Only bounded, read-only ACP file requests are available."
+                : useRemoteAgentPty
+                  ? "ACP filesystem and terminal requests are routed through the bigbud remote agent."
+                  : "ACP filesystem and terminal requests are routed directly over SSH.",
               "",
             ],
             ...(input.readinessProbe ? { readinessProbe: input.readinessProbe } : {}),
+            ...(input.sessionFsOwner ? { sessionFsOwner: input.sessionFsOwner } : {}),
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({

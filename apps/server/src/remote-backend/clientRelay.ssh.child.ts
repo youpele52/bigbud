@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { waitForClientRelayReap } from "./clientRelay.ssh.reap.ts";
 import { ClientRelayStdioSocket } from "./clientRelay.stdio.ts";
 
 /** Exit/waitpid confirmation owns cleanup; inherited stderr must never hold 'close' forever. */
@@ -59,21 +60,7 @@ export function ownClientRelaySshChild(child: ChildProcessWithoutNullStreams, si
     stream,
     exited,
     async waitForExit(timeoutMs: number) {
-      if (reaped) return;
-      let deadline: NodeJS.Timeout | undefined;
-      try {
-        await Promise.race([
-          exited,
-          new Promise<never>((_resolve, reject) => {
-            deadline = setTimeout(
-              () => reject(new Error("SSH relay cleanup could not confirm owned child exit.")),
-              timeoutMs,
-            );
-          }),
-        ]);
-      } finally {
-        if (deadline) clearTimeout(deadline);
-      }
+      if (!reaped) await waitForClientRelayReap(exited, timeoutMs);
     },
   };
 }

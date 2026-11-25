@@ -12,12 +12,17 @@ import {
   listProcesses,
   processAlive,
 } from "../../../scripts/lib/dev-process-tree.ts";
+import { resolveDesktopSshOwnerDevProfile } from "../src/backend/backendEnv.sshOwner.ts";
 import { prepareDevSystemMonitorEnv } from "./dev-system-monitor.mjs";
 import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5733);
 const devServerUrl = `http://localhost:${port}`;
+const sshOwnerProfile = resolveDesktopSshOwnerDevProfile(false, process.env);
+const appMarker = sshOwnerProfile
+  ? `--bigbud-ssh-owner-dev-root=${sshOwnerProfile}`
+  : `--t3code-dev-root=${desktopDir}`;
 const requiredFiles = [
   "dist-electron/main.js",
   "dist-electron/preload.js",
@@ -49,7 +54,7 @@ function cleanupStaleDevApps() {
     return;
   }
 
-  spawnSync("pkill", ["-f", "--", `--t3code-dev-root=${desktopDir}`], { stdio: "ignore" });
+  spawnSync("pkill", ["-f", "--", appMarker], { stdio: "ignore" });
 }
 
 const launcher = new DevElectronLauncher({
@@ -59,7 +64,7 @@ const launcher = new DevElectronLauncher({
   spawnApp() {
     const app = spawn(
       resolveElectronPath(true),
-      ["--no-deprecation", `--t3code-dev-root=${desktopDir}`, "dist-electron/main.js"],
+      ["--no-deprecation", appMarker, "dist-electron/main.js"],
       {
         cwd: desktopDir,
         env: {

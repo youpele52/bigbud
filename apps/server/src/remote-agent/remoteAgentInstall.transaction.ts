@@ -1,4 +1,5 @@
 import { type RemoteAgentArtifact } from "./remoteAgentArtifact.ts";
+import { type RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { type RemoteAgentInstallPaths } from "./remoteAgentInstall.ts";
 import {
   buildRemoteAgentActivationCommittedStateScript,
@@ -11,7 +12,6 @@ import {
   buildOptionalRemoteAgentSupervisorPreparationCommand,
   buildRemoteAgentSupervisorPreparationCommand,
 } from "./remoteAgentSupervisor.ts";
-import { type RunSshCommandInput } from "../ssh/sshProcess.ts";
 
 /** Retired compatibility transaction; candidate staging is stateless and isolated. */
 
@@ -34,7 +34,7 @@ export async function runRemoteAgentActivationTransaction(input: {
   readonly executionTargetId: string;
   readonly artifact: RemoteAgentArtifact;
   readonly paths: RemoteAgentInstallPaths;
-  readonly runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>;
+  readonly runRemoteCommand: RemoteAgentCommandRunner;
   readonly verifyInstalledAgent: (input: {
     readonly executionTargetId: string;
     readonly version: string;

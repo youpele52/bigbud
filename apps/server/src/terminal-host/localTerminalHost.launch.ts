@@ -7,6 +7,9 @@ import { assertPrivateDirectory, ensurePrivateDirectory } from "./localTerminalH
 import type { LocalTerminalHostGenerationPaths } from "./localTerminalHost.paths.ts";
 
 export const LOCAL_TERMINAL_HOST_MINIMAL_PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+
+/** Build A X2 hosts advertise this; an older host must be treated as unsupported. */
+export { TERMINAL_HOST_RETIREMENT_CAPABILITY } from "../remote-agent/remoteAgentProtocol.terminalHost.ts";
 const SOCKET_WAIT_MS = 5_000;
 const SOCKET_POLL_MS = 50;
 

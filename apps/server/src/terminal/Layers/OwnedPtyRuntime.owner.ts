@@ -1,11 +1,48 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { NATIVE_SSH_CONNECTION_PREFIX } from "../../terminal-host/localTerminalHost.directSsh.owner.lifecycle.ts";
 import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
 import type { TerminalSessionState } from "./Manager.types.ts";
 
 /** Durable owner route for one application pane; matches the PTY adapter's `terminal:` prefix. */
 export const ownedTerminalOwnerRouteKey = (threadId: string, terminalId: string): string =>
   `terminal:${JSON.stringify([threadId, terminalId])}`;
+
+/** A boot-bound root and durable native lease allow attach-only without a new SSH cwd probe. */
+export const findNativeTerminalRecovery = Effect.fn("terminal.findNativeTerminalRecovery")(
+  function* (
+    runtime: OwnedPtyRuntime | undefined,
+    request: { threadId: string; cwd: string },
+    terminalId: string,
+  ) {
+    if (!runtime?.localSshClient || runtime.nativeSshWorkspaceRoot !== request.cwd)
+      return undefined;
+    const key = ownedTerminalOwnerRouteKey(request.threadId, terminalId);
+    const route = yield* Effect.tryPromise(() => runtime.owners().get(key));
+    return route?.ownerKey === key &&
+      route.target === runtime.targetId &&
+      route.terminalCwd === request.cwd &&
+      route.connectionId.startsWith(NATIVE_SSH_CONNECTION_PREFIX) &&
+      !route.shellLaunch &&
+      route.state === "may-have-been-sent" &&
+      route.resourceId
+      ? route
+      : undefined;
+  },
+);
+
+/** A native owner-loss tombstone is not an exit or permission to launch. */
+export const findNativeTerminalHostLoss = Effect.fn("terminal.findNativeTerminalHostLoss")(
+  function* (runtime: OwnedPtyRuntime | undefined, threadId: string, terminalId: string) {
+    const client = runtime?.localSshClient;
+    if (!runtime || !client?.isHostLost) return undefined;
+    const row = yield* Effect.tryPromise(() =>
+      runtime.owners().get(ownedTerminalOwnerRouteKey(threadId, terminalId)),
+    ).pipe(Effect.option);
+    const route = Option.getOrUndefined(row);
+    return route?.target === runtime.targetId && client.isHostLost(route) ? route : undefined;
+  },
+);
 
 /**
  * Owners are reserved durably before any PTY dispatch and are only removed once

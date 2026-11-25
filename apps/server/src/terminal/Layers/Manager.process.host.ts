@@ -18,6 +18,7 @@ import { terminalInventorySessions } from "./Manager.hostInventory.ts";
 import type { TerminalHostLimitContext } from "./Manager.hostLimit.ts";
 import { terminalPaneIdsForThread } from "./Manager.hostPaneIds.ts";
 import { applyTerminalQuitPolicy } from "./Manager.quitPolicy.ts";
+import { nativeDirectSshQuitCloserFor } from "../../terminal-host/localTerminalHost.directSsh.owner.quit.ts";
 import { makeTerminalSessionHostApi } from "./Manager.session.host.ts";
 import type { TerminalHostInventorySource } from "./Manager.session.subscription.ts";
 import { toSessionKey } from "./Manager.shell";
@@ -116,6 +117,7 @@ export function makeTerminalManagerHost(input: {
       keepRunningAfterQuit,
       runtime,
       remote: hub.remote,
+      native: nativeDirectSshQuitCloserFor(options.ptyAdapter),
     }).pipe(Effect.ensuring(Effect.sync(() => hub.dispose())), Effect.ignoreCause({ log: true })),
   };
 }

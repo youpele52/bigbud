@@ -26,6 +26,12 @@ export class RemoteAgentPtyClient {
     readonly profileLaunch?: boolean;
     /** Protocol 1.9 fields; callers send only what the host advertises. */
     readonly lifecycle?: RemoteAgentPtyCreateLifecycleFields;
+    /** Protocol 1.10 X2 inventory identity; absent on a legacy create. */
+    readonly paneIdentity?: {
+      readonly threadId: string;
+      readonly paneId: string;
+      readonly kind: "local" | "managed-ssh";
+    };
     readonly onRejected?: () => Promise<void>;
   }): Promise<RemoteAgentPtyProcess> {
     const ptyId = input.ptyId ?? randomUUID();
@@ -47,6 +53,13 @@ export class RemoteAgentPtyClient {
             ...(input.environment ? { environment: input.environment } : {}),
             ...(input.profileLaunch ? { profileLaunch: true } : {}),
             ...input.lifecycle,
+            ...(input.paneIdentity
+              ? {
+                  threadId: input.paneIdentity.threadId,
+                  paneId: input.paneIdentity.paneId,
+                  paneKind: input.paneIdentity.kind,
+                }
+              : {}),
           },
         },
         (frame) => frame.type === "ptyCreateResponse" && frame.value.ptyId === ptyId,

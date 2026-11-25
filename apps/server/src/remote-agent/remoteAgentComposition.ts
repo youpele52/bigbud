@@ -1,5 +1,12 @@
-import { RemoteAgentConnection } from "./remoteAgentConnection.ts";
-import { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
+import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
+import {
+  makeInstalledProxyPoolFactory,
+  type InstalledProxySelection,
+} from "./remoteAgentComposition.installedProxy.ts";
+import {
+  RemoteAgentConnectionPool,
+  type RemoteAgentConnectionPoolFactory,
+} from "./remoteAgentConnectionPool.ts";
 import {
   makeRemoteProcessClientResolver,
   makeRemoteWorkspaceClientResolver,
@@ -21,6 +28,7 @@ import {
   cancelOwnedRemoteProcess,
   makeOwnedRemoteAgentProcess,
 } from "./remoteAgentOwnedProcess.ts";
+import { installedRemoteAgentStartupRefusal } from "./remoteAgentInstalledStartup.state.ts";
 
 export interface RemoteAgentComposition {
   readonly managed: boolean;
@@ -32,48 +40,62 @@ export interface RemoteAgentComposition {
   readonly ptyResolver: RemoteAgentPtyResolver;
 }
 
-export function makeRemoteAgentComposition(input: {
-  readonly binaryPath: string;
-  readonly maxFrameBytes?: number;
-}): RemoteAgentComposition {
-  const managed = input.binaryPath === "$HOME/.bigbud/agent/bin/current";
-  const pool = new RemoteAgentConnectionPool({
-    ...(managed ? { resolveBinding: remoteAgentAdmission.resolveBinding } : {}),
-    ...(managed
-      ? {
-          isRetiring: async (executionTargetId, binding) => {
-            const state = await (await openRemoteAgentControl(executionTargetId)).registry.read();
-            const buildId = remoteAgentBuildId(binding.runtime);
-            return state.retirementReservations.some(
-              (reservation) => reservation.buildId === buildId && reservation.phase !== "failed",
-            );
-          },
-        }
-      : {}),
-    create: async (executionTargetId, binding) =>
-      RemoteAgentConnection.ssh({
-        executionTargetId,
-        binaryPath: input.binaryPath,
-        ...(binding ? { runtime: binding.runtime } : {}),
-        ...(input.maxFrameBytes !== undefined ? { maxFrameBytes: input.maxFrameBytes } : {}),
-      }),
-  });
+export function makeRemoteAgentComposition(
+  input: { readonly maxFrameBytes?: number } & (
+    | { readonly binaryPath: string; readonly installedProxy?: never }
+    | { readonly installedProxy: InstalledProxySelection; readonly binaryPath?: never }
+  ),
+): RemoteAgentComposition {
+  const managed =
+    input.installedProxy !== undefined || input.binaryPath === "$HOME/.bigbud/agent/bin/current";
+  const { binaryPath, maxFrameBytes } = input;
+  const raw: RemoteAgentConnectionPoolFactory =
+    binaryPath === undefined
+      ? makeInstalledProxyPoolFactory(input.installedProxy, maxFrameBytes)
+      : {
+          ...(managed
+            ? {
+                resolveBinding: remoteAgentAdmission.resolveBinding,
+                isRetiring: async (executionTargetId, binding) => {
+                  const state = await (
+                    await openRemoteAgentControl(executionTargetId)
+                  ).registry.read();
+                  const buildId = remoteAgentBuildId(binding.runtime);
+                  return state.retirementReservations.some(
+                    (reservation) =>
+                      reservation.buildId === buildId && reservation.phase !== "failed",
+                  );
+                },
+              }
+            : {}),
+          create: async (executionTargetId, binding) =>
+            RemoteAgentConnection.ssh({
+              executionTargetId,
+              binaryPath,
+              ...(binding ? { runtime: binding.runtime } : {}),
+              ...(maxFrameBytes !== undefined ? { maxFrameBytes } : {}),
+            }),
+        };
+  // A refused endpoint never re-enters through the process-default composition:
+  // the refusal is typed and this pool refuses before any SSH launch.
+  const factory = guardRefusedTargets(raw);
+  const pool = new RemoteAgentConnectionPool(factory);
   const workspaceResolver = makeRemoteWorkspaceClientResolver(pool);
   const processResolver = makeRemoteProcessClientResolver(pool);
   const ownedRunner = managed ? { runOwned: makeOwnedRemoteAgentProcess(pool) } : {};
   // Custom binaries are observed, never promoted into the managed target admission.
   // The ordinary inventory/legacy connection may prepare its existing supervisor;
   // this profile lane and every recovery connection are strictly proxy-only.
-  const resolveProfileBinding = managed
-    ? remoteAgentAdmission.resolveBinding
-    : async (target: string) =>
-        observeLegacyRemoteAgentBinding(
-          target,
-          await openRemoteAgentControl(target),
-          undefined,
-          undefined,
-          input.binaryPath,
-        );
+  const resolveProfileBinding =
+    factory.resolveBinding ??
+    (async (target: string) =>
+      observeLegacyRemoteAgentBinding(
+        target,
+        await openRemoteAgentControl(target),
+        undefined,
+        undefined,
+        binaryPath,
+      ));
   // With the terminal host enabled, remote terminals are lifecycle-managed too (plan §7.2).
   const ownedPty = makeOwnedRemoteAgentPty(
     pool,
@@ -117,5 +139,34 @@ export function makeRemoteAgentComposition(input: {
       ...ownedRunner,
     }),
     ptyResolver,
+  };
+}
+
+function guardRefusedTargets(
+  factory: RemoteAgentConnectionPoolFactory,
+): RemoteAgentConnectionPoolFactory {
+  const refuse = (target: string) => {
+    const reason = installedRemoteAgentStartupRefusal(target);
+    if (reason) {
+      throw new RemoteAgentConnectionError(
+        `Installed agent startup refused this endpoint (${reason}).`,
+      );
+    }
+  };
+  return {
+    create: async (executionTargetId, binding) => {
+      refuse(executionTargetId);
+      return factory.create(executionTargetId, binding);
+    },
+    ...(factory.resolveBinding
+      ? {
+          resolveBinding: async (executionTargetId: string) => {
+            refuse(executionTargetId);
+            return factory.resolveBinding?.(executionTargetId);
+          },
+        }
+      : {}),
+    ...(factory.isRetiring ? { isRetiring: factory.isRetiring } : {}),
+    ...(factory.retirementFence ? { retirementFence: factory.retirementFence } : {}),
   };
 }

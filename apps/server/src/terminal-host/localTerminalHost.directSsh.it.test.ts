@@ -1,10 +1,9 @@
 /**
- * M7 with the real binary (`BIGBUD_TERMINAL_HOST_IT=1`): a Direct SSH pane's ssh client runs in
- * the local terminal host, survives a backend restart, and is closed by Forget. No SSH server is
- * needed: a fake `ssh` on PATH runs the remote command locally, exactly as sshd would run it.
+ * S0 F04/X2: exercise legacy Direct SSH through the real local native host, with a recording
+ * `ssh` executable and isolated state. This is a baseline, not release-profile qualification.
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { TerminalEvent } from "@bigbud/contracts";
 import { Effect, Option, type Scope } from "effect";
@@ -14,8 +13,10 @@ import { fixture as journalFixture } from "../persistence/Layers/DirectShellLaun
 import type { RemoteAgentOwnerStore } from "../remote-agent/remoteAgentOwners.ts";
 import { TerminalViewRegistry } from "../terminal/activity/terminalViewRegistry.ts";
 import { directShellOwnerKey } from "../terminal/Layers/DirectShellLaunch.owner.ts";
+import { historyPath } from "../terminal/Layers/Manager.history-io.ts";
 import { makeTerminalManagerWithOptions } from "../terminal/Layers/Manager.process.ts";
 import type { TerminalManagerOptions } from "../terminal/Layers/Manager.types.ts";
+import { ownedTerminalOwnerRouteKey } from "../terminal/Layers/OwnedPtyRuntime.owner.ts";
 import type { PtyAdapterShape } from "../terminal/Services/PTY.ts";
 import { reachableHostInventoryEntries } from "../terminal/Services/OwnedPtyRuntime.ts";
 import { makeLocalTerminalHostPtyAdapter } from "./localTerminalHost.adapter.ts";
@@ -24,8 +25,11 @@ import {
   realLocalTerminalHostController,
 } from "./localTerminalHost.parity.testUtils.ts";
 import { localTerminalHostPaths } from "./localTerminalHost.paths.ts";
-import { makeLocalTerminalHostProcesses } from "./localTerminalHost.process.ts";
-import { makeLocalTerminalHostRegistry } from "./localTerminalHost.registry.ts";
+import { makeLocalTerminalHostProcesses, runProcessCommand } from "./localTerminalHost.process.ts";
+import {
+  makeLocalTerminalHostRegistry,
+  type LocalTerminalHostRecord,
+} from "./localTerminalHost.registry.ts";
 import { makeShortTerminalHostRoot } from "./localTerminalHost.testUtils.ts";
 
 vi.mock("../ssh/sshProcess", () => ({
@@ -43,7 +47,11 @@ const target = "ssh:host=devbox.test&user=me&auth=ssh-key&transport=direct-ssh";
 const processes = makeLocalTerminalHostProcesses();
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
-  for (const cleanup of cleanups.splice(0).toReversed()) await cleanup();
+  try {
+    for (const cleanup of cleanups.splice(0).toReversed()) await cleanup();
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 const noFallback: PtyAdapterShape = {
@@ -73,40 +81,64 @@ const until = async (check: () => boolean, label: string, timeoutMs = 10_000) =>
 const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
   Effect.runPromise(Effect.scoped(effect).pipe(Effect.provide(NodeServices.layer)));
 
-/** Runs the remote command (its last argument) locally, as sshd would on the target. */
-async function installFakeSsh(dir: string) {
-  await mkdir(dir, { recursive: true });
-  const script = join(dir, "ssh");
-  await writeFile(script, '#!/bin/sh\nfor last; do :; done\nexec /bin/sh -c "$last"\n');
-  await chmod(script, 0o755);
-  const saved = { PATH: process.env.PATH, SHELL: process.env.SHELL };
-  process.env.PATH = `${dir}:${process.env.PATH ?? "/usr/bin:/bin"}`;
-  process.env.SHELL = "/bin/sh";
-  cleanups.push(() => {
-    process.env.PATH = saved.PATH;
-    process.env.SHELL = saved.SHELL;
-  });
+/** Records only process ancestry and argv shape, then executes the synthetic remote command locally. */
+async function installSshRecorder(home: string) {
+  const dir = join(home, "bin");
+  const log = join(home, "ssh-launches");
+  await mkdir(dir);
+  await symlink("/bin/sh", join(dir, "sh"));
+  await writeFile(
+    join(dir, "ssh"),
+    `#!/bin/sh
+printf '%s %s %s %s\\n' "$$" "$PPID" "$#" "$1" >> "$HOME/ssh-launches"
+for last; do :; done
+exec /bin/sh -c "$last"
+`,
+    { mode: 0o700 },
+  );
+  // The PTY launch can find only our recorder, never a real OpenSSH executable.
+  vi.stubEnv("PATH", dir);
+  vi.stubEnv("HOME", home);
+  vi.stubEnv("SHELL", "/bin/sh");
+  return () => readFile(log, "utf8");
 }
 
-describe.skipIf(!enabled)("M7 Direct SSH through the real local terminal host", () => {
-  it("runs ssh in the host, survives a backend restart, and is closed by Forget", async () => {
+async function isFixtureHost(record: LocalTerminalHostRecord) {
+  if ((await processes.verify(record.pid, record.pidStartTime)) !== "verified") return false;
+  const command = await runProcessCommand("/bin/ps", [
+    "-ww",
+    "-o",
+    "command=",
+    "-p",
+    String(record.pid),
+  ]);
+  return (
+    command.code === 0 && command.stdout.trim().startsWith(`${record.binaryPath} --supervisor `)
+  );
+}
+
+async function retireFixtureHost(record: LocalTerminalHostRecord) {
+  if (record.pid === undefined || !(await isFixtureHost(record))) return false;
+  return processes.signal(record.pid, "SIGTERM") && processes.waitForExit(record.pid, 5_000);
+}
+
+describe.skipIf(!enabled)("S0 F04/X2 Direct SSH through the real local terminal host", () => {
+  it("records native launcher ancestry, reuses the owner, and retires the drained fixture host", async () => {
     const root = await makeShortTerminalHostRoot();
+    const registry = makeLocalTerminalHostRegistry(root.paths);
     cleanups.push(root.cleanup);
     cleanups.push(async () => {
-      for (const record of await makeLocalTerminalHostRegistry(root.paths).read()) {
-        if (record.pid === undefined) continue;
-        processes.signal(record.pid, "SIGTERM");
-        await processes.waitForExit(record.pid, 3_000);
-      }
+      for (const record of await registry.read()) await retireFixtureHost(record);
     });
-    await installFakeSsh(join(root.stateDir, "bin"));
+    const launches = await installSshRecorder(root.stateDir);
     const cwd = join(root.stateDir, "remote-work");
     await mkdir(cwd);
     const ownerStore = await makeTerminalHostOwnerStore(root.stateDir);
     cleanups.push(ownerStore.dispose);
     const journal = await journalFixture();
+    const logsDir = join(root.stateDir, "logs");
     const options = (adapter: PtyAdapterShape): TerminalManagerOptions => ({
-      logsDir: join(root.stateDir, "logs"),
+      logsDir,
       ptyAdapter: adapter,
       agentDetector: () => Effect.succeed(new Map()),
       subprocessPollIntervalMs: 60_000,
@@ -123,13 +155,13 @@ describe.skipIf(!enabled)("M7 Direct SSH through the real local terminal host", 
       rows: 30,
     };
     const recordKey = directShellOwnerKey(pane.threadId, pane.terminalId);
+    const hostOwnerKey = ownedTerminalOwnerRouteKey(pane.threadId, pane.terminalId);
 
-    // Backend 1: the ssh client starts in the host; the backend stops without a quit hint.
-    const sshPid = await run(
+    // Backend scope 1: start the SSH client and stop the backend without a quit hint.
+    const first = backend(root.stateDir, ownerStore.store);
+    const { sshPid, hosted, hostOwner } = await run(
       Effect.gen(function* () {
-        const manager = yield* makeTerminalManagerWithOptions(
-          options(backend(root.stateDir, ownerStore.store).adapter),
-        );
+        const manager = yield* makeTerminalManagerWithOptions(options(first.adapter));
         let text = "";
         yield* manager.subscribe((event: TerminalEvent) =>
           Effect.sync(() => {
@@ -142,22 +174,51 @@ describe.skipIf(!enabled)("M7 Direct SSH through the real local terminal host", 
         yield* Effect.promise(() => until(() => text.includes("direct-42"), "remote output"));
         // The generation-scoped PID marker is consumed, never shown.
         expect(text).not.toContain("bigbud-shell-");
-        expect(yield* Effect.promise(() => journal.store.getHosted!(recordKey))).toMatchObject({
-          executionTargetId: target,
+        // Attach-only recovery requires retained history. Wait for the debounced write, not a sleep.
+        yield* Effect.promise(() =>
+          vi.waitFor(async () => {
+            expect(
+              await readFile(historyPath(logsDir, pane.threadId, pane.terminalId), "utf8"),
+            ).toContain("direct-42");
+          }, 5_000),
+        );
+        const hosted = yield* Effect.promise(() => journal.store.getHosted!(recordKey));
+        expect(hosted).toMatchObject({ executionTargetId: target });
+        const hostOwner = yield* Effect.promise(() => ownerStore.store.get(hostOwnerKey));
+        expect(hostOwner).toMatchObject({
+          epoch: expect.any(String),
+          connectionId: expect.any(String),
+          resourceId: expect.any(String),
+          state: "may-have-been-sent",
         });
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 600)));
-        return opened.pid!;
+        expect(opened.pid).toEqual(expect.any(Number));
+        return { sshPid: opened.pid!, hosted: hosted!, hostOwner: hostOwner! };
       }),
     );
+    await first.close();
+    const [host] = await registry.read();
+    expect(host).toMatchObject({ pid: expect.any(Number), epoch: hostOwner.epoch });
+    expect(await isFixtureHost(host!)).toBe(true);
+    const launch = `${sshPid} ${host!.pid} 6 -tt\n`;
+    expect(await launches()).toBe(launch);
     expect(processes.isAlive(sshPid)).toBe(true);
 
-    // Backend 2 (a restart): the pane reattaches to the same ssh session; Forget closes it.
+    // Backend scope 2: reattach, then explicitly authorize the drain with Forget.
     const second = backend(root.stateDir, ownerStore.store);
     await run(
       Effect.gen(function* () {
         const manager = yield* makeTerminalManagerWithOptions(options(second.adapter));
         const reopened = yield* manager.open({ ...pane, attachOnly: true });
         expect(reopened.pid).toBe(sshPid);
+        expect(yield* Effect.promise(() => journal.store.getHosted!(recordKey))).toMatchObject({
+          reservationId: hosted.reservationId,
+        });
+        expect(yield* Effect.promise(() => ownerStore.store.get(hostOwnerKey))).toMatchObject({
+          epoch: hostOwner.epoch,
+          connectionId: hostOwner.connectionId,
+          resourceId: hostOwner.resourceId,
+        });
+        expect(yield* Effect.promise(launches)).toBe(launch);
         expect(yield* manager.forgetRetainedShellOwners!({ threadId: pane.threadId })).toEqual({
           forgotten: 1,
         });
@@ -165,12 +226,23 @@ describe.skipIf(!enabled)("M7 Direct SSH through the real local terminal host", 
           until(() => !processes.isAlive(sshPid), "the ssh session to end after Forget", 5_000),
         );
         expect(yield* Effect.promise(() => journal.store.getHosted!(recordKey))).toBeUndefined();
+        yield* Effect.promise(() =>
+          vi.waitFor(async () => {
+            expect(await ownerStore.store.get(hostOwnerKey)).toMatchObject({ state: "terminal" });
+          }, 5_000),
+        );
         yield* manager.close({ threadId: pane.threadId, deleteHistory: true });
+        const closed = yield* Effect.flip(manager.open({ ...pane, attachOnly: true }));
+        expect(closed._tag).toBe("TerminalNotRunningError");
       }),
     );
     const inventory = reachableHostInventoryEntries(
       await second.runtime.hostGenerations!.inventory(),
     );
     expect(inventory.filter((entry) => entry.state === "running")).toEqual([]);
+    await second.close();
+    // One-shot offline retirement of the verified temp host, not a production admission fence.
+    expect(await retireFixtureHost(host!)).toBe(true);
+    expect(await launches()).toBe(launch);
   }, 60_000);
 });

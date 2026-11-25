@@ -8,6 +8,7 @@ import {
   recordSshMonitorSample,
   sshMonitorLease,
 } from "../ssh/sshMonitor.connections.ts";
+import type { SelectedSshMonitorHealth } from "../ssh/sshMonitor.healthOwner.ts";
 import { validSshMonitorTarget } from "../ssh/sshMonitor.target.ts";
 
 function activeTarget(project: {
@@ -66,27 +67,36 @@ export const sampleSshMonitorEffect = Effect.fn("sampleSshMonitorEffect")(functi
 
 /** Shared verified-target health is authoritative across renderer tabs and reconnects. */
 export const listConnectedSshMonitorsEffect = Effect.fn("listConnectedSshMonitorsEffect")(
-  function* (projects: ProjectionProjectRepositoryShape, callerId: string) {
+  function* (
+    projects: ProjectionProjectRepositoryShape,
+    callerId: string,
+    owner?: SelectedSshMonitorHealth,
+  ) {
+    const monitorTarget = (
+      project: Parameters<typeof activeTarget>[0] & { workspaceRoot: string | null },
+    ) => {
+      const target = activeTarget(project);
+      return !owner || (target === owner.targetId && project.workspaceRoot === owner.workspaceRoot)
+        ? target
+        : null;
+    };
     const rows = yield* projects
       .listAll()
       .pipe(Effect.mapError(() => "SSH monitor project lookup failed"));
-    const targets = [
-      ...new Set(
-        rows
-          .map(activeTarget)
-          .filter(
-            (target): target is string =>
-              target !== null && sshMonitorLease(target, callerId) !== null,
-          ),
-      ),
-    ];
+    const leases = new Map<string, object>();
+    for (const project of rows) {
+      const target = monitorTarget(project);
+      const lease = target ? sshMonitorLease(target, callerId) : null;
+      if (target && lease) leases.set(target, lease);
+    }
+    const targets = [...leases.keys()];
     const connected = yield* Effect.tryPromise({
-      try: async () => {
+      try: async (signal) => {
         const connected: string[] = [];
-        for (let i = 0; i < targets.length; i += 4) {
+        for (let i = 0; i < targets.length && !signal.aborted; i += 4) {
           const group = targets.slice(i, i + 4);
           const states = await Promise.all(
-            group.map((target) => isConnectedSshMonitorTarget(target, callerId)),
+            group.map((target) => isConnectedSshMonitorTarget(target, callerId, owner, signal)),
           );
           for (let j = 0; j < group.length; j++) if (states[j]) connected.push(group[j]!);
         }
@@ -100,8 +110,10 @@ export const listConnectedSshMonitorsEffect = Effect.fn("listConnectedSshMonitor
       .pipe(Effect.mapError(() => "SSH monitor project lookup failed"));
     const healthy = new Set(connected);
     return current.flatMap((project) => {
-      const target = activeTarget(project);
-      return target && healthy.has(target) && sshMonitorLease(target, callerId) !== null
+      const target = monitorTarget(project);
+      return target &&
+        healthy.has(target) &&
+        sshMonitorLease(target, callerId) === leases.get(target)
         ? [{ projectId: project.projectId, name: project.title, target }]
         : [];
     });

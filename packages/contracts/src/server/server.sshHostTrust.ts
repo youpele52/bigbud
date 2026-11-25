@@ -13,6 +13,7 @@ export type SshHostTrustChallenge = typeof SshHostTrustChallenge.Type;
 export const ServerTrustSshHostInput = Schema.Struct({
   executionTargetId: ExecutionTargetId,
   challengeId: TrimmedNonEmptyString,
+  cancel: Schema.optional(Schema.Literal(true)),
 });
 export type ServerTrustSshHostInput = typeof ServerTrustSshHostInput.Type;
 

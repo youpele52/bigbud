@@ -1,4 +1,4 @@
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 
 import type { PiRpcResponse } from "./RpcProcess.types.ts";
 
@@ -8,15 +8,24 @@ interface PendingResponse {
   readonly reject: (error: Error) => void;
 }
 
+/** Pipes of a local Pi child or of a typed SSH owner lease; never a synthetic child process. */
+export interface PiRpcStdio {
+  readonly stdin: Writable;
+  readonly stdout: Readable;
+  readonly stderr: Readable;
+}
+
 interface PiRpcProcessLifecycleOptions {
-  readonly child: ChildProcessWithoutNullStreams;
-  readonly describeExit: (code: number | null, signal: NodeJS.Signals | null) => Error;
+  readonly stdio: PiRpcStdio;
+  readonly describeExit: (code: number | null, signal: string | null) => Error;
   readonly flushStdout: () => void;
   readonly cleanup: () => void;
 }
 
 export interface PiRpcProcessLifecycle {
   readonly addPending: (id: string, entry: PendingResponse) => void;
+  /** Marks the transport as ended and fails every waiter with the described exit. */
+  readonly end: (code: number | null, signal: string | null) => Error;
   readonly fail: (error: unknown) => Error;
   readonly processEnded: () => boolean;
   readonly removePending: (id: string) => PendingResponse | undefined;
@@ -55,30 +64,28 @@ export function createPiRpcProcessLifecycle(
     return terminalError;
   };
 
-  const failExit = (code: number | null, signal: NodeJS.Signals | null) => {
+  const end = (code: number | null, signal: string | null) => {
     processEnded = true;
-    fail(options.describeExit(code, signal));
+    return fail(options.describeExit(code, signal));
   };
 
   // These listeners must remain attached: removing the last `error` listener
   // from a Node stream makes a later EPIPE terminate the server process.
-  options.child.stdin.on("error", fail);
-  options.child.stdout.on("error", (error) => {
+  options.stdio.stdin.on("error", fail);
+  options.stdio.stdout.on("error", (error) => {
     options.flushStdout();
     fail(error);
   });
-  options.child.stderr.on("error", (error) => {
+  options.stdio.stderr.on("error", (error) => {
     // stderr loss is diagnostic only; stdout and stdin remain usable.
     void error;
   });
-  options.child.on("error", fail);
-  options.child.once("exit", failExit);
-  options.child.once("close", failExit);
 
   return {
     addPending: (id, entry) => {
       pending.set(id, entry);
     },
+    end,
     fail,
     processEnded: () => processEnded,
     removePending: (id) => {

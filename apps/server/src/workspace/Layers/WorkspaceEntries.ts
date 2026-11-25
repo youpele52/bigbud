@@ -1,5 +1,3 @@
-import { validateLocalDirectoryPath } from "./WorkspaceEntries.paths.ts";
-import fsPromises from "node:fs/promises";
 import type { Dirent } from "node:fs";
 
 import { Cache, Duration, Effect, Exit, Layer, Option, Path } from "effect";
@@ -12,14 +10,11 @@ import {
   WorkspaceEntriesError,
   type WorkspaceEntriesShape,
 } from "../Services/WorkspaceEntries.ts";
+import { WorkspaceDirectoryReadOwner } from "../Services/WorkspaceDirectoryReadOwner.ts";
+import { WorkspaceIndexReadOwner } from "../Services/WorkspaceIndexReadOwner.ts";
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
 import {
-  insertRankedName,
-  normalizeNameRankQuery,
-  scoreNameRankCandidate,
-  type RankedName,
-} from "@bigbud/shared/search/nameRank";
-import {
+  rankWorkspaceIndex,
   type SearchableWorkspaceEntry,
   toPosixPath,
   parentPathOf,
@@ -33,9 +28,9 @@ import {
   listRemoteWorkspaceDirectoryFromSsh,
 } from "./WorkspaceEntries.remote.ts";
 import { filterGitIgnoredPaths, isInsideGitWorkTree } from "./WorkspaceEntries.git.ts";
+import { readLocalDirectoryEntries } from "./WorkspaceEntries.local.ts";
 import {
   IGNORED_DIRECTORY_NAMES,
-  processErrorDetail,
   WORKSPACE_CACHE_MAX_KEYS,
   WORKSPACE_CACHE_TTL_MS,
   WORKSPACE_INDEX_MAX_ENTRIES,
@@ -52,6 +47,12 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   const path = yield* Path.Path;
   const gitOption = yield* Effect.serviceOption(GitCore);
   const workspacePaths = yield* WorkspacePaths;
+  const directoryReadOwner = Option.getOrUndefined(
+    yield* Effect.serviceOption(WorkspaceDirectoryReadOwner),
+  );
+  const indexReadOwner = Option.getOrUndefined(
+    yield* Effect.serviceOption(WorkspaceIndexReadOwner),
+  );
 
   const buildWorkspaceIndexFromGit = Effect.fn("WorkspaceEntries.buildWorkspaceIndexFromGit")(
     function* (cwd: string) {
@@ -120,35 +121,6 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     },
   );
 
-  const readDirectoryEntries = Effect.fn("WorkspaceEntries.readDirectoryEntries")(function* (
-    cwd: string,
-    relativeDir: string,
-  ): Effect.fn.Return<
-    { readonly relativeDir: string; readonly dirents: Dirent[] | null },
-    WorkspaceEntriesError
-  > {
-    yield* validateLocalDirectoryPath(cwd, relativeDir, path.sep);
-    return yield* Effect.tryPromise({
-      try: async () => {
-        const absoluteDir = relativeDir ? path.join(cwd, relativeDir) : cwd;
-        const dirents = await fsPromises.readdir(absoluteDir, { withFileTypes: true });
-        return { relativeDir, dirents };
-      },
-      catch: (cause) =>
-        new WorkspaceEntriesError({
-          cwd,
-          operation: "workspaceEntries.readDirectoryEntries",
-          detail: processErrorDetail(cause),
-          cause,
-        }),
-    }).pipe(
-      Effect.catchIf(
-        () => relativeDir.length > 0,
-        () => Effect.succeed({ relativeDir, dirents: null }),
-      ),
-    );
-  });
-
   const buildWorkspaceIndexFromFilesystem = Effect.fn(
     "WorkspaceEntries.buildWorkspaceIndexFromFilesystem",
   )(function* (cwd: string): Effect.fn.Return<WorkspaceIndex, WorkspaceEntriesError> {
@@ -164,7 +136,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
 
       const directoryEntries = yield* Effect.forEach(
         currentDirectories,
-        (relativeDir) => readDirectoryEntries(cwd, relativeDir),
+        (relativeDir) => readLocalDirectoryEntries(path, cwd, relativeDir),
         { concurrency: WORKSPACE_SCAN_READDIR_CONCURRENCY },
       );
 
@@ -306,17 +278,16 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
     if (!isLocalExecutionTarget(executionTargetId)) {
       return {
-        entries: yield* listRemoteWorkspaceDirectoryFromSsh({
-          cwd: input.cwd,
-          executionTargetId,
-          relativeDir: input.relativePath ?? "",
-        }),
+        entries: yield* listRemoteWorkspaceDirectoryFromSsh(
+          { cwd: input.cwd, executionTargetId, relativeDir: input.relativePath ?? "" },
+          directoryReadOwner,
+        ),
       };
     }
 
     const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
     const relativeDir = input.relativePath ?? "";
-    const { dirents } = yield* readDirectoryEntries(normalizedCwd, relativeDir);
+    const { dirents } = yield* readLocalDirectoryEntries(path, normalizedCwd, relativeDir);
     const filteredEntries = (dirents ?? [])
       .filter((dirent) => dirent.name && dirent.name !== "." && dirent.name !== "..")
       .filter((dirent) => !IGNORED_DIRECTORY_NAMES.has(dirent.name))
@@ -356,33 +327,8 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
         : input.cwd;
       const indexEffect = isLocalExecutionTarget(executionTargetId)
         ? Cache.get(workspaceIndexCache, `${executionTargetId}\u0000${normalizedCwd}`)
-        : buildRemoteWorkspaceIndex({
-            cwd: normalizedCwd,
-            executionTargetId,
-          });
-      return yield* indexEffect.pipe(
-        Effect.map((index) => {
-          const normalizedQuery = normalizeNameRankQuery(input.query);
-          const limit = Math.max(0, Math.floor(input.limit));
-          const rankedEntries: RankedName<SearchableWorkspaceEntry>[] = [];
-          let matchedEntryCount = 0;
-
-          for (const entry of index.entries) {
-            const score = scoreNameRankCandidate(entry, normalizedQuery);
-            if (score === null) {
-              continue;
-            }
-
-            matchedEntryCount += 1;
-            insertRankedName(rankedEntries, { entry, score }, limit);
-          }
-
-          return {
-            entries: rankedEntries.map((candidate) => candidate.entry),
-            truncated: index.truncated || matchedEntryCount > limit,
-          };
-        }),
-      );
+        : buildRemoteWorkspaceIndex({ cwd: normalizedCwd, executionTargetId }, indexReadOwner);
+      return yield* indexEffect.pipe(Effect.map((index) => rankWorkspaceIndex(index, input)));
     },
   );
 

@@ -105,6 +105,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     searchFileContents: vi.fn(),
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
+    entryActions: vi.fn(),
+    createDirectory: vi.fn(),
+    deleteEntry: vi.fn(),
   },
   notes: {
     list: vi.fn<(...args: any[]) => Promise<NotesListResult>>(),
@@ -197,6 +200,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     readDocumentUrl: vi.fn(),
     writeHandoffDocument: vi.fn(),
     retryTextGeneration: vi.fn(),
+    getBackendDrainConsent: vi.fn(),
+    decideBackendDrainConsent: vi.fn(),
     claimMetadataWarnings: vi.fn(),
     acknowledgeMetadataWarning: vi.fn(),
     startHandoffJob: vi.fn(),

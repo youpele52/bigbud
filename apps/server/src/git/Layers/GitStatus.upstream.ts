@@ -3,7 +3,7 @@
  *
  * @module GitStatus.upstream
  */
-import { Cache, Duration, Effect, Exit, Path, Option } from "effect";
+import { Cache, Duration, Effect, Exit, Path, Option, Schema } from "effect";
 import { RemoteAgentGitActionBinding } from "../../remote-agent/remoteAgentGit.action.ts";
 
 import { GitCommandError } from "@bigbud/contracts";
@@ -12,6 +12,11 @@ import {
   parseUpstreamRefWithRemoteNames,
   parseUpstreamRefByFirstSeparator,
 } from "./GitCoreUtils.ts";
+import {
+  fetchThroughOwner,
+  InitiatingFetchOwner,
+  initiatingTransportUnavailable,
+} from "./GitCore.initiatingTransport.ts";
 import { StatusRemoteRefreshCacheKey, type GitHelpers } from "./GitCoreExecutor.ts";
 import { type RemoteOps } from "./GitStatus.remotes.ts";
 
@@ -26,6 +31,7 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   helpers: GitHelpers,
   path: Path.Path,
   remoteOps: RemoteOps,
+  initiatingTransportDisabled: () => boolean,
 ) {
   const { executeGit, runGitStdout } = helpers;
   const {
@@ -61,19 +67,41 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   const fetchRemoteForStatus = (
     gitCommonDir: string,
     remoteName: string,
-  ): Effect.Effect<void, GitCommandError> => {
-    const fetchCwd =
-      path.basename(gitCommonDir) === ".git" ? path.dirname(gitCommonDir) : gitCommonDir;
-    return executeGit(
-      "GitCore.fetchRemoteForStatus",
-      fetchCwd,
-      ["--git-dir", gitCommonDir, "fetch", "--quiet", "--no-tags", remoteName],
-      {
-        allowNonZeroExit: true,
-        timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
-      },
-    ).pipe(Effect.asVoid);
-  };
+  ): Effect.Effect<void, GitCommandError> =>
+    Effect.gen(function* () {
+      const fetchOwner = yield* Effect.serviceOption(InitiatingFetchOwner);
+      const fetchCwd =
+        path.basename(gitCommonDir) === ".git" ? path.dirname(gitCommonDir) : gitCommonDir;
+      if (Option.isSome(fetchOwner)) {
+        yield* Effect.tryPromise({
+          try: (signal) =>
+            fetchThroughOwner(
+              {
+                owner: fetchOwner.value,
+                cwd: fetchCwd,
+                remoteName,
+                refspecs: [],
+                timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
+              },
+              signal,
+            ),
+          catch: (cause) =>
+            Schema.is(GitCommandError)(cause)
+              ? cause
+              : initiatingTransportUnavailable("fetch", fetchCwd),
+        });
+        return;
+      }
+      yield* executeGit(
+        "GitCore.fetchRemoteForStatus",
+        fetchCwd,
+        ["--git-dir", gitCommonDir, "fetch", "--quiet", "--no-tags", remoteName],
+        {
+          allowNonZeroExit: true,
+          timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
+        },
+      );
+    });
 
   const refreshStatusRemoteCacheEntry = Effect.fn("refreshStatusRemoteCacheEntry")(function* (
     cacheKey: StatusRemoteRefreshCacheKey,
@@ -94,6 +122,12 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   const refreshStatusUpstreamIfStale = Effect.fn("refreshStatusUpstreamIfStale")(function* (
     cwd: string,
   ) {
+    // Keep selected status local until an owner-controlled fetch binding is present.
+    if (
+      initiatingTransportDisabled() &&
+      Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))
+    )
+      return;
     // A shared cache's lookup context is not a logical action's pinned generation.
     // Mutations use current local tracking refs; observational refresh remains independently cached.
     if (Option.isSome(yield* Effect.serviceOption(RemoteAgentGitActionBinding))) return;

@@ -2,7 +2,10 @@ import type { ProviderSession } from "@bigbud/contracts/orchestration/provider.t
 import { Effect } from "effect";
 
 import { createPiOrchestrationBridge } from "../../../orchestration-tools/PiOrchestrationBridge.ts";
-import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import {
+  isLocalProviderRuntimeTarget,
+  resolveProviderRuntimeTarget,
+} from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { resolveProviderSessionExecutionTargets } from "../../providerSessionExecutionTargets.ts";
 import { ProviderAdapterProcessError } from "../../Errors.ts";
@@ -16,28 +19,14 @@ import type { ActivePiSession } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { PiAdapterMethodDependencies } from "./Adapter.methods.types.ts";
 import { createPiRpcProcess } from "./RpcProcess.ts";
+import { selectedDevPiRpcOwner } from "./RpcProcess.owner.selected.ts";
+import { getPiRpcCapabilityDenial } from "./RpcProcess.selection.ts";
 import { normalizeString, readResumeCursor, toMessage } from "./Adapter.utils.ts";
 
 export function makePiStartSession(
   deps: PiAdapterMethodDependencies,
 ): PiAdapterShape["startSession"] {
   return Effect.fn("startSession")(function* (input) {
-    const piSettings = yield* deps.serverSettings.getSettings.pipe(
-      Effect.map((settings) => settings.providers.pi),
-      Effect.mapError(
-        (cause) =>
-          new ProviderAdapterProcessError({
-            provider: PROVIDER,
-            threadId: input.threadId,
-            detail: toMessage(cause, "Failed to read Pi settings."),
-            cause,
-          }),
-      ),
-    );
-
-    const resumeCursor = readResumeCursor(input.resumeCursor);
-    const createdAt = new Date().toISOString();
-    const sessionEpoch = input.sessionEpoch ?? 0;
     const executionTargets = resolveProviderSessionExecutionTargets({
       providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
       workspaceExecutionTargetId: input.workspaceExecutionTargetId,
@@ -51,6 +40,49 @@ export function makePiStartSession(
       executionTargetId: executionTargets.workspaceExecutionTargetId,
       cwd: input.cwd,
     });
+    // Local Pi keeps its child path and must not bind or start the remote owner.
+    const selectedOwner = isLocalProviderRuntimeTarget(providerRuntimeTarget)
+      ? undefined
+      : yield* selectedDevPiRpcOwner().pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: toMessage(cause, "Failed to reach the source-dev SSH owner."),
+                cause,
+              }),
+          ),
+        );
+    const denial = getPiRpcCapabilityDenial(
+      { providerRuntimeTarget, workspaceTarget },
+      "rpc-start",
+      selectedOwner !== undefined,
+    );
+    if (denial) {
+      return yield* new ProviderAdapterProcessError({
+        provider: PROVIDER,
+        threadId: input.threadId,
+        detail: denial.message,
+        cause: denial,
+      });
+    }
+
+    const piSettings = yield* deps.serverSettings.getSettings.pipe(
+      Effect.map((settings) => settings.providers.pi),
+      Effect.mapError(
+        (cause) =>
+          new ProviderAdapterProcessError({
+            provider: PROVIDER,
+            threadId: input.threadId,
+            detail: toMessage(cause, "Failed to read Pi settings."),
+            cause,
+          }),
+      ),
+    );
+    const resumeCursor = readResumeCursor(input.resumeCursor);
+    const createdAt = new Date().toISOString();
+    const sessionEpoch = input.sessionEpoch ?? 0;
     const orchestrationBridge = yield* Effect.tryPromise({
       try: () =>
         createPiOrchestrationBridge({
@@ -78,6 +110,15 @@ export function makePiStartSession(
             ? { remoteWorkspaceReadinessProbe: deps.remoteWorkspaceReadinessProbe }
             : {}),
           ...(resumeCursor?.sessionFile ? { sessionFile: resumeCursor.sessionFile } : {}),
+          ...(selectedOwner
+            ? {
+                ownerBinding: {
+                  ...selectedOwner,
+                  threadId: input.threadId,
+                  sessionEpoch,
+                },
+              }
+            : {}),
           env: process.env,
         }),
       catch: (cause) =>
@@ -149,7 +190,7 @@ export function makePiStartSession(
         .pipe(deps.runPromise)
         .catch(() => undefined);
     });
-    session.process.child.once("exit", onExit);
+    session.process.onExit(onExit);
 
     yield* Effect.gen(function* () {
       yield* refreshSessionState(session);

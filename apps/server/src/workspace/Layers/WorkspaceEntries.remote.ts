@@ -3,8 +3,17 @@ import { Effect } from "effect";
 
 import { type ProjectEntry } from "@bigbud/contracts";
 
+import { resolveRemoteAgentTransport } from "../../remote-agent/remoteAgentDefault.ts";
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { runSshCommand } from "../../ssh/sshProcess.ts";
+import type { WorkspaceDirectoryReadOwnerShape } from "../Services/WorkspaceDirectoryReadOwner.ts";
 import { WorkspaceEntriesError } from "../Services/WorkspaceEntries.ts";
+import type { WorkspaceIndexReadOwnerShape } from "../Services/WorkspaceIndexReadOwner.ts";
+import {
+  IGNORED_DIRECTORY_NAMES,
+  processErrorDetail,
+  WORKSPACE_INDEX_MAX_ENTRIES,
+} from "./WorkspaceEntries.constants.ts";
 import {
   type SearchableWorkspaceEntry,
   toPosixPath,
@@ -17,18 +26,9 @@ import {
 const REMOTE_WORKSPACE_SCAN_TIMEOUT_MS = 30_000;
 const REMOTE_DIRECTORY_LIST_TIMEOUT_MS = 10_000;
 const REMOTE_DIRECTORY_LIST_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
-const WORKSPACE_INDEX_MAX_ENTRIES = 25_000;
-const IGNORED_DIRECTORY_NAMES = new Set([
-  ".git",
-  ".convex",
-  "node_modules",
-  ".next",
-  ".turbo",
-  "dist",
-  "build",
-  "out",
-  ".cache",
-]);
+const isDirectSshWorkspaceTarget = (executionTargetId: string): boolean =>
+  parseSshExecutionTarget(executionTargetId) !== null &&
+  resolveRemoteAgentTransport(executionTargetId) === "direct-ssh";
 
 export interface RemoteWorkspaceIndex {
   scannedAt: number;
@@ -71,11 +71,14 @@ function normalizeRemoteRelativeDirectory(relativeDir: string): string {
 }
 
 export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspaceDirectoryFromSsh")(
-  function* (input: {
-    readonly cwd: string;
-    readonly executionTargetId: string;
-    readonly relativeDir: string;
-  }): Effect.fn.Return<ReadonlyArray<ProjectEntry>, WorkspaceEntriesError> {
+  function* (
+    input: {
+      readonly cwd: string;
+      readonly executionTargetId: string;
+      readonly relativeDir: string;
+    },
+    directoryReadOwner?: WorkspaceDirectoryReadOwnerShape,
+  ): Effect.fn.Return<ReadonlyArray<ProjectEntry>, WorkspaceEntriesError> {
     const relativeDir = yield* Effect.try({
       try: () => normalizeRemoteRelativeDirectory(input.relativeDir),
       catch: (cause) =>
@@ -86,10 +89,20 @@ export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspac
           cause,
         }),
     });
-    const findRoot = relativeDir.length > 0 ? `./${relativeDir}` : ".";
-    const result = yield* Effect.tryPromise({
-      try: () =>
-        runSshCommand({
+    const children = yield* Effect.tryPromise({
+      try: async () => {
+        if (directoryReadOwner && isDirectSshWorkspaceTarget(input.executionTargetId)) {
+          // The public directory listing has no truncation field, just as for the legacy read.
+          const { entries } = await directoryReadOwner.listDirectory({ ...input, relativeDir });
+          return entries.map(({ name, directory }) =>
+            name && name !== "." && name !== ".." && !name.includes("/") && !name.includes("\0")
+              ? { path: name, kind: directory ? ("directory" as const) : ("file" as const) }
+              : null,
+          );
+        }
+
+        const findRoot = relativeDir.length > 0 ? `./${relativeDir}` : ".";
+        const result = await runSshCommand({
           executionTargetId: input.executionTargetId,
           cwd: input.cwd,
           command: "find",
@@ -113,7 +126,11 @@ export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspac
           timeoutMs: REMOTE_DIRECTORY_LIST_TIMEOUT_MS,
           maxBufferBytes: REMOTE_DIRECTORY_LIST_MAX_BUFFER_BYTES,
           outputMode: "truncate",
-        }),
+        });
+        return splitNullSeparatedOutput(result.stdout, result.stdoutTruncated ?? false).map(
+          parseRemoteFindRecord,
+        );
+      },
       catch: (cause) =>
         new WorkspaceEntriesError({
           cwd: input.cwd,
@@ -123,25 +140,19 @@ export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspac
         }),
     });
 
-    const entries = splitNullSeparatedOutput(result.stdout, result.stdoutTruncated ?? false)
-      .map((entry) => {
-        const record = parseRemoteFindRecord(entry);
-        if (!record) return null;
-        const { path: childPath, kind } = record;
-        if (!childPath || childPath === ".") return null;
-        return {
-          path: relativeDir ? `${relativeDir}/${childPath}` : childPath,
-          kind,
-        };
-      })
-      .filter((entry): entry is { path: string; kind: "file" | "directory" } => entry !== null);
+    const entries: Array<{ path: string; kind: "file" | "directory" }> = [];
+    for (const child of children) {
+      if (child) {
+        entries.push({
+          path: relativeDir ? `${relativeDir}/${child.path}` : child.path,
+          kind: child.kind,
+        });
+      }
+    }
 
     return listRemoteWorkspaceDirectory(toRemoteProjectEntries(entries), relativeDir);
   },
 );
-
-const processErrorDetail = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
 
 function splitNullSeparatedOutput(stdout: string, truncated: boolean): string[] {
   const parts = stdout.split("\0");
@@ -177,10 +188,54 @@ function toRemoteProjectEntries(
     .map(toSearchableWorkspaceEntry);
 }
 
-export const buildRemoteWorkspaceIndex = Effect.fn("buildRemoteWorkspaceIndex")(function* (input: {
-  readonly cwd: string;
-  readonly executionTargetId: string;
-}): Effect.fn.Return<RemoteWorkspaceIndex, WorkspaceEntriesError> {
+function isWorkspaceIndexPath(path: string): boolean {
+  // Keep literal POSIX names, but reject paths that can escape or alias the root.
+  return (
+    typeof path === "string" &&
+    !path.includes("\0") &&
+    !/^[a-z]:/i.test(path) &&
+    toPosixPath(path)
+      .split("/")
+      .every((part) => part !== "" && part !== "." && part !== "..")
+  );
+}
+
+export const buildOwnedRemoteWorkspaceIndex = (
+  input: { readonly cwd: string; readonly executionTargetId: string },
+  owner: WorkspaceIndexReadOwnerShape,
+) =>
+  Effect.tryPromise({
+    try: async () => {
+      const index = await owner.indexWorkspace(input);
+      const entries = toRemoteProjectEntries(
+        index.entries.flatMap(({ path, directory }) =>
+          isWorkspaceIndexPath(path) && typeof directory === "boolean"
+            ? [{ path, kind: directory ? ("directory" as const) : ("file" as const) }]
+            : [],
+        ),
+      );
+      return {
+        scannedAt: Date.now(),
+        entries: entries.slice(0, WORKSPACE_INDEX_MAX_ENTRIES),
+        truncated: index.truncated || entries.length > WORKSPACE_INDEX_MAX_ENTRIES,
+      };
+    },
+    catch: (cause) =>
+      new WorkspaceEntriesError({
+        cwd: input.cwd,
+        operation: "workspaceEntries.remoteIndex",
+        detail: processErrorDetail(cause),
+        cause,
+      }),
+  });
+
+export const buildRemoteWorkspaceIndex = Effect.fn("buildRemoteWorkspaceIndex")(function* (
+  input: { readonly cwd: string; readonly executionTargetId: string },
+  indexReadOwner?: WorkspaceIndexReadOwnerShape,
+): Effect.fn.Return<RemoteWorkspaceIndex, WorkspaceEntriesError> {
+  if (indexReadOwner && isDirectSshWorkspaceTarget(input.executionTargetId))
+    return yield* buildOwnedRemoteWorkspaceIndex(input, indexReadOwner);
+
   const gitProbe = yield* Effect.tryPromise({
     try: () =>
       runSshCommand({

@@ -43,6 +43,7 @@ export interface SessionApiContext {
     terminalId: string,
   ) => Effect.Effect<TerminalSessionState, TerminalSessionLookupError>;
   sessionsForThread: (threadId: string) => Effect.Effect<TerminalSessionState[]>;
+  keepRunningAfterQuit?: (() => boolean) | undefined;
   withThreadLock: <A, E, R>(
     threadId: string,
     effect: Effect.Effect<A, E, R>,
@@ -77,6 +78,7 @@ export interface SessionApiContext {
   resolveRuntimePathIdentity?:
     | ((cwd: string) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>)
     | undefined;
+  directSshCwdOwner?: TerminalManagerOptions["directSshCwdOwner"];
   snapshot: (session: TerminalSessionState) => TerminalSessionSnapshot;
   acquireWorktreeLease: (input: {
     runtimePathIdentity?: RuntimePathIdentity | undefined;

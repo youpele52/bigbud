@@ -51,6 +51,9 @@ import {
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsEntryActionsRpc,
+  WsProjectsCreateDirectoryRpc,
+  WsProjectsDeleteEntryRpc,
   WsSubscribeProjectDirectoryChangesRpc,
   WsTeachListProjectsRpc,
 } from "./rpc.workspace";
@@ -188,6 +191,10 @@ export * from "./rpc.workspace";
 
 export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+import {
+  WsServerDecideBackendDrainConsentRpc,
+  WsServerGetBackendDrainConsentRpc,
+} from "./rpc.backendDrain";
 import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 import { WsCopilotRuntimeRpc } from "./rpc.copilotRuntime";
 import { WsServerPeerPairingRpc } from "./rpc.remotePeer";
@@ -214,6 +221,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetProviderProvisioningStatusRpc,
   WsServerProvisionProviderRpc,
   WsServerRetryTextGenerationRpc,
+  WsServerGetBackendDrainConsentRpc,
+  WsServerDecideBackendDrainConsentRpc,
   WsServerClaimMetadataWarningsRpc,
   WsServerAcknowledgeMetadataWarningRpc,
   WsWorktreeOperationsRpc,
@@ -287,6 +296,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsEntryActionsRpc,
+  WsProjectsCreateDirectoryRpc,
+  WsProjectsDeleteEntryRpc,
   WsKanbanListRpc,
   WsKanbanGetRpc,
   WsKanbanCreateRpc,

@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 import { RemoteAgentPtyError } from "../../remote-agent/remoteAgentPtyClient.types";
 
-import type { PtyProcess } from "../Services/PTY";
+import { NativeSshPtyHostLostError, type PtyProcess } from "../Services/PTY";
+import { publishTerminalHostNotice, terminalHostLostNotice } from "./Manager.hostLifecycle.ts";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import type { TerminalSessionState } from "./Manager.types";
@@ -38,6 +39,12 @@ export function observeTerminalProcessError(
             )
               return [null, state] as const;
             session.status = "error";
+            if (error instanceof NativeSshPtyHostLostError) {
+              // Keep the exact observer's shutdown fence but do not advertise a live PID or
+              // manufacture a child exit event from loss of the owner channel.
+              session.endedReason = "host-lost";
+              session.pid = null;
+            }
             session.hasRunningSubprocess = false;
             session.activeAgentProvider = null;
             session.activeAgent = null;
@@ -54,6 +61,8 @@ export function observeTerminalProcessError(
             createdAt,
             message: error.message,
           });
+          if (error instanceof NativeSshPtyHostLostError)
+            yield* publishTerminalHostNotice(ctx.hostHub, terminalHostLostNotice(session));
         }),
       );
     }) ?? (() => undefined)

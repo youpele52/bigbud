@@ -4,35 +4,63 @@ import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { resolvePiInvocation, shouldUseWindowsPiShell, quoteWindowsPiShellCommand } from "./Cli.ts";
 import type { PiRpcProcessOptions } from "./RpcProcess.types.ts";
+import { getPiRpcCapabilityDenial } from "./RpcProcess.selection.ts";
+import {
+  probePiOwnerVersion,
+  resolvePiOwnerRuntime,
+  type PiRpcOwnerBinding,
+} from "./RpcProcess.owner.ts";
+
+import {
+  PI_VERSION_PROBE_MAX_BYTES,
+  PI_VERSION_PROBE_TIMEOUT_MS,
+  piVersionCapabilities,
+} from "./RpcProcess.version.ts";
 
 const execute = promisify(execFile);
 
-/** agent_settled was introduced in Pi 0.80.4, independently of who installed the runtime. */
-export function piVersionCapabilities(output: string) {
-  const match = output.trim().match(/^(?:pi\s+v?)?(\d+)\.(\d+)\.(\d+)(?:[-+][\w.-]+)?$/i);
-  if (!match)
-    throw new Error(
-      "Pi --version did not report a supported semantic version; cannot select the RPC lifecycle safely.",
-    );
-  const [major, minor, patch] = match.slice(1, 4).map(Number);
-  return {
-    supportsAgentSettled: major! > 0 || minor! > 80 || (minor === 80 && patch! >= 4),
-    supportsPromptDisposition: major! > 0 || minor! >= 99,
-  };
+export interface PiSettlementProbe {
+  readonly version: string;
+  readonly capabilities: ReturnType<typeof piVersionCapabilities>;
 }
 
-/** Probe the selected host/executable, never the local installation for a remote runtime. */
-export async function detectPiSettlementSupport(
+/**
+ * Probe the selected host/executable, never the local installation for a remote runtime.
+ * A selected owner runtime is probed only through its typed `probeProvider` port, bounded to
+ * the same five seconds and 4 KiB per stream; the widened `execFile` SSH probe remains for
+ * the unselected legacy path and for local Pi.
+ */
+export async function probePiSettlementSupport(
   options: PiRpcProcessOptions,
   run: (
     command: string,
     args: string[],
     options: ExecFileOptionsWithStringEncoding,
   ) => Promise<{ stdout: string }> = execute,
-): Promise<ReturnType<typeof piVersionCapabilities>> {
+  binding?: PiRpcOwnerBinding,
+): Promise<PiSettlementProbe> {
+  const denial = getPiRpcCapabilityDenial(options, "version-probe", binding !== undefined);
+  if (denial) throw denial;
+
   const local = isLocalProviderRuntimeTarget(options.providerRuntimeTarget);
+  if (!local && binding) {
+    const runtime = resolvePiOwnerRuntime({
+      owner: binding.owner,
+      threadId: binding.threadId,
+      sessionEpoch: binding.sessionEpoch,
+      providerRuntimeTarget: options.providerRuntimeTarget,
+      workspaceTarget: options.workspaceTarget,
+      binaryPath: options.binaryPath,
+    });
+    const version = await probePiOwnerVersion(binding.owner, runtime);
+    return { version, capabilities: piVersionCapabilities(version) };
+  }
+
   const selected = local ? resolvePiInvocation(options.binaryPath) : undefined;
-  if (selected?.bundledCliPath) return piVersionCapabilities("1.4.0");
+  if (selected?.bundledCliPath) {
+    const version = "1.4.0";
+    return { version, capabilities: piVersionCapabilities(version) };
+  }
   const invocation = selected
     ? { command: selected.command, args: [...selected.args, "--version"] }
     : buildSshCommandInvocation({
@@ -52,17 +80,30 @@ export async function detectPiSettlementSupport(
           ? { cwd: options.workspaceTarget.cwd }
           : {}),
         encoding: "utf8",
-        timeout: 5_000,
-        maxBuffer: 4096,
+        timeout: PI_VERSION_PROBE_TIMEOUT_MS,
+        maxBuffer: PI_VERSION_PROBE_MAX_BYTES,
         killSignal: "SIGKILL",
         shell,
       },
     );
-    return piVersionCapabilities(String(stdout));
+    const version = String(stdout);
+    return { version, capabilities: piVersionCapabilities(version) };
   } catch (cause) {
     throw new Error(
       `Failed to determine Pi RPC lifecycle support for ${options.binaryPath}. Verify that the selected runtime supports --version.`,
       { cause },
     );
   }
+}
+
+export async function detectPiSettlementSupport(
+  options: PiRpcProcessOptions,
+  run: (
+    command: string,
+    args: string[],
+    options: ExecFileOptionsWithStringEncoding,
+  ) => Promise<{ stdout: string }> = execute,
+  binding?: PiRpcOwnerBinding,
+): Promise<ReturnType<typeof piVersionCapabilities>> {
+  return (await probePiSettlementSupport(options, run, binding)).capabilities;
 }

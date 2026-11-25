@@ -54,6 +54,7 @@ describe("createBuildConfig", () => {
       const linux = await Effect.runPromise(
         createBuildConfig(
           "linux",
+          "x64",
           "AppImage",
           identity,
           false,
@@ -64,7 +65,17 @@ describe("createBuildConfig", () => {
         ),
       );
       const windows = await Effect.runPromise(
-        createBuildConfig("win", "nsis", identity, false, true, "3000", "/resources", "/repo"),
+        createBuildConfig(
+          "win",
+          "x64",
+          "nsis",
+          identity,
+          false,
+          true,
+          "3000",
+          "/resources",
+          "/repo",
+        ),
       );
 
       assert.equal(linux.appId, identity.appId);
@@ -81,6 +92,7 @@ describe("createBuildConfig", () => {
       assert.equal(windows.appId, identity.appId);
       assert.equal(windows.productName, identity.productName);
       assert.notProperty(windows.win as object, "azureSignOptions");
+      assert.deepInclude(windows.win, { signExts: [".exe"] });
       assert.deepEqual(windows.nsis, { include: join("/repo", DESKTOP_NSIS_INCLUDE) });
       assert.notProperty(linux, "nsis");
       assert.notProperty(linux, "dmg");
@@ -88,48 +100,53 @@ describe("createBuildConfig", () => {
     },
   );
 
-  it("requires signing and explicitly signs the Rust sidecar for signed macOS builds", async () => {
-    const config = await Effect.runPromise(
-      createBuildConfig(
-        "mac",
-        "dmg",
-        desktopReleaseIdentityForChannel("preview"),
-        true,
-        false,
-        undefined,
-        "/resources",
-        "/repo",
-      ),
-    );
+  it.each(["arm64", "x64"] as const)(
+    "signs the expected Rust sidecars for macOS %s",
+    async (arch) => {
+      const config = await Effect.runPromise(
+        createBuildConfig(
+          "mac",
+          arch,
+          "dmg",
+          desktopReleaseIdentityForChannel("preview"),
+          true,
+          false,
+          undefined,
+          "/resources",
+          "/repo",
+        ),
+      );
 
-    assert.equal(config.forceCodeSigning, true);
-    assert.deepInclude(config.mac, {
-      notarize: false,
-      binaries: [
-        "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
-        "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
-      ],
-      entitlements: "/resources/entitlements.mac.plist",
-      entitlementsInherit: "/resources/entitlements.mac.plist",
-    });
-    assert.equal(config.afterSign, "/repo/apps/desktop/scripts/notarize.cjs");
-    assert.deepEqual(config.dmg, { format: "ULFO", writeUpdateInfo: false });
-    assert.deepEqual((config.mac as { target: unknown }).target, ["dmg", "zip"]);
-    assert.deepInclude((config.mac as { extendInfo: object }).extendInfo, {
-      NSCameraUsageDescription:
-        "bigbud uses your camera only when you allow a browser site to access it.",
-      NSMicrophoneUsageDescription:
-        "bigbud uses your microphone for voice input and browser sites you explicitly allow.",
-      NSLocationWhenInUseUsageDescription:
-        "bigbud shares your location only with browser sites you explicitly allow.",
-      NSDocumentsFolderUsageDescription:
-        "bigbud searches and opens files in Documents only when your File Access setting includes it.",
-      NSDownloadsFolderUsageDescription:
-        "bigbud searches and opens files in Downloads only when your File Access setting includes it.",
-      NSDesktopFolderUsageDescription:
-        "bigbud searches and opens files on the Desktop only when your File Access setting includes it.",
-    });
-  });
+      assert.equal(config.forceCodeSigning, true);
+      assert.deepInclude(config.mac, {
+        notarize: false,
+        binaries: [
+          "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
+          "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
+          ...(arch === "arm64" ? ["Contents/Resources/server/ssh-owner/bin/bigbud-ssh-owner"] : []),
+        ],
+        entitlements: "/resources/entitlements.mac.plist",
+        entitlementsInherit: "/resources/entitlements.mac.plist",
+      });
+      assert.equal(config.afterSign, "/repo/apps/desktop/scripts/notarize.cjs");
+      assert.deepEqual(config.dmg, { format: "ULFO", writeUpdateInfo: false });
+      assert.deepEqual((config.mac as { target: unknown }).target, ["dmg", "zip"]);
+      assert.deepInclude((config.mac as { extendInfo: object }).extendInfo, {
+        NSCameraUsageDescription:
+          "bigbud uses your camera only when you allow a browser site to access it.",
+        NSMicrophoneUsageDescription:
+          "bigbud uses your microphone for voice input and browser sites you explicitly allow.",
+        NSLocationWhenInUseUsageDescription:
+          "bigbud shares your location only with browser sites you explicitly allow.",
+        NSDocumentsFolderUsageDescription:
+          "bigbud searches and opens files in Documents only when your File Access setting includes it.",
+        NSDownloadsFolderUsageDescription:
+          "bigbud searches and opens files in Downloads only when your File Access setting includes it.",
+        NSDesktopFolderUsageDescription:
+          "bigbud searches and opens files on the Desktop only when your File Access setting includes it.",
+      });
+    },
+  );
 });
 
 describe("isOffArchMacNativeDirectory", () => {

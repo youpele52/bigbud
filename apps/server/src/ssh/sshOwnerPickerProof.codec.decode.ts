@@ -1,0 +1,130 @@
+import { decodeMessage } from "../remote-agent/remoteAgentProtocol.codec.wire.ts";
+
+import {
+  boolValue,
+  bytesValue,
+  EMPTY,
+  invalid,
+  PROOF_TOKEN_BYTES,
+  stringValue,
+  uintValue,
+} from "./sshOwnerPickerProof.codec.wire.ts";
+import { readReply, type Outcome } from "./sshOwnerPickerProof.codec.outcome.ts";
+
+export type Frame =
+  | {
+      kind: "helloAccepted";
+      major: number;
+      minor: number;
+      ownerEpoch: Uint8Array;
+      generation: Uint8Array;
+      aliasDescriptor: Uint8Array;
+    }
+  | {
+      kind: "reply";
+      requestId: Uint8Array;
+      ownerEpoch: Uint8Array;
+      generation: Uint8Array;
+      outcome: Outcome;
+    }
+  | { kind: "grantReply"; requestId: Uint8Array; grant: Uint8Array; error: number }
+  | { kind: "storageHydrate"; targetId: string }
+  | { kind: "attachChallenge"; serverNonce: Uint8Array; proof: Uint8Array }
+  | {
+      kind: "storageTransition";
+      requestId: Uint8Array;
+      targetId: string;
+      writerEpoch: string;
+      expectedSeq: number;
+      disconnected: boolean;
+    };
+
+const readFrame = (field: number, bytes: Uint8Array): Frame => {
+  switch (field) {
+    case 2: {
+      let major = 0,
+        minor = 0,
+        ownerEpoch = EMPTY,
+        generation = EMPTY,
+        aliasDescriptor = EMPTY;
+      decodeMessage(bytes, (number, wire, reader) => {
+        if (number === 1) major = uintValue(wire, reader);
+        else if (number === 2) minor = uintValue(wire, reader);
+        else if (number === 3) ownerEpoch = bytesValue(wire, reader);
+        else if (number === 4) generation = bytesValue(wire, reader);
+        else if (number === 5) aliasDescriptor = bytesValue(wire, reader);
+        else reader.skip(wire);
+      });
+      return { kind: "helloAccepted", major, minor, ownerEpoch, generation, aliasDescriptor };
+    }
+    case 4:
+      return readReply(bytes);
+    case 6: {
+      let requestId = EMPTY,
+        grant = EMPTY,
+        error = 0;
+      decodeMessage(bytes, (number, wire, reader) => {
+        if (number === 1) requestId = bytesValue(wire, reader);
+        else if (number === 2) grant = bytesValue(wire, reader);
+        else if (number === 3) error = uintValue(wire, reader);
+        else reader.skip(wire);
+      });
+      if ((error === 0) === (grant.length === 0)) return invalid();
+      return { kind: "grantReply", requestId, grant, error };
+    }
+    case 7: {
+      let targetId = "";
+      decodeMessage(bytes, (number, wire, reader) => {
+        if (number === 1) targetId = stringValue(wire, reader);
+        else reader.skip(wire);
+      });
+      return { kind: "storageHydrate", targetId };
+    }
+    case 9: {
+      let requestId = EMPTY,
+        targetId = "",
+        writerEpoch = "",
+        expectedSeq = 0,
+        disconnected = false;
+      decodeMessage(bytes, (number, wire, reader) => {
+        if (number === 1) requestId = bytesValue(wire, reader);
+        else if (number === 2) targetId = stringValue(wire, reader);
+        else if (number === 3) writerEpoch = stringValue(wire, reader);
+        else if (number === 4) expectedSeq = uintValue(wire, reader);
+        else if (number === 5) disconnected = boolValue(wire, reader);
+        else reader.skip(wire);
+      });
+      return {
+        kind: "storageTransition",
+        requestId,
+        targetId,
+        writerEpoch,
+        expectedSeq,
+        disconnected,
+      };
+    }
+    case 12: {
+      let serverNonce: Uint8Array | undefined;
+      let proof: Uint8Array | undefined;
+      decodeMessage(bytes, (number, wire, reader) => {
+        if (number === 1 && serverNonce === undefined) serverNonce = bytesValue(wire, reader);
+        else if (number === 2 && proof === undefined) proof = bytesValue(wire, reader);
+        else return invalid();
+      });
+      if (serverNonce?.length !== PROOF_TOKEN_BYTES || proof?.length !== PROOF_TOKEN_BYTES)
+        return invalid();
+      return { kind: "attachChallenge", serverNonce, proof };
+    }
+    default:
+      return invalid();
+  }
+};
+
+export const decodeOwnerFrame = (bytes: Uint8Array): Frame => {
+  let frame: Frame | undefined;
+  decodeMessage(bytes, (field, wire, reader) => {
+    if (frame !== undefined) return invalid();
+    frame = readFrame(field, bytesValue(wire, reader));
+  });
+  return frame ?? invalid();
+};

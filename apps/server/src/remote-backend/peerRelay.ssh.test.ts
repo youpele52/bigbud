@@ -7,7 +7,8 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ensureCoordinatorPeerKey } from "../peer-orchestration/peerSshKey.ts";
+import { parseKeyscanOutput } from "../peer-orchestration/peerCoordinator.transport.ts";
+import { parsePeerPublicKey } from "../peer-orchestration/peerSshKey.ts";
 import {
   mergePeerAuthorizedKeys,
   peerAuthorizedKeysLine,
@@ -50,14 +51,26 @@ const keygen = (path: string) => {
     .toString()
     .trim();
 };
+/** Test-only pre-pin scan; the product path asks the Rust owner instead. */
+const scanForTest = (host: string, port: number) =>
+  parseKeyscanOutput(
+    execFileSync("ssh-keyscan", ["-T", "10", "-p", String(port), "-t", "ed25519", "--", host], {
+      timeout: 20_000,
+      maxBuffer: 64 * 1024,
+    }).toString(),
+  );
 
 beforeAll(async () => {
   if (!existsSync(SSHD) || process.platform === "win32") return;
   dir = await mkdtemp(join(tmpdir(), "peer-ssh-"));
   hostKey.real = keygen(join(dir, "host_key"));
   hostKey.other = keygen(join(dir, "other_host_key"));
-  const generated = await ensureCoordinatorPeerKey(join(dir, "coordinator"));
-  coordinatorKey = { keyFile: generated.keyFile, fingerprint: generated.publicKey.fingerprint };
+  const generated = { keyFile: join(dir, "coordinator") };
+  keygen(generated.keyFile);
+  coordinatorKey = {
+    keyFile: generated.keyFile,
+    fingerprint: parsePeerPublicKey(await readFile(`${generated.keyFile}.pub`, "utf8")).fingerprint,
+  };
   keygen(join(dir, "stranger"));
   // Stands in for the peer relay helper: records its fixed argv, then echoes the channel.
   const helper = join(dir, "helper.mjs");
@@ -128,6 +141,25 @@ const firstChunk = (stream: NodeJS.ReadableStream) =>
   });
 
 describe("peer SSH transport against a local sshd", () => {
+  it("inspects the enrollment key without pinning it or entering the relay", async (context) => {
+    if (!ready) return context.skip();
+    const relayEntry = join(dir, "reached.json");
+    const knownHosts = join(dir, "known");
+    await rm(relayEntry, { force: true });
+    await rm(knownHosts, { recursive: true, force: true });
+    const fingerprint = execFileSync("ssh-keygen", ["-lf", join(dir, "host_key.pub")], {
+      encoding: "utf8",
+    })
+      .trim()
+      .split(/\s+/)[1];
+    expect(fingerprint).toMatch(/^SHA256:/);
+    expect(await scanForTest("127.0.0.1", port)).toEqual([
+      { pinnedHostKey: hostKey.real, fingerprint },
+    ]);
+    expect(existsSync(relayEntry)).toBe(false);
+    expect(existsSync(knownHosts)).toBe(false);
+  });
+
   it("reaches only the forced command, with the grant's fixed identity", async (context) => {
     if (!ready) return context.skip();
     await rm(join(dir, "reached.json"), { force: true });

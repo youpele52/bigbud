@@ -2,6 +2,14 @@
   "$schema": "https://turbo.build/schema.json",
   "extends": ["//"],
   "tasks": {
+    "dev": {
+      "passThroughEnv": [
+        "BIGBUD_SSH_OWNER",
+        "BIGBUD_SSH_OWNER_BIN",
+        "BIGBUD_SSH_OWNER_NORMAL_DEV_READY",
+        "BIGBUD_SSH_OWNER_NORMAL_DEV_PROFILE",
+      ],
+    },
     "start": {
       "dependsOn": ["build"],
       "cache": false,

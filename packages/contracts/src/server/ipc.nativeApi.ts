@@ -35,8 +35,10 @@ import type * as DetailPaging from "../orchestration/orchestration.detail.paging
 import type * as BranchCopy from "../orchestration/orchestration.branchCopy";
 import type { DatabaseCompactionNativeApi } from "./databaseCompaction";
 import type { MetadataWarningsNativeApi } from "./metadataWarnings";
+import type { BackendDrainNativeApi } from "./backendDrain";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
+import type * as ProjectEntryMutation from "../workspace/projectEntryMutation";
 import type * as SystemSearch from "../search/systemSearch";
 import type { TerminalNativeApi } from "./ipc.nativeApi.terminal";
 import type * as Automation from "./automation";
@@ -104,6 +106,15 @@ export interface NativeApi {
       input: Project.ProjectSearchEntriesInput,
     ) => Promise<Project.ProjectSearchEntriesResult>;
     writeFile: (input: Project.ProjectWriteFileInput) => Promise<Project.ProjectWriteFileResult>;
+    entryActions: (
+      input: ProjectEntryMutation.ProjectEntryActionsInput,
+    ) => Promise<ProjectEntryMutation.ProjectEntryActions>;
+    createDirectory: (
+      input: ProjectEntryMutation.ProjectCreateDirectoryInput,
+    ) => Promise<ProjectEntryMutation.ProjectCreateDirectoryResult>;
+    deleteEntry: (
+      input: ProjectEntryMutation.ProjectDeleteEntryInput,
+    ) => Promise<ProjectEntryMutation.ProjectDeleteEntryResult>;
   };
   search: {
     /** Streams `search.query` tier updates; aborting `signal` cancels the query end to end. */
@@ -177,7 +188,8 @@ export interface NativeApi {
   };
   server: RemoteBackendRelayNativeApi &
     DatabaseCompactionNativeApi &
-    MetadataWarningsNativeApi & {
+    MetadataWarningsNativeApi &
+    BackendDrainNativeApi & {
       getConfig: () => Promise<Server.ServerConfig>;
       refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
       refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;
@@ -251,6 +263,7 @@ export interface NativeApi {
       ) => Promise<PinnedThreads.ServerSetThreadPinnedResult>;
       readDocumentUrl: (
         input: Server.ServerReadDocumentUrlInput,
+        options?: { readonly signal?: AbortSignal },
       ) => Promise<Server.ServerReadDocumentUrlResult>;
       writeHandoffDocument: (
         input: Server.ServerWriteHandoffDocumentInput,

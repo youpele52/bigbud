@@ -2,6 +2,7 @@ import { Effect } from "effect";
 
 import { runProcess } from "../../utils/processRunner.ts";
 import { buildSshTransportArgs } from "../../ssh/sshCommand.ts";
+import { assertLegacySshLaunchAllowed } from "../../ssh/sshOwnerDevMode.ts";
 import { buildPasswordSessionControlPath } from "../../ssh/sshSession.ts";
 import { formatSshDestination, parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { validSshMonitorTarget } from "../../ssh/sshMonitor.target.ts";
@@ -29,6 +30,7 @@ export function remoteInspectionInvocation(executionTargetId: string) {
 
 /** Noninteractive SSH transport shared by read-only inspections; never triggers agent admission. */
 export function remoteReadOnlyInvocation(executionTargetId: string, command: string) {
+  assertLegacySshLaunchAllowed();
   // The password branch bypasses `buildSshTransportArgs`, so it needs its own guard.
   assertSshTargetConnected(executionTargetId);
   if (!validSshMonitorTarget(executionTargetId)) throw new Error("Invalid SSH inspection target.");

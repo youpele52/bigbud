@@ -32,6 +32,7 @@ import { toMessage } from "./Adapter.stream.ts";
 import { attachOpencodeEventStream } from "./Adapter.session.start.events.ts";
 import { formatManagedServerSdkError } from "../../managedServerProviderDiscovery.ts";
 import type { OpencodeServerHandle } from "../../Services/Opencode/ServerManager.ts";
+import { startSelectedOpencodeOwnerServer } from "./ServerManager.owner.selected.ts";
 
 export interface StartSessionDeps {
   readonly provider: Extract<ProviderKind, "opencode">;
@@ -140,28 +141,52 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       const serverDirectory = input.cwd;
       const cleanupBridge = orchestrationBridge.cleanup;
 
-      const serverHandle = yield* Effect.tryPromise({
-        try: () =>
-          deps.serverManager.acquire({
-            provider: deps.provider,
-            binaryPath: settings.binaryPath,
-            ...(serverDirectory ? { directory: serverDirectory } : {}),
-            executionTargetId: executionContext.providerRuntimeTarget.executionTargetId,
-          }),
-        catch: (cause) =>
-          new ProviderAdapterProcessError({
-            provider: deps.provider,
-            threadId: input.threadId,
-            detail: toMessage(cause, `Failed to start ${deps.provider} server.`),
-            cause,
-          }),
+      // Selected dev domain: the owner lease replaces the legacy remote child entirely.
+      const ownedServer = yield* startSelectedOpencodeOwnerServer({
+        threadId: input.threadId,
+        sessionEpoch: input.sessionEpoch ?? 0,
+        binaryPath: settings.binaryPath,
+        executionContext,
       }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterProcessError({
+              provider: deps.provider,
+              threadId: input.threadId,
+              detail: toMessage(cause, `Failed to start ${deps.provider} SSH owner server.`),
+              cause,
+            }),
+        ),
         Effect.tapError(() =>
           Effect.sync(() => {
             void cleanupBridge().catch(() => undefined);
           }),
         ),
       );
+      const serverHandle = yield* ownedServer
+        ? Effect.succeed(ownedServer.handle)
+        : Effect.tryPromise({
+            try: () =>
+              deps.serverManager.acquire({
+                provider: deps.provider,
+                binaryPath: settings.binaryPath,
+                ...(serverDirectory ? { directory: serverDirectory } : {}),
+                executionTargetId: executionContext.providerRuntimeTarget.executionTargetId,
+              }),
+            catch: (cause) =>
+              new ProviderAdapterProcessError({
+                provider: deps.provider,
+                threadId: input.threadId,
+                detail: toMessage(cause, `Failed to start ${deps.provider} server.`),
+                cause,
+              }),
+          }).pipe(
+            Effect.tapError(() =>
+              Effect.sync(() => {
+                void cleanupBridge().catch(() => undefined);
+              }),
+            ),
+          );
       yield* Effect.tryPromise({
         try: () =>
           registerOpencodeOrchestrationMcpBridge({
@@ -195,6 +220,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         serverDirectory,
         orchestrationServerName: orchestrationBridge.serverName,
         cleanup: cleanupBridge,
+        ...(ownedServer ? { closeServer: ownedServer.close } : {}),
       });
       const allowedTools = yield* Effect.tryPromise({
         try: async () => {
@@ -349,8 +375,10 @@ function makeOpencodeBridgeCleanup(input: {
   readonly serverDirectory: string | undefined;
   readonly orchestrationServerName: string;
   readonly cleanup: () => Promise<void>;
+  /** Owner leases tear down their exact listener only after the bridge is gone. */
+  readonly closeServer?: () => Promise<void>;
 }): () => Promise<void> {
-  return composeBridgeCleanups(async () => {
+  const cleanupBridge = composeBridgeCleanups(async () => {
     try {
       await disconnectOpencodeOrchestrationMcpBridge({
         client: input.serverHandle.client,
@@ -361,4 +389,8 @@ function makeOpencodeBridgeCleanup(input: {
       // Best effort: bridge cleanup below removes bigbud auth and files.
     }
   }, input.cleanup);
+  return async () => {
+    await cleanupBridge();
+    if (input.closeServer) await input.closeServer().catch(() => undefined);
+  };
 }
