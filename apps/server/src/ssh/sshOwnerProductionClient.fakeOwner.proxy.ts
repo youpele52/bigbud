@@ -50,27 +50,44 @@ const handleAgentProxy = (requestId, target, operation) => {
 };
 const opencodeLeases = new Map();
 let nextOpencodePort = 41000;
-const opencodeState = (lease, phase, port) =>
+const opencodeState = (lease, phase, port, password) =>
   Buffer.concat([
     bytesField(1, lease),
     uintField(2, phase),
     port === undefined ? Buffer.alloc(0) : uintField(3, port),
+    password === undefined ? Buffer.alloc(0) : bytesField(5, Buffer.from(password)),
   ]);
+// The v2 service transport is additive field 4 of ProviderServiceScope. The
+// fake owner mirrors the real one: it selects its own credential and returns it
+// only while the lease is ready.
+const opencodeTransport = (inner) => {
+  const scope = field(inner, 3);
+  if (!scope) return "v1";
+  const transport = field(parseFields(scope.value), 4);
+  return transport && transport.value === 2 ? "v2" : "v1";
+};
 const handleOpencode = (requestId, target, operation) => {
   const inner = parseFields(operation.value);
   const known = opencodeLeases.get(target);
   if (operation.field === 50) {
     const lease = field(inner, 2) ? field(inner, 2).value : Buffer.alloc(0);
     if (lease.length !== 32) return reply(requestId, target, 10, uintField(1, 3));
+    const transport = opencodeTransport(inner);
     const port = nextOpencodePort++;
-    opencodeLeases.set(target, { lease, port });
-    return reply(requestId, target, 33, opencodeState(lease, 2, port));
+    const password = transport === "v2" ? "fixture-v2-" + port : undefined;
+    opencodeLeases.set(target, { lease, port, password });
+    return reply(requestId, target, 33, opencodeState(lease, 2, port, password));
   }
   const requested = field(inner, 1) ? field(inner, 1).value : Buffer.alloc(0);
   if (!known || !requested.equals(known.lease))
     return reply(requestId, target, 10, uintField(1, 2));
   if (operation.field === 51)
-    return reply(requestId, target, 33, opencodeState(known.lease, 2, known.port));
+    return reply(
+      requestId,
+      target,
+      33,
+      opencodeState(known.lease, 2, known.port, known.password),
+    );
   opencodeLeases.delete(target);
   return reply(requestId, target, 33, opencodeState(known.lease, 4));
 };

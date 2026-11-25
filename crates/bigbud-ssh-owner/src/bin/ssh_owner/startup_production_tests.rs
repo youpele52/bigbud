@@ -203,6 +203,29 @@ fn parses_owner_selected_provider_bindings() {
         )
         .expect("owner-selected OpenCode binding");
         assert!(parsed.opencode_service.is_some());
+        assert!(parsed.opencode_v2.is_none());
+        // The v2 recipe is independent: one target may bind either or both,
+        // and each still requires the authorized workspace root.
+        let parsed = parse(
+            args(
+                &root,
+                &[
+                    "--workspace-root",
+                    workspace.to_str().unwrap(),
+                    "--opencode-v2-service",
+                    "/opt/opencode-v2",
+                ],
+            )
+            .into_iter(),
+        )
+        .expect("owner-selected OpenCode v2 binding");
+        assert!(parsed.opencode_service.is_none());
+        assert!(parsed.opencode_v2.is_some());
+        assert_eq!(
+            parse(args(&root, &["--opencode-v2-service", "/opt/opencode-v2"]).into_iter())
+                .unwrap_err(),
+            ProfileRefusal::Conflict
+        );
     }
     // A partial triple is a conflict, never a silently ignored binding.
     assert_eq!(

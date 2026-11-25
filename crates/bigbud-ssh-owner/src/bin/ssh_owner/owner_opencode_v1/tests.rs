@@ -1,4 +1,5 @@
 use super::*;
+use crate::v1::ErrorCode;
 use std::{
     fs,
     os::unix::{fs::PermissionsExt, net::UnixListener},
@@ -95,7 +96,7 @@ fn private_forward_directory_is_unique_and_removed_without_a_rebind_window() {
 
 #[test]
 fn receipt_requires_exact_nonce_framing_and_owner_launch_signal() {
-    let mut control = Control::new(NONCE);
+    let mut control = Control::new("bigbud-opencode-v1", NONCE);
     control.ingest(format!("prefix bigbud-opencode-v1 {NONCE} prepared\n").as_bytes());
     control.ingest(format!("bigbud-opencode-v1 {} prepared\n", "f".repeat(64)).as_bytes());
     assert!(!control.prepared());

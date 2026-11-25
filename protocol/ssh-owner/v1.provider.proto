@@ -19,13 +19,23 @@ message ProofProviderVersion {
   string stderr = 3;
 }
 
+// Which owner-selected provider transport a service lease uses. The value is
+// additive: an omitted or unspecified transport keeps the original OpenCode v1
+// service contract for older callers.
+enum ProviderServiceTransport {
+  PROVIDER_SERVICE_TRANSPORT_UNSPECIFIED = 0;
+  PROVIDER_SERVICE_TRANSPORT_V1 = 1;
+  PROVIDER_SERVICE_TRANSPORT_V2 = 2;
+}
+
 // Product provider service scope. The owner selects the executable, arguments
-// and (for OpenCode v1) the only forwarding authority at startup; a request
-// carries only the authorized session below.
+// and the only forwarding authority at startup; a request carries only the
+// authorized session below and, additively, which owner transport to use.
 message ProviderServiceScope {
   string thread_id = 1;
   uint64 session_epoch = 2;
   string cwd = 3;
+  ProviderServiceTransport transport = 4;
 }
 
 message ProofOpencodeOpen {
@@ -46,6 +56,9 @@ message ProofOpencodeState {
   ProofOpencodePhase phase = 2;
   optional uint32 local_port = 3;
   optional uint32 exit_code = 4;
+  // OpenCode v2 only: the owner-generated credential for this exact listener.
+  // Present only while the lease is READY; never stored, logged or reused.
+  optional string password = 5;
 }
 
 enum ProofOpencodePhase {

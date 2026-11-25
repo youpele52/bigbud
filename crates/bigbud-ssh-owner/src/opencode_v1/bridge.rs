@@ -34,8 +34,14 @@ impl Bridge {
     /// directory. Never pass a product input, request parameter, or child output.
     /// This borrows the reservation without rebinding its IPv4 loopback port.
     pub fn start(startup: &Startup, socket: &Path) -> io::Result<Self> {
+        Self::start_listener(startup.listener(), socket)
+    }
+
+    /// The same relay over an arbitrary owner-retained loopback listener. The
+    /// listener must already be bound and nonblocking; it is only cloned.
+    pub fn start_listener(listener: &TcpListener, socket: &Path) -> io::Result<Self> {
         let socket = socket::Destination::new(socket)?;
-        let listener = startup.listener().try_clone()?;
+        let listener = listener.try_clone()?;
         let (stop, wake) = UnixStream::pair()?;
         let handle = thread::Builder::new()
             .name("opencode-v1-bridge".into())

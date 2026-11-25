@@ -200,14 +200,14 @@ describe("selected OpenCode v1 SSH owner composition", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it("keeps OpenCode v2's explicit SSH bootstrap refusal", async () => {
+  it("keeps OpenCode v2's typed SSH bootstrap refusal when no owner can provide it", async () => {
     await expect(
       isolatedEnvironment({
         runtimeTargetId: targetId,
         binaryPath,
         profileRoot: "/tmp/bigbud-opencode-v2",
       } as never),
-    ).rejects.toThrow(/SSH bootstrap is not yet verified/);
+    ).rejects.toThrow(/OpenCode v2 SSH bootstrap is not verified/);
   });
 
   it("rejects a listener that never becomes ready and closes the exact lease", async () => {

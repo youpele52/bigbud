@@ -62,6 +62,8 @@ fn production_bootstrap_refuses_a_hello_for_another_profile() {
             opencode_recipe: None,
             #[cfg(target_os = "linux")]
             opencode_service: None,
+            #[cfg(target_os = "linux")]
+            opencode_v2: None,
         },
     );
     assert!(result.is_err());

@@ -27,10 +27,18 @@ export interface PickerProofProductionProxyClient {
     pid: number,
     request: { readonly terminate: boolean; readonly timeoutMs: number },
   ): Promise<ProofAgentProxyStatus>;
-  /** Bind the target's owner-selected OpenCode listener for one session. */
+  /** Bind the target's owner-selected OpenCode v1 listener for one session. */
   openOpencode(scope: ProofOpencodeServiceScope): Promise<ProofOpencodeState>;
   opencodeStatus(lease: Uint8Array): Promise<ProofOpencodeState>;
   closeOpencode(lease: Uint8Array): Promise<ProofOpencodeState>;
+  /**
+   * Bind the target's owner-selected OpenCode v2 listener for one session. The
+   * owner selects the executable, argv, remote port, profile and credential;
+   * the ready state carries only the local listener and that credential.
+   */
+  openOpencodeV2(lease: Uint8Array, scope: ProofOpencodeServiceScope): Promise<ProofOpencodeState>;
+  opencodeV2Status(lease: Uint8Array): Promise<ProofOpencodeState>;
+  closeOpencodeV2(lease: Uint8Array): Promise<ProofOpencodeState>;
 }
 
 type Execute = (operation: PickerProofOperation) => Promise<Outcome>;
@@ -84,5 +92,18 @@ export function makePickerProofProductionProxyClient(
       }),
     opencodeStatus: (lease) => opencode({ kind: "proofOpencodeStatus", lease: copyLease(lease) }),
     closeOpencode: (lease) => opencode({ kind: "proofOpencodeClose", lease: copyLease(lease) }),
+    openOpencodeV2: (lease, scope) =>
+      opencode({
+        kind: "proofOpencodeOpen",
+        lease: copyLease(lease),
+        serviceScope: {
+          threadId: scope.threadId,
+          sessionEpoch: scope.sessionEpoch,
+          cwd: scope.cwd,
+          transport: "v2",
+        },
+      }),
+    opencodeV2Status: (lease) => opencode({ kind: "proofOpencodeStatus", lease: copyLease(lease) }),
+    closeOpencodeV2: (lease) => opencode({ kind: "proofOpencodeClose", lease: copyLease(lease) }),
   };
 }

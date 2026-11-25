@@ -309,6 +309,8 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
             opencode_recipe,
             #[cfg(target_os = "linux")]
             opencode_service,
+            #[cfg(target_os = "linux")]
+            opencode_v2: None,
         },
     )?;
     owner.supervised_terminal = lifetime.is_some();

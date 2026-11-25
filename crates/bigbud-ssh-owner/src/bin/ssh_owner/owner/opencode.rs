@@ -1,13 +1,19 @@
-//! One approved, one-shot OpenCode fixture lease per owner generation.
+//! One approved, one-shot OpenCode lease per owner target and generation.
+//!
+//! Both transports share this lane: the worker publishes exactly one ready
+//! result, and only that result may carry a credential. A v2 credential is
+//! cleared as soon as the lease settles, is revoked, or is lost.
 use super::{ErrorCode, Outcome, Owner};
 use crate::{
     Token,
-    owner_opencode_v1::{Outcome as WorkerOutcome, Recipe},
+    owner_opencode::{Outcome as WorkerOutcome, ReadyPort},
+    owner_opencode_v1::{ProductRecipe as V1Recipe, Recipe},
+    owner_opencode_v2::ProductRecipe as V2Recipe,
     v1::{ProofOpencodeOpen, ProofOpencodePhase as Phase, ProofOpencodeState},
 };
 use std::{
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU16, Ordering},
     },
     thread::{self, JoinHandle},
@@ -17,10 +23,39 @@ use std::{
 const CLOSE_BUDGET: Duration = Duration::from_millis(1750);
 const POLL: Duration = Duration::from_millis(5);
 
+/// Published readiness for one worker. The credential is written before the
+/// port so that a visible port always has its exact secret.
+#[derive(Default)]
+struct Publication {
+    port: AtomicU16,
+    password: Mutex<Option<String>>,
+}
+
+impl Publication {
+    fn publish(&self, ready: ReadyPort) -> bool {
+        let Ok(mut password) = self.password.lock() else {
+            return false;
+        };
+        *password = ready.secret;
+        self.port.store(ready.port, Ordering::Release);
+        true
+    }
+
+    fn secret(&self) -> Option<String> {
+        self.password.lock().ok().and_then(|slot| slot.clone())
+    }
+
+    fn forget(&self) {
+        if let Ok(mut slot) = self.password.lock() {
+            *slot = None;
+        }
+    }
+}
+
 pub(super) struct Lease {
     token: Token,
     cancelled: Arc<AtomicBool>,
-    port: Arc<AtomicU16>,
+    published: Arc<Publication>,
     worker: Option<JoinHandle<WorkerOutcome>>,
     settled: Option<WorkerOutcome>,
 }
@@ -32,6 +67,8 @@ impl Lease {
                 .worker
                 .take()
                 .map(|worker| worker.join().unwrap_or(WorkerOutcome::Unconfirmed));
+            // No settled lease retains a credential.
+            self.published.forget();
         }
     }
 
@@ -39,6 +76,7 @@ impl Lease {
         self.observe();
         let mut local_port = None;
         let mut exit_code = None;
+        let mut password = None;
         let phase = match self.settled.as_ref() {
             Some(WorkerOutcome::Exited(code)) => match u32::try_from(*code) {
                 Ok(code) if code <= 254 => {
@@ -52,24 +90,30 @@ impl Lease {
             Some(WorkerOutcome::Rejected(_)) => Phase::Rejected,
             Some(WorkerOutcome::Unconfirmed) => Phase::Unconfirmed,
             None if self.cancelled.load(Ordering::Acquire) => Phase::Closing,
-            None => match self.port.load(Ordering::Acquire) {
+            None => match self.published.port.load(Ordering::Acquire) {
                 0 => Phase::Starting,
                 port => {
                     local_port = Some(u32::from(port));
+                    password = self.published.secret();
                     Phase::Ready
                 }
             },
         };
+        if !matches!(phase, Phase::Ready) {
+            self.published.forget();
+        }
         Outcome::ProofOpencode(ProofOpencodeState {
             lease: self.token.to_vec(),
             phase: phase.into(),
             local_port,
             exit_code,
+            password,
         })
     }
 
     pub(super) fn retire(&mut self) -> Result<(), ErrorCode> {
         self.cancelled.store(true, Ordering::Release);
+        self.published.forget();
         let deadline = Instant::now() + CLOSE_BUDGET;
         loop {
             self.observe();
@@ -97,7 +141,10 @@ impl Owner {
         request: ProofOpencodeOpen,
     ) -> Result<Outcome, ErrorCode> {
         if let Some(scope) = request.service_scope.clone() {
-            return self.open_opencode_service(&request, &scope);
+            return match scope.transport() {
+                crate::v1::ProviderServiceTransport::V2 => self.open_opencode_v2(&request, &scope),
+                _ => self.open_opencode_service(&request, &scope),
+            };
         }
         let token: Token = request
             .lease
@@ -113,18 +160,12 @@ impl Owner {
             return Err(ErrorCode::OperationDenied);
         }
         let host = super::present(&self.transport)?.host().to_owned();
-        let pinned = super::present(&self.transport)?.pinned_opencode_v1_ssh()?;
-        self.spawn_opencode(token, move |cancelled, port| {
+        let pinned = super::present(&self.transport)?.pinned_opencode_ssh()?;
+        self.spawn_opencode(token, move |cancelled, published| {
             recipe.run(
                 pinned,
                 &host,
-                |local| {
-                    if cancelled.load(Ordering::Acquire) {
-                        return false;
-                    }
-                    port.store(local, Ordering::Release);
-                    !cancelled.load(Ordering::Acquire)
-                },
+                |ready| publish(&cancelled, &published, ready),
                 || cancelled.load(Ordering::Acquire),
             )
         })
@@ -139,7 +180,7 @@ impl Owner {
     ) -> Result<Outcome, ErrorCode> {
         let token: Token = *<&Token>::try_from(request.lease.as_slice())
             .map_err(|_| ErrorCode::InvalidOperands)?;
-        let recipe: Arc<crate::owner_opencode_v1::ProductRecipe> = self
+        let recipe: Arc<V1Recipe> = self
             .opencode_service
             .as_ref()
             .cloned()
@@ -148,18 +189,42 @@ impl Owner {
             return Err(ErrorCode::OperationDenied);
         }
         let host = super::present(&self.transport)?.host().to_owned();
-        let pinned = super::present(&self.transport)?.pinned_opencode_v1_ssh()?;
-        self.spawn_opencode(token, move |cancelled, port| {
+        let pinned = super::present(&self.transport)?.pinned_opencode_ssh()?;
+        self.spawn_opencode(token, move |cancelled, published| {
             recipe.run(
                 pinned,
                 &host,
-                |local| {
-                    if cancelled.load(Ordering::Acquire) {
-                        return false;
-                    }
-                    port.store(local, Ordering::Release);
-                    !cancelled.load(Ordering::Acquire)
-                },
+                |ready| publish(&cancelled, &published, ready),
+                || cancelled.load(Ordering::Acquire),
+            )
+        })
+    }
+
+    /// Product OpenCode v2: the configured executable, `serve --stdio` argv,
+    /// remote port, local listener, forward spec and credential are all
+    /// owner-selected. The request names only the authorized workspace.
+    fn open_opencode_v2(
+        &mut self,
+        request: &ProofOpencodeOpen,
+        scope: &crate::v1::ProviderServiceScope,
+    ) -> Result<Outcome, ErrorCode> {
+        let token: Token = *<&Token>::try_from(request.lease.as_slice())
+            .map_err(|_| ErrorCode::InvalidOperands)?;
+        let recipe: Arc<V2Recipe> = self
+            .opencode_v2
+            .as_ref()
+            .cloned()
+            .ok_or(ErrorCode::OperationDenied)?;
+        if self.lanes.opencode.is_some() || !recipe.matches(scope) {
+            return Err(ErrorCode::OperationDenied);
+        }
+        let host = super::present(&self.transport)?.host().to_owned();
+        let pinned = super::present(&self.transport)?.pinned_opencode_ssh()?;
+        self.spawn_opencode(token, move |cancelled, published| {
+            recipe.run(
+                pinned,
+                &host,
+                |ready| publish(&cancelled, &published, ready),
                 || cancelled.load(Ordering::Acquire),
             )
         })
@@ -168,12 +233,12 @@ impl Owner {
     fn spawn_opencode(
         &mut self,
         token: Token,
-        work: impl FnOnce(Arc<AtomicBool>, Arc<AtomicU16>) -> WorkerOutcome + Send + 'static,
+        work: impl FnOnce(Arc<AtomicBool>, Arc<Publication>) -> WorkerOutcome + Send + 'static,
     ) -> Result<Outcome, ErrorCode> {
         let cancelled = Arc::new(AtomicBool::new(false));
-        let port = Arc::new(AtomicU16::new(0));
+        let published = Arc::new(Publication::default());
         let stop = Arc::clone(&cancelled);
-        let publish = Arc::clone(&port);
+        let publish = Arc::clone(&published);
         let worker = thread::Builder::new()
             .name("bigbud-opencode-lease".into())
             .spawn(move || work(stop, publish))
@@ -181,7 +246,7 @@ impl Owner {
         let mut lease = Lease {
             token,
             cancelled,
-            port,
+            published,
             worker: Some(worker),
             settled: None,
         };
@@ -203,6 +268,7 @@ impl Owner {
             .ok_or(ErrorCode::OperationDenied)?;
         if close {
             lease.cancelled.store(true, Ordering::Release);
+            lease.published.forget();
         }
         Ok(lease.reply())
     }
@@ -217,4 +283,8 @@ impl Owner {
             lease.settled.is_none() || matches!(lease.settled, Some(WorkerOutcome::Unconfirmed))
         })
     }
+}
+
+fn publish(cancelled: &AtomicBool, published: &Publication, ready: ReadyPort) -> bool {
+    !cancelled.load(Ordering::Acquire) && published.publish(ready)
 }

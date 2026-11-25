@@ -79,7 +79,9 @@ impl Owner {
         }
         #[cfg(target_os = "linux")]
         if !self.production
-            && (self.opencode_recipe.is_some() || self.opencode_service.is_some())
+            && (self.opencode_recipe.is_some()
+                || self.opencode_service.is_some()
+                || self.opencode_v2.is_some())
             && !matches!(
                 operation,
                 Operation::ProofOpencodeOpen(_)

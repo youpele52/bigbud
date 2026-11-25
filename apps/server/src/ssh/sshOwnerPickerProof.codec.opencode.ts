@@ -8,13 +8,18 @@ import {
   invalid,
   PickerProofOwnerError,
   PROOF_TOKEN_BYTES,
+  stringValue,
   uintValue,
 } from "./sshOwnerPickerProof.codec.wire.ts";
+
+/** Owner-selected transport for a service lease; omitted means the v1 contract. */
+export type ProofOpencodeServiceTransport = "v1" | "v2";
 
 export type ProofOpencodeServiceScope = {
   readonly threadId: string;
   readonly sessionEpoch: number;
   readonly cwd: string;
+  readonly transport?: ProofOpencodeServiceTransport;
 };
 
 export type ProofOpencodeOperation =
@@ -28,9 +33,22 @@ export type ProofOpencodeOperation =
 
 export type ProofOpencodeState = { readonly lease: Uint8Array } & (
   | { readonly phase: "starting" | "closing" | "closed" | "lost" | "unconfirmed" | "rejected" }
-  | { readonly phase: "ready"; readonly localPort: number }
+  | { readonly phase: "ready"; readonly localPort: number; readonly password?: string }
   | { readonly phase: "exited"; readonly exitCode: number }
 );
+
+// ProviderServiceTransport: an omitted or unspecified value keeps v1.
+const TRANSPORT_V2 = 2;
+const MAX_PASSWORD_BYTES = 256;
+
+function validPassword(value: string): boolean {
+  if (value.length === 0 || Buffer.byteLength(value) > MAX_PASSWORD_BYTES) return false;
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return false;
+  }
+  return true;
+}
 
 export function writeProofOpencode(writer: WireWriter, operation: ProofOpencodeOperation) {
   if (operation.lease.length !== PROOF_TOKEN_BYTES)
@@ -42,6 +60,7 @@ export function writeProofOpencode(writer: WireWriter, operation: ProofOpencodeO
       scope.fieldString(1, operation.serviceScope.threadId);
       scope.fieldUint(2, operation.serviceScope.sessionEpoch);
       scope.fieldString(3, operation.serviceScope.cwd);
+      if (operation.serviceScope.transport === "v2") scope.fieldUint(4, TRANSPORT_V2);
       operands.fieldRepeatedMessage(3, scope.finish());
     } else {
       const scope = new WireWriter();
@@ -64,14 +83,17 @@ export function readProofOpencode(bytes: Uint8Array): ProofOpencodeState {
   let phase: number | undefined;
   let localPort: number | undefined;
   let exitCode: number | undefined;
+  let password: string | undefined;
   decodeMessage(bytes, (field, wire, reader) => {
     if (field === 1 && lease === undefined) lease = bytesValue(wire, reader);
     else if (field === 2 && phase === undefined) phase = uintValue(wire, reader);
     else if (field === 3 && localPort === undefined) localPort = uintValue(wire, reader);
     else if (field === 4 && exitCode === undefined) exitCode = uintValue(wire, reader);
+    else if (field === 5 && password === undefined) password = stringValue(wire, reader);
     else return invalid();
   });
   if (lease?.length !== PROOF_TOKEN_BYTES) return invalid();
+  if (password !== undefined && !validPassword(password)) return invalid();
   if (
     phase === 2 &&
     localPort !== undefined &&
@@ -79,10 +101,15 @@ export function readProofOpencode(bytes: Uint8Array): ProofOpencodeState {
     localPort <= 65535 &&
     exitCode === undefined
   )
-    return { lease, phase: "ready", localPort };
+    return {
+      lease,
+      phase: "ready",
+      localPort,
+      ...(password === undefined ? {} : { password }),
+    };
   if (phase === 7 && exitCode !== undefined && exitCode <= 254 && localPort === undefined)
-    return { lease, phase: "exited", exitCode };
-  if (localPort !== undefined || exitCode !== undefined) return invalid();
+    return password === undefined ? { lease, phase: "exited", exitCode } : invalid();
+  if (localPort !== undefined || exitCode !== undefined || password !== undefined) return invalid();
   switch (phase) {
     case 1:
       return { lease, phase: "starting" };

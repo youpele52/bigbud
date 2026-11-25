@@ -9,6 +9,7 @@ import {
   type OwnedV2Process,
 } from "./ServerManager.child.ts";
 import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
+import { V2SshOwnerUnavailable } from "./ServerManager.sshOwner.ts";
 import { OpencodeV2DevelopmentSessions } from "./DevelopmentSessions.ts";
 import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import { makeNoExecutionAdmissionTransport } from "./Adapter.admission.ts";
@@ -60,9 +61,14 @@ describe.skipIf(process.platform === "win32")(
         ),
       ).toBe(false);
       expect(environment.HOME).toBe(input.profileRoot);
+      // A remote target is typed-refused by the local isolation builder and
+      // only the owner may acquire it (see ServerManager.sshOwner.test.ts).
       await expect(
         isolatedEnvironment({ ...input, runtimeTargetId: "ssh-fixture" }),
-      ).rejects.toThrow("unavailable");
+      ).rejects.toBeInstanceOf(V2SshOwnerUnavailable);
+      await expect(
+        startOwnedV2Process({ ...input, runtimeTargetId: "ssh-fixture" }),
+      ).rejects.toBeInstanceOf(V2SshOwnerUnavailable);
     });
     it("creates only isolated deny-all sessions and explicit no-execution admissions; stop retains history", async () => {
       const input = await config();

@@ -1,8 +1,9 @@
-use super::{POLL, REMOTE_ENDPOINT};
+use super::POLL;
 use crate::transport::PinnedSsh;
 use std::{
     fs,
     io::{self, Read, Write},
+    net::SocketAddrV4,
     os::{
         fd::{AsFd, AsRawFd},
         unix::{ffi::OsStrExt, process::CommandExt},
@@ -17,14 +18,14 @@ use std::{
 const KILL_GRACE: Duration = Duration::from_millis(250);
 const DIR_TEMPLATE: &[u8] = b"/tmp/bigbud-oc1-XXXXXXXXXXXXXXXX\0";
 
-pub(super) struct ForwardSocket {
+pub(crate) struct ForwardSocket {
     directory: PathBuf,
     socket: PathBuf,
     closed: bool,
 }
 
 impl ForwardSocket {
-    pub(super) fn new() -> io::Result<Self> {
+    pub(crate) fn new() -> io::Result<Self> {
         // Never consult TMPDIR or a wire operand. mkdtemp creates the unpredictable
         // socket parent atomically with mode 0700 before it can be substituted.
         let mut template = DIR_TEMPLATE.to_vec();
@@ -45,11 +46,11 @@ impl ForwardSocket {
         })
     }
 
-    pub(super) fn path(&self) -> &Path {
+    pub(crate) fn path(&self) -> &Path {
         &self.socket
     }
 
-    pub(super) fn close(mut self) -> io::Result<()> {
+    pub(crate) fn close(mut self) -> io::Result<()> {
         self.remove()?;
         self.closed = true;
         Ok(())
@@ -79,25 +80,29 @@ struct Running {
     _pin: PinnedSsh,
 }
 
-pub(super) struct SshChild {
+pub(crate) struct SshChild {
     running: Option<Running>,
     deferred: SyncSender<Running>,
     reaped: bool,
 }
 
 impl SshChild {
-    pub(super) fn spawn(
+    /// `remote` is the owner-selected loopback endpoint; `socket` is the
+    /// owner-generated local path. Neither comes from a request or child output.
+    pub(crate) fn spawn(
         mut pinned: PinnedSsh,
         host: &str,
         command: &str,
         socket: &Path,
+        remote: SocketAddrV4,
+        worker: &str,
     ) -> io::Result<Self> {
         // Only the fixed transport constructor can enable forwarding; this
-        // module adds the sole -L from the owner-generated path and constant.
-        let forward = format!("{}:{REMOTE_ENDPOINT}", socket.display());
+        // module adds the sole -L from the owner-generated path and endpoint.
+        let forward = format!("{}:{remote}", socket.display());
         let (deferred, recv) = mpsc::sync_channel::<Running>(1);
         thread::Builder::new()
-            .name("proof-opencode-v1-reap".into())
+            .name(worker.to_owned())
             .spawn(move || {
                 if let Ok(mut running) = recv.recv() {
                     let _reaped_or_no_child = running.child.wait();
@@ -123,14 +128,14 @@ impl SshChild {
         })
     }
 
-    pub(super) fn setup(&mut self) -> io::Result<()> {
+    pub(crate) fn setup(&mut self) -> io::Result<()> {
         let child = self.child()?;
         nonblocking(child.stdin.as_ref().ok_or_else(no_pipe)?)?;
         nonblocking(child.stdout.as_ref().ok_or_else(no_pipe)?)?;
         nonblocking(child.stderr.as_ref().ok_or_else(no_pipe)?)
     }
 
-    pub(super) fn send(&mut self, byte: u8) -> io::Result<bool> {
+    pub(crate) fn send(&mut self, byte: u8) -> io::Result<bool> {
         let stdin = self.child()?.stdin.as_mut().ok_or_else(no_pipe)?;
         match stdin.write(&[byte]) {
             Ok(1) => Ok(true),
@@ -143,13 +148,35 @@ impl SshChild {
         }
     }
 
-    pub(super) fn close_input(&mut self) {
+    /// Writes as much of `pending` as the nonblocking pipe accepts and removes
+    /// the written prefix. `true` means the entire payload was written.
+    pub(crate) fn send_all(&mut self, pending: &mut Vec<u8>) -> io::Result<bool> {
+        if pending.is_empty() {
+            return Ok(true);
+        }
+        let stdin = self.child()?.stdin.as_mut().ok_or_else(no_pipe)?;
+        match stdin.write(pending) {
+            Ok(0) => Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "SSH control write failed",
+            )),
+            Ok(written) if written <= pending.len() => {
+                pending.drain(..written);
+                Ok(pending.is_empty())
+            }
+            Ok(_) => Err(io::Error::other("SSH control write overran its payload")),
+            Err(e) if would_block(&e) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub(crate) fn close_input(&mut self) {
         if let Some(running) = &mut self.running {
             drop(running.child.stdin.take());
         }
     }
 
-    pub(super) fn read(&mut self, stdout: bool, buffer: &mut [u8]) -> io::Result<usize> {
+    pub(crate) fn read(&mut self, stdout: bool, buffer: &mut [u8]) -> io::Result<usize> {
         let child = self.child()?;
         let pipe: &mut dyn Read = if stdout {
             child.stdout.as_mut().ok_or_else(no_pipe)?
@@ -162,14 +189,14 @@ impl SshChild {
         }
     }
 
-    pub(super) fn reaped(&mut self) -> io::Result<bool> {
+    pub(crate) fn reaped(&mut self) -> io::Result<bool> {
         if !self.reaped {
             self.reaped = self.child()?.try_wait()?.is_some();
         }
         Ok(self.reaped)
     }
 
-    pub(super) fn kill_and_reap(&mut self) -> bool {
+    pub(crate) fn kill_and_reap(&mut self) -> bool {
         self.close_input();
         let status = self.reaped();
         if matches!(status, Ok(true)) {

@@ -53,12 +53,32 @@ export function providerCases(
         ],
       ],
     ]),
+    // ProviderServiceScope.transport = PROVIDER_SERVICE_TRANSPORT_V2 (additive).
+    proof_opencode_service_open_v2: request(50, [
+      [2, opencodeLease],
+      [
+        3,
+        [
+          [1, "thread-opencode"],
+          [2, 7],
+          [3, "/fixture/work"],
+          [4, 2],
+        ],
+      ],
+    ]),
     proof_opencode_status: request(51, [[1, opencodeLease]]),
     proof_opencode_close: request(52, [[1, opencodeLease]]),
     proof_opencode_ready: reply(33, [
       [1, opencodeLease],
       [2, 2],
       [3, 49152],
+    ]),
+    // OpenCode v2 readiness carries the owner-generated server credential.
+    proof_opencode_ready_v2: reply(33, [
+      [1, opencodeLease],
+      [2, 2],
+      [3, 49152],
+      [5, "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
     ]),
     proof_opencode_closed: reply(33, [
       [1, opencodeLease],

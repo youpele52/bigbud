@@ -6,6 +6,11 @@ import path from "node:path";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { makeOwnedClient, v2Request } from "./Client.ts";
 import { assertDevelopmentVersion, validateOwnedEndpoint } from "./Compatibility.ts";
+import {
+  startOwnedV2SshProcess,
+  V2SshOwnerUnavailable,
+  type V2SshOwner,
+} from "./ServerManager.sshOwner.ts";
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
 import {
   requireV2NativeIsolation,
@@ -29,12 +34,16 @@ export type {
   OwnedV2Process,
 } from "./ServerManager.types.ts";
 
-/** Only explicitly isolated roots and a small environment allowlist reach the child. */
+/**
+ * Only explicitly isolated local roots and a small environment allowlist reach
+ * the child. A remote target never reaches this builder: it acquires through
+ * `startOwnedV2SshProcess` and the owner selects every launch input.
+ */
 export async function isolatedEnvironment(
   config: V2IsolatedProcessConfig,
 ): Promise<NodeJS.ProcessEnv> {
   if (config.runtimeTargetId !== "local") {
-    throw new Error("OpenCode v2 SSH bootstrap is not yet verified; runtime unavailable.");
+    throw new V2SshOwnerUnavailable("profile");
   }
   if (
     !path.isAbsolute(config.binaryPath) ||
@@ -198,8 +207,15 @@ async function readiness(child: ChildProcess): Promise<string> {
 export async function startOwnedV2Process(
   config: V2ProcessConfig,
   synthetic?: V2SyntheticLauncherGrant,
+  sshOwner?: V2SshOwner,
 ): Promise<OwnedV2Process> {
   if (config.sharedService) throw new Error("V2 owned launcher refuses a borrowed shared service.");
+  if (config.runtimeTargetId !== "local") {
+    // The owner selects the executable, argv, remote port, listener, forward
+    // spec and credential. Without it, a remote target stays typed-refused.
+    if (!sshOwner) throw new V2SshOwnerUnavailable("recipe");
+    return startOwnedV2SshProcess(config, sshOwner);
+  }
   const approval = synthetic ? undefined : await requireV2NativeIsolation(config.binaryPath);
   const launch = synthetic
     ? await verifyV2SyntheticNodeFixture(synthetic, config)

@@ -49,6 +49,8 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         opencode_recipe,
         #[cfg(target_os = "linux")]
         opencode_service,
+        #[cfg(target_os = "linux")]
+        opencode_v2,
     } = startup;
     let (target, config, authority) = match startup {
         TargetStartup::Pinned { target, config } => (target, Some(config), None),
@@ -135,7 +137,8 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
                 #[cfg(target_os = "linux")]
                 tracked_push_or_opencode: tracked_push.is_some()
                     || opencode_recipe.is_some()
-                    || opencode_service.is_some(),
+                    || opencode_service.is_some()
+                    || opencode_v2.is_some(),
                 #[cfg(not(target_os = "linux"))]
                 tracked_push_or_opencode: false,
                 production: route_facts.production(),
@@ -181,6 +184,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
                     || tracked_push.is_some()
                     || opencode_recipe.is_some()
                     || opencode_service.is_some()
+                    || opencode_v2.is_some()
                     || guarded_write.is_some()
                 {
                     return Err(protocol_error().into());
@@ -322,6 +326,8 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         opencode_recipe: opencode_recipe.map(std::sync::Arc::new),
         #[cfg(target_os = "linux")]
         opencode_service: opencode_service.map(std::sync::Arc::new),
+        #[cfg(target_os = "linux")]
+        opencode_v2: opencode_v2.map(std::sync::Arc::new),
         #[cfg(target_os = "linux")]
         tracked_push,
     };

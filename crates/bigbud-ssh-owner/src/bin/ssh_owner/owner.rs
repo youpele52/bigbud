@@ -85,10 +85,15 @@ pub(super) struct OwnerStartup<'a> {
     pub(super) agent_service: Option<crate::owner_agent_proxy::ServiceRecipe>,
     pub(super) identity_agent_path: Option<&'a Path>,
     pub(super) stage: Option<StageBinding>,
+    /// OpenCode v1 fixture recipe (dev-selected only).
     #[cfg(target_os = "linux")]
     pub(super) opencode_recipe: Option<crate::owner_opencode_v1::Recipe>,
+    /// Owner-selected OpenCode v1 service recipe.
     #[cfg(target_os = "linux")]
     pub(super) opencode_service: Option<crate::owner_opencode_v1::ProductRecipe>,
+    /// Owner-selected OpenCode v2 service recipe.
+    #[cfg(target_os = "linux")]
+    pub(super) opencode_v2: Option<crate::owner_opencode_v2::ProductRecipe>,
     #[cfg(target_os = "linux")]
     pub(super) tracked_push: Option<TrackedPushStartup>,
 }

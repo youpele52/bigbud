@@ -98,6 +98,8 @@ impl Fixture {
                 opencode_recipe: None,
                 #[cfg(target_os = "linux")]
                 opencode_service: None,
+                #[cfg(target_os = "linux")]
+                opencode_v2: None,
             },
         )
         .unwrap()

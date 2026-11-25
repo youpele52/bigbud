@@ -63,5 +63,7 @@ pub(crate) struct Owner {
     #[cfg(target_os = "linux")]
     pub(super) opencode_service: Option<std::sync::Arc<crate::owner_opencode_v1::ProductRecipe>>,
     #[cfg(target_os = "linux")]
+    pub(super) opencode_v2: Option<std::sync::Arc<crate::owner_opencode_v2::ProductRecipe>>,
+    #[cfg(target_os = "linux")]
     pub(super) tracked_push: Option<tracked_push::TrackedPushState>,
 }

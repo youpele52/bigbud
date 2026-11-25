@@ -16,7 +16,11 @@ mod owner_attachment;
 #[cfg(any(unix, windows))]
 mod owner_grants;
 #[cfg(target_os = "linux")]
+mod owner_opencode;
+#[cfg(target_os = "linux")]
 mod owner_opencode_v1;
+#[cfg(target_os = "linux")]
+mod owner_opencode_v2;
 #[cfg(any(unix, windows))]
 mod owner_pipe;
 #[cfg(any(unix, windows))]

@@ -74,6 +74,8 @@ fn bound_alias_browses_through_selected_owner_dispatch() {
             opencode_recipe: None,
             #[cfg(target_os = "linux")]
             opencode_service: None,
+            #[cfg(target_os = "linux")]
+            opencode_v2: None,
             tracked_push: None,
         },
     )
