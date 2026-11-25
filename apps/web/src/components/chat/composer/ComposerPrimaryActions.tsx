@@ -19,6 +19,7 @@ interface ComposerPrimaryActionsProps {
   compact: boolean;
   pendingAction: PendingActionState | null;
   isRunning: boolean;
+  queueMessage?: boolean;
   hasBackgroundWork?: boolean;
   /** Running background subagents; Stop asks before stopping them with the thread. */
   backgroundSubagentCount?: number;
@@ -52,6 +53,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   compact,
   pendingAction,
   isRunning,
+  queueMessage = false,
   hasBackgroundWork = false,
   backgroundSubagentCount = 0,
   showPlanFollowUpPrompt,
@@ -143,6 +145,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
+  const queueAction = queueMessage ? (
+    <Button
+      type="submit"
+      size="sm"
+      className="rounded-full"
+      disabled={isConnecting || !hasSendableContent}
+    >
+      Queue message
+    </Button>
+  ) : null;
   if (isRunning || hasBackgroundWork) {
     return (
       <>
@@ -160,9 +172,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           </button>
           <ComposerEscapeStopHint visible={hintVisible} />
         </span>
+        {queueAction}
       </>
     );
   }
+
+  if (queueAction) return queueAction;
 
   if (showPlanFollowUpPrompt) {
     if (promptHasText) {

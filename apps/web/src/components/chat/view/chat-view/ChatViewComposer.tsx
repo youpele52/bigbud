@@ -20,7 +20,6 @@ import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
-import { pendingUserInputComposerPlaceholder } from "./PendingUserInputPanel.logic";
 import { ChatViewComposerMenuLayer } from "./ChatViewComposerMenuLayer";
 import { useChatViewComposerSyntheticMenu } from "./ChatViewComposer.syntheticMenu";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -58,9 +57,11 @@ export function ChatViewComposer({
   const attachmentPolicy = providerAttachmentPolicy(composer.selectedProvider);
   const promptHasText = base.prompt.trim().length > 0;
   const backgroundWork = describeThreadBackgroundWork(base.activeThread);
+  const hasPendingRequest = thread.isComposerApprovalState || thread.isOpencodePendingUserInputMode;
   const isDefaultComposerState =
     !backgroundWork.hasBackgroundWork &&
-    !interactions.pendingAction &&
+    !hasPendingRequest &&
+    !interactions.canQueueChat &&
     thread.phase !== "running" &&
     !thread.showPlanFollowUpPrompt;
   const micReplacesSend =
@@ -164,7 +165,7 @@ export function ChatViewComposer({
               composer={composer}
               interactions={interactions}
               resolvedTheme={base.resolvedTheme}
-              disabled={thread.isComposerApprovalState}
+              disabled={false}
               onSyntheticMenuHighlight={onSyntheticMenuHighlight}
               onSyntheticMenuSelect={onSyntheticMenuSelect}
               onSyntheticMenuSearchChange={onSyntheticMenuSearchChange}
@@ -180,13 +181,9 @@ export function ChatViewComposer({
 
             <ComposerPromptEditor
               ref={base.composerEditorRef}
-              value={thread.isComposerApprovalState ? "" : base.prompt}
+              value={base.prompt}
               cursor={base.composerCursor}
-              terminalContexts={
-                !thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode
-                  ? base.composerTerminalContexts
-                  : []
-              }
+              terminalContexts={base.composerTerminalContexts}
               discoveredSkills={composer.discoveredSkills}
               onRemoveTerminalContext={base.removeComposerTerminalContextFromDraft}
               onChange={interactions.composerCommandHandlers.onPromptChange}
@@ -194,22 +191,17 @@ export function ChatViewComposer({
               onPaste={interactions.onComposerPaste}
               promptSuggestion={promptSuggestion}
               placeholder={
-                thread.isComposerApprovalState
-                  ? (thread.activePendingApproval?.detail ??
-                    "Resolve this approval request to continue")
-                  : base.composerDraft.shellMode
-                    ? "Enter shell command"
-                    : thread.isOpencodePendingUserInputMode
-                      ? pendingUserInputComposerPlaceholder(
-                          thread.activePendingProgress?.activeQuestion,
-                        )
-                      : thread.showPlanFollowUpPrompt && thread.activeProposedPlan
-                        ? "Add feedback to refine the plan, or leave this blank to implement it"
-                        : thread.phase === "disconnected"
-                          ? "What are we working on?"
-                          : "Ask anything, @tag files/folders, or use / to show available commands"
+                base.composerDraft.shellMode
+                  ? "Enter shell command"
+                  : hasPendingRequest
+                    ? "Write a chat message to queue"
+                    : thread.showPlanFollowUpPrompt && thread.activeProposedPlan
+                      ? "Add feedback to refine the plan, or leave this blank to implement it"
+                      : thread.phase === "disconnected"
+                        ? "What are we working on?"
+                        : "Ask anything, @tag files/folders, or use / to show available commands"
               }
-              disabled={base.isConnecting || thread.isComposerApprovalState}
+              disabled={base.isConnecting}
               {...(compact ? { className: "min-h-9 max-h-20 leading-5", compact: true } : {})}
             />
           </div>
@@ -226,7 +218,8 @@ export function ChatViewComposer({
                 onRespondToApproval={runtime.turnActions.onRespondToApproval}
               />
             </div>
-          ) : (
+          ) : null}
+          {
             <div
               data-chat-composer-footer="true"
               data-chat-composer-footer-compact={
@@ -309,7 +302,7 @@ export function ChatViewComposer({
                       onUseSkill={onUseSkill}
                       showAttachFiles={attachmentPolicy.supported}
                       showReadDialog={attachmentPolicy.supported}
-                      disabled={base.isConnecting || thread.isComposerApprovalState}
+                      disabled={base.isConnecting}
                     />
                   </>
                 )}
@@ -322,39 +315,46 @@ export function ChatViewComposer({
                     prompt={base.prompt}
                     onTranscript={onMicTranscript}
                     onRecordingChange={setIsRecording}
-                    disabled={base.isConnecting || thread.isComposerApprovalState}
+                    disabled={base.isConnecting}
                   />
                 </span>
-                {!isRecording && !micReplacesSend && (
-                  <ComposerPrimaryActions
-                    compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
-                    pendingAction={interactions.pendingAction}
-                    isRunning={thread.activeSessionTurnRunning}
-                    hasBackgroundWork={backgroundWork.hasBackgroundWork}
-                    backgroundSubagentCount={backgroundWork.backgroundSubagentCount}
-                    showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
-                    promptHasText={promptHasText}
-                    isSendBusy={thread.isSendBusy}
-                    isConnecting={base.isConnecting}
-                    isPreparingWorktree={thread.isPreparingWorktree}
-                    hasSendableContent={base.composerSendState.hasSendableContent}
-                    onPreviousPendingQuestion={
-                      interactions.pendingUserInputHandlers.onPreviousActivePendingUserInputQuestion
-                    }
-                    onInterrupt={() => {
-                      void runtime.turnActions.onInterrupt();
-                    }}
-                    onImplementPlanInNewThread={() => {
-                      void interactions.planHandlers.onImplementPlanInNewThread();
-                    }}
-                  />
-                )}
+                {!isRecording &&
+                  !micReplacesSend &&
+                  (!hasPendingRequest || interactions.canQueueChat) && (
+                    <ComposerPrimaryActions
+                      compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
+                      pendingAction={null}
+                      queueMessage={interactions.canQueueChat}
+                      isRunning={!hasPendingRequest && thread.activeSessionTurnRunning}
+                      hasBackgroundWork={
+                        !thread.isComposerApprovalState && backgroundWork.hasBackgroundWork
+                      }
+                      backgroundSubagentCount={backgroundWork.backgroundSubagentCount}
+                      showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
+                      promptHasText={promptHasText}
+                      isSendBusy={thread.isSendBusy}
+                      isConnecting={base.isConnecting}
+                      isPreparingWorktree={thread.isPreparingWorktree}
+                      hasSendableContent={base.composerSendState.hasSendableContent}
+                      onPreviousPendingQuestion={
+                        interactions.pendingUserInputHandlers
+                          .onPreviousActivePendingUserInputQuestion
+                      }
+                      onInterrupt={() => {
+                        void runtime.turnActions.onInterrupt();
+                      }}
+                      onImplementPlanInNewThread={() => {
+                        void interactions.planHandlers.onImplementPlanInNewThread();
+                      }}
+                    />
+                  )}
               </div>
             </div>
-          )}
+          }
         </div>
       </div>
       <ComposerReadDialog
+        key={base.threadId}
         open={base.readDocumentDialogOpen}
         onOpenChange={base.setReadDocumentDialogOpen}
         onSubmitUrl={onSubmitReadUrl}

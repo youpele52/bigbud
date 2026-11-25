@@ -25,6 +25,9 @@ export interface QueuedPrompt {
   createdAt: string;
   /** Already in the transcript; the server redelivers it, so the panel does not list it. */
   alreadySent?: boolean | undefined;
+  pendingInteractionGate?:
+    | { readonly manualRecovery?: "discard-and-resend" | undefined }
+    | undefined;
 }
 
 export type QueuePromptResult = "queued" | "empty" | "full";
@@ -39,9 +42,9 @@ export interface QueuedPromptSubmission {
   readonly interactionMode?: ProviderInteractionMode;
 }
 
-/** Prompts the user queued; already-sent redeliveries are shown by their timeline bubble. */
+/** Ordinary redeliveries use their timeline bubble; all interaction holds need a queue row. */
 export function visibleQueuedPrompts<T extends QueuedPrompt>(prompts: readonly T[]): T[] {
-  return prompts.filter((prompt) => prompt.alreadySent !== true);
+  return prompts.filter((prompt) => prompt.alreadySent !== true || prompt.pendingInteractionGate);
 }
 
 export function formatQueuedPromptText(prompts: readonly QueuedPrompt[]) {
@@ -52,9 +55,10 @@ export function formatQueuedPromptText(prompts: readonly QueuedPrompt[]) {
   return ["Additional instructions:", "", numberedPrompts].join("\n");
 }
 
-interface UsePromptQueueInput {
+interface UsePromptQueueInput<T extends QueuedPrompt = QueuedPrompt> {
   threadId: ThreadId;
-  projectedPrompts: readonly QueuedPrompt[];
+  projectedPrompts: readonly T[];
+  queueHold?: boolean | undefined;
   activeTurnInProgress: boolean;
   activeTurnId?: TurnId | null | undefined;
   sessionEpoch?: number | undefined;
@@ -182,23 +186,29 @@ function isEmptySubmission(submission: QueuedPromptSubmission) {
   return submission.text.trim().length === 0 && (submission.attachments?.length ?? 0) === 0;
 }
 
-export function usePromptQueue(input: UsePromptQueueInput) {
+export function usePromptQueue<T extends QueuedPrompt>(input: UsePromptQueueInput<T>) {
   // Control commands cover the whole server queue; the panel and limit use the visible part.
   const allQueuedPrompts = input.projectedPrompts;
-  const queuedPrompts = useMemo(() => visibleQueuedPrompts(allQueuedPrompts), [allQueuedPrompts]);
+  const queuedPrompts = useMemo(
+    () => (input.queueHold ? [...allQueuedPrompts] : visibleQueuedPrompts(allQueuedPrompts)),
+    [allQueuedPrompts, input.queueHold],
+  );
   const controlPending =
     input.controlOperation != null &&
     !["completed", "failed", "superseded", "cancelled"].includes(input.controlOperation.state);
 
-  const queuedPromptCount = queuedPrompts.length;
-  const hasQueuedPrompts = queuedPromptCount > 0;
+  const queuedPromptCount = useMemo(
+    () => allQueuedPrompts.filter((prompt) => !prompt.alreadySent).length,
+    [allQueuedPrompts],
+  );
+  const hasQueuedPrompts = queuedPrompts.length > 0;
   const canQueueMorePrompts = queuedPromptCount < MAX_QUEUED_PROMPTS;
 
   /** Queues a full composer submission; rejects when the server refuses it. */
   const submitQueuedPrompt = useCallback(
     async (submission: QueuedPromptSubmission): Promise<QueuePromptResult> => {
       if (isEmptySubmission(submission)) return "empty";
-      if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) return "full";
+      if (queuedPromptCount >= MAX_QUEUED_PROMPTS) return "full";
       const api = readNativeApi();
       if (!api) throw new Error("The app is not connected.");
       await api.orchestration.dispatchCommand(
@@ -212,19 +222,19 @@ export function usePromptQueue(input: UsePromptQueueInput) {
       );
       return "queued";
     },
-    [input, queuedPrompts.length],
+    [input, queuedPromptCount],
   );
 
   const queuePrompt = useCallback(
     (text: string): QueuePromptResult => {
       if (isEmptySubmission({ text })) return "empty";
-      if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) return "full";
+      if (queuedPromptCount >= MAX_QUEUED_PROMPTS) return "full";
       void submitQueuedPrompt({ text }).catch((error: unknown) =>
         input.onError(promptQueueErrorMessage(error)),
       );
       return "queued";
     },
-    [input, queuedPrompts.length, submitQueuedPrompt],
+    [input, queuedPromptCount, submitQueuedPrompt],
   );
 
   const removeQueuedPrompt = useCallback(
@@ -314,6 +324,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
   return useMemo(
     () => ({
       queuedPrompts,
+      queueHold: input.queueHold === true,
       queuedPromptCount,
       hasQueuedPrompts,
       canQueueMorePrompts,
@@ -332,6 +343,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
       input.canSteer,
       input.controlOperation,
       input.nativeSteer,
+      input.queueHold,
       interruptAndFlushQueuedPrompts,
       queuePrompt,
       queuedPromptCount,

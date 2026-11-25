@@ -205,6 +205,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
 
   const showPlanFollowUpPrompt =
     !isOpencodePendingUserInputMode &&
+    pendingApprovals.length === 0 &&
     interactionMode === "plan" &&
     latestTurnSettled &&
     hasActionableProposedPlan(activeProposedPlan);
@@ -266,7 +267,9 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   const workingVerb = workingVerbRef.current ?? randomSpinnerVerb();
   const isComposerApprovalState = activePendingApproval !== null;
   const hasComposerHeader =
-    isComposerApprovalState || (showPlanFollowUpPrompt && activeProposedPlan !== null);
+    isComposerApprovalState ||
+    isOpencodePendingUserInputMode ||
+    (showPlanFollowUpPrompt && activeProposedPlan !== null);
   // Plan follow-up and per-question Next/Submit labels need the compact footer on narrow widths.
   const composerFooterHasWideActions = showPlanFollowUpPrompt || activePendingProgress !== null;
 

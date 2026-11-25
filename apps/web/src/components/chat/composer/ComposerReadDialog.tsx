@@ -1,5 +1,7 @@
 import { BookOpenIcon, LinkIcon, UploadIcon, XIcon } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useId, useLayoutEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "../../ui/alert";
+import { parseComposerDocumentUrl } from "./ComposerReadDialog.url";
 
 import { Button } from "../../ui/button";
 import {
@@ -17,8 +19,8 @@ import { cn } from "~/lib/utils";
 interface ComposerReadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmitUrl: (url: string) => Promise<void> | void;
-  onSubmitFiles: (files: File[]) => Promise<void> | void;
+  onSubmitUrl: (url: string, signal: AbortSignal) => Promise<void>;
+  onSubmitFiles: (files: File[]) => boolean;
 }
 
 function appendUniqueFiles(currentFiles: File[], nextFiles: File[]) {
@@ -46,44 +48,114 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const urlId = useId();
+
+  useLayoutEffect(() => {
     if (!open) {
       setUrl("");
       setFiles([]);
       setIsSubmitting(false);
+      setSubmitError(null);
     }
+    return () => {
+      requestRef.current?.abort();
+      requestRef.current = null;
+    };
   }, [open]);
 
   const hasUrl = url.trim().length > 0;
+  const parsedUrl = hasUrl ? parseComposerDocumentUrl(url) : null;
+  const invalidUrl = hasUrl && !parsedUrl;
   const hasFiles = files.length > 0;
   const hasConflictingSources = hasUrl && hasFiles;
-  const canSubmit = !isSubmitting && !hasConflictingSources && (hasUrl || hasFiles);
+  const canSubmit = !isSubmitting && !invalidUrl && !hasConflictingSources && (hasUrl || hasFiles);
+
+  async function addToDraft() {
+    if (!canSubmit || requestRef.current) return;
+    const request = new AbortController();
+    requestRef.current = request;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      if (parsedUrl) {
+        await onSubmitUrl(parsedUrl, request.signal);
+      } else if (!onSubmitFiles(files)) {
+        setSubmitError("Could not attach these files. Check the attachment limits and try again.");
+        return;
+      }
+      if (!request.signal.aborted) onOpenChange(false);
+    } catch (error) {
+      if (!request.signal.aborted) {
+        setSubmitError(
+          error instanceof Error ? error.message : "Could not add this document. Try again.",
+        );
+      }
+    } finally {
+      if (requestRef.current === request) {
+        requestRef.current = null;
+        setIsSubmitting(false);
+      }
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPopup className="max-w-xl">
+      <DialogPopup
+        className="max-w-xl"
+        onDragEnter={(event) => event.stopPropagation()}
+        onDragLeave={(event) => event.stopPropagation()}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpenIcon className="size-4.5" />
             Read document or URL
           </DialogTitle>
           <DialogDescription>
-            Choose one source: paste a remote URL or select local documents to send with the next
-            turn.
+            Add a public URL or local documents to your draft. Nothing is sent until you send the
+            draft.
           </DialogDescription>
         </DialogHeader>
         <DialogPanel className="space-y-4">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground/80 text-sm">
+            <label
+              htmlFor={urlId}
+              className="flex items-center gap-2 text-muted-foreground/80 text-sm"
+            >
               <LinkIcon className="size-4" />
               URL
-            </div>
+            </label>
             <Input
+              id={urlId}
               value={url}
-              onChange={(event) => setUrl(event.target.value)}
+              aria-invalid={invalidUrl || undefined}
+              aria-describedby={invalidUrl ? `${urlId}-error` : undefined}
+              onChange={(event) => {
+                setUrl(event.target.value);
+                setSubmitError(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                void addToDraft();
+              }}
               placeholder="https://example.com/report.pdf"
               disabled={isSubmitting}
             />
+            {invalidUrl && (
+              <p id={`${urlId}-error`} className="text-destructive text-xs">
+                Enter a valid HTTP or HTTPS URL without credentials (up to 2048 characters).
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -98,6 +170,7 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
               className="sr-only"
               tabIndex={-1}
               onChange={(event) => {
+                setSubmitError(null);
                 setFiles((currentFiles) =>
                   appendUniqueFiles(currentFiles, Array.from(event.target.files ?? [])),
                 );
@@ -118,6 +191,8 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
               }}
               onDrop={(event) => {
                 event.preventDefault();
+                if (isSubmitting) return;
+                setSubmitError(null);
                 setFiles((currentFiles) =>
                   appendUniqueFiles(currentFiles, Array.from(event.dataTransfer.files ?? [])),
                 );
@@ -168,41 +243,29 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
 
           {hasConflictingSources ? (
             <Alert variant="warning">
-              <AlertDescription>Choose either a URL or local files for one send.</AlertDescription>
+              <AlertDescription>Choose either a URL or local files to add.</AlertDescription>
             </Alert>
           ) : null}
+          {submitError && (
+            <Alert variant="error">
+              <AlertDescription>{submitError}</AlertDescription>
+            </Alert>
+          )}
         </DialogPanel>
         <DialogFooter>
           <Button
+            type="button"
             size="default"
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
           >
             Cancel
           </Button>
-          <Button
-            onClick={async () => {
-              if (!canSubmit) return;
-              setIsSubmitting(true);
-              try {
-                if (hasUrl) {
-                  await onSubmitUrl(url.trim());
-                } else if (hasFiles) {
-                  await onSubmitFiles(files);
-                }
-                onOpenChange(false);
-              } finally {
-                setIsSubmitting(false);
-              }
-            }}
-            disabled={!canSubmit}
-          >
-            Send
+          <Button type="button" onClick={() => void addToDraft()} disabled={!canSubmit}>
+            {isSubmitting ? "Adding to draft…" : "Add to draft"}
           </Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>
   );
 });
-import { Alert, AlertDescription } from "../../ui/alert";

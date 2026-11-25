@@ -57,96 +57,54 @@ afterEach(async () => {
 });
 const draft = () => useComposerDraftStore.getState().draftsByThreadId[recentId];
 
-it("answers two questions in one send, then queues the image with a label naming both", async () => {
+it("queues chat and its attachments without answering, then submits the two independent answers", async () => {
   await installSendApi();
-  useComposerDraftStore.getState().setPrompt(recentId, "");
-  const respond = vi.fn(async () => {});
+  useComposerDraftStore.getState().setPrompt(recentId, "Keep this chat separate");
+  useComposerDraftStore
+    .getState()
+    .addImage(recentId, makeImage({ id: "chat-shot", previewUrl: "data:image/png;base64,AQ==" }));
+  const respond = vi.fn();
   const submit = vi.fn(async () => "queued" as const);
-  const control = createSendControl();
   mounted = await render(
     <PendingAnswerFlowHarness
       threadId={recentId}
       input={request}
-      control={control}
-      overrides={{ onRespondToUserInput: respond, submitQueuedComposerPrompt: submit }}
+      control={createSendControl()}
+      onRespond={respond}
+      overrides={{ submitQueuedComposerPrompt: submit }}
     />,
   );
-  await expect.element(page.getByText("1 of 2")).toBeVisible();
+  await expect.element(page.getByRole("textbox", { name: "Answer text" })).toHaveValue("");
   await page.getByText("Staging", { exact: true }).click();
-  await expect.element(page.getByRole("radio", { name: /Staging/ })).toBeChecked();
-  await page.getByRole("textbox", { name: "Message" }).fill("behind the flag");
-  // The real primary action advances on non-final questions; the editor swaps to question 2.
-  await page.getByRole("button", { name: "Next question" }).last().click();
+  await page.getByRole("textbox", { name: "Answer text" }).fill("behind the flag");
+  await page.getByRole("button", { name: "Queue message" }).click();
+  await vi.waitFor(() =>
+    expect(submit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        text: "Keep this chat separate",
+        attachments: [expect.objectContaining({ type: "image" })],
+      }),
+    ),
+  );
+  expect(respond).not.toHaveBeenCalled();
+  await expect
+    .element(page.getByRole("textbox", { name: "Answer text" }))
+    .toHaveValue("behind the flag");
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect.element(page.getByText("2 of 2")).toBeVisible();
-  await expect.element(page.getByRole("textbox", { name: "Message" })).toHaveValue("");
-  const submitAnswers = page.getByRole("button", { name: "Submit answers" });
-  await expect.element(submitAnswers).toBeDisabled();
+  await expect.element(page.getByRole("textbox", { name: "Answer text" })).toHaveValue("");
+  const answer = page.getByRole("button", { name: "Submit answer" });
+  await expect.element(answer).toBeDisabled();
   await page.getByText("Server", { exact: true }).click();
   await page.getByText("Docs", { exact: true }).click();
-  useComposerDraftStore
-    .getState()
-    .addImage(recentId, makeImage({ id: "answer-shot", previewUrl: "data:image/png;base64,AQ==" }));
-  await submitAnswers.click();
-  await vi.waitFor(() => expect(submit).toHaveBeenCalledOnce());
+  await page.getByRole("textbox", { name: "Message" }).fill("A newer chat draft");
+  await answer.click();
   expect(respond).toHaveBeenCalledExactlyOnceWith(request.requestId, {
     deploy: "Staging\nbehind the flag",
     areas: "Server, Docs",
   });
-  expect(respond.mock.invocationCallOrder[0]).toBeLessThan(submit.mock.invocationCallOrder[0]!);
-  expect(submit).toHaveBeenCalledWith({
-    text: [
-      "The attached files are part of my answer to: Deploy target",
-      "The attached files are part of my answer to: Areas",
-    ].join("\n"),
-    attachments: [expect.objectContaining({ type: "image" })],
-  });
-  await vi.waitFor(() => expect(draft()?.images ?? []).toEqual([]));
-});
-
-it("cannot send a required question with nothing selected and nothing typed", async () => {
-  await installSendApi();
-  useComposerDraftStore.getState().setPrompt(recentId, "");
-  const respond = vi.fn(async () => {});
-  const control = createSendControl();
-  const single = { ...request, questions: [request.questions[0]!] };
-  mounted = await render(
-    <PendingAnswerFlowHarness
-      threadId={recentId}
-      input={single}
-      control={control}
-      overrides={{ onRespondToUserInput: respond }}
-    />,
-  );
-  await expect.element(page.getByRole("button", { name: "Submit answer" })).toBeDisabled();
-  await control.onSend();
-  expect(respond).not.toHaveBeenCalled();
-  await page.getByText("Production", { exact: true }).click();
-  await page.getByRole("button", { name: "Submit answer" }).click();
-  await vi.waitFor(() =>
-    expect(respond).toHaveBeenCalledExactlyOnceWith(single.requestId, { deploy: "Production" }),
-  );
-});
-
-it("treats an unsent draft as the arriving question's context so it can be sent at once", async () => {
-  await installSendApi();
-  useComposerDraftStore.getState().setPrompt(recentId, "Use the canary cluster");
-  const respond = vi.fn(async () => {});
-  const control = createSendControl();
-  const single = { ...request, questions: [request.questions[0]!] };
-  mounted = await render(
-    <PendingAnswerFlowHarness
-      threadId={recentId}
-      input={single}
-      control={control}
-      overrides={{ onRespondToUserInput: respond }}
-    />,
-  );
-  await page.getByRole("button", { name: "Submit answer" }).click();
-  await vi.waitFor(() =>
-    expect(respond).toHaveBeenCalledExactlyOnceWith(single.requestId, {
-      deploy: "Use the canary cluster",
-    }),
-  );
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(draft()?.prompt).toBe("A newer chat draft");
 });
 
 it("renders the question panel in the compact composer, wrapping chips at narrow widths", async () => {

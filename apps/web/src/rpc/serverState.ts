@@ -75,6 +75,8 @@ const selectSettings = (config: ServerConfig | null): ServerSettings =>
   config?.settings ?? DEFAULT_SERVER_SETTINGS;
 const selectTerminalHostEnabled = (config: ServerConfig | null): boolean =>
   config?.workspaceCapabilities?.terminalHost?.enabled === true;
+const selectTerminalHostControlledByEnvironment = (config: ServerConfig | null): boolean =>
+  config?.workspaceCapabilities?.terminalHost?.controlledByEnvironment === true;
 
 export const welcomeAtom = makeStateAtom<ServerLifecycleWelcomePayload | null>(
   "server-welcome",
@@ -318,6 +320,11 @@ export function useServerObservability(): ServerConfig["observability"] | null {
 /** Whether new local terminals run in the background terminal host; false until known. */
 export function useServerTerminalHostEnabled(): boolean {
   return useAtomValue(serverConfigAtom, selectTerminalHostEnabled);
+}
+
+/** Whether `BIGBUD_TERMINAL_HOST` overrides the Settings toggle on the running server. */
+export function useServerTerminalHostControlledByEnvironment(): boolean {
+  return useAtomValue(serverConfigAtom, selectTerminalHostControlledByEnvironment);
 }
 
 export function useDefaultChatCwd(): string | null {

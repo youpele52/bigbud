@@ -15,6 +15,23 @@ import {
 } from "./types.store";
 import { normalizeProviderKind, shouldRemoveDraft } from "./normalization.store";
 import { composerStorageKey } from "./storageKey.store";
+import type { PersistedReadDocument } from "./readDocuments.store";
+
+function hydrateReadDocument(document: PersistedReadDocument): ComposerFileAttachment {
+  const file = new File([document.text], document.name, { type: "text/plain" });
+  return {
+    type: "file",
+    id: document.id,
+    name: file.name,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    filePath: "",
+    entryKind: "file",
+    attachmentMode: "upload",
+    file,
+    readDocumentText: document.text,
+  };
+}
 
 // ── Storage helpers ───────────────────────────────────────────────────
 
@@ -99,12 +116,16 @@ export function partializeComposerDraftStoreState(
     if (typeof threadId !== "string" || threadId.length === 0) {
       continue;
     }
+    const readDocuments = draft.files.flatMap(({ id, name, readDocumentText }) =>
+      readDocumentText === undefined ? [] : [{ id, name, text: readDocumentText }],
+    );
     const hasModelData =
       Object.keys(draft.modelSelectionByProvider).length > 0 || draft.activeProvider !== null;
     if (
       draft.prompt.length === 0 &&
       !draft.shellMode &&
       draft.persistedAttachments.length === 0 &&
+      readDocuments.length === 0 &&
       draft.annotations.length === 0 &&
       draft.terminalContexts.length === 0 &&
       !hasModelData &&
@@ -123,6 +144,7 @@ export function partializeComposerDraftStoreState(
       ...(draft.persistedFileAttachments.length > 0
         ? { fileAttachments: draft.persistedFileAttachments }
         : {}),
+      ...(readDocuments.length > 0 ? { readDocuments } : {}),
       ...(draft.annotations.length > 0 ? { annotations: draft.annotations } : {}),
       ...(draft.terminalContexts.length > 0
         ? {
@@ -233,7 +255,10 @@ export function toHydratedThreadDraft(
     prompt: persistedDraft.prompt,
     shellMode: persistedDraft.shellMode ?? false,
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
-    files: hydrateFilesFromPersisted(persistedFileAttachments),
+    files: [
+      ...hydrateFilesFromPersisted(persistedFileAttachments),
+      ...(persistedDraft.readDocuments?.map(hydrateReadDocument) ?? []),
+    ],
     annotations: persistedDraft.annotations ? [...persistedDraft.annotations] : [],
     nonPersistedImageIds: [],
     persistedAttachments: [...persistedDraft.attachments],

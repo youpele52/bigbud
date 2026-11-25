@@ -26,8 +26,6 @@ function makeInput(
     composerHighlightedItemId: null,
     isComposerShellMode: false,
     interactionMode: "default",
-    activePendingProgress: null,
-    activePendingUserInput: null,
     setComposerCursor: vi.fn(),
     setComposerTrigger: vi.fn(),
     setComposerHighlightedItemId: vi.fn(),
@@ -35,14 +33,12 @@ function makeInput(
     setComposerDraftTerminalContexts: vi.fn(),
     threadId: "thread-1" as never,
     setPrompt: vi.fn(),
-    setPendingUserInputAnswersByRequestId: vi.fn(),
     applyPromptReplacement,
     onProviderModelSelect: vi.fn(),
     handleInteractionModeChange: vi.fn(),
     toggleInteractionMode: vi.fn(),
     onOpenReadDialog: vi.fn(),
     onSend: vi.fn(),
-    onChangeActivePendingUserInputCustomAnswer: vi.fn(),
     ...overrides,
   };
 }

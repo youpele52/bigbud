@@ -24,6 +24,7 @@ import {
   ComposerAnnotationAttachment as ComposerAnnotationAttachmentSchema,
   type ComposerAnnotationAttachment,
 } from "./types.annotation.store";
+import { PersistedReadDocument } from "./readDocuments.store";
 export type { ComposerAnnotationAttachment } from "./types.annotation.store";
 
 export {
@@ -48,7 +49,7 @@ export interface ComposerImageAttachment extends Omit<ChatImageAttachment, "prev
   file: File;
 }
 
-/** In-memory representation of a non-image file attachment. Holds only the path — no bytes. */
+/** In-memory representation of a non-image file attachment. */
 export interface ComposerFileAttachment extends ChatFileAttachment {
   entryKind?: "file" | "directory";
   attachmentMode?: "upload" | "path-reference" | "thread-reference";
@@ -56,6 +57,8 @@ export interface ComposerFileAttachment extends ChatFileAttachment {
   filePath: string;
   /** The original File object — used on web fallback (base64 transport). Null on desktop. */
   file: File | null;
+  /** A generated URL document retained if a send fails after the user starts another draft. */
+  readDocumentText?: string;
   threadId?: ThreadId;
   threadTitle?: string;
   watchForCompletion?: boolean;
@@ -100,6 +103,7 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
   shellMode: Schema.optionalKey(Schema.Boolean),
   attachments: Schema.Array(PersistedComposerImageAttachment),
   fileAttachments: Schema.optionalKey(Schema.Array(PersistedComposerFileAttachment)),
+  readDocuments: Schema.optionalKey(Schema.Array(PersistedReadDocument)),
   annotations: Schema.optionalKey(Schema.Array(ComposerAnnotationAttachmentSchema)),
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
   modelSelectionByProvider: Schema.optionalKey(

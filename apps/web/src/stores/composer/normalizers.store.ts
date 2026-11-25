@@ -30,6 +30,7 @@ import {
   normalizePersistedAttachment,
   normalizePersistedTerminalContextDraft,
 } from "./normalizers.store.persisted";
+import { normalizePersistedReadDocuments } from "./readDocuments.store";
 
 export {
   normalizePersistedAnnotation,
@@ -179,6 +180,7 @@ export function normalizePersistedDraftsByThreadId(
     const draftCandidate = draftValue as PersistedComposerThreadDraftState;
     const promptCandidate = typeof draftCandidate.prompt === "string" ? draftCandidate.prompt : "";
     const shellMode = draftCandidate.shellMode === true;
+    const readDocuments = normalizePersistedReadDocuments(draftCandidate.readDocuments);
     const attachments = Array.isArray(draftCandidate.attachments)
       ? draftCandidate.attachments.flatMap((entry) => {
           const normalized = normalizePersistedAttachment(entry);
@@ -283,6 +285,7 @@ export function normalizePersistedDraftsByThreadId(
     if (
       promptCandidate.length === 0 &&
       attachments.length === 0 &&
+      readDocuments.length === 0 &&
       annotations.length === 0 &&
       terminalContexts.length === 0 &&
       !hasModelData &&
@@ -299,6 +302,7 @@ export function normalizePersistedDraftsByThreadId(
       prompt,
       shellMode,
       attachments,
+      ...(readDocuments.length > 0 ? { readDocuments } : {}),
       ...(annotations.length > 0 ? { annotations } : {}),
       ...(terminalContexts.length > 0 ? { terminalContexts } : {}),
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),

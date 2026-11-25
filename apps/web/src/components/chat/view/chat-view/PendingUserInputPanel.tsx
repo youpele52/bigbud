@@ -15,13 +15,19 @@ import { Badge } from "../../../ui/badge";
 import { Button, buttonVariants } from "../../../ui/button";
 import { useChatCitationActions } from "../../common/ChatCitation.context";
 import { UserInputFieldHint } from "../../messages/UserInputFieldHint";
-import { derivePendingUserInputPanelModel } from "./PendingUserInputPanel.logic";
+import {
+  derivePendingUserInputPanelModel,
+  pendingUserInputComposerPlaceholder,
+} from "./PendingUserInputPanel.logic";
 
 interface PendingUserInputPanelProps {
   pendingUserInput: Pick<PendingUserInput, "requestId" | "questions">;
   progress: PendingUserInputProgress;
   compact?: boolean;
   disabled?: boolean;
+  canSubmit?: boolean;
+  onSubmit?: (() => void) | undefined;
+  onChangeCustomAnswer?: (questionId: string, value: string) => void;
   onToggleOption: (
     questionId: string,
     option: UserInputQuestion["options"][number],
@@ -53,12 +59,15 @@ function useQuestionCitationFocus(
   }, [actions, activeQuestionId, focus, onSelectQuestion, questions, requestId]);
 }
 
-/** A pending question docked above the composer; the composer itself is the free-text field. */
+/** A pending question docked above the composer; answer text is separate from chat. */
 export function PendingUserInputPanel({
   pendingUserInput,
   progress,
   compact = false,
   disabled = false,
+  canSubmit = false,
+  onSubmit,
+  onChangeCustomAnswer,
   onToggleOption,
   onSelectQuestion,
 }: PendingUserInputPanelProps) {
@@ -161,6 +170,31 @@ export function PendingUserInputPanel({
             ) : null}
           </div>
         </div>
+        {onChangeCustomAnswer ? (
+          <textarea
+            aria-label="Answer text"
+            placeholder={pendingUserInputComposerPlaceholder(question)}
+            rows={2}
+            className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            value={progress.customAnswer}
+            disabled={disabled}
+            onChange={(event) => onChangeCustomAnswer(question.id, event.target.value)}
+          />
+        ) : null}
+        {onSubmit ? (
+          <div className="mt-2 flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              disabled={disabled || (progress.isLastQuestion ? !canSubmit : !progress.canAdvance)}
+              onClick={
+                progress.isLastQuestion ? onSubmit : () => onSelectQuestion(model.questionIndex + 1)
+              }
+            >
+              {progress.isLastQuestion ? "Submit answer" : "Continue"}
+            </Button>
+          </div>
+        ) : null}
         {model.hint ? (
           <p className={pendingUserInputPresentationStyles.hint}>{model.hint}</p>
         ) : null}

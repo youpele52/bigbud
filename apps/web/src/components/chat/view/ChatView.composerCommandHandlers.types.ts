@@ -1,9 +1,5 @@
 import { type ProviderInteractionMode, type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { type ComposerTrigger } from "../../../logic/composer";
-import {
-  derivePendingUserInputProgress,
-  type PendingUserInputDraftAnswer,
-} from "../../../logic/user-input";
 import { type TerminalContextDraft } from "../../../lib/terminalContext";
 import type { ComposerCommandItem } from "../composer/ComposerCommandMenu";
 import type { ComposerPromptEditorHandle } from "../composer/ComposerPromptEditor";
@@ -21,8 +17,6 @@ export interface UseComposerCommandHandlersInput {
   composerHighlightedItemId: string | null;
   isComposerShellMode: boolean;
   interactionMode: ProviderInteractionMode;
-  activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
-  activePendingUserInput: { requestId: string } | null;
   setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
   setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
   setComposerHighlightedItemId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -30,9 +24,6 @@ export interface UseComposerCommandHandlersInput {
   setComposerDraftTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => void;
   threadId: ThreadId;
   setPrompt: (prompt: string) => void;
-  setPendingUserInputAnswersByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
-  >;
   applyPromptReplacement: (
     rangeStart: number,
     rangeEnd: number,
@@ -44,6 +35,4 @@ export interface UseComposerCommandHandlersInput {
   toggleInteractionMode: () => void;
   onOpenReadDialog: () => void;
   onSend: (e?: { preventDefault: () => void }) => void;
-  /** Mirrors editor text into the active pending question's draft answer. */
-  onChangeActivePendingUserInputCustomAnswer: (questionId: string, value: string) => void;
 }

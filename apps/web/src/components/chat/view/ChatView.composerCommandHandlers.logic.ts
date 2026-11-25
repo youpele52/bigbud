@@ -31,8 +31,6 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     composerMenuItems,
     composerHighlightedItemId,
     isComposerShellMode,
-    activePendingProgress,
-    activePendingUserInput,
     setComposerCursor,
     setComposerTrigger,
     setComposerHighlightedItemId,
@@ -46,7 +44,6 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     toggleInteractionMode,
     onOpenReadDialog,
     onSend,
-    onChangeActivePendingUserInputCustomAnswer,
   } = input;
 
   const readComposerSnapshot = useCallback((): {
@@ -253,13 +250,6 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       cursorAdjacentToMention: boolean,
       terminalContextIds: string[],
     ) => {
-      // While a question is pending the editor text is also its active question's context.
-      if (activePendingProgress?.activeQuestion && activePendingUserInput) {
-        onChangeActivePendingUserInputCustomAnswer(
-          activePendingProgress.activeQuestion.id,
-          nextPrompt,
-        );
-      }
       const bangInput =
         isComposerShellMode || nextPrompt.startsWith("!") ? readBangShellInput(nextPrompt) : null;
       if (isComposerShellMode || bangInput) {
@@ -295,10 +285,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       );
     },
     [
-      activePendingProgress?.activeQuestion,
-      activePendingUserInput,
       composerTerminalContexts,
-      onChangeActivePendingUserInputCustomAnswer,
       setPrompt,
       isComposerShellMode,
       setComposerDraftTerminalContexts,

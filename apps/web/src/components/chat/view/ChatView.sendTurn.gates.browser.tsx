@@ -1,10 +1,8 @@
-import { ApprovalRequestId } from "@bigbud/contracts/core/baseSchemas";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import {
   SendHarness,
   createSendControl,
-  deferred,
   installSendApi,
 } from "./ChatView.sendTurn.browser-helpers";
 import { recentId, resetProjectGateStore } from "./ThreadProjectGate.test-helpers";
@@ -61,34 +59,23 @@ it("restores text and attachments when the running-turn queue refuses the prompt
   expect(draft()).toMatchObject({ prompt: "Original follow-up", images: [{ id: "queued-image" }] });
 });
 
-it("routes structured answers before ordinary dispatch and preserves edits made while the answer is pending", async () => {
+it("queues while a provider request is pending even when the thread appears idle", async () => {
   const api = await installSendApi();
-  const answer = deferred<void>();
-  const respond = vi.fn(() => answer.promise);
-  const requestId = ApprovalRequestId.makeUnsafe("question-1");
+  const submit = vi.fn(async () => "queued" as const);
   const control = createSendControl();
   mounted = await render(
     <SendHarness
       threadId={recentId}
       control={control}
-      overrides={{
-        isSendBusy: true,
-        isOpencodePendingUserInputMode: true,
-        activePendingUserInputRequestId: requestId,
-        onRespondToUserInput: respond,
-      }}
+      overrides={{ hasPendingProviderRequest: true, submitQueuedComposerPrompt: submit }}
     />,
   );
-  const sending = control.onSend();
-  await vi.waitFor(() =>
-    expect(respond).toHaveBeenCalledWith(requestId, { [requestId]: "Original follow-up" }),
+  await control.onSend();
+  expect(submit).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ text: "Original follow-up" }),
   );
-  useComposerDraftStore.getState().setPrompt(recentId, "Keep this newer answer");
-  await vi.waitFor(() => expect(control.input!.promptRef.current).toBe("Keep this newer answer"));
-  answer.resolve();
-  await sending;
   expect(api.dispatchCommand).not.toHaveBeenCalled();
-  expect(draft()?.prompt).toBe("Keep this newer answer");
+  expect(draft()?.prompt ?? "").toBe("");
 });
 
 it.each([false, true])("only clears a plan follow-up after accepted=%s", async (accepted) => {

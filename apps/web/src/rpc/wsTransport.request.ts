@@ -12,13 +12,21 @@ export function withWsRequestDeadline<A, E, R>(
   return timeout && Option.isSome(timeout) ? Effect.timeout(scoped, timeout.value) : scoped;
 }
 
+export interface WsRequestOptions {
+  readonly timeout?: Option.Option<Duration.Input>;
+  readonly signal?: AbortSignal;
+}
+
 /** A single monotonic budget covers reconnect, protocol readiness, and request completion. */
 export async function requestWsUnary<T>(
   execute: (client: WsRpcProtocolClient) => Effect.Effect<T, Error, never>,
-  timeout: Option.Option<Duration.Input> | undefined,
+  options: WsRequestOptions | undefined,
   reconnectOperation: Promise<void> | null,
   currentSession: () => TransportSession,
 ): Promise<T> {
+  const { timeout, signal } = options ?? {};
+  signal?.throwIfAborted();
+  const runOptions = signal ? { signal } : undefined;
   const deadline =
     timeout && Option.isSome(timeout)
       ? performance.now() + Duration.toMillis(Duration.fromInputUnsafe(timeout.value))
@@ -26,15 +34,19 @@ export async function requestWsUnary<T>(
   const remaining = () =>
     deadline === null ? undefined : Duration.millis(Math.max(0, deadline - performance.now()));
   if (reconnectOperation) {
-    if (deadline === null) await reconnectOperation;
-    else
+    if (deadline === null && !runOptions) await reconnectOperation;
+    else {
+      const reconnect = Effect.promise(() => reconnectOperation);
       await Effect.runPromise(
-        Effect.promise(() => reconnectOperation).pipe(Effect.timeout(remaining()!)),
+        deadline === null ? reconnect : reconnect.pipe(Effect.timeout(remaining()!)),
+        runOptions,
       );
+    }
   }
   // Do not send a request after its budget was consumed by reconnect.
   if (deadline !== null && deadline <= performance.now())
     throw new Error("WebSocket RPC request timed out before dispatch");
+  signal?.throwIfAborted();
   const session = currentSession();
   return session.runtime.runPromise(
     withWsRequestDeadline(
@@ -43,6 +55,7 @@ export async function requestWsUnary<T>(
       ),
       deadline === null ? timeout : Option.some(remaining()!),
     ),
+    runOptions,
   );
 }
 

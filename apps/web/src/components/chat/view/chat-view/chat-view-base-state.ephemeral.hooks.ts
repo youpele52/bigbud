@@ -14,6 +14,7 @@ import {
 import { useStore } from "../../../../stores/main";
 import { selectThreadTerminalState, useTerminalStateStore } from "../../../../stores/terminal";
 import { type ExpandedImagePreview } from "../../common/ExpandedImagePreview";
+import { useComposerReadDialogState } from "../../composer/ComposerReadDialog.state";
 import {
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
@@ -73,7 +74,8 @@ export function useChatViewBaseEphemeralState(input: {
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
-  const [readDocumentDialogOpen, setReadDocumentDialogOpen] = useState(false);
+  const { readDocumentDialogOpen, setReadDocumentDialogOpen } =
+    useComposerReadDialogState(threadId);
   const [terminalLaunchContext, setTerminalLaunchContext] = useState<TerminalLaunchContext | null>(
     null,
   );

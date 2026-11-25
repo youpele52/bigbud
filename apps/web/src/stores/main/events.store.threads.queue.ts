@@ -45,6 +45,7 @@ export function applyThreadQueueEvent(
       const flushedMessageIds = new Set(event.payload.messageIds);
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
+        queueHold: false,
         queuedPrompts: (thread.queuedPrompts ?? []).filter(
           (prompt) => !flushedMessageIds.has(prompt.id),
         ),

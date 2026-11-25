@@ -44,25 +44,11 @@ const FILE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_FILE_BYTES / 
 
 /** Returns an `addComposerImages` handler bound to the current draft state. */
 export function useAddComposerImages(input: UseAddComposerImagesInput) {
-  const {
-    activeThreadId,
-    composerImagesRef,
-    pendingUserInputsLength,
-    addComposerImage,
-    addComposerImagesToDraft,
-  } = input;
+  const { activeThreadId, composerImagesRef, addComposerImage, addComposerImagesToDraft } = input;
 
   return useCallback(
     (files: File[]) => {
       if (!activeThreadId || files.length === 0) return;
-
-      if (pendingUserInputsLength > 0) {
-        toastManager.add({
-          type: "error",
-          title: "Attach images after answering plan questions.",
-        });
-        return;
-      }
 
       const nextImages: ComposerImageAttachment[] = [];
       let nextImageCount = composerImagesRef.current.length;
@@ -102,15 +88,11 @@ export function useAddComposerImages(input: UseAddComposerImagesInput) {
       if (error)
         toastManager.add({ type: "error", title: "Could not attach image", description: error });
     },
-    [
-      activeThreadId,
-      composerImagesRef,
-      pendingUserInputsLength,
-      addComposerImage,
-      addComposerImagesToDraft,
-    ],
+    [activeThreadId, composerImagesRef, addComposerImage, addComposerImagesToDraft],
   );
 }
+
+export type ComposerFileAddMode = "atomic" | { readonly readDocumentText: string };
 
 /** Returns an `addComposerFiles` handler bound to the current draft state. */
 export function useAddComposerFiles(input: UseAddComposerFilesInput) {
@@ -118,29 +100,27 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
     activeThreadId,
     composerFilesRef,
     composerImagesLength,
-    pendingUserInputsLength,
     addComposerFile,
     addComposerFilesToDraft,
     isElectron,
   } = input;
 
   return useCallback(
-    (files: File[]) => {
+    (files: File[], mode?: ComposerFileAddMode) => {
       if (!activeThreadId || files.length === 0) return false;
 
-      if (pendingUserInputsLength > 0) {
-        toastManager.add({
-          type: "error",
-          title: "Attach files after answering plan questions.",
-        });
-        return false;
-      }
-
       const nextFiles: ComposerFileAttachment[] = [];
+      const paths = mode ? new Set(composerFilesRef.current.map((file) => file.filePath)) : null;
       let nextCount = composerFilesRef.current.length + composerImagesLength;
       let error: string | null = null;
 
       for (const file of files) {
+        const filePath = isElectron && typeof mode !== "object" ? desktopAttachmentPath(file) : "";
+        if (filePath && paths?.has(filePath)) {
+          error = `'${file.name}' is already attached.`;
+          break;
+        }
+        if (filePath) paths?.add(filePath);
         if (file.size > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
           if (!isElectron) {
             toastManager.add({
@@ -150,14 +130,13 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
           } else {
             error = `'${file.name}' exceeds the ${FILE_SIZE_LIMIT_LABEL} attachment limit.`;
           }
+          if (mode) break;
           continue;
         }
         if (nextCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
           error = `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} files per message.`;
           break;
         }
-
-        const filePath = isElectron ? desktopAttachmentPath(file) : "";
 
         nextFiles.push({
           type: "file",
@@ -169,24 +148,25 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
           attachmentMode: "upload",
           filePath,
           file,
+          ...(typeof mode === "object" ? { readDocumentText: mode.readDocumentText } : {}),
         });
         nextCount += 1;
       }
 
+      if (error)
+        toastManager.add({ type: "error", title: "Could not attach file", description: error });
+      if (mode && nextFiles.length !== files.length) return false;
       if (nextFiles.length === 1 && nextFiles[0]) {
         addComposerFile(nextFiles[0]);
       } else if (nextFiles.length > 1) {
         addComposerFilesToDraft(nextFiles);
       }
-      if (error)
-        toastManager.add({ type: "error", title: "Could not attach file", description: error });
       return nextFiles.length > 0;
     },
     [
       activeThreadId,
       composerFilesRef,
       composerImagesLength,
-      pendingUserInputsLength,
       addComposerFile,
       addComposerFilesToDraft,
       isElectron,
@@ -196,16 +176,7 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
 
 /** Returns an `applyPromptReplacement` helper that edits the composer text in-place. */
 export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput) {
-  const {
-    promptRef,
-    setPrompt,
-    setComposerCursor,
-    setComposerTrigger,
-    activePendingProgress,
-    activePendingUserInput,
-    setPendingUserInputAnswersByRequestId,
-    composerEditorRef,
-  } = input;
+  const { promptRef, setPrompt, setComposerCursor, setComposerTrigger, composerEditorRef } = input;
 
   return useCallback(
     (
@@ -227,23 +198,6 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       const nextCursor = collapseExpandedComposerCursor(next.text, next.cursor);
       promptRef.current = next.text;
       setPrompt(next.text);
-      // The editor stays the composer draft; a pending question mirrors it as its custom answer.
-      const question = activePendingProgress?.activeQuestion;
-      if (question && activePendingUserInput) {
-        const requestId = activePendingUserInput.requestId;
-        setPendingUserInputAnswersByRequestId((existing) =>
-          withPendingUserInputDraftAnswer(
-            existing,
-            requestId,
-            question.id,
-            setPendingUserInputCustomAnswer(
-              existing[requestId]?.[question.id],
-              next.text,
-              question,
-            ),
-          ),
-        );
-      }
       setComposerCursor(nextCursor);
       setComposerTrigger(
         detectComposerTrigger(next.text, expandCollapsedComposerCursor(next.text, nextCursor)),
@@ -255,20 +209,11 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       }
       return true;
     },
-    [
-      promptRef,
-      setPrompt,
-      setComposerCursor,
-      setComposerTrigger,
-      activePendingProgress,
-      activePendingUserInput,
-      setPendingUserInputAnswersByRequestId,
-      composerEditorRef,
-    ],
+    [promptRef, setPrompt, setComposerCursor, setComposerTrigger, composerEditorRef],
   );
 }
 
-/** Returns handlers for interacting with pending user-input prompts. Sending lives in onSend. */
+/** Returns handlers for interacting with pending user-input prompts.  */
 export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersInput) {
   const {
     activePendingUserInput,

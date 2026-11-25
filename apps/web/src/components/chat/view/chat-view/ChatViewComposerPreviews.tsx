@@ -1,6 +1,5 @@
 import type { MessageId } from "@bigbud/contracts";
 
-import { isChatCitationAttachment } from "../../../../stores/composer/types.annotation.store";
 import { ComposerAnnotationPreviews } from "../../composer/ComposerAnnotationPreviews";
 import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
 import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
@@ -21,23 +20,16 @@ export function ChatViewComposerPreviews({
   thread: ChatViewThreadDerivedState;
   onOpenReplySource: (messageId: MessageId) => void;
 }) {
-  if (thread.isComposerApprovalState) return null;
-  const pendingAnswer = thread.isOpencodePendingUserInputMode;
   const replyTarget = base.composerDraft.replyTarget;
   return (
     <>
-      {!pendingAnswer && (
-        <>
-          {replyTarget && !thread.showPlanFollowUpPrompt && !base.composerDraft.shellMode && (
-            <ComposerReplyPreview
-              replyTarget={replyTarget}
-              onClear={() => base.setComposerReplyTarget(base.activeThread!.id, null)}
-              onOpenSource={() => onOpenReplySource(replyTarget.messageId)}
-            />
-          )}
-        </>
+      {replyTarget && !thread.showPlanFollowUpPrompt && !base.composerDraft.shellMode && (
+        <ComposerReplyPreview
+          replyTarget={replyTarget}
+          onClear={() => base.setComposerReplyTarget(base.activeThread!.id, null)}
+          onOpenSource={() => onOpenReplySource(replyTarget.messageId)}
+        />
       )}
-      {/* Attachments stay visible while answering: they follow the answer as a labelled message. */}
       <ComposerImagePreviews
         composerImages={base.composerImages}
         nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
@@ -45,11 +37,7 @@ export function ChatViewComposerPreviews({
         onExpandImage={base.setExpandedImage}
       />
       <ComposerAnnotationPreviews
-        annotations={
-          pendingAnswer
-            ? base.composerAnnotations.filter(isChatCitationAttachment)
-            : base.composerAnnotations
-        }
+        annotations={base.composerAnnotations}
         images={base.composerImages}
         onRemoveAnnotation={base.removeComposerAnnotationFromDraft}
         onClearAnnotations={() => clearComposerSurfaceAnnotations(base)}

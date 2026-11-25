@@ -24,7 +24,13 @@ const notice = (
   ...extra,
 });
 
-type AddOptions = { type?: string; title?: string; timeout?: number; actionProps?: unknown };
+type AddOptions = {
+  type?: string;
+  title?: string;
+  description?: string;
+  timeout?: number;
+  actionProps?: unknown;
+};
 
 function fixture(
   overrides: { keepOpen?: unknown; retrySetup?: unknown; closeDrainingHosts?: unknown } = {},
@@ -120,7 +126,13 @@ describe("terminal lifecycle notices", () => {
     expect(shown("offlineClosed", { count: 3 }).title).toBe(
       "While bigbud was closed, 3 terminals were closed because they were idle.",
     );
-    expect(shown("hostLost").type).toBe("error");
+    expect(shown("hostLost")).toMatchObject({
+      type: "error",
+      title: "Lost contact with “Terminal 1” in “Fix login”.",
+      description: expect.stringContaining("can’t confirm whether the terminal stopped"),
+    });
+    expect(f.lastOptions().description).toContain("won’t restart it automatically");
+    expect(f.lastOptions().actionProps).toBeUndefined();
     expect(shown("backendRestartStopped").title).toBe(
       "Terminals were stopped because the backend restarted.",
     );

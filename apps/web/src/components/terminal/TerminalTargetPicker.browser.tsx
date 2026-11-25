@@ -49,7 +49,7 @@ beforeEach(() => {
   bindTerminalLaunch(threadId, "default", {
     cwd: "C:\\project",
     executionTargetId: "local",
-    runtimeEnv: { T3CODE_PROJECT_ROOT: "C:\\project" },
+    runtimeEnv: { BIGBUD_PROJECT_ROOT: "C:\\project" },
   });
   mocks.workspace = "local";
   vi.clearAllMocks();
@@ -77,7 +77,7 @@ it.each(["drawer", "panel"] as const)(
       useTerminalStateStore.getState().setTerminalWslDistribution(threadId, "Ubuntu dev");
       await expect.poll(() => hook.result.current.executionTargetId).toBe("wsl:Ubuntu%20dev");
       expect(hook.result.current.cwd).toBe("C:\\project");
-      expect(hook.result.current.runtimeEnv).toEqual({ T3CODE_PROJECT_ROOT: "C:\\project" });
+      expect(hook.result.current.runtimeEnv).toEqual({ BIGBUD_PROJECT_ROOT: "C:\\project" });
       const previous = hook.result.current.terminalState.terminalIds.length;
       hook.result.current.splitTerminal();
       await expect

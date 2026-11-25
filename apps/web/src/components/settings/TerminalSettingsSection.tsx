@@ -13,6 +13,7 @@ import { TerminalInteractionSettings, TerminalScrollSettings } from "./TerminalI
 import { TerminalShellSettings } from "./TerminalShellSettings";
 import { TerminalAgentHooksSettings } from "./TerminalAgentHooksSettings";
 import { TerminalPasteSettings } from "./TerminalPasteSettings";
+import { TerminalHostSettings } from "./TerminalHostSettings";
 import { TerminalLifecycleSettings } from "./TerminalLifecycleSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
@@ -138,6 +139,7 @@ export function TerminalSettingsSection() {
         <TerminalShellSettings />
       </SettingsSection>
       <SettingsSection title="Running terminals">
+        <TerminalHostSettings />
         <TerminalLifecycleSettings />
       </SettingsSection>
       <SettingsSection title="Scrolling">

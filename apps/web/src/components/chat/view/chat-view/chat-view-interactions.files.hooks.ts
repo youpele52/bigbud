@@ -15,21 +15,22 @@ import {
 } from "../../../sidebar/threadPanel.dnd";
 import { toastManager } from "../../../ui/toast";
 
-import { useAddComposerFiles, useAddComposerImages } from "../ChatView.composerHandlers.logic";
+import {
+  useAddComposerFiles,
+  useAddComposerImages,
+  type ComposerFileAddMode,
+} from "../ChatView.composerHandlers.logic";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
-import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 
 interface UseChatViewInteractionFilesInput {
   base: ChatViewBaseState;
-  thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
   provider: ProviderKind;
 }
 
 export function useChatViewInteractionFiles({
   base,
-  thread,
   runtime,
   provider,
 }: UseChatViewInteractionFilesInput) {
@@ -46,7 +47,6 @@ export function useChatViewInteractionFiles({
   const addComposerImages = useAddComposerImages({
     activeThreadId: base.activeThreadId,
     composerImagesRef: base.composerImagesRef,
-    pendingUserInputsLength: thread.pendingUserInputs.length,
     addComposerImage: base.addComposerImage,
     addComposerImagesToDraft: base.addComposerImagesToDraft,
     setThreadError: runtime.setThreadError,
@@ -56,16 +56,15 @@ export function useChatViewInteractionFiles({
     activeThreadId: base.activeThreadId,
     composerFilesRef: base.composerFilesRef,
     composerImagesLength: base.composerImages.length,
-    pendingUserInputsLength: thread.pendingUserInputs.length,
     addComposerFile: base.addComposerFile,
     addComposerFilesToDraft: base.addComposerFilesToDraft,
     setThreadError: runtime.setThreadError,
     isElectron,
   });
   const addComposerFiles = useCallback(
-    (files: File[]) => {
+    (files: File[], mode?: ComposerFileAddMode) => {
       if (rejectAttachments()) return false;
-      return addFiles(files);
+      return addFiles(files, mode);
     },
     [addFiles, rejectAttachments],
   );

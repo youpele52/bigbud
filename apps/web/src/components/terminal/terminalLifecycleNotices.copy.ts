@@ -59,8 +59,9 @@ export function describeTerminalLifecycleNotice(
     case "hostLost":
       return {
         type: "error",
-        title:
-          "Terminals stopped because the terminal service exited unexpectedly. Their last output is shown.",
+        title: `Lost contact with “${label}” in “${thread}”.`,
+        description:
+          "The terminal service became unavailable. bigbud can’t confirm whether the terminal stopped. The last available output stays visible, and bigbud won’t restart it automatically.",
       };
     case "legacyHostUnreachable":
       return {

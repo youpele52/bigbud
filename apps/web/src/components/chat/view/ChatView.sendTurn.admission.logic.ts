@@ -10,6 +10,7 @@ type ComposerQueueInput = Pick<
   | "isLocalDraftThread"
   | "bootstrapSourceThreadId"
   | "isComposerShellMode"
+  | "hasPendingProviderRequest"
 > & {
   readonly shouldQueuePrompt: boolean;
   readonly planFollowUp: boolean;
@@ -23,11 +24,11 @@ type ComposerQueueInput = Pick<
 export function canQueueComposerPrompt(input: ComposerQueueInput): boolean {
   const thread = input.activeThread;
   return Boolean(
-    input.shouldQueuePrompt &&
+    (input.shouldQueuePrompt || input.hasPendingProviderRequest) &&
     thread &&
     input.isServerThread &&
     !input.isLocalDraftThread &&
-    thread.messages.length > 0 &&
+    (thread.messages.length > 0 || input.hasPendingProviderRequest) &&
     !input.planFollowUp &&
     input.bootstrapSourceThreadId === null &&
     !input.isComposerShellMode,

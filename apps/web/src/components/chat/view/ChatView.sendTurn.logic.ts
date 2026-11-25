@@ -6,13 +6,11 @@ import { readNativeApi } from "../../../rpc/nativeApi";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
 import {
   queueComposerTurn,
-  respondToPendingUserInput,
   sendChatTurn,
   sendShellCommand,
   submitPlanFollowUp,
 } from "./ChatView.sendTurn.actions";
 import { canQueueComposerPrompt } from "./ChatView.sendTurn.admission.logic";
-import { isChatCitationAttachment } from "../../../stores/composer/types.annotation.store";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
 import {
@@ -50,16 +48,11 @@ export function useOnSend(input: UseOnSendInput) {
       }
       const isCurrent = captureSurface();
       const submittedInput = ownSendInput(rawInput, isCurrent);
-      const respondingToInput =
-        submittedInput.isOpencodePendingUserInputMode &&
-        submittedInput.activePendingUserInputRequestId;
-      const queued =
-        !respondingToInput &&
-        canQueueComposerPrompt({
-          ...submittedInput,
-          shouldQueuePrompt: submittedInput.shouldQueuePrompt(),
-          planFollowUp: submittedInput.showPlanFollowUpPrompt,
-        });
+      const queued = canQueueComposerPrompt({
+        ...submittedInput,
+        shouldQueuePrompt: submittedInput.shouldQueuePrompt(),
+        planFollowUp: submittedInput.showPlanFollowUpPrompt,
+      });
       const claim = claimComposerSend(pending.current, submittedInput, queued);
       if (!claim) return;
       try {
@@ -74,9 +67,6 @@ export function useOnSend(input: UseOnSendInput) {
           isComposerShellMode,
           showPlanFollowUpPrompt: planFollowUp,
           activeProposedPlan: proposedPlan,
-          isOpencodePendingUserInputMode,
-          activePendingUserInputRequestId,
-          activePendingUserInput,
         } = submittedInput;
 
         if (!api || !thread) return;
@@ -88,17 +78,11 @@ export function useOnSend(input: UseOnSendInput) {
           submittedInput.setThreadError(thread.id, attachmentIssue);
           return;
         }
-        const resetComposerDraft = (preserveCitations = false) => {
+        const resetComposerDraft = () => {
           claim.consume();
-          // Acknowledgements must not erase edits made while a preflight or answer was pending.
+          // Acknowledgements must not erase edits made while a preflight was pending.
           if (!matchesComposerContent(submittedInput, claim.content)) return;
-          // Answers are text-only (attachments follow in a labelled queued prompt); keep quotes
-          // for a later chat turn.
-          const citations = preserveCitations
-            ? submittedInput.composerAnnotations.filter(isChatCitationAttachment)
-            : [];
           submittedInput.clearComposerDraftContent(thread.id);
-          if (citations.length > 0) submittedInput.addComposerAnnotationsToDraft(citations);
           if (!isCurrent()) return;
           pRef.current = "";
           submittedInput.setComposerHighlightedItemId(null);
@@ -106,42 +90,28 @@ export function useOnSend(input: UseOnSendInput) {
           submittedInput.setComposerTrigger(null);
         };
         const trimmed = pRef.current.trim();
-        if (isOpencodePendingUserInputMode && activePendingUserInputRequestId) {
-          const progress = submittedInput.activePendingProgress;
-          // Multi-question requests: send advances until the last question, which resolves all.
-          if (progress && !progress.isLastQuestion) {
-            if (progress.canAdvance)
-              submittedInput.setActivePendingUserInputQuestionIndex?.(progress.questionIndex + 1);
-            return;
-          }
-          await respondToPendingUserInput({
-            activePendingUserInput,
-            activePendingUserInputRequestId,
-            activePendingDraftAnswers: submittedInput.activePendingDraftAnswers,
-            activeQuestionId: progress?.activeQuestion?.id,
-            promptText: pRef.current,
-            images: submittedInput.composerImagesRef.current,
-            files: submittedInput.composerFilesRef.current,
-            onRespondToUserInput: submittedInput.onRespondToUserInput,
-            submitQueuedComposerPrompt: submittedInput.submitQueuedComposerPrompt,
-            resetComposerDraft: () => resetComposerDraft(true),
-          });
+        if (connecting) {
+          submittedInput.setThreadError(
+            thread.id,
+            "bigbud is reconnecting. Your draft is safe; retry after it connects.",
+          );
           return;
         }
         if (queued) {
           await queueComposerTurn({ api, sendInput: submittedInput, resetComposerDraft });
           return;
         }
-        if (
-          (sendBusy && !isForceSend() && !shouldQueuePrompt()) ||
-          connecting ||
-          inFlightRef.current
-        ) {
+        if (submittedInput.hasPendingProviderRequest) {
           submittedInput.setThreadError(
             thread.id,
-            connecting
-              ? "bigbud is reconnecting. Your draft is safe; retry after it connects."
-              : "A send is already in progress. Your draft is safe.",
+            "Resolve the pending request before sending this draft.",
+          );
+          return;
+        }
+        if ((sendBusy && !isForceSend() && !shouldQueuePrompt()) || inFlightRef.current) {
+          submittedInput.setThreadError(
+            thread.id,
+            "A send is already in progress. Your draft is safe.",
           );
           return;
         }

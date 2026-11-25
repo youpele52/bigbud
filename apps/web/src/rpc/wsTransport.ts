@@ -1,4 +1,4 @@
-import { Duration, Effect, Option, Stream } from "effect";
+import { Duration, Effect, Stream } from "effect";
 
 import { localWsTransportScope, type WsTransportScope } from "./wsTransport.scope";
 import {
@@ -13,7 +13,11 @@ import {
   type TransportSession,
 } from "./wsTransport.session";
 import { waitForWsRetry } from "./wsTransport.wait";
-import { requestWsUnary, scopedWsFiniteRequest } from "./wsTransport.request";
+import {
+  requestWsUnary,
+  scopedWsFiniteRequest,
+  type WsRequestOptions,
+} from "./wsTransport.request";
 import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
 import {
   createWsConnectionControls,
@@ -41,10 +45,6 @@ interface SubscribeOptions {
   readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
   readonly shouldRetry?: (error: unknown) => boolean;
-}
-
-interface RequestOptions {
-  readonly timeout?: Option.Option<Duration.Input>;
 }
 
 /** `down` means the socket closed and the transport is waiting to retry. */
@@ -94,14 +94,14 @@ export class WsTransport {
 
   async request<TSuccess>(
     execute: (client: WsRpcProtocolClient) => Effect.Effect<TSuccess, Error, never>,
-    options?: RequestOptions,
+    options?: WsRequestOptions,
   ): Promise<TSuccess> {
     if (this.disposed) {
       throw new Error("Transport disposed");
     }
 
     this.assertConnectedOrConnecting();
-    return requestWsUnary(execute, options?.timeout, this.reconnectOperation, () => {
+    return requestWsUnary(execute, options, this.reconnectOperation, () => {
       this.assertConnectedOrConnecting();
       return this.session;
     });

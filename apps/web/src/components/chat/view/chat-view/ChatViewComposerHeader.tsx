@@ -1,7 +1,7 @@
 import { cn } from "~/lib/utils";
 import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingApprovalPanel";
 import { ComposerPlanFollowUpBanner } from "../../composer/ComposerPlanFollowUpBanner";
-import { ComposerPromptQueue } from "../../composer/ComposerPromptQueue";
+import { ChatViewHeldPromptQueue } from "./ChatViewHeldPromptQueue";
 import type { ChatViewInteractionsState } from "./chat-view-interactions.hooks";
 import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { PendingUserInputPanel } from "./PendingUserInputPanel";
@@ -31,7 +31,12 @@ export function ChatViewComposerHeader({
           pendingUserInput={thread.activePendingUserInput}
           progress={thread.activePendingProgress}
           compact={compact}
-          disabled={interactions.pendingAction?.isResponding ?? false}
+          disabled={interactions.pendingAnswerDisabled ?? false}
+          canSubmit={interactions.pendingAction?.isComplete ?? false}
+          onSubmit={interactions.onSubmitPendingAnswer}
+          onChangeCustomAnswer={
+            interactions.pendingUserInputHandlers.onChangeActivePendingUserInputCustomAnswer
+          }
           onToggleOption={
             interactions.pendingUserInputHandlers.onToggleActivePendingUserInputOption
           }
@@ -60,18 +65,12 @@ export function ChatViewComposerHeader({
         />
       ) : null}
       {pendingQuestion}
-      <ComposerPromptQueue
-        queuedPrompts={interactions.promptQueue.queuedPrompts}
-        canSendNow={!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode}
-        onRemovePrompt={interactions.promptQueue.removeQueuedPrompt}
-        onInterruptAndFlush={() => {
-          void interactions.promptQueue.interruptAndFlushQueuedPrompts();
-        }}
-        canSteer={thread.activeSessionTurnRunning && interactions.promptQueue.canSteer}
-        controlOperation={interactions.promptQueue.controlOperation}
-        onSteer={() => {
-          void interactions.promptQueue.steerQueuedPrompts();
-        }}
+      <ChatViewHeldPromptQueue
+        key={threadId}
+        threadId={threadId}
+        queue={interactions.promptQueue}
+        canControl={!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode}
+        activeTurn={thread.activeSessionTurnRunning}
       />
     </>
   );
