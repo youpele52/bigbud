@@ -103,12 +103,29 @@ it("an externally answered form closes with authoritative answers rather than fa
     };
     http.forms.set(session.native.id, [form]);
     for (const event of await pendingV2Interactions(session)) await runtime.emit(session, event);
+    const opened = events.find((event) => event.type === "user-input.requested");
+    expect(opened?.requestGeneration).toEqual(expect.any(String));
+    await expect(
+      runtime.send({
+        threadId,
+        requestMessageId: MessageId.makeUnsafe("pending-form"),
+        input: "chat",
+      }),
+    ).rejects.toMatchObject({
+      turnStartRefusal: {
+        gate: {
+          provider: "opencodeV2",
+          userInputRequests: [{ requestId: form.id, generation: opened?.requestGeneration }],
+        },
+      },
+    });
     http.forms.set(session.native.id, [
       { ...form, state: { status: "answered", answer: { answer: "authoritative" } } },
     ]);
     for (const event of await pendingV2Interactions(session)) await runtime.emit(session, event);
-    expect(events.find((event) => event.type === "user-input.resolved")?.payload).toEqual({
-      answers: { answer: "authoritative" },
+    expect(events.find((event) => event.type === "user-input.resolved")).toMatchObject({
+      requestGeneration: opened?.requestGeneration,
+      payload: { answers: { answer: "authoritative" } },
     });
   });
 });

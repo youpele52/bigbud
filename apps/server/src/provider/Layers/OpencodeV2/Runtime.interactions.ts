@@ -22,6 +22,14 @@ function permissionType(action: string) {
       : ("command_execution_approval" as const);
 }
 
+function nativeInteractionGeneration(
+  session: V2RuntimeSession,
+  kind: "request.opened" | "user-input.requested",
+  id: string,
+) {
+  return session.pendingInteractions?.get(`${kind}:${id}`)?.requestGeneration;
+}
+
 /** Refresh pending interaction ownership from native state before exposing or answering. */
 export async function pendingV2Interactions(
   session: V2RuntimeSession,
@@ -41,6 +49,7 @@ export async function pendingV2Interactions(
   for (const retained of session.pendingInteractions?.values() ?? [])
     if (retained.type === "request.resolved") events.push(retained);
   const observedAnswers = new Map<string, Record<string, unknown>>();
+  const observedClosedForms = new Set<string>();
   for (const [key, opened] of session.pendingInteractions ?? []) {
     if (
       opened.type !== "user-input.requested" ||
@@ -58,6 +67,7 @@ export async function pendingV2Interactions(
       settled.state.status === "pending"
     )
       throw new Error("V2 disappeared form settlement is unconfirmed.");
+    observedClosedForms.add(key);
     if (settled.state.status === "answered") observedAnswers.set(key, settled.state.answer);
   }
   for (const request of permissions) {
@@ -84,6 +94,8 @@ export async function pendingV2Interactions(
     events.push({
       ...runtimeEventBase(session, `permission:${request.id}`),
       requestId: RuntimeRequestId.makeUnsafe(request.id),
+      requestGeneration:
+        nativeInteractionGeneration(session, "request.opened", request.id) ?? crypto.randomUUID(),
       type: "request.opened",
       payload: {
         requestType: permissionType(request.action),
@@ -107,6 +119,9 @@ export async function pendingV2Interactions(
     events.push({
       ...runtimeEventBase(session, `form:${form.id}`),
       requestId: RuntimeRequestId.makeUnsafe(form.id),
+      requestGeneration:
+        nativeInteractionGeneration(session, "user-input.requested", form.id) ??
+        crypto.randomUUID(),
       type: "user-input.requested",
       payload: { questions },
     });
@@ -120,7 +135,7 @@ export async function pendingV2Interactions(
     if (event.type === "request.resolved") retained.add(`request.opened:${event.requestId}`);
     session.pendingInteractions.set(key, event);
   }
-  events.push(...invalidateV2Interactions(session, retained, observedAnswers));
+  events.push(...invalidateV2Interactions(session, retained, observedAnswers, observedClosedForms));
   return events;
 }
 
@@ -187,6 +202,7 @@ export async function replyV2Permission(
   return {
     ...runtimeEventBase(session, `permission-resolved:${id}`),
     requestId: RuntimeRequestId.makeUnsafe(id),
+    requestGeneration: nativeInteractionGeneration(session, "request.opened", id),
     type: "request.resolved" as const,
     payload: { requestType: permissionType(request.action), decision },
   };
@@ -232,6 +248,7 @@ export async function replyV2Form(
   return {
     ...runtimeEventBase(session, `form-resolved:${id}`),
     requestId: RuntimeRequestId.makeUnsafe(id),
+    requestGeneration: nativeInteractionGeneration(session, "user-input.requested", id),
     type: "user-input.resolved" as const,
     payload: { answers: answer },
   };

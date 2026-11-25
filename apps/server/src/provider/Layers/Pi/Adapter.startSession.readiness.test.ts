@@ -22,6 +22,8 @@ describe("Pi start-session readiness", () => {
     const stop = vi.fn(async () => undefined);
     vi.mocked(createPiRpcProcess).mockResolvedValueOnce({
       child: { once: vi.fn() } as never,
+      isAlive: () => true,
+      onExit: () => () => undefined,
       command: "pi",
       args: ["--mode", "rpc"],
       stderrTail: () => "",

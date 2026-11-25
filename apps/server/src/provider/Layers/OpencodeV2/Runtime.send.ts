@@ -1,4 +1,6 @@
-import { Effect } from "effect";
+import { assertV2InteractionAdmission } from "./Runtime.interactionAdmission.ts";
+import { Effect, Schema } from "effect";
+import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import type { ProviderSendTurnInput } from "@bigbud/contracts/orchestration/provider.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
@@ -84,6 +86,7 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
         );
         assertV2CallerCurrent();
         if (!current || current.state === "reserved") {
+          assertV2InteractionAdmission(session);
           session.backgroundClosure?.assertCurrent();
           session.consentPermit?.assertCurrent();
           const hold = session.activation?.token
@@ -153,6 +156,7 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
           if (!existing) await switchV2TurnModel(runtime, session, input);
           validate();
           if (preparing) {
+            assertV2InteractionAdmission(session);
             session.messages.clear();
             session.terminalDelivered = false;
           }
@@ -174,7 +178,10 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
             const uncertain = await Effect.runPromise(runtime.options.journal.find(identity));
             validate();
             session.row = uncertain;
-            if (session.row)
+            if (
+              session.row &&
+              !(Schema.is(ProviderAdapterValidationError)(error) && error.turnStartRefusal)
+            )
               await v2RuntimeStatus(
                 runtime,
                 session,

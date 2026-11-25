@@ -1,3 +1,4 @@
+import { holdUndispatchedInteraction } from "../../pendingInteractionAdmission.ts";
 import { randomUUID } from "node:crypto";
 
 import { ThreadId, TurnId } from "@bigbud/contracts/core/baseSchemas.ts";
@@ -69,6 +70,8 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       yield* applyModelSelection({ session, modelSelection: input.modelSelection });
     }
 
+    if (session.pendingUserInputs.size > 0)
+      return yield* holdUndispatchedInteraction(PROVIDER, session.sessionEpoch);
     const turnId = TurnId.makeUnsafe(`pi-turn-${randomUUID()}`);
     session.lastPlanFingerprint = undefined;
     const queuedWhileRunning = session.activeTurnId !== undefined;

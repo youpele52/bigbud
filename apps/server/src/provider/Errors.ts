@@ -1,3 +1,4 @@
+import { PendingInteractionGate } from "@bigbud/contracts/orchestration/orchestration.pendingInteractionGate.ts";
 import { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Schema } from "effect";
 
@@ -14,6 +15,13 @@ export class ProviderAdapterValidationError extends Schema.TaggedErrorClass<Prov
     issue: Schema.String,
     /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
     failureClass: Schema.optional(TurnStartFailureClass),
+    /** Set only at a guard that refuses the turn before any provider send. */
+    turnStartRefusal: Schema.optional(
+      Schema.Struct({
+        kind: Schema.Literal("pending-interaction"),
+        gate: PendingInteractionGate,
+      }),
+    ),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

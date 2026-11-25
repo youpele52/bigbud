@@ -16,6 +16,7 @@ import {
   ProviderAdapterValidationError,
   type ProviderAdapterError,
 } from "../../Errors.ts";
+import { pendingClaudeInteractionTurnRefusal } from "./Adapter.approval.lifecycle.ts";
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../../Services/Claude/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
@@ -125,11 +126,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
 
     if (context.pendingApprovals.size > 0 || context.pendingUserInputs.size > 0) {
-      return yield* new ProviderAdapterValidationError({
-        provider: PROVIDER,
-        operation: "sendTurn",
-        issue: "Resolve or cancel the pending approval or user-input request first.",
-      });
+      return yield* pendingClaudeInteractionTurnRefusal(context);
     }
 
     if (context.turnState) {

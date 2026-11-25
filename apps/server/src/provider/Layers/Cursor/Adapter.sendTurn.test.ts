@@ -1,6 +1,6 @@
-import { EventId, ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { ApprovalRequestId, EventId, ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Deferred, Effect, Schema } from "effect";
 
 import { createFakeAcpSessionRuntime } from "../../acp/AcpSessionRuntime.test.helpers.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
@@ -55,6 +55,43 @@ function sendTurnDeps(ctx: CursorSessionContext, events: ProviderRuntimeEvent[])
 }
 
 describe("CursorAdapter sendTurn lifecycle", () => {
+  it.effect.each([false, true])("refuses before the prompt wire call (late callback: %s)", (late) =>
+    Effect.gen(function* () {
+      const ctx = makeContext();
+      const requestId = ApprovalRequestId.makeUnsafe("observed-approval");
+      const open = () =>
+        ctx.pendingApprovals.set(requestId, { decision: Deferred.makeUnsafe(), kind: "command" });
+      const events: ProviderRuntimeEvent[] = [];
+      const deps = sendTurnDeps(ctx, events);
+      if (!late) open();
+      const error = yield* Effect.flip(
+        makeSendTurnEffect(
+          {
+            ...deps,
+            offerRuntimeEvent: (event) =>
+              deps.offerRuntimeEvent(event).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    if (event.type === "turn.started") open();
+                  }),
+                ),
+              ),
+          },
+          { threadId: THREAD_ID, input: "chat" },
+        ),
+      );
+      assert.instanceOf(error, ProviderAdapterValidationError);
+      if (!Schema.is(ProviderAdapterValidationError)(error))
+        throw new Error("Expected validation refusal");
+      assert.deepEqual(error.turnStartRefusal?.gate.approvalRequests, [
+        { requestId, generation: requestId },
+      ]);
+      assert.equal(error.turnStartRefusal?.gate.provider, "cursor");
+      assert.equal(vi.mocked(ctx.acp.prompt).mock.calls.length, 0);
+      assert.equal(ctx.activeTurnId, undefined);
+    }),
+  );
+
   it.effect(
     "clears the live turn after ACP prompt completion so follow-ups can auto-dispatch",
     () =>

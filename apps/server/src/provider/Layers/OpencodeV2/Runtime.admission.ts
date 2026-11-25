@@ -1,6 +1,8 @@
+import { ProviderAdapterValidationError } from "../../Errors.ts";
+import { assertV2InteractionAdmission } from "./Runtime.interactionAdmission.ts";
 import { createHash } from "node:crypto";
 import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { ProviderSendTurnInput } from "@bigbud/contracts";
 import type { ModelRef } from "@opencode/client";
 import type {
@@ -274,14 +276,18 @@ export async function dispatchV2Turn(
               validateDispatch = await beforeDispatch();
               validateDispatch();
               validateOwner();
+              assertV2InteractionAdmission(session);
             },
             catch: (error) =>
-              new V2PreparationFailed({
-                detail: `V2 ${stage} failed${v2HttpFailureStatus(error) === undefined ? v2SafeFailureSuffix(error) : ` (HTTP ${v2HttpFailureStatus(error)})`}. No prompt dispatched; retry the same request after resolving preparation.`,
-              }),
+              Schema.is(ProviderAdapterValidationError)(error) && error.turnStartRefusal
+                ? error
+                : new V2PreparationFailed({
+                    detail: `V2 ${stage} failed${v2HttpFailureStatus(error) === undefined ? v2SafeFailureSuffix(error) : ` (HTTP ${v2HttpFailureStatus(error)})`}. No prompt dispatched; retry the same request after resolving preparation.`,
+                  }),
           }),
-        dispatch: (row) =>
-          v2TryPromise({
+        dispatch: (row) => {
+          let localRefusal: ProviderAdapterValidationError | undefined;
+          return v2TryPromise({
             try: async () => {
               session.row = row;
               stage = "prompt dispatch";
@@ -290,6 +296,14 @@ export async function dispatchV2Turn(
               const ack = await v2Request("session.prompt", (signal) => {
                 validate();
                 const prompt = () => {
+                  try {
+                    assertV2InteractionAdmission(session);
+                  } catch (error) {
+                    // Record proof only from our own guard before calling the native client.
+                    if (Schema.is(ProviderAdapterValidationError)(error) && error.turnStartRefusal)
+                      localRefusal = error;
+                    throw error;
+                  }
                   session.resources?.remoteCommands?.resume();
                   return session.lease.process.client.session.prompt(
                     {
@@ -331,8 +345,9 @@ export async function dispatchV2Turn(
                 ack.payload.metadata?.bigbud_fingerprint === fingerprint
               );
             },
-            catch: failure,
-          }),
+            catch: (error) => localRefusal ?? failure(error),
+          });
+        },
         reconcile: (row) =>
           v2TryPromise({
             try: async () => {

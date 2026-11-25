@@ -1,3 +1,4 @@
+import { refusePendingInteractions } from "../../pendingInteractionAdmission.ts";
 import { TurnId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
 import { Effect, type FileSystem } from "effect";
 import type { ContentBlock } from "effect-acp/schema";
@@ -96,6 +97,15 @@ export function makeSendTurnEffect(
       });
     }
 
+    const pendingRefusal = () =>
+      refusePendingInteractions({
+        provider: PROVIDER,
+        sessionEpoch: ctx.sessionEpoch,
+        approvals: ctx.pendingApprovals,
+        userInputs: ctx.pendingUserInputs,
+      });
+    const refusal = pendingRefusal();
+    if (refusal) return yield* refusal;
     // An exit observed before dispatch means the turn never started (session-dead, recoverable).
     yield* assertAcpAgentAliveBeforePrompt(PROVIDER, input.threadId, ctx.acp);
     ctx.activeTurnId = turnId;
@@ -117,6 +127,21 @@ export function makeSendTurnEffect(
       payload: { model: resolvedModel },
     });
 
+    // Attachment/model preparation and event publication can yield to an incoming callback.
+    const lateRefusal = pendingRefusal();
+    if (lateRefusal) {
+      settleIdleDevinTurn(ctx);
+      yield* deps.offerRuntimeEvent({
+        type: "turn.aborted",
+        ...(yield* deps.makeEventStamp()),
+        sessionEpoch: ctx.sessionEpoch,
+        provider: PROVIDER,
+        threadId: input.threadId,
+        turnId,
+        payload: { reason: "Pending interaction before prompt dispatch" },
+      });
+      return yield* lateRefusal;
+    }
     const result = yield* ctx.acp.prompt({ prompt: promptParts }).pipe(
       Effect.mapError((error) =>
         mapAcpPromptToAdapterError(PROVIDER, input.threadId, "session/prompt", error),

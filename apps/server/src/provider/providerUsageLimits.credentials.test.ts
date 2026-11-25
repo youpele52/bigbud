@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cursorCredentialDatabasePath,
@@ -11,6 +13,41 @@ import {
 import { readOpencodeGoUsageCredential } from "./Layers/Opencode/Provider.usageLimits.credentials.ts";
 
 const directories: string[] = [];
+const execute = promisify(execFile);
+const cursorCredentialModule = new URL(
+  "./Layers/Cursor/Provider.usageLimits.credentials.ts",
+  import.meta.url,
+);
+
+async function assertBunCursorCredential(home: string, path: string, expected: string) {
+  // Bun can write a transpilation cache below HOME independently of database access.
+  const runtimeHome = await directory();
+  await execute(
+    "bun",
+    [
+      "--no-env-file",
+      "-e",
+      `const {readCursorUsageCredential} = await import(${JSON.stringify(cursorCredentialModule.href)});
+       const value = await readCursorUsageCredential(process.env.FIXTURE_DB);
+       if (!process.versions.bun || value?.secret !== process.env.FIXTURE_EXPECTED) {
+         throw new Error("Unexpected Bun Cursor credential fixture result");
+       }`,
+    ],
+    {
+      cwd: home,
+      env: {
+        PATH: process.env.PATH,
+        SystemRoot: process.env.SystemRoot,
+        HOME: runtimeHome,
+        USERPROFILE: runtimeHome,
+        TMPDIR: runtimeHome,
+        FIXTURE_DB: path,
+        FIXTURE_EXPECTED: expected,
+      },
+      timeout: 5_000,
+    },
+  );
+}
 
 async function directory() {
   const path = await mkdtemp(join(tmpdir(), "bigbud-quota-credentials-"));
@@ -83,6 +120,7 @@ describe("read-only Cursor desktop credentials", () => {
       const before = await readFile(path);
       const modified = (await stat(path)).mtimeMs;
       expect((await readCursorUsageCredential(path))?.secret).toBe(jwt);
+      await assertBunCursorCredential(home, path, jwt);
       expect(await readFile(path)).toEqual(before);
       expect((await stat(path)).mtimeMs).toBe(modified);
       expect(await readdir(home)).toEqual(["state.vscdb"]);
@@ -92,7 +130,7 @@ describe("read-only Cursor desktop credentials", () => {
   it("reads the current WAL login rather than a checkpointed former account", async () => {
     const previous = token({ sub: "previous", exp: Date.now() / 1000 + 3600 });
     const next = token();
-    const { path, db } = await cursorDatabase(previous, true);
+    const { home, path, db } = await cursorDatabase(previous, true);
     try {
       db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
       db.prepare("UPDATE ItemTable SET value = ? WHERE key = ?").run(
@@ -102,6 +140,7 @@ describe("read-only Cursor desktop credentials", () => {
       const beforeDb = await readFile(path);
       const beforeWal = await readFile(`${path}-wal`);
       expect((await readCursorUsageCredential(path))?.secret).toBe(next);
+      await assertBunCursorCredential(home, path, next);
       expect(await readFile(path)).toEqual(beforeDb);
       expect(await readFile(`${path}-wal`)).toEqual(beforeWal);
     } finally {

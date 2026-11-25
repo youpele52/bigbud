@@ -19,7 +19,8 @@ function harness(input: { readonly exitedBeforeDispatch: boolean }) {
   }) as unknown as ActivePiSession["process"]["request"];
   const session = {
     process: {
-      child: child as never,
+      isAlive: () => child.exitCode === null,
+      onExit: () => () => undefined,
       command: "pi",
       args: [],
       stderrTail: () => "",
@@ -54,10 +55,23 @@ function harness(input: { readonly exitedBeforeDispatch: boolean }) {
     serverSettings: { getSettings: Effect.die("unused") },
     sessions: new Map([[threadId, session]]),
   });
-  return { threadId, methods };
+  return { threadId, methods, session, request };
 }
 
 describe("Pi turn start when the RPC process exited", () => {
+  it("does not dispatch and requests a manual-recovery hold while input is locally pending", async () => {
+    const { threadId, methods, session, request } = harness({ exitedBeforeDispatch: false });
+    session.pendingUserInputs.set("prompt", {} as never);
+    const refusal = await Effect.runPromise(
+      Effect.flip(methods.sendTurn({ threadId, input: "chat" })),
+    );
+    expect(refusal).toMatchObject({ failureClass: "invalid-request" });
+    expect(refusal).toMatchObject({
+      turnStartRefusal: { gate: { manualRecovery: "discard-and-resend", provider: "pi" } },
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("an exit observed before dispatch is session-dead", async () => {
     const { threadId, methods } = harness({ exitedBeforeDispatch: true });
     const error = await Effect.runPromise(

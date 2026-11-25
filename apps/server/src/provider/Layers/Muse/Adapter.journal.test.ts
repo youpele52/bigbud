@@ -1,4 +1,4 @@
-import { MessageId } from "@bigbud/contracts/core/baseSchemas";
+import { ApprovalRequestId, MessageId } from "@bigbud/contracts/core/baseSchemas";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -12,6 +12,7 @@ import { PersistenceSqlError } from "../../../persistence/Errors.ts";
 import { advanceMuseJournal, settleMuseJournalTerminal } from "./Adapter.journal.ts";
 import { executeMuseRecovery, scanMuseJournal } from "./Adapter.recovery.ts";
 import {
+  approvalParams,
   deferred,
   makeMuseTestHost,
   makeMuseTestState,
@@ -25,6 +26,60 @@ const layer = ProviderTurnAdmissionsLive.pipe(Layer.provideMerge(SqlitePersisten
 const outage = new PersistenceSqlError({ operation: "transition", detail: "disk unavailable" });
 
 describe("Muse monotonic durable journal (real SQLite)", () => {
+  it("reopens the same intent when an interaction appears immediately before the wire call", async () => {
+    const host = makeMuseTestHost();
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const journal = yield* ProviderTurnAdmissions;
+        let inject = true;
+        const admissions = {
+          ...journal,
+          transition: (...args: Parameters<typeof journal.transition>) =>
+            journal.transition(...args).pipe(
+              Effect.tap((row) => {
+                if (!inject || row.state !== "dispatch-intent") return Effect.void;
+                inject = false;
+                return Effect.promise(() =>
+                  host.request({
+                    method: "approval/request",
+                    params: approvalParams(host.sessionId()),
+                  }),
+                );
+              }),
+            ),
+        };
+        const adapter = yield* host.adapter({ admissions });
+        yield* adapter.startSession(startInput);
+        const input = {
+          threadId,
+          requestMessageId: MessageId.makeUnsafe("late-refusal"),
+          input: "work",
+        };
+        const refusal = yield* Effect.flip(adapter.sendTurn(input));
+        expect(refusal).toMatchObject({
+          turnStartRefusal: {
+            gate: { provider: "muse", approvalRequests: [{ requestId: "approval:0" }] },
+          },
+        });
+        const reserved = (yield* journal.listBound(threadId, 10))[0];
+        expect(reserved).toMatchObject({ state: "reserved", revision: 2 });
+        expect(host.calls.filter((call) => call.method === "turn/start")).toHaveLength(0);
+        yield* adapter.respondToRequest(
+          threadId,
+          ApprovalRequestId.makeUnsafe("approval:0"),
+          "accept",
+        );
+        yield* adapter.sendTurn(input);
+        expect(host.calls.filter((call) => call.method === "turn/start")).toHaveLength(1);
+        expect((yield* journal.listBound(threadId, 10))[0]).toMatchObject({
+          state: "accepted",
+          nativeAdmissionId: reserved?.nativeAdmissionId,
+        });
+        yield* adapter.stopAll();
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+
   it.each(["changed-material", "no-progress"])(
     "fails safely and bounds CAS reconciliation for %s",
     async (mode) => {
