@@ -28,7 +28,7 @@ pub(super) fn create(
     // entries on success *or* error, and never copy back if removal fails.
     fs::remove_dir_all(staging).map_err(|_| READ_ONLY)?;
     let bytes = generated?;
-    let pin = read(&bytes, label, deadline).map_err(|error| match error {
+    let pin = read(&bytes, label, deadline, directory).map_err(|error| match error {
         ErrorCode::TransportLost => error,
         _ => READ_ONLY,
     })?;
@@ -42,7 +42,7 @@ fn staging_directory(directory: &Path) -> Result<PathBuf, ErrorCode> {
     for _ in 0..16 {
         let nonce = NEXT_SNAPSHOT.fetch_add(1, Ordering::Relaxed);
         let path = directory.join(format!(
-            ".bigbud-picker-hash-{}-{nonce}",
+            ".bigbud-picker-stage-{}-{nonce}",
             std::process::id()
         ));
         match fs::DirBuilder::new().mode(0o700).create(&path) {
@@ -81,7 +81,12 @@ fn hash_in_staging(
     Ok(bytes)
 }
 
-pub(super) fn read(bytes: &[u8], label: &str, deadline: Instant) -> Result<Pin, ErrorCode> {
+pub(super) fn read(
+    bytes: &[u8],
+    label: &str,
+    deadline: Instant,
+    directory: &Path,
+) -> Result<Pin, ErrorCode> {
     let record = std::str::from_utf8(bytes).map_err(|_| CHANGED)?;
     let (field, _) = record.split_once(' ').ok_or(CHANGED)?;
     validate_field(field)?;
@@ -89,7 +94,7 @@ pub(super) fn read(bytes: &[u8], label: &str, deadline: Instant) -> Result<Pin, 
     // matcher. In particular, never let OpenSSH select a row from a mixed file.
     let key = HostKey::from_record(bytes, field).ok_or(CHANGED)?;
     let record = key.record(field);
-    if !match_record(&record, label, deadline)? {
+    if !match_record(&record, label, deadline, directory)? {
         return Err(CHANGED);
     }
     Ok(Pin { key, record })
@@ -110,39 +115,62 @@ pub(super) fn matches_field(
     field: &str,
     label: &str,
     deadline: Instant,
+    directory: &Path,
 ) -> Result<bool, ErrorCode> {
     validate_field(field)?;
     // Only the host field participates in HMAC matching. Do not hand untrusted key/marker data to the helper.
     let record = format!(
         "{field} ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
     );
-    match_record(&record, label, deadline)
+    match_record(&record, label, deadline, directory)
 }
 
-fn match_record(record: &str, label: &str, deadline: Instant) -> Result<bool, ErrorCode> {
+fn match_record(
+    record: &str,
+    label: &str,
+    deadline: Instant,
+    directory: &Path,
+) -> Result<bool, ErrorCode> {
     // Use system OpenSSH's HMAC-SHA1 matcher instead of adding a crypto
-    // dependency. It gets only the validated bytes on stdin, not a path to
-    // reopen, and cannot consult ambient known_hosts or connect to the host.
-    let mut command = keygen()?;
-    command.args(["-q", "-F", label, "-f", "/dev/stdin"]);
-    let output = process::run_with_input(
-        command,
-        deadline.min(Instant::now() + LOOKUP_LIMIT),
-        record.len(),
-        record.as_bytes(),
-    )
-    .map_err(helper_failure)?;
-    match output.status.code() {
-        Some(0)
-            if !output.truncated
-                && output.stderr.is_empty()
-                && output.stdout == record.as_bytes() =>
-        {
-            Ok(true)
+    // dependency. It only ever sees this one validated record, not ambient
+    // known_hosts, and cannot connect to the host.
+    //
+    // `-F` takes a path, so the record is staged in the same private directory
+    // that `create` uses. It must not be offered on `/dev/stdin`: that path
+    // resolves through fdescfs on macOS, whose lookup intermittently fails with
+    // EBADF for a child spawned while other threads spawn processes. A
+    // transient platform failure must never become a trust-store refusal.
+    let staging = staging_directory(directory)?;
+    let path = staging.join("known_hosts");
+    let staged = options()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .and_then(|mut file| file.write_all(record.as_bytes()))
+        .map_err(|_| READ_ONLY);
+    let matched = staged.and_then(|()| {
+        let mut command = keygen()?;
+        command.args(["-q", "-F", label, "-f"]).arg(&path);
+        let output = process::run(
+            command,
+            deadline.min(Instant::now() + LOOKUP_LIMIT),
+            record.len(),
+        )
+        .map_err(helper_failure)?;
+        match output.status.code() {
+            Some(0)
+                if !output.truncated
+                    && output.stderr.is_empty()
+                    && output.stdout == record.as_bytes() =>
+            {
+                Ok(true)
+            }
+            Some(1) if output.stdout.is_empty() && output.stderr.is_empty() => Ok(false),
+            _ => Err(READ_ONLY),
         }
-        Some(1) if output.stdout.is_empty() && output.stderr.is_empty() => Ok(false),
-        _ => Err(READ_ONLY),
-    }
+    });
+    fs::remove_dir_all(staging).map_err(|_| READ_ONLY)?;
+    matched
 }
 
 fn keygen() -> Result<Command, ErrorCode> {

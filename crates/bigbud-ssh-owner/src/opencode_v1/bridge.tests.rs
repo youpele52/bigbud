@@ -6,6 +6,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const LIMIT: Duration = Duration::from_secs(2);
+// Waiting for the relay worker to accept a connection or publish a closure is
+// not a data-transfer deadline: a worker that has not been scheduled yet is not
+// an open or a stuck stream. Only the failure path waits this long.
+const SETTLE: Duration = Duration::from_secs(30);
 
 struct Fixture {
     dir: PathBuf,
@@ -53,7 +57,7 @@ fn connect(addr: SocketAddr) -> TcpStream {
 }
 
 fn accept(listener: &UnixListener) -> UnixStream {
-    let deadline = Instant::now() + LIMIT;
+    let deadline = Instant::now() + SETTLE;
     loop {
         match listener.accept() {
             Ok((stream, _)) => {
@@ -70,11 +74,33 @@ fn accept(listener: &UnixListener) -> UnixStream {
     }
 }
 
+// A timeout means "the worker has not published the closure yet", never that
+// the stream is still open, so it is retried until the settle budget is spent.
 fn assert_closed(mut reader: impl Read) {
-    match reader.read(&mut [0]) {
-        Ok(0) => {}
-        Err(error) if error.kind() == ErrorKind::ConnectionReset => {}
-        other => panic!("expected a closed stream, got {other:?}"),
+    let deadline = Instant::now() + SETTLE;
+    loop {
+        match reader.read(&mut [0]) {
+            Ok(0) => return,
+            Err(error) if error.kind() == ErrorKind::ConnectionReset => return,
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {}
+            other => panic!("expected a closed stream, got {other:?}"),
+        }
+    }
+}
+
+// Reads until the peer closes, retrying a timeout for the same reason. The
+// caller still asserts the exact bytes that were relayed.
+fn read_to_close(mut reader: impl Read) -> Vec<u8> {
+    let deadline = Instant::now() + SETTLE;
+    let mut bytes = Vec::new();
+    let mut buffer = [0; BUFFER_BYTES];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => return bytes,
+            Ok(count) => bytes.extend_from_slice(&buffer[..count]),
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {}
+            Err(error) => panic!("read relayed bytes: {error:?}"),
+        }
     }
 }
 
@@ -122,16 +148,12 @@ fn missing_socket_is_local_to_the_connection_and_half_closes_flush_both_directio
     let payload: Vec<_> = (0..=255).cycle().take(4 * BUFFER_BYTES + 17).collect();
     client.write_all(&payload).unwrap();
     client.shutdown(Shutdown::Write).unwrap();
-    let mut received = Vec::new();
-    unix.read_to_end(&mut received).unwrap();
-    assert_eq!(received, payload);
+    assert_eq!(read_to_close(&mut unix), payload);
 
     let response = b"response after the request's write half closed";
     unix.write_all(response).unwrap();
     unix.shutdown(Shutdown::Write).unwrap();
-    received.clear();
-    client.read_to_end(&mut received).unwrap();
-    assert_eq!(received, response);
+    assert_eq!(read_to_close(&mut client), response);
     bridge.shutdown().unwrap();
 }
 

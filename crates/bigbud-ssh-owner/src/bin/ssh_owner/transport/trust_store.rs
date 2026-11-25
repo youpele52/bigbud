@@ -47,11 +47,11 @@ fn read_with_hashing(
     label: &str,
     allow_hashing: bool,
 ) -> Result<Option<Pin>, ErrorCode> {
-    check_directory(path)?;
+    let directory = check_directory(path)?;
     match options().open(path) {
         Ok(file) => {
             let hashed_deadline = allow_hashing.then(|| Instant::now() + hashed::LOOKUP_LIMIT);
-            read_store(&file, label, hashed_deadline).map(|store| store.pin)
+            read_store(&file, label, hashed_deadline, directory).map(|store| store.pin)
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(_) => Err(READ_ONLY),
@@ -95,7 +95,7 @@ fn approve_locked(
     hash_known_hosts: bool,
     deadline: Instant,
 ) -> Result<(), ErrorCode> {
-    let mut store = read_store(file, label, Some(deadline))?;
+    let mut store = read_store(file, label, Some(deadline), directory)?;
     if let Some(pin) = &store.pin {
         return pin.check_key(key);
     }
@@ -103,7 +103,7 @@ fn approve_locked(
         let generated = hashed::create(directory, label, key, deadline)?;
         // The helper takes time; re-read from the start before appending so a
         // pin installed by a fixture writer without our lock is not masked.
-        store = read_store(file, label, Some(deadline))?;
+        store = read_store(file, label, Some(deadline), directory)?;
         if let Some(pin) = &store.pin {
             return pin.check_key(key);
         }
@@ -176,6 +176,7 @@ fn read_store(
     file: &File,
     label: &str,
     hashed_deadline: Option<Instant>,
+    directory: &Path,
 ) -> Result<Store, ErrorCode> {
     let bytes = read_private_bytes(file, MAX_STORE_BYTES)?;
     let len = bytes.len() as u64;
@@ -183,7 +184,7 @@ fn read_store(
         return Err(ErrorCode::HostKeyChanged);
     }
     let pin = single_record(&bytes)?
-        .map(|record| parse_pin(record, label, hashed_deadline))
+        .map(|record| parse_pin(record, label, hashed_deadline, directory))
         .transpose()?;
     Ok(Store {
         pin,
@@ -227,10 +228,11 @@ fn parse_pin(
     bytes: &[u8],
     label: &str,
     hashed_deadline: Option<Instant>,
+    directory: &Path,
 ) -> Result<Pin, ErrorCode> {
     if bytes.starts_with(b"|") {
         let deadline = hashed_deadline.ok_or(ErrorCode::ConfigUnsupported)?;
-        return hashed::read(bytes, label, deadline);
+        return hashed::read(bytes, label, deadline, directory);
     }
     let key = HostKey::from_record(bytes, label).ok_or(ErrorCode::HostKeyChanged)?;
     Ok(Pin {

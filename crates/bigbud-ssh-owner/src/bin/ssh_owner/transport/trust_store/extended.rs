@@ -54,15 +54,22 @@ fn inspect(
     first_file: Option<&File>,
     verification: HostVerification,
 ) -> Result<Inspection, ErrorCode> {
-    if paths.is_empty() || paths.len() > MAX_SOURCES {
+    let Some(first) = paths.first() else {
+        return Err(ErrorCode::ConfigUnsupported);
+    };
+    if paths.len() > MAX_SOURCES {
         return Err(ErrorCode::ConfigUnsupported);
     }
+    // The matcher stages its single validated record beside the first source,
+    // which is the only file this path ever appends to.
+    let directory = check_directory(first)?;
     let mut selection = Selection {
         label,
         pin: None,
         hashes: 0,
         deadline,
         verification,
+        directory,
     };
     let mut digest = Sha256::new();
     for (index, path) in paths.iter().enumerate() {
@@ -190,6 +197,7 @@ struct Selection<'a> {
     hashes: usize,
     deadline: Instant,
     verification: HostVerification,
+    directory: &'a Path,
 }
 
 impl Selection<'_> {
@@ -257,7 +265,7 @@ impl Selection<'_> {
             if self.hashes > MAX_HASHED_ROWS {
                 return Err(ErrorCode::ConfigUnsupported);
             }
-            return hashed::matches_field(hosts, self.label, self.deadline);
+            return hashed::matches_field(hosts, self.label, self.deadline, self.directory);
         }
         pattern_list(hosts, self.label)
     }
