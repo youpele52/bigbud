@@ -16,9 +16,9 @@ import {
   DEVELOPMENT_ICON_OVERRIDES,
   PUBLISH_ICON_OVERRIDES,
 } from "../../../scripts/lib/brand-assets.ts";
-import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog.ts";
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import serverPackageJson from "../package.json" with { type: "json" };
+import { resolveServerPublishDependencies } from "./cli.publishManifest.ts";
 import {
   assertCompleteServerWorkspaceAgentSet,
   stageHostServerWorkspaceAgent,
@@ -219,6 +219,18 @@ const publishCmd = Command.make(
       const serverDir = path.join(repoRoot, "apps/server");
       const packageJsonPath = path.join(serverDir, "package.json");
       const backupPath = `${packageJsonPath}.bak`;
+      const dependencies = yield* Effect.try({
+        try: () =>
+          resolveServerPublishDependencies(
+            serverPackageJson.dependencies,
+            rootPackageJson.workspaces.catalog,
+          ),
+        catch: (cause) =>
+          new CliError({
+            message: `Unable to prepare server publish dependencies: ${String(cause)}`,
+            cause,
+          }),
+      });
 
       // Assert build assets exist
       for (const relPath of ["dist/bin.mjs", "dist/client/index.html"]) {
@@ -245,10 +257,8 @@ const publishCmd = Command.make(
       });
 
       yield* Effect.acquireUseRelease(
-        // Acquire: backup package.json, resolve catalog: deps, strip devDependencies/scripts
+        // Acquire: back up package.json and write the staged publish manifest.
         Effect.gen(function* () {
-          // Resolve catalog dependencies before any file mutations. If this throws,
-          // acquire fails and no release hook runs, so filesystem must still be untouched.
           const version = Option.getOrElse(config.appVersion, () => serverPackageJson.version);
           const pkg = {
             name: serverPackageJson.name,
@@ -258,14 +268,8 @@ const publishCmd = Command.make(
             version,
             engines: serverPackageJson.engines,
             files: serverPackageJson.files,
-            dependencies: serverPackageJson.dependencies as Record<string, unknown>,
+            dependencies,
           };
-
-          pkg.dependencies = resolveCatalogDependencies(
-            pkg.dependencies,
-            rootPackageJson.workspaces.catalog,
-            "apps/server dependencies",
-          );
 
           const original = yield* fs.readFileString(packageJsonPath);
           yield* fs.writeFileString(backupPath, original);

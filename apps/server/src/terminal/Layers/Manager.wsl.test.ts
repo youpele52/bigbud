@@ -43,8 +43,8 @@ describe("target-bound WSL folder resolution", () => {
         ...input,
         worktreePath: "C:\\worktree",
         env: {
-          T3CODE_PROJECT_ROOT: "C:\\project",
-          T3CODE_WORKTREE_PATH: "C:\\worktree",
+          BIGBUD_PROJECT_ROOT: "C:\\project",
+          BIGBUD_WORKTREE_PATH: "C:\\worktree",
           CUSTOM: "unchanged",
         },
       }),
@@ -53,8 +53,8 @@ describe("target-bound WSL folder resolution", () => {
       cwd: "/mapped/project",
       worktreePath: "/mapped/project",
       env: {
-        T3CODE_PROJECT_ROOT: "/mapped/project",
-        T3CODE_WORKTREE_PATH: "/mapped/project",
+        BIGBUD_PROJECT_ROOT: "/mapped/project",
+        BIGBUD_WORKTREE_PATH: "/mapped/project",
         CUSTOM: "unchanged",
       },
       wslIdentity: { distribution: "Ubuntu dev", username: "alice", uid: 1000 },
@@ -153,13 +153,9 @@ describe("target-bound WSL folder resolution", () => {
     expect(runner).not.toHaveBeenCalled();
   });
   it.each(
-    [
-      "worktreePath",
-      "BIGBUD_PROJECT_ROOT",
-      "BIGBUD_WORKTREE_PATH",
-      "T3CODE_PROJECT_ROOT",
-      "T3CODE_WORKTREE_PATH",
-    ].flatMap((field) => ["/missing", "/project"].map((cwd) => ({ field, cwd }))),
+    ["worktreePath", "BIGBUD_PROJECT_ROOT", "BIGBUD_WORKTREE_PATH"].flatMap((field) =>
+      ["/missing", "/project"].map((cwd) => ({ field, cwd })),
+    ),
   )("rejects malformed $field before any probe for $cwd", async ({ field, cwd }) => {
     for (const value of [
       "/bad\nfolder",

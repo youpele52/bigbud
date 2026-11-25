@@ -103,7 +103,7 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
         Effect.flip,
         Effect.ensuring(Effect.promise(held.release)),
       );
-      assert.match(String(error), /needs the bigbud backend stopped/);
+      assert.match(String(error), /writes the bigbud database and needs exclusive access/);
       yield* Effect.promise(() => rm(baseDir, { recursive: true, force: true }));
     }),
   );

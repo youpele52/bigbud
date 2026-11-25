@@ -23,6 +23,21 @@ import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS, type TerminalSessionState } from 
 
 type OpenRequest = Parameters<TerminalManagerShape["open"]>[0];
 
+export function hostLostPane(
+  ctx: SessionApiContext,
+  request: OpenRequest,
+  terminalId: string,
+): boolean {
+  return (
+    ctx.hostLimit
+      ?.roster()
+      .some(
+        (entry) =>
+          entry.lost && entry.threadId === request.threadId && entry.terminalId === terminalId,
+      ) === true
+  );
+}
+
 /**
  * `attachOnly` with no live process and no recoverable owner: return the retained session
  * as-is, open a host-lost pane read-only, or report that nothing runs. Never spawns.
@@ -83,6 +98,7 @@ export function endedTerminalSnapshot(
   request: OpenRequest,
   terminalId: string,
   reason: TerminalEndedReason,
+  history = "",
 ) {
   const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
   const session = createTerminalSessionState({
@@ -92,12 +108,12 @@ export function endedTerminalSnapshot(
     dropPathMode: defaultTerminalDropPathMode(executionTargetId),
     cwd: request.cwd,
     worktreePath: request.worktreePath ?? null,
-    history: "",
+    history,
     cols: request.cols ?? DEFAULT_OPEN_COLS,
     rows: request.rows ?? DEFAULT_OPEN_ROWS,
     runtimeEnv: normalizedRuntimeEnv(request.env),
   });
-  session.status = "exited";
+  session.status = reason === "host-lost" ? "error" : "exited";
   session.endedReason = reason;
   return ctx.snapshot(session);
 }

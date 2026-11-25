@@ -56,16 +56,16 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_LOG_LEVEL: "Warn",
-                  T3CODE_MODE: "desktop",
-                  T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
-                  T3CODE_HOME: baseDir,
+                  BIGBUD_LOG_LEVEL: "Warn",
+                  BIGBUD_MODE: "desktop",
+                  BIGBUD_PORT: "4001",
+                  BIGBUD_HOST: "0.0.0.0",
+                  BIGBUD_HOME: baseDir,
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
-                  T3CODE_NO_BROWSER: "true",
-                  T3CODE_AUTH_TOKEN: "env-token",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
-                  T3CODE_LOG_WS_EVENTS: "true",
+                  BIGBUD_NO_BROWSER: "true",
+                  BIGBUD_AUTH_TOKEN: "env-token",
+                  BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
+                  BIGBUD_LOG_WS_EVENTS: "true",
                 },
               }),
             ),
@@ -121,16 +121,16 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_LOG_LEVEL: "Warn",
-                  T3CODE_MODE: "desktop",
-                  T3CODE_PORT: "4001",
-                  T3CODE_HOST: "0.0.0.0",
-                  T3CODE_HOME: join(os.tmpdir(), "ignored-base"),
+                  BIGBUD_LOG_LEVEL: "Warn",
+                  BIGBUD_MODE: "desktop",
+                  BIGBUD_PORT: "4001",
+                  BIGBUD_HOST: "0.0.0.0",
+                  BIGBUD_HOME: join(os.tmpdir(), "ignored-base"),
                   VITE_DEV_SERVER_URL: "http://127.0.0.1:5173",
-                  T3CODE_NO_BROWSER: "false",
-                  T3CODE_AUTH_TOKEN: "ignored-token",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
-                  T3CODE_LOG_WS_EVENTS: "false",
+                  BIGBUD_NO_BROWSER: "false",
+                  BIGBUD_AUTH_TOKEN: "ignored-token",
+                  BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "false",
+                  BIGBUD_LOG_WS_EVENTS: "false",
                 },
               }),
             ),
@@ -200,7 +200,7 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_BOOTSTRAP_FD: String(fd),
+                  BIGBUD_BOOTSTRAP_FD: String(fd),
                 },
               }),
             ),
@@ -319,12 +319,12 @@ it.layer(NodeServices.layer)("cli config resolution", (it) => {
             ConfigProvider.layer(
               ConfigProvider.fromEnv({
                 env: {
-                  T3CODE_MODE: "web",
-                  T3CODE_BOOTSTRAP_FD: String(fd),
-                  T3CODE_HOME: baseDir,
-                  T3CODE_NO_BROWSER: "true",
-                  T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
-                  T3CODE_LOG_WS_EVENTS: "true",
+                  BIGBUD_MODE: "web",
+                  BIGBUD_BOOTSTRAP_FD: String(fd),
+                  BIGBUD_HOME: baseDir,
+                  BIGBUD_NO_BROWSER: "true",
+                  BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "true",
+                  BIGBUD_LOG_WS_EVENTS: "true",
                 },
               }),
             ),

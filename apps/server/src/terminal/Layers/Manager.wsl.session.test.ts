@@ -24,7 +24,7 @@ const identity = { distribution: "Ubuntu dev", username: "alice", uid: 1000 };
 const folder = {
   cwd: "/mapped/worktree",
   worktreePath: "/mapped/worktree",
-  env: { T3CODE_PROJECT_ROOT: "/mapped/project", T3CODE_WORKTREE_PATH: "/mapped/worktree" },
+  env: { BIGBUD_PROJECT_ROOT: "/mapped/project", BIGBUD_WORKTREE_PATH: "/mapped/worktree" },
   wslIdentity: identity,
 };
 
@@ -41,7 +41,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("WSL terminal sessio
             executionTargetId: target,
             cwd: "C:\\project",
             worktreePath: "C:\\worktree",
-            env: { T3CODE_PROJECT_ROOT: "C:\\project" },
+            env: { BIGBUD_PROJECT_ROOT: "C:\\project" },
           }),
         );
         expect(opened).toMatchObject({
@@ -63,7 +63,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("WSL terminal sessio
           "--user",
           "alice",
         ]);
-        expect(ptyAdapter.spawnInputs[0]?.args).toContain("T3CODE_PROJECT_ROOT=/mapped/project");
+        expect(ptyAdapter.spawnInputs[0]?.args).toContain("BIGBUD_PROJECT_ROOT=/mapped/project");
         expect(ptyAdapter.spawnInputs[0]?.args).toContain("/mapped/worktree");
         expect(
           (yield* manager.snapshot({ threadId: opened.threadId, terminalId: opened.terminalId }))

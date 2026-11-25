@@ -86,27 +86,9 @@ export const optionalUrlConfig = (name: string): Config.Config<URL | undefined> 
     Config.map((value) => Option.getOrUndefined(value)),
   );
 
-const aliasedOptionalIntegerConfig = (
-  primary: string,
-  alias: string,
-): Config.Config<number | undefined> =>
-  Config.all({
-    primary: optionalIntegerConfig(primary),
-    alias: optionalIntegerConfig(alias),
-  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
-
-const aliasedOptionalStringConfig = (
-  primary: string,
-  alias: string,
-): Config.Config<string | undefined> =>
-  Config.all({
-    primary: optionalStringConfig(primary),
-    alias: optionalStringConfig(alias),
-  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
-
 export const OffsetConfig = Config.all({
-  portOffset: aliasedOptionalIntegerConfig("BIGBUD_PORT_OFFSET", "T3CODE_PORT_OFFSET"),
-  devInstance: aliasedOptionalStringConfig("BIGBUD_DEV_INSTANCE", "T3CODE_DEV_INSTANCE"),
+  portOffset: optionalIntegerConfig("BIGBUD_PORT_OFFSET"),
+  devInstance: optionalStringConfig("BIGBUD_DEV_INSTANCE"),
 });
 
 export function resolveOffset(config: {

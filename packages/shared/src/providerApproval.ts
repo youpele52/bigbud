@@ -55,3 +55,21 @@ export function approvalRuntimeEventToActivities(
     },
   ];
 }
+
+const INTERACTION_LIFECYCLE_ACTIVITY_KINDS: ReadonlySet<string> = new Set([
+  "approval.requested",
+  "approval.resolved",
+  "provider.approval.respond.failed",
+  "user-input.requested",
+  "user-input.resolved",
+  "provider.user-input.respond.failed",
+]);
+
+/**
+ * True for activity kinds that open, resolve, or fail a pending approval or user-input
+ * interaction. These must never be dropped by activity budgets: losing one hides a pending
+ * request from status and UI while the provider still blocks the turn.
+ */
+export function isInteractionLifecycleActivityKind(kind: string): boolean {
+  return INTERACTION_LIFECYCLE_ACTIVITY_KINDS.has(kind) || kind.startsWith("user-input.");
+}

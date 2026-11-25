@@ -7,10 +7,9 @@ import { GitCommandError } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
 import { makeRawExecute, wrapExecuteWithMetrics, makeGitHelpers } from "./GitCoreExecutor.ts";
 import { makeGitStatusOps } from "./GitStatus.ts";
-import { makeSystemWorkspaceTrash } from "../../workspace/Layers/WorkspaceTrash.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
-import { makeGitWorktreeOps } from "./GitWorktree.ts";
-import type { GitWorktreeOps } from "./GitWorktree.ts";
+import { makeGitWorktreeOps, type GitWorktreeOps } from "./GitWorktree.ts";
+import { pushInitiatingBranch } from "./GitCore.initiatingPush.ts";
 import { makeGitHistoryOps } from "./GitHistory.ts";
 import {
   formatRemoteExecutionTargetDetail,
@@ -23,9 +22,7 @@ import {
 import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 import { requireRemoteGitAgent, assertLocalExecutionTarget } from "./GitCore.target.ts";
 
-export { makeGitCore };
-
-const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
+export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   executeOverride?: GitCoreShape["execute"];
   remoteExecuteOverride?: GitCoreShape["execute"];
 }) {
@@ -43,11 +40,11 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const execute: GitCoreShape["execute"] = wrapExecuteWithMetrics(executeRaw);
   const helpers = makeGitHelpers(execute);
 
-  const statusOps = yield* makeGitStatusOps(helpers, path, makeSystemWorkspaceTrash());
+  const statusOps = yield* makeGitStatusOps(helpers, path, "initiating");
 
   const branchOps = makeGitBranchOps(helpers, statusOps);
 
-  const worktreeOps = makeGitWorktreeOps(helpers, statusOps, path, worktreesDir);
+  const worktreeOps = makeGitWorktreeOps(helpers, statusOps, path, worktreesDir, "initiating");
   const historyOps = makeGitHistoryOps(helpers);
 
   const remoteAgentGitExecutor = yield* Effect.serviceOption(RemoteAgentGitExecutorService);
@@ -150,7 +147,9 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
               ),
             )
           : requireRemoteGitAgent("git.push", cwd, executionTargetId)
-        : statusOps.pushCurrentBranch(cwd, fallbackBranch, undefined, operationId),
+        : pushInitiatingBranch(execute, cwd, () =>
+            statusOps.pushCurrentBranch(cwd, fallbackBranch, undefined, operationId),
+          ),
     pullCurrentBranch: (cwd, executionTargetId, operationId?) =>
       executionTargetId && !isLocalExecutionTarget(executionTargetId)
         ? remoteExecute

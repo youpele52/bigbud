@@ -1,3 +1,4 @@
+import { hasCodexPendingInteractionFence } from "./codexAppServerManager.interactionAdmission.ts";
 import { randomUUID } from "node:crypto";
 
 import { EventId, type ProviderEvent } from "@bigbud/contracts";
@@ -75,7 +76,8 @@ export function handleServerNotification(
           continue;
         requests.delete(requestId);
         // Submitted UI was closed only after its write completed; don't resolve it twice.
-        if (pending.uiClosed) return;
+        const fenced = hasCodexPendingInteractionFence(pending);
+        if (pending.uiClosed && !fenced) return;
         const requestKind =
           "requestKind" in pending &&
           (pending.requestKind === "command" ||
@@ -95,7 +97,11 @@ export function handleServerNotification(
           turnId: pending.turnId,
           itemId: pending.itemId,
           ...(requestKind ? { requestKind } : {}),
-          payload: { ...params, interaction: "requestKind" in pending ? "approval" : "user-input" },
+          payload: {
+            ...params,
+            interaction: "requestKind" in pending ? "approval" : "user-input",
+            ...(fenced ? { interactionGeneration: requestId } : {}),
+          },
         });
         return;
       }

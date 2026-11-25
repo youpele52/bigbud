@@ -111,9 +111,7 @@ export function resolveLocalHostIdentity(
 ): LocalHostIdentity {
   const machine = (options.machine ?? machineIdentity)();
   if (machine) return { source: "machine", identity: machine };
-  const baseDir =
-    options.baseDir ??
-    resolveOwnershipBaseDir(process.env.BIGBUD_HOME?.trim() || process.env.T3CODE_HOME?.trim());
+  const baseDir = options.baseDir ?? resolveOwnershipBaseDir(process.env.BIGBUD_HOME?.trim());
   const installation = readOrCreateInstallationId(baseDir);
   if (!installation.ok) {
     return {

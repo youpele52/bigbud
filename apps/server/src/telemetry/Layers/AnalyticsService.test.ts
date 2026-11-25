@@ -1,6 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -14,7 +14,9 @@ import { AnalyticsServiceLayerLive } from "./AnalyticsService.ts";
 interface RecordedBatchRequest {
   readonly path: string;
   readonly body: {
+    readonly api_key?: string;
     readonly batch?: ReadonlyArray<{
+      readonly distinct_id?: string;
       readonly event?: string;
       readonly properties?: {
         readonly index?: number;
@@ -25,7 +27,9 @@ interface RecordedBatchRequest {
 }
 
 interface RecordedBatchBody {
+  readonly api_key?: string;
   readonly batch: ReadonlyArray<{
+    readonly distinct_id?: string;
     readonly event?: string;
     readonly properties?: {
       readonly index?: number;
@@ -35,6 +39,63 @@ interface RecordedBatchBody {
 }
 
 it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
+  for (const [name, config] of [
+    ["default settings", {}],
+    ["disabled with a key", { BIGBUD_TELEMETRY_ENABLED: false, BIGBUD_POSTHOG_KEY: "key" }],
+    ["enabled without a key", { BIGBUD_TELEMETRY_ENABLED: true }],
+    ["enabled with a blank key", { BIGBUD_TELEMETRY_ENABLED: true, BIGBUD_POSTHOG_KEY: "  " }],
+    [
+      "legacy variables alone",
+      {
+        T3CODE_TELEMETRY_ENABLED: true,
+        T3CODE_POSTHOG_KEY: "legacy",
+        T3CODE_POSTHOG_HOST: "https://example.invalid",
+        T3CODE_TELEMETRY_FLUSH_BATCH_SIZE: 1,
+        T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS: 1,
+      },
+    ],
+    [
+      "legacy key with bigbud opt-in",
+      { BIGBUD_TELEMETRY_ENABLED: true, T3CODE_POSTHOG_KEY: "legacy" },
+    ],
+    [
+      "legacy opt-in with bigbud key",
+      { T3CODE_TELEMETRY_ENABLED: true, BIGBUD_POSTHOG_KEY: "key" },
+    ],
+  ] as const) {
+    it.effect(`${name} does not create an identifier`, () =>
+      Effect.gen(function* () {
+        const serverConfigLayer = ServerConfig.layerTest(process.cwd(), {
+          prefix: "telemetry-disabled-",
+        });
+        const runtimeLayer = AnalyticsServiceLayerLive.pipe(
+          Layer.provideMerge(serverConfigLayer),
+          Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(config))),
+          Layer.provideMerge(serverHttpTestLayer),
+        );
+        yield* Effect.gen(function* () {
+          const analytics = yield* AnalyticsService;
+          const { anonymousIdPath } = yield* ServerConfig;
+          const fs = yield* FileSystem.FileSystem;
+          yield* analytics.record("test.disabled");
+          yield* analytics.flush;
+          assert.equal(yield* fs.exists(anonymousIdPath), false);
+        }).pipe(Effect.provide(runtimeLayer));
+      }),
+    );
+  }
+
+  it.effect("installation identifier is random and persisted", () =>
+    Effect.gen(function* () {
+      const first = yield* getTelemetryIdentifier;
+      const second = yield* getTelemetryIdentifier;
+      assert.match(
+        first ?? "",
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      assert.equal(first, second);
+    }).pipe(Effect.provide(ServerConfig.layerTest(process.cwd(), { prefix: "telemetry-id-" }))),
+  );
   it.effect("flush drains all buffered events across multiple batches", () =>
     Effect.gen(function* () {
       const capturedRequests: Array<RecordedBatchRequest> = [];
@@ -45,10 +106,13 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
       const telemetryLayer = AnalyticsServiceLayerLive.pipe(Layer.provideMerge(serverConfigLayer));
       const configLayer = ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          T3CODE_TELEMETRY_ENABLED: true,
-          T3CODE_POSTHOG_KEY: "phc_test_key",
-          T3CODE_POSTHOG_HOST: "",
-          T3CODE_TELEMETRY_FLUSH_BATCH_SIZE: 20,
+          BIGBUD_TELEMETRY_ENABLED: true,
+          BIGBUD_POSTHOG_KEY: "phc_test_key",
+          BIGBUD_POSTHOG_HOST: "",
+          BIGBUD_TELEMETRY_FLUSH_BATCH_SIZE: 20,
+          T3CODE_POSTHOG_HOST: "https://example.invalid",
+          T3CODE_TELEMETRY_FLUSH_BATCH_SIZE: 1,
+          T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS: 1,
         }),
       );
       const batchServerLayer = HttpServer.serve(
@@ -91,6 +155,20 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
           Array.isArray(request.body?.batch),
       );
       assert.equal(batchRequests.length, 3);
+      assert.equal(
+        batchRequests.every((request) => request.body.api_key === "phc_test_key"),
+        true,
+      );
+      assert.equal(
+        batchRequests.every((request) =>
+          request.body.batch.every((event) =>
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+              event.distinct_id ?? "",
+            ),
+          ),
+        ),
+        true,
+      );
       assert.equal(
         batchRequests.every((request) => request.path === "/batch/" || request.path === "/batch"),
         true,

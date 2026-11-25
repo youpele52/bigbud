@@ -33,11 +33,7 @@ function makeFakeTrash(): WorkspaceTrash & { trashed: string[] } {
 const makeOps = (lane: "initiating" | "target", trash?: WorkspaceTrash) =>
   Effect.gen(function* () {
     const execute = wrapExecuteWithMetrics(yield* makeRawExecute());
-    return yield* makeGitStatusOps(
-      makeGitHelpers(execute),
-      yield* Path.Path,
-      lane === "initiating" ? trash : undefined,
-    );
+    return yield* makeGitStatusOps(makeGitHelpers(execute), yield* Path.Path, lane, trash);
   }).pipe(Effect.provide(GitCoreDependenciesLayer));
 
 const listed = (cwd: string) =>

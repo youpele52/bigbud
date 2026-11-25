@@ -157,7 +157,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   });
   const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
     serverSettingsPath,
-    hostOverride: process.env.BIGBUD_HOST ?? process.env.T3CODE_HOST,
+    hostOverride: process.env.BIGBUD_HOST,
   });
   const port = await resolveDesktopBackendPort({
     host: desktopMobileRemoteNetwork.bindHost,
@@ -312,7 +312,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   });
   logHeader("bootstrap auto updater configured");
   logHeader("bootstrap login shell hydration started");
-  await syncShellEnvironmentAsync();
+  await syncShellEnvironmentAsync(process.env, { profile: isPackaged ? "D" : "V" });
   logHeader("bootstrap login shell hydration completed");
   await preservePackagedCopilotRuntime(isPackaged, resourcesPath).catch((error) =>
     console.error(

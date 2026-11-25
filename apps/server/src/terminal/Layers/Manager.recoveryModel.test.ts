@@ -52,6 +52,33 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("manager shadow owne
       expect(writes).not.toHaveBeenCalled();
     }),
   );
+  it.effect("retains verified native replay without claiming exact screen recovery", () =>
+    Effect.gen(function* () {
+      const adapter = new FakePtyAdapter();
+      const original = adapter.spawn.bind(adapter);
+      vi.spyOn(adapter, "spawn").mockImplementation((input) =>
+        original(input).pipe(
+          Effect.map((process) =>
+            Object.assign(process, {
+              recovered: true,
+              recoveredHistoryFromStart: true as const,
+            }),
+          ),
+        ),
+      );
+      const writes = vi.spyOn(TerminalRecoveryModel.prototype, "write");
+      const { manager, getEvents } = yield* createManager(5, { ptyAdapter: adapter });
+      const input = openInput();
+      expect((yield* manager.open(input)).historyUnavailable).toBeUndefined();
+      adapter.processes[0]!.emitData("verified replay\n");
+      yield* waitFor(
+        Effect.map(getEvents, (events) => events.some((event) => event.type === "output")),
+      );
+      expect((yield* manager.snapshot(input))?.history).toBe("verified replay\n");
+      expect(writes).not.toHaveBeenCalled();
+    }),
+  );
+
   it.effect(
     "feeds the live generation, orders both resize paths and disposes on explicit restart/close",
     () =>

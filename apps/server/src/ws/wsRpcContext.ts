@@ -365,6 +365,8 @@ export const makeWsRpcContext = (
       workspaceEntries,
       workspaceFileSystem,
       workspaceRuntime,
+      // Read before any router wraps workspaceRuntime, so mutations keep their own backend choice.
+      workspaceMutations: workspaceRuntime.mutations,
       remoteAgentHealth: Option.getOrUndefined(remoteAgentHealth),
       remoteAgentInstaller: Option.getOrUndefined(remoteAgentInstaller),
       remoteAgentInstallOperations: Option.getOrUndefined(remoteAgentInstallOperations),

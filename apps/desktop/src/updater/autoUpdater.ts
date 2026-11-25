@@ -114,8 +114,7 @@ export function shouldEnableAutoUpdates(): boolean {
       isPackaged: app.isPackaged,
       platform: process.platform,
       appImage: process.env.APPIMAGE,
-      disabledByEnv:
-        (process.env.BIGBUD_DISABLE_AUTO_UPDATE ?? process.env.T3CODE_DISABLE_AUTO_UPDATE) === "1",
+      disabledByEnv: process.env.BIGBUD_DISABLE_AUTO_UPDATE === "1",
     }) === null
   );
 }

@@ -104,27 +104,18 @@ export function resolveLinuxDesktopRuntimeConfig(options: {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const gpuFallbackMarkerArmed = options.gpuFallbackMarkerArmed === true;
-  const conservativeMode =
-    readBooleanEnv(env, "BIGBUD_LINUX_CONSERVATIVE_MODE", "T3CODE_LINUX_CONSERVATIVE_MODE") ===
-    true;
+  const conservativeMode = readBooleanEnv(env, "BIGBUD_LINUX_CONSERVATIVE_MODE") === true;
   const explicitDisableHardwareAcceleration = readBooleanEnv(
     env,
     "BIGBUD_LINUX_DISABLE_HARDWARE_ACCELERATION",
-    "T3CODE_LINUX_DISABLE_HARDWARE_ACCELERATION",
   );
   const disableHardwareAcceleration =
     platform === "linux" &&
     (explicitDisableHardwareAcceleration ?? (conservativeMode || gpuFallbackMarkerArmed));
   const ozonePlatform =
-    platform === "linux"
-      ? readOzonePlatformEnv(env, "BIGBUD_LINUX_OZONE_PLATFORM", "T3CODE_LINUX_OZONE_PLATFORM")
-      : null;
+    platform === "linux" ? readOzonePlatformEnv(env, "BIGBUD_LINUX_OZONE_PLATFORM") : null;
   const backendMaxOldSpaceMb =
-    readIntegerEnv(
-      env,
-      "BIGBUD_DESKTOP_BACKEND_MAX_OLD_SPACE_MB",
-      "T3CODE_DESKTOP_BACKEND_MAX_OLD_SPACE_MB",
-    ) ??
+    readIntegerEnv(env, "BIGBUD_DESKTOP_BACKEND_MAX_OLD_SPACE_MB") ??
     (platform === "linux"
       ? conservativeMode
         ? LINUX_CONSERVATIVE_BACKEND_MAX_OLD_SPACE_MB

@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { RemoteAgentLifecycle } from "./remoteAgentLifecycle.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 
-function connection(hello: { readonly agentEpoch: string }): RemoteAgentConnection {
+function connection(hello: { readonly agentEpoch: string; readonly agentInstanceId?: string }) {
   return {
     handshake: async () => ({
       protocolMajor: 1,
@@ -12,21 +12,24 @@ function connection(hello: { readonly agentEpoch: string }): RemoteAgentConnecti
       buildDigest: "development",
       os: "linux",
       architecture: "x86_64",
-      agentInstanceId: "agent-1",
+      agentInstanceId: hello.agentInstanceId ?? "agent-1",
       agentEpoch: hello.agentEpoch,
       capabilities: [],
       maxFrameBytes: 1024,
       maxOperationOutputBytes: 1024,
       maxJournalBytes: 1024,
     }),
-    close: () => undefined,
-  } as unknown as RemoteAgentConnection;
+    close: vi.fn(),
+  };
 }
+
+const asConnection = (value: ReturnType<typeof connection>) =>
+  value as unknown as RemoteAgentConnection;
 
 describe("remote agent lifecycle", () => {
   it("retains the agent identity while reconnecting", async () => {
     const lifecycle = new RemoteAgentLifecycle({
-      create: async () => connection({ agentEpoch: "1" }),
+      create: async () => asConnection(connection({ agentEpoch: "1" })),
     });
     await lifecycle.connect();
     expect(lifecycle.snapshot.state).toBe("ready");
@@ -41,7 +44,7 @@ describe("remote agent lifecycle", () => {
   it("degrades when a reconnect sees a new agent epoch", async () => {
     let epoch = "1";
     const lifecycle = new RemoteAgentLifecycle({
-      create: async () => connection({ agentEpoch: epoch }),
+      create: async () => asConnection(connection({ agentEpoch: epoch })),
     });
     await lifecycle.connect();
     epoch = "2";
@@ -50,5 +53,19 @@ describe("remote agent lifecycle", () => {
     expect(lifecycle.snapshot.agentEpoch).toBe("1");
     await expect(lifecycle.connect({ reconnect: true })).rejects.toThrow("epoch changed");
     expect(lifecycle.snapshot.agentEpoch).toBe("1");
+  });
+
+  it("rejects a replacement instance that presents the retained epoch", async () => {
+    const original = connection({ agentEpoch: "1", agentInstanceId: "original" });
+    const replacement = connection({ agentEpoch: "1", agentInstanceId: "replacement" });
+    const create = vi.fn().mockResolvedValueOnce(original).mockResolvedValue(replacement);
+    const lifecycle = new RemoteAgentLifecycle({ create, expectedEpoch: "1" });
+    await lifecycle.connect();
+    lifecycle.markTransportLoss();
+    await expect(lifecycle.connect({ reconnect: true })).rejects.toThrow("instance changed");
+    expect(lifecycle.connection).toBeNull();
+    expect(lifecycle.snapshot).toMatchObject({ state: "degraded", agentEpoch: "1" });
+    expect(replacement.close).toHaveBeenCalledOnce();
+    await expect(lifecycle.connect({ reconnect: true })).rejects.toThrow("instance changed");
   });
 });

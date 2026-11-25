@@ -30,10 +30,7 @@ const SERVE_OWNERSHIP_FILE = "tailscale-serve-owner.json";
 
 /** Every channel's state lives under the stable root (`~/.bigbud`, or `BIGBUD_HOME`). */
 function bigbudStateRoots(): string[] {
-  return [
-    Path.join(OS.homedir(), ".bigbud"),
-    resolveOwnershipBaseDir(process.env.BIGBUD_HOME ?? process.env.T3CODE_HOME),
-  ];
+  return [Path.join(OS.homedir(), ".bigbud"), resolveOwnershipBaseDir(process.env.BIGBUD_HOME)];
 }
 
 /**

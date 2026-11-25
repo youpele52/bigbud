@@ -73,7 +73,6 @@ export function createDevRunnerEnv({
       MOBILE_WEB_PORT: String(resolvedMobileWebPort),
       BIGBUD_DEV_INSTANCE_OFFSET: String(instanceOffset),
       BIGBUD_HOME: resolvedBaseDir,
-      T3CODE_HOME: resolvedBaseDir,
     };
     delete output.VITE_MOBILE_WEB_URL;
     delete output.BIGBUD_DEV_WEB_PORT;
@@ -90,7 +89,6 @@ export function createDevRunnerEnv({
 
     if (!isDesktopMode && !isMobileWebMode) {
       output.BIGBUD_PORT = String(resolvedServerPort);
-      output.T3CODE_PORT = String(resolvedServerPort);
       output.VITE_WS_URL = `ws://localhost:${resolvedServerPort}`;
     } else if (isDesktopMode) {
       delete output.BIGBUD_PORT;
@@ -108,12 +106,10 @@ export function createDevRunnerEnv({
 
     if (!isDesktopMode && !isMobileWebMode && host !== undefined) {
       output.BIGBUD_HOST = host;
-      output.T3CODE_HOST = host;
     }
 
     if (!isDesktopMode && !isMobileWebMode && authToken !== undefined) {
       output.BIGBUD_AUTH_TOKEN = authToken;
-      output.T3CODE_AUTH_TOKEN = authToken;
     } else if (!isDesktopMode && !isMobileWebMode) {
       delete output.BIGBUD_AUTH_TOKEN;
       delete output.T3CODE_AUTH_TOKEN;
@@ -121,7 +117,6 @@ export function createDevRunnerEnv({
 
     if (!isDesktopMode && !isMobileWebMode && noBrowser !== undefined) {
       output.BIGBUD_NO_BROWSER = noBrowser ? "1" : "0";
-      output.T3CODE_NO_BROWSER = noBrowser ? "1" : "0";
     } else if (!isDesktopMode && !isMobileWebMode) {
       delete output.BIGBUD_NO_BROWSER;
       delete output.T3CODE_NO_BROWSER;
@@ -129,7 +124,6 @@ export function createDevRunnerEnv({
 
     if (autoBootstrapProjectFromCwd !== undefined) {
       output.BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
-      output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
     } else {
       delete output.BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
       delete output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
@@ -137,7 +131,6 @@ export function createDevRunnerEnv({
 
     if (logWebSocketEvents !== undefined) {
       output.BIGBUD_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
-      output.T3CODE_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
     } else {
       delete output.BIGBUD_LOG_WS_EVENTS;
       delete output.T3CODE_LOG_WS_EVENTS;
@@ -145,7 +138,6 @@ export function createDevRunnerEnv({
 
     if (mode === "dev" || mode === "dev:server" || mode === "dev:web") {
       output.BIGBUD_MODE = "web";
-      output.T3CODE_MODE = "web";
       delete output.BIGBUD_DESKTOP_WS_URL;
       delete output.T3CODE_DESKTOP_WS_URL;
     }

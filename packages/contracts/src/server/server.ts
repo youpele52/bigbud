@@ -39,7 +39,13 @@ export const ServerWorkspaceCapabilities = Schema.Struct({
     supportsPtyReattach: Schema.Boolean,
   }),
   /** Whether new local terminals run in the background terminal host (absent: older server). */
-  terminalHost: Schema.optional(Schema.Struct({ enabled: Schema.Boolean })),
+  terminalHost: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.Boolean,
+      /** `BIGBUD_TERMINAL_HOST` is set, so the Settings toggle does not decide. */
+      controlledByEnvironment: Schema.optional(Schema.Boolean),
+    }),
+  ),
 });
 export type ServerWorkspaceCapabilities = typeof ServerWorkspaceCapabilities.Type;
 

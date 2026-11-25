@@ -8,6 +8,7 @@
 import type { ServerWorkspaceCapabilities } from "@bigbud/contracts/server/server";
 
 import { localTerminalHostSelection } from "../terminal-host/localTerminalHost.layer.ts";
+import { terminalHostControlledByEnvironment } from "../terminal-host/localTerminalHost.paths.ts";
 
 export function serverWorkspaceCapabilities(input: {
   readonly remoteAgentEnabled: boolean;
@@ -26,6 +27,11 @@ export function serverWorkspaceCapabilities(input: {
       supportsDirectoryWatch: true,
       supportsPtyReattach: input.remoteAgentEnabled,
     },
-    terminalHost: { enabled: hostMode === "enabled" },
+    terminalHost: {
+      enabled: hostMode === "enabled",
+      controlledByEnvironment: terminalHostControlledByEnvironment(
+        input.environment ?? process.env,
+      ),
+    },
   };
 }
