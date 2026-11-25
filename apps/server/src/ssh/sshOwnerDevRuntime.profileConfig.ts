@@ -11,11 +11,7 @@ import {
 import path from "node:path";
 import { isDevSshOwnerProfile } from "@bigbud/shared/DevLauncher";
 import { SSH_CONFIG_MAX_FILE_BYTES } from "./sshConfigDiscovery.ts";
-import {
-  type SshConfigAliasHint,
-  type SshConfigAliasRefusal,
-  resolveProfileAliases,
-} from "./sshConfigProfileAliases.ts";
+import { resolveProfileAliases } from "./sshConfigProfileAliases.ts";
 
 export const DEV_OWNER_SSH_CONFIG = "ssh-config";
 const endpointInclude = "fixture-endpoint.conf";
@@ -25,13 +21,8 @@ type ProfileConfig = {
   readonly root: string;
   /** Top-level profile config used as the owner snapshot. */
   readonly sourcePath: string;
+  /** Bootstrap alias selected before the owner starts; the owner list is authoritative afterwards. */
   readonly alias: string;
-  /** Where the selected alias is declared; used only for display. */
-  readonly aliasSourcePath: string;
-  readonly line: number;
-  /** Every concrete alias resolved from the profile, in discovery order. */
-  readonly hosts: ReadonlyArray<SshConfigAliasHint>;
-  readonly refusals: ReadonlyArray<SshConfigAliasRefusal>;
 };
 
 const invalidProfile = () => new Error("Expected a private, disposable SSH owner dev profile.");
@@ -102,10 +93,6 @@ export async function readDevOwnerProfileConfig(
     root,
     sourcePath,
     alias: selected.alias,
-    aliasSourcePath: selected.sourcePath,
-    line: selected.line,
-    hosts: resolution.hints,
-    refusals: resolution.refusals,
   };
 }
 

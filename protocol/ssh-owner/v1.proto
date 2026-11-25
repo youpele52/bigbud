@@ -310,6 +310,8 @@ message ProofAliasEntry {
 
 // Bounded alias list. `truncated` reports that discovery stopped adding entries
 // at `max_entries`; the remainder of the config was still parsed and validated.
+// Owner bounds: at most 256 entries, alias names at most 64 bytes and every
+// metadata field at most 255 bytes. Longer metadata refuses the whole list.
 message ProofAliases {
   repeated ProofAliasEntry entries = 1;
   bool truncated = 2;

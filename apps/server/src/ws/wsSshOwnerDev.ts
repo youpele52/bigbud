@@ -69,7 +69,7 @@ export const makeWsSshOwnerDevHandlers = Effect.fn("makeWsSshOwnerDevHandlers")(
     if (session.kind !== "unix" || guarded) return Effect.succeed(hosts);
     return Effect.tryPromise({
       try: async () => {
-        const aliases = await picker.withOwner(targetId, (client) => client.listAliases());
+        const aliases = await picker.listAliases();
         return {
           ...sshConfigHostsFromOwnerAliases(
             aliases,

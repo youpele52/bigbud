@@ -87,6 +87,7 @@ describe("owner listAliases", () => {
                 _executionTargetId: string,
                 operation: (client: PickerProofOwner) => Promise<A>,
               ) => operation(started),
+              listAliases: () => started.listAliases(),
               listRemoteFolders: async () => {
                 throw new Error("not used");
               },

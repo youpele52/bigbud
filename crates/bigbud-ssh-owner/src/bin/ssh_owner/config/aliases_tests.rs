@@ -245,3 +245,22 @@ fn uses_the_owner_config_scope_only_and_returns_no_raw_values() {
             .contains("id_ed25519")
     );
 }
+
+#[test]
+fn reports_the_restricted_connector_route_fact() {
+    let fixture = Fixture::new().expect("fixture");
+    fixture
+        .write(
+            "ssh-config",
+            "Host connector\n  HostName 127.0.0.1\n  ProxyCommand nc %h %p\n",
+        )
+        .expect("config");
+
+    let aliases = run(&fixture).expect("list");
+    assert_eq!(
+        aliases.entries[0].route_kind,
+        AliasRouteKind::RestrictedConnector as i32
+    );
+    assert_eq!(aliases.entries[0].jump_hops, 0);
+    assert!(aliases.entries[0].unsupported.is_none());
+}

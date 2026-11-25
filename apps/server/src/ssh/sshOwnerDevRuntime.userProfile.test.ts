@@ -187,7 +187,6 @@ it.skipIf(process.platform !== "darwin")(
       const config = await readDevOwnerProfileConfig(profile);
       if (!config) throw new Error("Expected the profile config");
       expect(config.alias).toBe("dev-workbench");
-      expect(config.refusals).toEqual([]);
       const { aliasConfig } = await bindDevOwnerAlias(
         {
           root: fixture,

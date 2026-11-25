@@ -33,6 +33,7 @@ import {
   startupFailure,
 } from "./sshOwnerDevPicker.errors.ts";
 import type { PickerProofOwner } from "./sshOwnerPickerProof.client.session.ts";
+import type { PickerProofAliasList } from "./sshOwnerPickerProof.codec.aliases.ts";
 import type { PickerProofTrust } from "./sshOwnerPickerProof.codec.outcome.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 import {
@@ -278,6 +279,11 @@ export function makeSshOwnerDevPicker<Owner extends DevPickerOwner>({
       operation: (client: Owner) => Promise<A>,
       signal?: AbortSignal,
     ) => run({ executionTargetId }, () => useOwner(operation, signal), signal),
+    /** Read-only config discovery: never dials and never applies the saved-alias guard. */
+    listAliases: (): Promise<PickerProofAliasList> =>
+      run({ executionTargetId }, () =>
+        useOwner((client) => client.listAliases(), undefined, false),
+      ),
     inspectTrust: (input: ServerRemoteConnectionInput) => run(input, () => useOwner(inspect)),
     async listRemoteFolders(input: ServerListRemoteFoldersInput, signal?: AbortSignal) {
       const fence = new AbortController();
