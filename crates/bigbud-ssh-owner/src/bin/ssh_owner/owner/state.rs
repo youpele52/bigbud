@@ -1,19 +1,15 @@
 use super::reconnect::ReconnectAdmission;
 use super::retirement::Retirement;
-use super::targets::{Registry as TargetRegistry, TargetAuthority};
-use super::{
-    DeploymentOperation, SnapshotCancelInbox, StageBinding, TerminalPreparation, guarded_write,
-    picker_cancel, posix_picker, terminal, workspace_mode,
-};
+use super::targets::{Lanes, Registry as TargetRegistry, TargetAuthority};
 #[cfg(target_os = "linux")]
-use super::{opencode, tracked_push};
+use super::tracked_push;
+use super::{
+    DeploymentOperation, SnapshotCancelInbox, StageBinding, guarded_write, picker_cancel,
+    workspace_mode,
+};
 use crate::{
-    Token,
-    owner_agent_proxy::{AgentProxyFixture, AgentProxyLease},
-    owner_grants::Grants,
-    owner_storage::Storage,
-    owner_trust::TrustApproval,
-    transport::Transport,
+    Token, owner_agent_proxy::AgentProxyFixture, owner_grants::Grants, owner_storage::Storage,
+    owner_trust::TrustApproval, transport::Transport,
 };
 
 pub(crate) struct Owner {
@@ -38,15 +34,13 @@ pub(crate) struct Owner {
     pub(super) grants: Grants,
     pub(super) trust: TrustApproval,
     pub(super) reconnect: ReconnectAdmission,
+    /// Masters, PTY, agent proxy and OpenCode leases of the bound target. They
+    /// swap with `target` and `generation`; each target keeps its own.
+    pub(super) lanes: Lanes,
     #[cfg(target_os = "linux")]
     pub(super) jump_picker: Option<crate::transport::jump_binding::JumpPicker>,
-    pub(super) terminal: Option<terminal::LiveTerminal>,
     pub(crate) supervised_terminal: bool,
-    pub(super) preparation: Option<TerminalPreparation>,
-    pub(super) terminal_uncertain: bool,
     pub(super) agent_fixture: Option<AgentProxyFixture>,
-    pub(super) agent_proxy: Option<AgentProxyLease>,
-    pub(super) agent_close_uncertain: bool,
     pub(crate) agent_actions: crate::owner_agent_proxy::agent_action::Operations,
     pub(super) stage: Option<StageBinding>,
     pub(super) deployment_operation: Option<DeploymentOperation>,
@@ -60,14 +54,10 @@ pub(crate) struct Owner {
     pub(super) workspace_snapshot_cancel: Option<SnapshotCancelInbox>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) snapshot_only_fixture: bool,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub(super) picker_master: Option<posix_picker::MasterPicker>,
     #[cfg(target_os = "linux")]
     pub(super) opencode_recipe: Option<std::sync::Arc<crate::owner_opencode_v1::Recipe>>,
     #[cfg(target_os = "linux")]
     pub(super) opencode_service: Option<std::sync::Arc<crate::owner_opencode_v1::ProductRecipe>>,
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_lease: Option<opencode::Lease>,
     #[cfg(target_os = "linux")]
     pub(super) tracked_push: Option<tracked_push::TrackedPushState>,
 }

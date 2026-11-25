@@ -388,5 +388,6 @@ fn registry_for_pinned(fixture: &Fixture) -> super::Registry {
         [3; 32],
         transport,
         crate::owner_storage::Storage::unhydrated(),
+        super::Lanes::default(),
     )
 }

@@ -30,9 +30,12 @@ export interface PickerProofHydratedStorage {
 
 /**
  * One resolved target on a shared owner (W3.7). Every request carries the
- * descriptor; grants are bound to this exact target and generation.
+ * descriptor; grants are bound to this exact target and generation. Terminal
+ * leases are target-scoped: a lease opened through one target never answers a
+ * request for another.
  */
-export interface PickerProofBoundTarget extends PickerProofListClient, PickerProofHealthClient {
+export interface PickerProofBoundTarget
+  extends PickerProofListClient, PickerProofHealthClient, PickerProofTerminalClient {
   readonly targetId: string;
   /** Current generation; rotates on Connect/Disconnect. */
   readonly generation: Uint8Array;

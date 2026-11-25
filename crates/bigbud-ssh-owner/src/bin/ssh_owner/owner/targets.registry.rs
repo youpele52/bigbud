@@ -7,7 +7,7 @@
 
 use super::super::reconnect::ReconnectAdmission;
 use super::super::{RunResult, Token};
-use super::{Descriptor, MAX_TARGETS, TargetAuthority};
+use super::{Descriptor, Lanes, MAX_TARGETS, TargetAuthority};
 use crate::owner_storage::Storage;
 use crate::{
     config::RouteFacts,
@@ -28,6 +28,8 @@ pub(crate) struct Slot {
     pub(crate) storage: Option<Storage>,
     pub(crate) trust: TrustApproval,
     pub(crate) reconnect: ReconnectAdmission,
+    /// Masters, PTY, agent proxy and OpenCode leases owned by this target.
+    pub(crate) lanes: Lanes,
 }
 
 impl Slot {
@@ -40,6 +42,7 @@ impl Slot {
         Storage,
         TrustApproval,
         ReconnectAdmission,
+        Lanes,
     ) {
         (
             self.target,
@@ -48,6 +51,7 @@ impl Slot {
             self.storage.unwrap_or_else(Storage::unhydrated),
             self.trust,
             self.reconnect,
+            self.lanes,
         )
     }
 }
@@ -75,6 +79,7 @@ impl Registry {
         generation: Token,
         transport: Transport,
         storage: Storage,
+        lanes: Lanes,
     ) -> Self {
         let mut entries = HashMap::new();
         entries.insert(
@@ -86,6 +91,7 @@ impl Registry {
                 storage: Some(storage),
                 trust: TrustApproval::default(),
                 reconnect: ReconnectAdmission::default(),
+                lanes,
             },
         );
         Self {
@@ -149,6 +155,35 @@ impl Registry {
             if request.target_generation != entry.generation {
                 return Err(ErrorCode::StaleGeneration);
             }
+            // Re-validate the alias descriptor and the owner-side trust inputs on
+            // every resolution, per target. A changed policy invalidates only
+            // this target's cached transport, snapshot and live lanes.
+            if let Some(authority) = authority {
+                let verified = authority.bind(&descriptor);
+                if let Some(entry) = self.entries.get_mut(&descriptor.target_id) {
+                    match verified {
+                        Ok(config) => {
+                            if entry.transport.is_none() {
+                                let transport = Transport::new_with_facts(
+                                    config,
+                                    &RouteFacts::default().with_production(),
+                                )
+                                .map_err(|_| ErrorCode::ConfigUnsupported)?;
+                                entry.transport = Some(transport);
+                                entry.storage = None;
+                            }
+                        }
+                        Err(error) => {
+                            entry.transport = None;
+                            entry.storage = None;
+                            entry.trust = TrustApproval::default();
+                            entry.reconnect = ReconnectAdmission::default();
+                            let _ = entry.lanes.revoke();
+                            return Err(error);
+                        }
+                    }
+                }
+            }
             return Ok(Preview {
                 target_id: descriptor.target_id.clone(),
             });
@@ -177,6 +212,7 @@ impl Registry {
                 storage: None,
                 trust: TrustApproval::default(),
                 reconnect: ReconnectAdmission::default(),
+                lanes: Lanes::default(),
             },
         );
         self.digests.insert(target_id.clone(), descriptor.digest());
@@ -216,6 +252,41 @@ impl Registry {
 
     pub(crate) fn generation(&self, target_id: &str) -> Option<Token> {
         self.entries.get(target_id).map(|entry| entry.generation)
+    }
+
+    /// The exact target's live lanes, or none for an unknown target. The pinned
+    /// fixture target lives in the owner fields, not here, while it is bound.
+    pub(crate) fn lanes(&self, target_id: &str) -> Option<&Lanes> {
+        self.entries.get(target_id).map(|entry| &entry.lanes)
+    }
+
+    /// Confirmed teardown of every cached target's live leases. The target
+    /// identity, generation and snapshot stay, so a later request re-resolves
+    /// the same target instead of being told its generation is stale.
+    pub(crate) fn revoke_cached_lanes(&mut self) -> Result<(), ErrorCode> {
+        let mut result = Ok(());
+        for entry in self.entries.values_mut() {
+            if entry.transport.is_some() {
+                result = result.and(entry.lanes.revoke());
+            }
+        }
+        result
+    }
+
+    /// True when any cached target has an ambiguous lease outcome, so a writer
+    /// handoff must fence every target before acknowledging the new binding.
+    pub(crate) fn has_uncertain_lanes(&self) -> bool {
+        self.entries
+            .values()
+            .any(|entry| entry.lanes.terminal_uncertain || entry.lanes.agent_close_uncertain)
+    }
+
+    /// A detached session cannot hand its 20-second reservation token to the
+    /// next attached client.
+    pub(crate) fn clear_preparations(&mut self) {
+        for entry in self.entries.values_mut() {
+            entry.lanes.preparation = None;
+        }
     }
 
     /// Moves one target out of the cache so its fields can become the active

@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use super::targets::LeaseScope;
 use super::{ErrorCode, Owner, Token, random_token};
 use crate::{
     owner_terminal::TerminalLease,
@@ -10,6 +11,8 @@ const RESERVATION_TTL: Duration = Duration::from_secs(20);
 
 pub(super) struct TerminalPreparation {
     lease: Token,
+    /// The exact target and generation this reservation belongs to.
+    scope: LeaseScope,
     cwd: String,
     cols: u16,
     rows: u16,
@@ -18,10 +21,25 @@ pub(super) struct TerminalPreparation {
 
 pub(super) struct LiveTerminal {
     id: Token,
+    /// The exact target and generation that opened this lease. A stale or
+    /// foreign target cannot attach to, replay or close it.
+    scope: LeaseScope,
     birth_generation: Option<Token>,
     // Mirrored only from positively settled writes. None fences input after ambiguity.
     next_input_sequence: Option<u64>,
     lease: TerminalLease,
+}
+
+impl LiveTerminal {
+    fn owns(&self, target: &str, generation: Token) -> bool {
+        self.scope.admits(target, generation)
+    }
+
+    /// Confirmed local teardown. The caller reports uncertainty; this only
+    /// closes the native lease.
+    pub(crate) fn revoke(&self) -> Result<(), ErrorCode> {
+        self.lease.revoke()
+    }
 }
 
 impl Owner {
@@ -29,8 +47,9 @@ impl Owner {
         &mut self,
         request: ProofPrepareTerminal,
     ) -> Result<ProofTerminalReservation, ErrorCode> {
-        if self.terminal.is_some()
+        if self.lanes.terminal.is_some()
             || self
+                .lanes
                 .preparation
                 .as_ref()
                 .is_some_and(|prep| prep.expires > Instant::now())
@@ -46,8 +65,9 @@ impl Owner {
             return Err(ErrorCode::InvalidOperands);
         }
         let lease = random_token().map_err(|_| ErrorCode::OwnerUnavailable)?;
-        self.preparation = Some(TerminalPreparation {
+        self.lanes.preparation = Some(TerminalPreparation {
             lease,
+            scope: LeaseScope::new(&self.target, self.generation),
             cwd: request.cwd,
             cols: u16::try_from(request.cols).map_err(|_| ErrorCode::InvalidOperands)?,
             rows: u16::try_from(request.rows).map_err(|_| ErrorCode::InvalidOperands)?,
@@ -64,24 +84,25 @@ impl Owner {
         lease: &[u8],
     ) -> Result<ProofTerminalReservation, ErrorCode> {
         let prep = self
+            .lanes
             .preparation
             .as_ref()
-            .filter(|prep| prep.lease == lease)
+            .filter(|prep| prep.lease == lease && prep.scope.admits(&self.target, self.generation))
             .ok_or(ErrorCode::OperationDenied)?;
         let receipt = ProofTerminalReservation {
             lease: prep.lease.to_vec(),
             cancelled: true,
         };
-        self.preparation = None;
+        self.lanes.preparation = None;
         Ok(receipt)
     }
 
     pub(super) fn open_terminal(&mut self, requested: &[u8]) -> Result<ProofTerminal, ErrorCode> {
-        if self.terminal.is_some() {
+        if self.lanes.terminal.is_some() {
             return Err(ErrorCode::OperationDenied);
         }
         let (id, launched) = if requested.is_empty()
-            && self.preparation.is_none()
+            && self.lanes.preparation.is_none()
             && !super::present(&self.transport)?.has_workspace_root()
         {
             (
@@ -90,12 +111,21 @@ impl Owner {
             )
         } else {
             let prepared = self
+                .lanes
                 .preparation
                 .as_ref()
-                .filter(|prep| prep.lease == requested && prep.expires > Instant::now())
+                .filter(|prep| {
+                    prep.lease == requested
+                        && prep.expires > Instant::now()
+                        && prep.scope.admits(&self.target, self.generation)
+                })
                 .ok_or(ErrorCode::OperationDenied)?;
             let id = prepared.lease;
-            let prep = self.preparation.take().ok_or(ErrorCode::OperationDenied)?;
+            let prep = self
+                .lanes
+                .preparation
+                .take()
+                .ok_or(ErrorCode::OperationDenied)?;
             (
                 id,
                 super::present(&self.transport)?
@@ -105,12 +135,13 @@ impl Owner {
         let terminal = match launched {
             Ok(terminal) => terminal,
             Err(error) => {
-                self.terminal_uncertain = error == ErrorCode::OutcomeUnknown;
+                self.lanes.terminal_uncertain = error == ErrorCode::OutcomeUnknown;
                 return Err(error);
             }
         };
-        self.terminal = Some(LiveTerminal {
+        self.lanes.terminal = Some(LiveTerminal {
             id,
+            scope: LeaseScope::new(&self.target, self.generation),
             birth_generation: self.supervised_terminal.then_some(self.generation),
             next_input_sequence: self.supervised_terminal.then_some(1),
             lease: terminal,
@@ -118,12 +149,19 @@ impl Owner {
         self.terminal_status(&id)
     }
 
-    pub(super) fn leased_terminal(&self, requested: &[u8]) -> Result<&TerminalLease, ErrorCode> {
-        self.terminal
+    fn live_terminal(&self, requested: &[u8]) -> Result<&LiveTerminal, ErrorCode> {
+        self.lanes
+            .terminal
             .as_ref()
-            .filter(|terminal| requested == terminal.id)
-            .map(|terminal| &terminal.lease)
+            .filter(|terminal| {
+                requested == terminal.id && terminal.owns(&self.target, self.generation)
+            })
             .ok_or(ErrorCode::OperationDenied)
+    }
+
+    pub(super) fn leased_terminal(&self, requested: &[u8]) -> Result<&TerminalLease, ErrorCode> {
+        self.live_terminal(requested)
+            .map(|terminal| &terminal.lease)
     }
 
     pub(super) fn write_terminal_input(
@@ -132,7 +170,11 @@ impl Owner {
         sequence: u64,
         data: &[u8],
     ) -> Result<(), ErrorCode> {
+        if self.live_terminal(requested).is_err() {
+            return Err(ErrorCode::OperationDenied);
+        }
         let terminal = self
+            .lanes
             .terminal
             .as_mut()
             .filter(|terminal| requested == terminal.id)
@@ -152,11 +194,7 @@ impl Owner {
     }
 
     pub(super) fn terminal_status(&self, requested: &[u8]) -> Result<ProofTerminal, ErrorCode> {
-        let terminal = self
-            .terminal
-            .as_ref()
-            .filter(|terminal| requested == terminal.id)
-            .ok_or(ErrorCode::OperationDenied)?;
+        let terminal = self.live_terminal(requested)?;
         let status = terminal.lease.snapshot()?;
         Ok(ProofTerminal {
             lease: requested.to_vec(),
@@ -193,14 +231,10 @@ impl Owner {
     }
 
     pub(super) fn close_terminal(&mut self, requested: &[u8]) -> Result<ProofTerminal, ErrorCode> {
-        let terminal = self
-            .terminal
-            .as_ref()
-            .filter(|terminal| requested == terminal.id)
-            .ok_or(ErrorCode::OperationDenied)?;
+        let terminal = self.live_terminal(requested)?;
         let pid = terminal.lease.pid();
         let birth_generation = terminal.birth_generation.map(Vec::from);
-        self.revoke_terminal()?;
+        self.lanes.revoke_terminal()?;
         Ok(ProofTerminal {
             lease: requested.to_vec(),
             pid,
@@ -212,19 +246,14 @@ impl Owner {
     }
 
     pub(super) fn revoke_terminal(&mut self) -> Result<(), ErrorCode> {
-        if let Some(terminal) = self.terminal.as_ref() {
-            self.terminal_uncertain = true;
-            terminal.lease.revoke()?;
-            self.terminal = None;
-            self.terminal_uncertain = false;
-        }
-        if self.terminal_uncertain {
-            return Err(ErrorCode::OutcomeUnknown);
-        }
-        Ok(())
+        self.lanes.revoke_terminal()
     }
 }
 
 fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_graphic())
 }
+
+#[cfg(test)]
+#[path = "terminal.tests.rs"]
+mod tests;

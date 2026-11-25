@@ -94,7 +94,7 @@ impl Owner {
             return Err(ErrorCode::OperationDenied);
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if self.picker_master.is_some()
+        if self.lanes.master.is_some()
             && !matches!(
                 operation,
                 Operation::ListFolders(_)
@@ -158,6 +158,12 @@ impl Owner {
 
 /// Verbs a production owner admits. Everything else is a fixture/proof verb
 /// whose promotion is a separate change (plan W7).
+///
+/// Masters, PTY, agent proxy and OpenCode leases now live per target, but their
+/// resource providers are still fixture-only: the POSIX master lane validates a
+/// disposable loopback fixture, the PTY runs the proof command, and the agent
+/// proxy consumes the startup-transferred pipes. Production keeps refusing
+/// those verbs typed instead of sharing one fixture resource across targets.
 fn production_verb(operation: &Operation) -> bool {
     matches!(
         operation,

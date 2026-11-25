@@ -6,7 +6,12 @@
 //! the duration of the request and swaps it back afterwards. Every existing
 //! dispatch path therefore observes exactly the target its request named,
 //! without a second transport implementation.
+//!
+//! The target's live lanes (master, PTY, agent proxy, OpenCode) travel with it.
+//! Two targets can each hold a lease, and a cancel, trust loss or generation
+//! change for one target cannot reach another's lanes.
 
+use super::targets::Lanes;
 use super::targets::Slot;
 use super::{ErrorCode, Owner, Storage};
 
@@ -30,6 +35,7 @@ impl Owner {
             storage,
             trust,
             reconnect,
+            lanes,
         } = slot;
         let Some(transport) = transport else {
             return Err(ErrorCode::OwnerUnavailable);
@@ -44,6 +50,7 @@ impl Owner {
             )),
             trust: std::mem::replace(&mut self.trust, trust),
             reconnect: std::mem::replace(&mut self.reconnect, reconnect),
+            lanes: std::mem::replace(&mut self.lanes, lanes),
         };
         self.targets.suspend(previous);
         Ok(())
@@ -64,7 +71,18 @@ impl Owner {
             )),
             trust: std::mem::replace(&mut self.trust, previous.trust),
             reconnect: std::mem::replace(&mut self.reconnect, previous.reconnect),
+            lanes: std::mem::replace(&mut self.lanes, previous.lanes),
         };
         self.targets.restore(finished);
+    }
+
+    /// The live lanes of one target, whether it is the bound target or cached.
+    /// Used by grant issuance so one target's ambiguous outcome cannot refuse
+    /// another target's request.
+    pub(super) fn target_lanes(&self, target_id: &str) -> Option<&Lanes> {
+        if target_id == self.target && self.transport.is_some() {
+            return Some(&self.lanes);
+        }
+        self.targets.lanes(target_id)
     }
 }

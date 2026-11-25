@@ -68,7 +68,7 @@ impl Lease {
         })
     }
 
-    fn retire(&mut self) -> Result<(), ErrorCode> {
+    pub(super) fn retire(&mut self) -> Result<(), ErrorCode> {
         self.cancelled.store(true, Ordering::Release);
         let deadline = Instant::now() + CLOSE_BUDGET;
         loop {
@@ -109,7 +109,7 @@ impl Owner {
             .as_ref()
             .cloned()
             .ok_or(ErrorCode::OperationDenied)?;
-        if self.opencode_lease.is_some() || !recipe.matches(&scope) {
+        if self.lanes.opencode.is_some() || !recipe.matches(&scope) {
             return Err(ErrorCode::OperationDenied);
         }
         let host = super::present(&self.transport)?.host().to_owned();
@@ -144,7 +144,7 @@ impl Owner {
             .as_ref()
             .cloned()
             .ok_or(ErrorCode::OperationDenied)?;
-        if self.opencode_lease.is_some() || !recipe.matches(scope) {
+        if self.lanes.opencode.is_some() || !recipe.matches(scope) {
             return Err(ErrorCode::OperationDenied);
         }
         let host = super::present(&self.transport)?.host().to_owned();
@@ -186,7 +186,7 @@ impl Owner {
             settled: None,
         };
         let outcome = lease.reply();
-        self.opencode_lease = Some(lease);
+        self.lanes.opencode = Some(lease);
         Ok(outcome)
     }
 
@@ -196,7 +196,8 @@ impl Owner {
         close: bool,
     ) -> Result<Outcome, ErrorCode> {
         let lease = self
-            .opencode_lease
+            .lanes
+            .opencode
             .as_mut()
             .filter(|lease| lease.token.as_slice() == token)
             .ok_or(ErrorCode::OperationDenied)?;
@@ -207,11 +208,11 @@ impl Owner {
     }
 
     pub(super) fn revoke_opencode(&mut self) -> Result<(), ErrorCode> {
-        self.opencode_lease.as_mut().map_or(Ok(()), Lease::retire)
+        self.lanes.revoke_opencode()
     }
 
     pub(super) fn opencode_prevents_connect(&mut self) -> bool {
-        self.opencode_lease.as_mut().is_some_and(|lease| {
+        self.lanes.opencode.as_mut().is_some_and(|lease| {
             lease.observe();
             lease.settled.is_none() || matches!(lease.settled, Some(WorkerOutcome::Unconfirmed))
         })

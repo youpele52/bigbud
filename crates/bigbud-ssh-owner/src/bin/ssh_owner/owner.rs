@@ -42,7 +42,6 @@ pub(crate) use bootstrap::bootstrap;
 pub(super) use deployment_operation::DeploymentOperation;
 pub(super) use stage::StageBinding;
 pub(crate) use targets::{TargetAuthority, TargetStartup};
-use terminal::TerminalPreparation;
 
 use std::{
     io::{Read, Write},
@@ -102,7 +101,7 @@ pub(super) fn present<T>(slot: &Option<T>) -> Result<&T, ErrorCode> {
 
 impl Owner {
     pub(super) fn retire_for_launcher(&mut self) -> RunResult<()> {
-        self.revoke_network_leases()
+        self.revoke_all_network_leases()
             .map_err(|_| protocol_error().into())
     }
 
@@ -118,7 +117,8 @@ impl Owner {
         self.reset_guarded_write();
         self.grants = Grants::default();
         self.trust.revoke();
-        self.preparation = None;
+        self.lanes.preparation = None;
+        self.targets.clear_preparations();
         self.workspace_mode_observation = None;
     }
 
@@ -134,16 +134,18 @@ impl Owner {
         } else {
             Storage::unhydrated()
         };
-        if self.terminal_uncertain
-            || self.agent_close_uncertain
+        if self.lanes.terminal_uncertain
+            || self.lanes.agent_close_uncertain
+            || self.targets.has_uncertain_lanes()
             || storage.allow_network() == Err(ErrorCode::TargetDisconnected)
         {
             // A previous writer may have committed Disconnect without delivering its reply.
             // Do not acknowledge this new binding until all tracked local transports are gone.
-            self.revoke_network_leases().map_err(|_| protocol_error())?;
+            self.revoke_all_network_leases()
+                .map_err(|_| protocol_error())?;
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if let Some(picker) = &mut self.picker_master {
+        if let Some(picker) = &mut self.lanes.master {
             picker.rebind_generation().map_err(|_| protocol_error())?;
         }
         self.storage = storage;

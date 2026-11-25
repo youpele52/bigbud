@@ -9,11 +9,11 @@ impl Owner {
         id: &[u8],
         operation: Operation,
     ) -> RunResult<Result<Outcome, ErrorCode>> {
-        if self.terminal_uncertain {
+        if self.lanes.terminal_uncertain {
             return Ok(Err(ErrorCode::OutcomeUnknown));
         }
         let local_control = !needs_storage(&operation);
-        if self.agent_close_uncertain && !is_agent_control(&operation) {
+        if self.lanes.agent_close_uncertain && !is_agent_control(&operation) {
             return Ok(Err(ErrorCode::OutcomeUnknown));
         }
         // The active target's transport, or a typed refusal. A production owner

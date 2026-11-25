@@ -12,14 +12,14 @@ use super::super::{
 };
 use super::reconnect::ReconnectAdmission;
 use super::retirement::Retirement;
+#[cfg(target_os = "linux")]
+use super::tracked_push;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::workspace_readiness;
 use super::{
     Owner, OwnerStartup, Payload, Pipe, Read, TargetStartup, Write, guarded_write, picker_cancel,
     posix_picker, protocol_error, targets, valid_hello,
 };
-#[cfg(target_os = "linux")]
-use super::{opencode, tracked_push};
 use crate::transport::Transport;
 #[cfg(target_os = "linux")]
 use crate::transport::jump_binding;
@@ -244,15 +244,28 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
     };
     // A pinned fixture target hydrates before HelloAccepted, exactly as before.
     // Production has no target: each target hydrates on its first request.
-    let (target, generation, transport, storage, trust, reconnect, targets) = match transport {
+    // The pinned fixture target's master lane starts with it; every other
+    // resolved target starts with empty lanes.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let mut lanes = super::targets::Lanes::default();
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        lanes.master =
+            posix_picker.map(|mode| posix_picker::MasterPicker::new(mode, retirement.clone()));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let lanes = super::targets::Lanes::default();
+    let (target, generation, transport, storage, trust, reconnect, lanes, targets) = match transport
+    {
         Some(transport) => {
             let storage = Storage::hydrate(pipe, &target)?;
             let mut registry =
-                TargetRegistry::with_pinned(target.clone(), generation, transport, storage);
+                TargetRegistry::with_pinned(target.clone(), generation, transport, storage, lanes);
             let slot = registry.take(&target).map_err(|_| protocol_error())?;
-            let (target, generation, transport, storage, trust, reconnect) = slot.into_fields();
+            let (target, generation, transport, storage, trust, reconnect, lanes) =
+                slot.into_fields();
             (
-                target, generation, transport, storage, trust, reconnect, registry,
+                target, generation, transport, storage, trust, reconnect, lanes, registry,
             )
         }
         None => (
@@ -262,6 +275,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
             Storage::unhydrated(),
             TrustApproval::default(),
             ReconnectAdmission::default(),
+            lanes,
             TargetRegistry::default(),
         ),
     };
@@ -284,15 +298,11 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         grants: Grants::new(Budget::for_startup(route_facts.production())),
         trust,
         reconnect,
+        lanes,
         #[cfg(target_os = "linux")]
         jump_picker,
-        terminal: None,
         supervised_terminal: false,
-        preparation: None,
-        terminal_uncertain: false,
         agent_fixture,
-        agent_proxy: None,
-        agent_close_uncertain: false,
         agent_actions: Default::default(),
         stage,
         deployment_operation: None,
@@ -306,15 +316,10 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         workspace_snapshot_cancel,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         snapshot_only_fixture,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        picker_master: posix_picker
-            .map(|mode| posix_picker::MasterPicker::new(mode, retirement.clone())),
         #[cfg(target_os = "linux")]
         opencode_recipe: opencode_recipe.map(std::sync::Arc::new),
         #[cfg(target_os = "linux")]
         opencode_service: opencode_service.map(std::sync::Arc::new),
-        #[cfg(target_os = "linux")]
-        opencode_lease: None,
         #[cfg(target_os = "linux")]
         tracked_push,
     };

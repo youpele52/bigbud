@@ -84,7 +84,7 @@ impl Owner {
     ) -> Result<ProofHealth, ErrorCode> {
         // Direct health opens a new SSH child. A master-selected target must
         // not bypass its lease, trust pause, or explicit password unlock.
-        if self.picker_master.is_some() {
+        if self.lanes.master.is_some() {
             return Err(ErrorCode::OperationDenied);
         }
         let seed = self

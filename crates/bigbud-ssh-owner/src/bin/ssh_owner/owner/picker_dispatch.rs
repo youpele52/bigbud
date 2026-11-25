@@ -14,7 +14,7 @@ impl Owner {
         if let Some(inbox) = &mut self.picker_cancel {
             use crate::transport::ListFailure;
             return inbox.run(request_id, |is_cancelled| {
-                let result = match &mut self.picker_master {
+                let result = match &mut self.lanes.master {
                     Some(master) => master.list_cancellable(
                         super::present(&self.transport)?,
                         self.generation,
@@ -36,7 +36,7 @@ impl Owner {
             });
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if let Some(master) = &mut self.picker_master {
+        if let Some(master) = &mut self.lanes.master {
             return master.list(super::present(&self.transport)?, self.generation, path);
         }
         super::present(&self.transport)?.list_folders(path)
@@ -60,7 +60,7 @@ impl Owner {
             return picker.retire();
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if let Some(master) = &mut self.picker_master {
+        if let Some(master) = &mut self.lanes.master {
             return master.retire();
         }
         Ok(())

@@ -10,14 +10,18 @@
 //!
 //! The one pinned fixture target is also a registry entry. Fixture requests
 //! omit the descriptor and address the pinned id, so both modes share the same
-//! admission path.
+//! admission path. Each entry also owns that target's master, PTY, agent proxy
+//! and OpenCode lanes, so a lease never crosses a target boundary.
 
 #[path = "targets.descriptor.rs"]
 mod descriptor;
+#[path = "targets.lanes.rs"]
+mod lanes;
 #[path = "targets.registry.rs"]
 mod registry;
 
 pub(crate) use descriptor::{Descriptor, MAX_TARGETS};
+pub(crate) use lanes::{Lanes, LeaseScope};
 pub(crate) use registry::{Registry, Slot};
 
 use self::descriptor::Kind;
@@ -134,6 +138,9 @@ impl TargetAuthority {
     }
 }
 
+#[cfg(test)]
+#[path = "targets.lanes.tests.rs"]
+mod lane_tests;
 #[cfg(test)]
 #[path = "targets.tests.rs"]
 mod tests;

@@ -1,3 +1,4 @@
+use super::targets::Lanes;
 use super::{
     Error, ErrorCode, Instant, Operation, Outcome, Owner, Payload, Pipe, ProofGrantReply, Read,
     Reply, Request, RunResult, Write, protocol_error,
@@ -31,17 +32,24 @@ impl Owner {
     pub(super) fn issue(&mut self, request: Request) -> ProofGrantReply {
         let grant = self.validate(&request).and_then(|operation| {
             // Resolution validates and caches the target; it dials nothing.
+            let mut resolved = None;
             if requires_target(&operation, self.authority.is_some()) {
                 let bound = self
                     .transport
                     .as_ref()
-                    .map(|_| (self.target.as_str(), self.generation));
+                    .map(|_| (self.target.as_ref(), self.generation));
                 let preview = self
                     .targets
                     .resolve(self.authority.as_ref(), &request, bound)?;
                 self.targets.storage_available(&preview.target_id)?;
+                resolved = Some(preview.target_id);
             }
-            if self.terminal_uncertain {
+            // An ambiguous write for one target refuses only that target; the
+            // other targets' lanes are untouched.
+            if resolved.as_deref().is_some_and(|target| {
+                self.target_lanes(target)
+                    .is_some_and(Lanes::terminal_uncertain)
+            }) {
                 return Err(ErrorCode::OutcomeUnknown);
             }
             // The grant binds the target and the generation the caller named;

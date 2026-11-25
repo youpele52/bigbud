@@ -63,7 +63,7 @@ impl Owner {
             &crate::transport::Transport,
         ) -> Result<crate::owner_agent_proxy::AgentProxyLease, ErrorCode>,
     ) -> Result<ProofAgentProxyStatus, ErrorCode> {
-        if self.agent_proxy.is_some() {
+        if self.lanes.agent_proxy.is_some() {
             return Err(ErrorCode::OperationDenied);
         }
         let fixture = self
@@ -72,11 +72,11 @@ impl Owner {
             .ok_or(ErrorCode::OperationDenied)?;
         match open(fixture, super::present(&self.transport)?) {
             Ok(lease) => {
-                let proxy = self.agent_proxy.insert(lease);
+                let proxy = self.lanes.agent_proxy.insert(lease);
                 proxy.status()
             }
             Err(error) => {
-                self.agent_close_uncertain = error == ErrorCode::OutcomeUnknown;
+                self.lanes.agent_close_uncertain = error == ErrorCode::OutcomeUnknown;
                 Err(error)
             }
         }
@@ -87,6 +87,7 @@ impl Owner {
         lease: &[u8],
     ) -> Result<ProofAgentProxyStatus, ErrorCode> {
         let proxy = self
+            .lanes
             .agent_proxy
             .as_mut()
             .ok_or(ErrorCode::OperationDenied)?;
@@ -105,29 +106,20 @@ impl Owner {
     ) -> Result<ProofAgentProxyStatus, ErrorCode> {
         let _ = self.agent_status(lease)?;
         let proxy = self
+            .lanes
             .agent_proxy
             .as_mut()
             .ok_or(ErrorCode::OperationDenied)?;
         let result = proxy.close(terminate, timeout_ms);
         match &result {
-            Ok(_) => self.agent_close_uncertain = false,
-            Err(ErrorCode::OutcomeUnknown) => self.agent_close_uncertain = true,
+            Ok(_) => self.lanes.agent_close_uncertain = false,
+            Err(ErrorCode::OutcomeUnknown) => self.lanes.agent_close_uncertain = true,
             Err(_) => {}
         }
         result
     }
 
     pub(super) fn revoke_agent_proxy(&mut self) -> Result<(), ErrorCode> {
-        let Some(proxy) = self.agent_proxy.as_mut() else {
-            return if self.agent_close_uncertain {
-                Err(ErrorCode::OutcomeUnknown)
-            } else {
-                Ok(())
-            };
-        };
-        self.agent_close_uncertain = true;
-        proxy.close(true, 2_000)?;
-        self.agent_close_uncertain = false;
-        Ok(())
+        self.lanes.revoke_agent_proxy()
     }
 }

@@ -195,6 +195,13 @@ export async function openPickerProofSession(
       get hydratedStorage() {
         return hydrated(state.snapshot);
       },
+      ...makePickerProofTerminalClient(
+        (operation) => runBound(operation),
+        () => ({
+          ownerEpoch: Uint8Array.from(ownerEpoch),
+          targetGeneration: Uint8Array.from(state.generation),
+        }),
+      ),
       inspectTrust: () => trust({ kind: "inspectTrust" }),
       async approveTrust(challenge) {
         if (!challenge.length || challenge.length > 1_024)

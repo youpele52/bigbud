@@ -31,18 +31,27 @@ struct Grant {
     request_id: Vec<u8>,
     operands: Token,
     class: Class,
+    scope: String,
     expires: Instant,
     binding: Binding,
 }
 
-// Lives only in the authenticated pipe session. Every use is also validated
-// against that session's immutable profile/target/epoch and current generation.
+/// The grant-issuance bound is enforced twice: once for the whole owner and
+/// once per target. One noisy target can exhaust its own background share
+/// without consuming another target's interactive reserve.
 #[derive(Default)]
 pub(super) struct Grants {
     pending: HashMap<Token, Grant>,
     consumed: HashSet<Vec<u8>>,
     pub(super) budget: Budget,
+    target_budgets: HashMap<String, Budget>,
 }
+
+/// Owner-scoped operations (alias discovery) share one bucket, so an arbitrary
+/// request target id cannot grow the per-target map without bound. The map holds
+/// at most `MAX_TARGET_SCOPES` real targets plus the owner bucket.
+const OWNER_SCOPE: &str = "";
+const MAX_TARGET_SCOPES: usize = 8;
 
 impl Grants {
     pub(super) fn new(budget: Budget) -> Self {
@@ -50,12 +59,39 @@ impl Grants {
             budget,
             pending: HashMap::new(),
             consumed: HashSet::new(),
+            target_budgets: HashMap::new(),
+        }
+    }
+
+    fn release(&mut self, scope: &str, class: Class) {
+        self.budget.release(class);
+        if let Some(budget) = self.target_budgets.get_mut(scope) {
+            budget.release(class);
+        }
+    }
+
+    /// Resolves the accounting bucket for one target. Real targets are capped by
+    /// the target registry; anything beyond the cap shares the owner bucket.
+    fn scope_for(&self, target: &str) -> String {
+        if target.is_empty() {
+            return OWNER_SCOPE.to_owned();
+        }
+        if self.target_budgets.contains_key(target) || self.target_budgets.len() < MAX_TARGET_SCOPES
+        {
+            target.to_owned()
+        } else {
+            OWNER_SCOPE.to_owned()
         }
     }
 
     pub(super) fn revoke_pending(&mut self) {
-        for grant in self.pending.values() {
-            self.budget.release(grant.class);
+        let scopes: Vec<(String, Class)> = self
+            .pending
+            .values()
+            .map(|grant| (grant.scope.clone(), grant.class))
+            .collect();
+        for (scope, class) in scopes {
+            self.release(&scope, class);
         }
         self.pending.clear();
     }
@@ -75,12 +111,12 @@ impl Grants {
             if grant.expires > now {
                 true
             } else {
-                expired.push(grant.class);
+                expired.push((grant.scope.clone(), grant.class));
                 false
             }
         });
-        for class in expired {
-            self.budget.release(class);
+        for (scope, class) in expired {
+            self.release(&scope, class);
         }
         if self.pending.len() >= MAX_PENDING || self.consumed.len() >= MAX_CONSUMED {
             // Never evict consumed IDs within an epoch to make room for a replay.
@@ -88,21 +124,32 @@ impl Grants {
         }
         let class = Class::of(&operation);
         self.budget.admit(class)?;
+        let scope = self.scope_for(&binding.target_id);
+        let target_admitted = self
+            .target_budgets
+            .entry(scope.clone())
+            .or_default()
+            .admit(class);
+        if let Err(error) = target_admitted {
+            self.budget.release(class);
+            return Err(error);
+        }
         let token = match random_token() {
             Ok(token) => token,
             Err(_) => {
-                self.budget.release(class);
+                self.release(&scope, class);
                 return Err(ErrorCode::OwnerUnavailable);
             }
         };
         let Entry::Vacant(entry) = self.pending.entry(token) else {
-            self.budget.release(class);
+            self.release(&scope, class);
             return Err(ErrorCode::OwnerUnavailable);
         };
         entry.insert(Grant {
             request_id: request.request_id.clone(),
             operands: operand_digest(operation),
             class,
+            scope,
             expires: now + GRANT_TTL,
             binding,
         });
@@ -123,8 +170,9 @@ impl Grants {
         let grant = entry.get();
         if grant.expires <= now {
             let class = grant.class;
+            let scope = grant.scope.clone();
             entry.remove();
-            self.budget.release(class);
+            self.release(&scope, class);
             return Err(ErrorCode::OperationDenied);
         }
         // Target and generation are compared before the request is accepted, so a
@@ -145,9 +193,16 @@ impl Grants {
             return Err(ErrorCode::OwnerUnavailable);
         }
         let grant = entry.remove();
-        self.budget.release(grant.class);
+        self.release(&grant.scope, grant.class);
         self.consumed.insert(request.request_id.clone());
         Ok(grant.binding)
+    }
+
+    #[cfg(test)]
+    pub(super) fn target_active(&self, target: &str, class: Class) -> usize {
+        self.target_budgets
+            .get(target)
+            .map_or(0, |budget| budget.active(class))
     }
 }
 

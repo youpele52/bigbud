@@ -278,6 +278,57 @@ mod tests {
     }
 
     #[test]
+    fn budget_reserve_is_accounted_per_target_as_well_as_globally() {
+        let now = Instant::now();
+        let mut grants = Grants::new(Budget::new(128, 8));
+        let request = |id: u8, target: &str| Request {
+            request_id: vec![id],
+            target_id: target.into(),
+            ..Request::default()
+        };
+        let binding = |target: &str| Binding {
+            target_id: target.into(),
+            generation: Vec::new(),
+        };
+
+        // One noisy target fills its own background share, which never reaches
+        // the interactive reserve of another target.
+        for id in 1..=24 {
+            assert!(
+                grants
+                    .issue(&request(id, "target-a"), binding("target-a"), index(), now)
+                    .is_ok(),
+                "background {id}"
+            );
+        }
+        assert_eq!(
+            grants.issue(&request(25, "target-a"), binding("target-a"), index(), now),
+            Err(ErrorCode::SessionQuota)
+        );
+        // The noisy target still has its interactive reserve, and so does the
+        // other target: neither background share can consume it.
+        assert!(
+            grants
+                .issue(&request(26, "target-a"), binding("target-a"), list(), now)
+                .is_ok()
+        );
+        assert!(
+            grants
+                .issue(&request(27, "target-b"), binding("target-b"), list(), now)
+                .is_ok()
+        );
+        // Target B keeps its background share even though target A is saturated.
+        assert!(
+            grants
+                .issue(&request(28, "target-b"), binding("target-b"), index(), now)
+                .is_ok()
+        );
+        assert_eq!(grants.target_active("target-a", Class::Background), 24);
+        assert_eq!(grants.target_active("target-a", Class::Interactive), 1);
+        assert_eq!(grants.target_active("target-b", Class::Interactive), 1);
+    }
+
+    #[test]
     fn budget_fixture_override_keeps_a_safe_default() {
         for (raw, expected) in [
             (None, DEFAULT_CAPACITY),

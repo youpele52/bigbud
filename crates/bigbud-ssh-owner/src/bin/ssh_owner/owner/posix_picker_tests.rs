@@ -59,6 +59,39 @@ fn rebind_generation_keeps_trust_failure_paused_until_connect() {
 
 #[cfg(test)]
 #[test]
+fn separate_picker_state_per_target_isolates_trust_and_generation() {
+    let first_generation = [1; 32];
+    let second_generation = [2; 32];
+    let mut first = MasterPicker {
+        generation: Some(first_generation),
+        verified: true,
+        ..MasterPicker::default()
+    };
+    let mut second = MasterPicker {
+        generation: Some(second_generation),
+        verified: true,
+        ..MasterPicker::default()
+    };
+    // A trust loss observed on one target pauses only that target.
+    first.record_observation(first_generation, Some(ErrorCode::HostKeyChanged));
+    assert_eq!(
+        first.admit(first_generation),
+        Err(ErrorCode::HostKeyChanged)
+    );
+    assert_eq!(second.admit(second_generation), Ok(()));
+    // A generation change on one target does not fence the other's lease.
+    first.transition_committed();
+    first.generation = Some([3; 32]);
+    assert_eq!(first.admit([9; 32]), Err(ErrorCode::StaleGeneration));
+    assert_eq!(second.admit(second_generation), Ok(()));
+    // Retiring one target's generation leaves the other's state intact.
+    assert_eq!(first.retire(), Ok(()));
+    assert_eq!(second.retire(), Ok(()));
+    assert_eq!(second.generation, Some(second_generation));
+}
+
+#[cfg(test)]
+#[test]
 fn retiring_a_failed_generation_does_not_authorize_a_replacement() {
     let token = [7; 32];
     let mut picker = MasterPicker {
