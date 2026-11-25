@@ -1,4 +1,6 @@
 import { memo, useRef } from "react";
+import { TrafficJam01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "../../ui/button";
@@ -145,15 +147,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
+  // Same round primary button as send; the traffic-jam glyph signals the message will queue.
   const queueAction = queueMessage ? (
-    <Button
+    <button
       type="submit"
-      size="sm"
-      className="rounded-full"
+      className="flex h-9 w-9 enabled:cursor-pointer items-center justify-center rounded-full bg-primary/90 text-primary-foreground transition-all duration-150 hover:bg-primary hover:scale-105 disabled:pointer-events-none disabled:opacity-30 disabled:hover:scale-100 sm:h-8 sm:w-8"
       disabled={isConnecting || !hasSendableContent}
+      aria-label="Queue message"
     >
-      Queue message
-    </Button>
+      <HugeiconsIcon icon={TrafficJam01Icon} className="size-4" aria-hidden="true" />
+    </button>
   ) : null;
   if (isRunning || hasBackgroundWork) {
     return (
