@@ -155,11 +155,9 @@ Gatekeeper assessment, packaging and release smoke checks must still succeed.
 - Provider: GitHub Releases (`provider: github`) configured at build time.
 - Repository slug source:
   - `BIGBUD_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
-  - legacy alias: `T3CODE_DESKTOP_UPDATE_REPOSITORY`
   - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
 - Optional GitHub API authentication:
   - set `BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
-  - legacy alias: `T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN`
   - Stable uses electron-updater's private GitHub provider when a token is present.
   - Prerelease channels use the token only to locate the newest matching release, then download that public release's channel-specific metadata and assets directly.
 - Required release assets for updater:
@@ -184,7 +182,7 @@ Gatekeeper assessment, packaging and release smoke checks must still succeed.
 | Preview | `ai.bigbud.desktop.preview` | `bigbud Preview` | `bigbud-preview`  | `~/.bigbud/channels/preview` | `preview` |
 | Nightly | `ai.bigbud.desktop.nightly` | `bigbud Nightly` | `bigbud-nightly`  | `~/.bigbud/channels/nightly` | `nightly` |
 
-The channel-specific bundle IDs, product names, package names, executables, desktop entries, and Windows app IDs allow all four channels to install and run simultaneously. Stable alone may reuse the legacy `T3 Code (Alpha)` Electron profile. `BIGBUD_HOME` (or legacy `T3CODE_HOME`) remains an exact base-directory override. Projects remain ordinary shared filesystem paths and are not copied into channel data.
+The channel-specific bundle IDs, product names, package names, executables, desktop entries, and Windows app IDs allow all four channels to install and run simultaneously. Stable alone may reuse the legacy `T3 Code (Alpha)` Electron profile. `BIGBUD_HOME` remains an exact base-directory override. Projects remain ordinary shared filesystem paths and are not copied into channel data.
 
 macOS privacy permissions are associated with the signed bundle identity. Grant Accessibility and Screen Recording separately for each installed channel that uses computer control.
 
@@ -238,7 +236,6 @@ Use `.github/workflows/ci.yml` release-style artifacts to validate packaging wit
 ## Env var naming
 
 - Prefer `BIGBUD_DESKTOP_UPDATE_*` names in new scripts, docs, and runtime configuration.
-- `T3CODE_DESKTOP_UPDATE_*` names remain supported as compatibility aliases where noted in code.
 
 ## 2) Apple signing and notarization setup (macOS)
 

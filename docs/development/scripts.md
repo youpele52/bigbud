@@ -19,7 +19,7 @@ The runner defaults `BIGBUD_HOME` to `~/.bigbud`. A backend takes an exclusive l
 BIGBUD_HOME=~/.bigbud-branch-a bun dev
 ```
 
-The development runner coordinates available server, web, and mobile-web ports. Defaults are `3773` (server), `5733` (web), and `5740` (mobile web); occupied ports may result in a different selected port. Use `BIGBUD_DEV_INSTANCE` to derive a consistent port offset for an instance, or `BIGBUD_PORT_OFFSET` to specify a numeric offset. `T3CODE_DEV_INSTANCE` and `T3CODE_PORT_OFFSET` are compatibility aliases.
+The development runner coordinates available server, web, and mobile-web ports. Defaults are `3773` (server), `5733` (web), and `5740` (mobile web); occupied ports may result in a different selected port. Use `BIGBUD_DEV_INSTANCE` to derive a consistent port offset for an instance, or `BIGBUD_PORT_OFFSET` to specify a numeric offset.
 
 For the exact port coordination and mobile companion discovery behavior, see [`scripts/dev-runner.lib.ts`](../../scripts/dev-runner.lib.ts) and the [mobile web development options](../../apps/mobile-web/dev.options.ts).
 
