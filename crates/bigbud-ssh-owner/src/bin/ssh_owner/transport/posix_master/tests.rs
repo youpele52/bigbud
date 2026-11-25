@@ -58,6 +58,7 @@ impl Fixture {
                     key: self.transport.pin().expect("pin read").expect("pin").key,
                     executable: validate_fixture(&self.transport).expect("fixture binding"),
                     password: false,
+                    production: false,
                 },
                 paths: PrivatePaths::new().expect("new master directory"),
                 child: Some(child),

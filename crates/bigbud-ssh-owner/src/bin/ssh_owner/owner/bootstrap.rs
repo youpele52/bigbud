@@ -21,8 +21,6 @@ use super::{
     posix_picker, protocol_error, targets, valid_hello,
 };
 use crate::transport::Transport;
-#[cfg(target_os = "linux")]
-use crate::transport::jump_binding;
 use targets::Registry as TargetRegistry;
 
 pub(crate) fn bootstrap<R: Read, W: Write>(
@@ -280,15 +278,15 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         ),
     };
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let peer_state_dir = profile_lock_path.parent().map(std::path::Path::to_path_buf);
+    let owner_state_dir = profile_lock_path.parent().map(std::path::Path::to_path_buf);
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let peer_state_dir = None;
+    let owner_state_dir = None;
     let owner = Owner {
         target,
         epoch,
         generation,
         profile: profile.to_vec(),
-        peer_state_dir,
+        owner_state_dir,
         storage,
         retirement: retirement.clone(),
         transport,

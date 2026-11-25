@@ -22,6 +22,18 @@ impl Owner {
         if target_id == self.target && self.transport.is_some() {
             return Ok(());
         }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let production_master = if self.production && self.lanes.master.is_none() {
+            // Prepared before any slot is taken, so a missing state root cannot
+            // strand a half-swapped target.
+            Some(
+                self.owner_state_dir
+                    .clone()
+                    .ok_or(ErrorCode::OwnerUnavailable)?,
+            )
+        } else {
+            None
+        };
         let slot = self.targets.take(target_id)?;
         if slot.transport.is_none() {
             // An at-rest slot is not addressable; keep the cached identity.
@@ -53,6 +65,16 @@ impl Owner {
             lanes: std::mem::replace(&mut self.lanes, lanes),
         };
         self.targets.suspend(previous);
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if let Some(root) = production_master {
+            // A production target gets its own master lane here. The control
+            // path is allocated under the owner's private state root on first
+            // list; no fixture root or pinned loopback target is involved.
+            self.lanes.master = Some(super::posix_picker::MasterPicker::production(
+                root,
+                self.retirement.clone(),
+            ));
+        }
         Ok(())
     }
 

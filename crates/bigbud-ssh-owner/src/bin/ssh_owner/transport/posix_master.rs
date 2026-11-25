@@ -13,6 +13,7 @@ pub(in crate::transport) mod jump;
 pub(crate) use jump::maybe_observe_key;
 mod launch;
 mod lease;
+mod link;
 mod master;
 #[cfg(any(test, target_os = "linux"))]
 mod password;
@@ -20,11 +21,14 @@ mod password;
 pub(in super::super) use password::maybe_run_password_helper;
 mod paths;
 mod probe;
+mod production;
+pub(in super::super) use production::validate_production_image;
 mod recovery;
 mod session;
 #[cfg(test)]
 mod tests;
 
+use link::{Binding, LinkMode, TrustRead};
 use master::Master;
 
 use super::{ErrorCode, Folders, HostKey, PinnedSsh, Transport, TransportConfig, trust_store};
@@ -33,7 +37,7 @@ use crate::Token;
 use launch::master_command;
 #[cfg(test)]
 use launch::validate_fixture;
-use launch::validate_fixture_for_auth;
+
 use paths::{PrivatePaths, Stamp};
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -74,6 +78,18 @@ impl PosixMasterSlot {
         }
     }
 
+    #[cfg(test)]
+    pub(in super::super) fn has_live_master(&self) -> bool {
+        self.master.is_some()
+    }
+
+    #[cfg(test)]
+    pub(in super::super) fn test_live_pid(&mut self) -> Option<u32> {
+        self.master
+            .as_mut()
+            .and_then(|master| master.live_pid().ok())
+    }
+
     pub(in super::super) fn require_no_residual_lease(root: &Path) -> Result<(), ErrorCode> {
         paths::require_no_residual_lease(root)
     }
@@ -111,7 +127,10 @@ impl PosixMasterSlot {
             allocate,
             &[],
             TrustRead::Default,
-            via_connector,
+            LinkMode {
+                forwarded: via_connector,
+                production: false,
+            },
         )?;
         let master = self.master.as_mut().ok_or(UNAVAILABLE)?;
         let result = (|| {
@@ -123,97 +142,6 @@ impl PosixMasterSlot {
             master.binding.revalidate(transport)
         })();
         self.finish_check(generation, result)
-    }
-
-    #[cfg(any(test, target_os = "linux"))]
-    fn prepare(
-        &mut self,
-        transport: &Transport,
-        generation: Token,
-        allocate: impl FnOnce() -> Result<PrivatePaths, ErrorCode>,
-        auth_options: &[&str],
-    ) -> Result<Command, ErrorCode> {
-        self.prepare_with(
-            transport,
-            generation,
-            allocate,
-            auth_options,
-            TrustRead::Default,
-        )
-    }
-
-    fn prepare_with(
-        &mut self,
-        transport: &Transport,
-        generation: Token,
-        allocate: impl FnOnce() -> Result<PrivatePaths, ErrorCode>,
-        auth_options: &[&str],
-        trust: TrustRead,
-    ) -> Result<Command, ErrorCode> {
-        self.prepare_link(transport, generation, allocate, auth_options, trust, false)
-    }
-
-    fn prepare_link(
-        &mut self,
-        transport: &Transport,
-        generation: Token,
-        allocate: impl FnOnce() -> Result<PrivatePaths, ErrorCode>,
-        auth_options: &[&str],
-        trust: TrustRead,
-        forwarded: bool,
-    ) -> Result<Command, ErrorCode> {
-        if self.master.is_some() || forwarded && !auth_options.is_empty() {
-            return Err(UNAVAILABLE);
-        }
-        let password = !auth_options.is_empty();
-        let executable = validate_fixture_for_auth(transport, password)?;
-        let pinned = if forwarded && transport.connector().is_some() {
-            transport.connector_pinned_ssh("-T")?
-        } else {
-            trust.pinned(transport)?
-        };
-        // Bind the actual snapshot used by this child, not an independent read
-        // of the live store that could race snapshot construction.
-        let read_snapshot = match trust {
-            TrustRead::Default => trust_store::read,
-            #[cfg(target_os = "macos")]
-            TrustRead::PlainFixture => trust_store::read_plain,
-        };
-        let key = read_snapshot(pinned._snapshot.path(), &transport.host_label)?
-            .ok_or(ErrorCode::TrustRequired)?
-            .key;
-        let binding = Binding {
-            generation,
-            scope: Arc::clone(&transport.config),
-            key,
-            executable,
-            password,
-        };
-        binding.revalidate_with(transport, trust)?;
-        let paths = allocate()?;
-        let command = launch::master_command_for_link(
-            &pinned,
-            &paths.socket,
-            transport.host(),
-            auth_options,
-            forwarded,
-        );
-        // The slot keeps the exact pin through checked reap, including when a
-        // failed launch cannot yet be reaped and must remain unavailable.
-        self.master = Some(Master {
-            binding,
-            paths,
-            child: None,
-            connector: None,
-            recovery: None,
-            socket: None,
-            closing: false,
-            _pin: pinned._snapshot,
-            retirement: self.retirement.clone(),
-            master_record: None,
-            connector_record: None,
-        });
-        Ok(command)
     }
 
     #[cfg(test)]
@@ -323,60 +251,6 @@ impl Drop for PosixMasterSlot {
             // Best effort on unwind. Normal owners must use checked invalidation.
             let _cleanup_on_drop = self.invalidate(master.binding.generation);
         }
-    }
-}
-
-struct Binding {
-    generation: Token,
-    scope: Arc<TransportConfig>,
-    key: HostKey,
-    executable: Stamp,
-    password: bool,
-}
-
-#[derive(Clone, Copy)]
-enum TrustRead {
-    Default,
-    #[cfg(target_os = "macos")]
-    PlainFixture,
-}
-
-impl TrustRead {
-    fn pin(self, transport: &Transport) -> Result<Option<trust_store::Pin>, ErrorCode> {
-        match self {
-            Self::Default => transport.pin(),
-            #[cfg(target_os = "macos")]
-            Self::PlainFixture => {
-                trust_store::read_plain(&transport.config.known_hosts, &transport.host_label)
-            }
-        }
-    }
-
-    fn pinned(self, transport: &Transport) -> Result<PinnedSsh, ErrorCode> {
-        match self {
-            Self::Default => transport.pinned_ssh("-T"),
-            #[cfg(target_os = "macos")]
-            Self::PlainFixture => {
-                let pin = self.pin(transport)?.ok_or(ErrorCode::TrustRequired)?;
-                transport.ssh_for_pin("-T", None, false, &pin, super::HostVerification::Ed25519Key)
-            }
-        }
-    }
-}
-
-impl Binding {
-    fn revalidate(&self, transport: &Transport) -> Result<(), ErrorCode> {
-        self.revalidate_with(transport, TrustRead::Default)
-    }
-
-    fn revalidate_with(&self, transport: &Transport, trust: TrustRead) -> Result<(), ErrorCode> {
-        if validate_fixture_for_auth(transport, self.password)? != self.executable {
-            return Err(ErrorCode::ConfigUnsupported);
-        }
-        if trust.pin(transport)?.ok_or(ErrorCode::TrustRequired)?.key != self.key {
-            return Err(ErrorCode::HostKeyChanged);
-        }
-        Ok(())
     }
 }
 

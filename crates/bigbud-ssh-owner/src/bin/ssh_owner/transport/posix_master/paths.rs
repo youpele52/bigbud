@@ -9,6 +9,7 @@ use std::os::unix::{
 use std::path::{Path, PathBuf};
 
 const DIRECTORY_TEMPLATE: &str = "bbcm-XXXXXXXXXXXX";
+type ParentCheck = fn(&Path, Option<(u64, u64)>) -> Result<(), ErrorCode>;
 // OpenSSH binds a temporary name with '.' and 16 random characters before
 // publishing the final socket. Leave room for both that suffix and the NUL.
 const OPENSSH_TEMP_SUFFIX: usize = 17;
@@ -21,6 +22,7 @@ pub(super) struct PrivatePaths {
     directory: PathBuf,
     directory_id: (u64, u64),
     fixture_id: Option<(u64, u64)>,
+    owner_private: bool,
     pub(super) socket: PathBuf,
 }
 
@@ -31,12 +33,23 @@ impl PrivatePaths {
         let root = Path::new("/private/tmp");
         #[cfg(target_os = "linux")]
         let root = Path::new("/tmp");
-        Self::allocate(root, None)
+        Self::allocate(root, None, false)
     }
 
     pub(super) fn new_in(root: &Path) -> Result<Self, ErrorCode> {
         require_no_residual_lease(root)?;
-        Self::allocate(root, Some(file_id(&private_dir(root)?)))
+        Self::allocate(root, Some(file_id(&private_dir(root)?)), false)
+    }
+
+    /// Production control path: one 0700 directory under the owner's private
+    /// state root. The root itself and every ancestor must be outside another
+    /// user's write authority, so no `ControlPath` can escape the owner.
+    pub(super) fn new_owner_private(root: &Path) -> Result<Self, ErrorCode> {
+        // The production state root is shared by every target, so a residual
+        // scan would confuse one target's live master with another's residue.
+        // Retirement records and the per-lease kernel peer check fence crashes;
+        // each allocation below is a fresh owner-private directory.
+        Self::allocate(root, Some(file_id(&private_dir(root)?)), true)
     }
 
     #[cfg(target_os = "linux")]
@@ -44,11 +57,20 @@ impl PrivatePaths {
         // Only the fenced fixture route calls this after an initial residual
         // scan, while holding the exclusive profile lock for this root.
         linux_fixture_parent(root.parent().ok_or(UNAVAILABLE)?)?;
-        Self::allocate(root, Some(file_id(&private_dir(root)?)))
+        Self::allocate(root, Some(file_id(&private_dir(root)?)), false)
     }
 
-    fn allocate(root: &Path, fixture_id: Option<(u64, u64)>) -> Result<Self, ErrorCode> {
-        check_parent(root, fixture_id)?;
+    fn allocate(
+        root: &Path,
+        fixture_id: Option<(u64, u64)>,
+        owner_private: bool,
+    ) -> Result<Self, ErrorCode> {
+        let parent_check = if owner_private {
+            check_owner_parent
+        } else {
+            check_parent
+        };
+        parent_check(root, fixture_id)?;
         let directory_template = root.join(DIRECTORY_TEMPLATE);
         if directory_template.join("s").as_os_str().as_bytes().len() + OPENSSH_TEMP_SUFFIX
             >= SUN_PATH_CAP
@@ -67,18 +89,19 @@ impl PrivatePaths {
         }
         let name = CStr::from_bytes_with_nul(&template).map_err(|_| UNAVAILABLE)?;
         let directory = PathBuf::from(OsStr::from_bytes(name.to_bytes()));
-        check_parent(root, fixture_id)?;
+        parent_check(root, fixture_id)?;
         let meta = private_dir(&directory)?;
         if let Some(id) = fixture_id {
             // Keep the directory entry across owner loss before we are allowed
             // to start a child. If sync fails the remaining entry blocks restart.
-            sync_fixture(root, id)?;
+            sync_root(root, id, parent_check)?;
         }
         let socket = directory.join("s");
         Ok(Self {
             directory,
             directory_id: file_id(&meta),
             fixture_id,
+            owner_private,
             socket,
         })
     }
@@ -89,7 +112,12 @@ impl PrivatePaths {
     }
 
     fn check_directory(&self) -> Result<(), ErrorCode> {
-        check_parent(self.directory.parent().ok_or(UNAVAILABLE)?, self.fixture_id)?;
+        let root = self.directory.parent().ok_or(UNAVAILABLE)?;
+        if self.owner_private {
+            check_owner_parent(root, self.fixture_id)?;
+        } else {
+            check_parent(root, self.fixture_id)?;
+        }
         if file_id(&private_dir(&self.directory)?) != self.directory_id {
             return Err(UNAVAILABLE);
         }
@@ -135,7 +163,15 @@ impl PrivatePaths {
         self.check_directory()?;
         fs::remove_dir(&self.directory).map_err(|_| UNAVAILABLE)?;
         if let Some(id) = self.fixture_id {
-            sync_fixture(self.directory.parent().ok_or(UNAVAILABLE)?, id)?;
+            sync_root(
+                self.directory.parent().ok_or(UNAVAILABLE)?,
+                id,
+                if self.owner_private {
+                    check_owner_parent
+                } else {
+                    check_parent
+                },
+            )?;
         }
         Ok(())
     }
@@ -182,8 +218,8 @@ fn scan_no_residual_lease(root: &Path) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-fn sync_fixture(root: &Path, id: (u64, u64)) -> Result<(), ErrorCode> {
-    check_parent(root, Some(id))?;
+fn sync_root(root: &Path, id: (u64, u64), parent_check: ParentCheck) -> Result<(), ErrorCode> {
+    parent_check(root, Some(id))?;
     let dir = fs::File::options()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
@@ -212,6 +248,28 @@ fn check_parent(root: &Path, fixture_id: Option<(u64, u64)>) -> Result<(), Error
     } else {
         trusted_parents(root, true)
     }
+}
+
+/// The owner-private production root: an owned 0700 directory whose ancestors
+/// are writable only by root or the owner. Unlike the disposable fixture, it
+/// does not require root ownership or a sticky temp parent.
+fn check_owner_parent(root: &Path, expected: Option<(u64, u64)>) -> Result<(), ErrorCode> {
+    let owner = uid();
+    let meta = private_dir(root)?;
+    if expected.is_some_and(|id| file_id(&meta) != id) {
+        return Err(UNAVAILABLE);
+    }
+    for ancestor in root.ancestors() {
+        let meta = fs::symlink_metadata(ancestor).map_err(|_| UNAVAILABLE)?;
+        let root_sticky = meta.uid() == 0 && meta.mode() & 0o1000 != 0;
+        if !meta.is_dir()
+            || (meta.uid() != 0 && meta.uid() != owner)
+            || (meta.mode() & 0o022 != 0 && !root_sticky)
+        {
+            return Err(UNAVAILABLE);
+        }
+    }
+    Ok(())
 }
 
 fn private_dir(path: &Path) -> Result<Metadata, ErrorCode> {

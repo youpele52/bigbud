@@ -236,3 +236,87 @@ fn a_changed_alias_descriptor_invalidates_only_that_target() {
     slot.lanes.terminal_uncertain = true;
     assert!(slot.lanes.terminal_uncertain());
 }
+
+#[test]
+fn production_refusals_happen_before_a_transport_and_leave_other_targets_usable() {
+    let fixture = Fixture::new();
+    let config = fixture.config();
+    write_private_with(
+        &config,
+        format!(
+            "{}Host broken\n  HostName 127.0.0.1\n  Port 2222\n  User tester\n  \
+             IdentityFile {}\n  UserKnownHostsFile {}\n  ForwardAgent yes\n",
+            fixture.alias_block("target-good", 2222),
+            fixture.identity.display(),
+            fixture.trust.display()
+        ),
+    );
+    let authority = fixture.authority(&config);
+    let mut registry = Registry::default();
+    let good = resolve(
+        &mut registry,
+        &authority,
+        &fixture,
+        "target-good",
+        2222,
+        &[],
+    )
+    .unwrap();
+    let good_generation = registry.generation(&good.target_id).unwrap();
+
+    // An unresolved alias is refused while resolving, before any transport.
+    assert_eq!(
+        resolve(
+            &mut registry,
+            &authority,
+            &fixture,
+            "target-missing",
+            2222,
+            &[]
+        )
+        .err(),
+        Some(ErrorCode::ConfigUnsupported)
+    );
+    // A policy the production owner does not admit is refused at the same point.
+    assert_eq!(
+        resolve(&mut registry, &authority, &fixture, "broken", 2222, &[]).err(),
+        Some(ErrorCode::ConfigUnsupported)
+    );
+    // A wrong-mode identity is refused before a transport exists.
+    let bad_identity = write_private(&fixture.root, "bad_identity", 0o644);
+    let bad = v1::TargetDescriptor {
+        target_id: "target-bad-identity".into(),
+        kind: TargetKind::Structured as i32,
+        host: "127.0.0.1".into(),
+        port: 2222,
+        user: "tester".into(),
+        auth_mode: TargetAuthMode::Key as i32,
+        identity_reference: bad_identity.to_str().unwrap().into(),
+        host_key_alias: String::new(),
+        trust_reference: fixture.trust.to_str().unwrap().into(),
+        generation: Vec::new(),
+    };
+    let request = request(Some(bad), "target-bad-identity", &[]);
+    assert_eq!(
+        registry.resolve(Some(&authority), &request, None).err(),
+        Some(ErrorCode::ConfigUnsupported)
+    );
+
+    // None of the refusals touched the usable target's cached transport or
+    // generation, and it still resolves normally.
+    assert_eq!(registry.generation("target-good"), Some(good_generation));
+    let slot = registry.take("target-good").unwrap();
+    assert!(slot.transport.is_some());
+    registry.restore(slot);
+    assert!(
+        resolve(
+            &mut registry,
+            &authority,
+            &fixture,
+            "target-good",
+            2222,
+            &good_generation
+        )
+        .is_ok()
+    );
+}

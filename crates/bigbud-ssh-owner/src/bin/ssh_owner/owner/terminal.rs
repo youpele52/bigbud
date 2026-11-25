@@ -43,6 +43,17 @@ impl LiveTerminal {
 }
 
 impl Owner {
+    /// The terminal cwd is the request's own directory. Fixture mode stays
+    /// exactly at the configured workspace root; a production target without a
+    /// workspace root accepts any bounded absolute remote path.
+    fn terminal_cwd_allowed(&self, cwd: &str) -> Result<bool, ErrorCode> {
+        let transport = super::present(&self.transport)?;
+        if transport.has_workspace_root() {
+            return Ok(transport.matches_workspace_root(cwd));
+        }
+        Ok(self.production && valid_remote_cwd(cwd))
+    }
+
     pub(super) fn prepare_terminal(
         &mut self,
         request: ProofPrepareTerminal,
@@ -56,7 +67,7 @@ impl Owner {
         {
             return Err(ErrorCode::OperationDenied);
         }
-        if !super::present(&self.transport)?.matches_workspace_root(&request.cwd)
+        if !self.terminal_cwd_allowed(&request.cwd)?
             || !valid_id(&request.thread_id)
             || !valid_id(&request.terminal_id)
             || !(1..=400).contains(&request.cols)
@@ -101,10 +112,13 @@ impl Owner {
         if self.lanes.terminal.is_some() {
             return Err(ErrorCode::OperationDenied);
         }
-        let (id, launched) = if requested.is_empty()
+        // The empty-lease fixture path runs a fixed proof command. Production
+        // never uses it: a real target always opens a reserved login shell.
+        let fixture_open = !self.production
+            && requested.is_empty()
             && self.lanes.preparation.is_none()
-            && !super::present(&self.transport)?.has_workspace_root()
-        {
+            && !super::present(&self.transport)?.has_workspace_root();
+        let (id, launched) = if fixture_open {
             (
                 random_token().map_err(|_| ErrorCode::OwnerUnavailable)?,
                 super::present(&self.transport)?.open_proof_terminal(),
@@ -126,11 +140,14 @@ impl Owner {
                 .preparation
                 .take()
                 .ok_or(ErrorCode::OperationDenied)?;
-            (
-                id,
+            let launched = if self.production {
                 super::present(&self.transport)?
-                    .open_prepared_terminal(&prep.cwd, prep.cols, prep.rows),
-            )
+                    .open_login_terminal(&prep.cwd, prep.cols, prep.rows)
+            } else {
+                super::present(&self.transport)?
+                    .open_prepared_terminal(&prep.cwd, prep.cols, prep.rows)
+            };
+            (id, launched)
         };
         let terminal = match launched {
             Ok(terminal) => terminal,
@@ -254,6 +271,18 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_graphic())
 }
 
+/// A remote working directory is a single absolute operand. It is never
+/// interpreted by the owner; the PTY wrapper quotes it for the target shell.
+fn valid_remote_cwd(cwd: &str) -> bool {
+    cwd.starts_with('/')
+        && cwd.len() <= 4096
+        && !cwd.contains('\0')
+        && !cwd.chars().any(char::is_control)
+}
+
+#[cfg(test)]
+#[path = "production_terminal_tests.rs"]
+mod production_tests;
 #[cfg(test)]
 #[path = "terminal.tests.rs"]
 mod tests;

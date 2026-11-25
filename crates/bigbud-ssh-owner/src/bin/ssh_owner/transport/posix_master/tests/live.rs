@@ -220,6 +220,7 @@ fn launch_outside(transport: &Transport) -> PosixMasterSlot {
                     .key,
                 executable: validate_fixture(transport).expect("fixture executable"),
                 password: false,
+                production: false,
             },
             child: Some(
                 master_command(&pinned, &paths.socket, transport.host(), &[])

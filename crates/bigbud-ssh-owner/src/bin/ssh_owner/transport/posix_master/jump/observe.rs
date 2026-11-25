@@ -2,6 +2,7 @@
 //! fixed lookup child records only the presented Ed25519 key and returns no
 //! known-host records. Strict host verification therefore stops before auth.
 
+use super::super::launch::validate_fixture_for_auth;
 use super::*;
 use crate::transport::host_key;
 use std::{

@@ -1,8 +1,28 @@
 use super::{DEADLINE, ErrorCode, Instant, Transport, workspace};
-use crate::owner_terminal::{DEV_PROMPT, DEV_TERM, FIXTURE_COMMAND, TerminalLease, TerminalMode};
+use crate::owner_terminal::{
+    DEV_PROMPT, DEV_TERM, FIXTURE_COMMAND, LOGIN_READY, TerminalLease, TerminalMode,
+};
 
 const ENTER_WORKSPACE: &str =
     "[ -d \"$target\" ] && cd -P \"$target\" && [ \"$PWD\" = \"$target\" ] || exit 3";
+
+/// The target's own login shell, entered at the request's remote cwd. The
+/// wrapper is POSIX so a non-POSIX login shell still starts from the target's
+/// own `$SHELL`; the owner never names a fixture shell or command.
+fn login_command(cwd: &str) -> String {
+    let script = format!(
+        "CDPATH=\n\
+         case \"$1\" in /*) ;; *) exit 3 ;; esac\n\
+         cd \"$1\" || exit 3\n\
+         printf '%s\\n' {LOGIN_READY}\n\
+         exec \"${{SHELL:-/bin/sh}}\" -l\n"
+    );
+    format!(
+        "/bin/sh -c {} sh {}",
+        workspace::quote(&script),
+        workspace::quote(cwd)
+    )
+}
 
 fn dev_shell() -> String {
     // Do not inherit SSH-provided environment or load login/ENV startup files.
@@ -64,6 +84,19 @@ impl Transport {
 
     pub(in super::super) fn open_proof_terminal(&self) -> Result<TerminalLease, ErrorCode> {
         self.launch_terminal(FIXTURE_COMMAND, (80, 24), TerminalMode::Proof)
+    }
+
+    /// Open the target's login shell in an interactive PTY at `cwd`. The
+    /// reservation already fixed the cwd and dimensions at the owner boundary.
+    pub(in super::super) fn open_login_terminal(
+        &self,
+        cwd: &str,
+        cols: u16,
+        rows: u16,
+    ) -> Result<TerminalLease, ErrorCode> {
+        super::posix_master::validate_production_image(self)?;
+        let remote = login_command(cwd);
+        self.launch_terminal(&remote, (cols, rows), TerminalMode::LoginShell)
     }
 
     fn launch_terminal(

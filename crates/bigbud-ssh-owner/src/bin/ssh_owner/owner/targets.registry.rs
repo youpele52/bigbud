@@ -178,7 +178,7 @@ impl Registry {
                             entry.storage = None;
                             entry.trust = TrustApproval::default();
                             entry.reconnect = ReconnectAdmission::default();
-                            let _ = entry.lanes.revoke();
+                            entry.lanes.invalidate_transport();
                             return Err(error);
                         }
                     }

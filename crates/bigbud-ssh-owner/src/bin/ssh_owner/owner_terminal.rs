@@ -37,6 +37,10 @@ pub(super) const FIXTURE_COMMAND: &str = r#"exec /bin/bash -c '
 '"#;
 pub(super) const DEV_PROMPT: &str = "BIGBUD_SSH_OWNER_DEV_PTY_READY> ";
 pub(super) const DEV_TERM: &str = "xterm-256color";
+/// Printed by the resolved login shell wrapper after it enters the requested
+/// directory, before it execs the target's own login shell. It is a launch
+/// witness, not a fixture command.
+pub(super) const LOGIN_READY: &str = "BIGBUD_SSH_OWNER_LOGIN_PTY_READY";
 const MAX_LEASE: Duration = Duration::from_secs(75);
 const DEV_MAX_LEASE: Duration = Duration::from_secs(30 * 60);
 const MAX_INPUT_BYTES: usize = 4 * 1024;
@@ -65,9 +69,16 @@ pub(super) struct TerminalReplay {
 pub(super) enum TerminalMode {
     Proof,
     DevInteractive,
+    /// A production target's own login shell. Interactive lifetime and ring
+    /// retention apply; readiness is the owner's launch witness.
+    LoginShell,
 }
 
 impl TerminalMode {
+    fn interactive(self) -> bool {
+        matches!(self, Self::DevInteractive | Self::LoginShell)
+    }
+
     fn ready(self, sample: &[u8]) -> bool {
         sample.split(|&byte| byte == b'\n').any(|line| match self {
             Self::Proof => line
@@ -77,6 +88,7 @@ impl TerminalMode {
                 // macOS /bin/sh's Readline may enable xterm meta keys before PS1.
                 line.strip_prefix(b"\x1b[?1034h").unwrap_or(line) == DEV_PROMPT.as_bytes()
             }
+            Self::LoginShell => line.strip_suffix(b"\r").unwrap_or(line) == LOGIN_READY.as_bytes(),
         })
     }
 }
@@ -110,7 +122,7 @@ impl TerminalLease {
     fn spawn(pinned: PinnedSsh, size: (u16, u16), mode: TerminalMode) -> Result<Self, ErrorCode> {
         let (lifetime, term) = match mode {
             TerminalMode::Proof => (MAX_LEASE, "dumb"),
-            TerminalMode::DevInteractive => (DEV_MAX_LEASE, DEV_TERM),
+            TerminalMode::DevInteractive | TerminalMode::LoginShell => (DEV_MAX_LEASE, DEV_TERM),
         };
         let program = pinned
             .command
@@ -175,8 +187,7 @@ impl TerminalLease {
             let status = self.snapshot()?;
             if status.live
                 && self.mode.ready(&status.sample)
-                && (!matches!(self.mode, TerminalMode::DevInteractive)
-                    || !self.handle.child_reaped())
+                && (!self.mode.interactive() || !self.handle.child_reaped())
             {
                 return Ok(());
             }
@@ -196,7 +207,7 @@ impl TerminalLease {
             .handle
             .snapshot()
             .map_err(|_| ErrorCode::TransportLost)?;
-        if matches!(self.mode, TerminalMode::DevInteractive) {
+        if self.mode.interactive() {
             // Publish exit only after the reaper has drained the final PTY
             // output. Take a single ring cut even while the shell is noisy.
             let live = match state.state {

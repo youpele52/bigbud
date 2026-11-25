@@ -156,9 +156,12 @@ impl Owner {
         ) {
             (Some(state), Some(request)) => {
                 match state.connector.run(&request, |binding, deadline| {
-                    state
-                        .launcher
-                        .launch(super::present(&self.transport)?, binding, deadline)
+                    state.launcher.launch(
+                        super::present(&self.transport)
+                            .map_err(|_| io::Error::from(io::ErrorKind::NotFound))?,
+                        binding,
+                        deadline,
+                    )
                 }) {
                     TrackedPushResult::DeniedBeforeDispatch => status,
                     TrackedPushResult::Finished(receipt) => match receipt {

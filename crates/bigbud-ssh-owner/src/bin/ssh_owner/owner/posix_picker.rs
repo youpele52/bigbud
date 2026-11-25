@@ -9,7 +9,7 @@ use crate::{
 };
 use std::{
     net::Ipv4Addr,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -163,10 +163,27 @@ pub(super) fn fence_linux_password_leases(
     Ok(())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum MasterMode {
+    /// Disposable loopback picker fixtures, unchanged.
+    Fixture(PosixPickerFixture),
+    /// A real target resolved by the owner in production mode.
+    Production,
+}
+
+impl Default for MasterMode {
+    fn default() -> Self {
+        Self::Fixture(PosixPickerFixture::default())
+    }
+}
+
 #[derive(Default)]
 pub(super) struct MasterPicker {
     slot: PosixMasterSlot,
-    mode: PosixPickerFixture,
+    mode: MasterMode,
+    /// Owner-private state root for the production control path; unused by the
+    /// disposable fixture, which allocates inside its identity directory.
+    production_root: Option<PathBuf>,
     generation: Option<Token>,
     verified: bool,
     trust_fault: Option<ErrorCode>,
@@ -177,7 +194,7 @@ impl MasterPicker {
     pub(super) fn new(mode: PosixPickerFixture, retirement: Option<Retirement>) -> Self {
         Self {
             slot: PosixMasterSlot::new(retirement),
-            mode,
+            mode: MasterMode::Fixture(mode),
             ..Self::default()
         }
     }
@@ -189,25 +206,29 @@ impl MasterPicker {
         path: Option<&str>,
     ) -> Result<Folders, ErrorCode> {
         self.admit(generation)?;
-        let deadline = Instant::now() + PICKER_DEADLINE;
         let result = match self.mode {
-            #[cfg(target_os = "macos")]
-            PosixPickerFixture::CancellableRead | PosixPickerFixture::CancellableMuxRead => {
-                Err(ErrorCode::OperationDenied)
+            MasterMode::Production => self.list_production(transport, generation, path),
+            MasterMode::Fixture(mode) => {
+                let deadline = Instant::now() + PICKER_DEADLINE;
+                match mode {
+                    #[cfg(target_os = "macos")]
+                    PosixPickerFixture::CancellableRead
+                    | PosixPickerFixture::CancellableMuxRead => Err(ErrorCode::OperationDenied),
+                    #[cfg(target_os = "linux")]
+                    PosixPickerFixture::CancellableMuxRead => Err(ErrorCode::OperationDenied),
+                    #[cfg(any(target_os = "macos", target_os = "linux"))]
+                    PosixPickerFixture::Connector => self
+                        .slot
+                        .open_and_list_folders(transport, generation, path, deadline),
+                    PosixPickerFixture::Key => self
+                        .slot
+                        .open_and_list_folders(transport, generation, path, deadline),
+                    #[cfg(target_os = "linux")]
+                    PosixPickerFixture::SyntheticPassword => self
+                        .slot
+                        .list_unlocked_folders(transport, generation, path, deadline),
+                }
             }
-            #[cfg(target_os = "linux")]
-            PosixPickerFixture::CancellableMuxRead => Err(ErrorCode::OperationDenied),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
-            PosixPickerFixture::Connector => self
-                .slot
-                .open_and_list_folders(transport, generation, path, deadline),
-            PosixPickerFixture::Key => self
-                .slot
-                .open_and_list_folders(transport, generation, path, deadline),
-            #[cfg(target_os = "linux")]
-            PosixPickerFixture::SyntheticPassword => self
-                .slot
-                .list_unlocked_folders(transport, generation, path, deadline),
         };
         self.record_observation(generation, result.as_ref().err().copied());
         result
@@ -222,7 +243,9 @@ impl MasterPicker {
         is_cancelled: impl Fn() -> bool,
     ) -> Result<Folders, crate::transport::ListFailure> {
         use crate::transport::ListFailure;
-        if self.mode != PosixPickerFixture::CancellableMuxRead {
+        // No production request carries a cancellation inbox; the fixture mux
+        // lane is the only cancellable lane.
+        if self.mode != MasterMode::Fixture(PosixPickerFixture::CancellableMuxRead) {
             return Err(ErrorCode::OperationDenied.into());
         }
         self.admit(generation)?;
@@ -291,7 +314,7 @@ impl MasterPicker {
         transport: &Transport,
         generation: Token,
     ) -> Result<(), ErrorCode> {
-        if self.mode != PosixPickerFixture::SyntheticPassword {
+        if self.mode != MasterMode::Fixture(PosixPickerFixture::SyntheticPassword) {
             return Err(ErrorCode::OperationDenied);
         }
         if self
@@ -342,6 +365,16 @@ impl MasterPicker {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[path = "posix_picker.production.rs"]
+mod production;
+
+#[cfg(test)]
+#[path = "posix_picker.production.live.tests.rs"]
+mod production_live_tests;
+#[cfg(test)]
+#[path = "posix_picker.production.tests.rs"]
+mod production_tests;
 #[cfg(test)]
 #[path = "posix_picker_tests.rs"]
 mod tests;

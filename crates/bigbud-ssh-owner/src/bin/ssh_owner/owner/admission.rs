@@ -94,7 +94,11 @@ impl Owner {
             return Err(ErrorCode::OperationDenied);
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if self.lanes.master.is_some()
+        if self
+            .lanes
+            .master
+            .as_ref()
+            .is_some_and(super::posix_picker::MasterPicker::restricts_admission)
             && !matches!(
                 operation,
                 Operation::ListFolders(_)
@@ -159,11 +163,10 @@ impl Owner {
 /// Verbs a production owner admits. Everything else is a fixture/proof verb
 /// whose promotion is a separate change (plan W7).
 ///
-/// Masters, PTY, agent proxy and OpenCode leases now live per target, but their
-/// resource providers are still fixture-only: the POSIX master lane validates a
-/// disposable loopback fixture, the PTY runs the proof command, and the agent
-/// proxy consumes the startup-transferred pipes. Production keeps refusing
-/// those verbs typed instead of sharing one fixture resource across targets.
+/// Masters and PTY leases now have real per-target providers: production opens
+/// a verified master under the owner's state root for folder listing and runs
+/// the target's login shell for a reserved terminal. The agent proxy and
+/// OpenCode recipe are still fixture-only, so those verbs remain refused.
 fn production_verb(operation: &Operation) -> bool {
     matches!(
         operation,
@@ -174,5 +177,14 @@ fn production_verb(operation: &Operation) -> bool {
             | Operation::ListFolders(_)
             | Operation::ListAliases(_)
             | Operation::ProofSampleHealth(_)
+            | Operation::ProofPrepareTerminal(_)
+            | Operation::ProofCancelTerminalReservation(_)
+            | Operation::ProofOpenTerminal(_)
+            | Operation::ProofTerminalStatus(_)
+            | Operation::ProofTerminalReplay(_)
+            | Operation::ProofTerminalInput(_)
+            | Operation::ProofTerminalResize(_)
+            | Operation::ProofTerminalCwd(_)
+            | Operation::ProofCloseTerminal(_)
     )
 }

@@ -88,6 +88,22 @@ impl Lanes {
         Ok(())
     }
 
+    /// A changed target policy drops this target's cached transport and lanes.
+    /// In production a confirmed reap also clears the old trust fault so the
+    /// newly resolved policy can open a lease under the same generation. Fixture
+    /// lanes keep their prior pause, exactly as before.
+    pub(crate) fn invalidate_transport(&mut self) {
+        let revoked = self.revoke();
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if revoked.is_ok()
+            && let Some(master) = &mut self.master
+        {
+            master.reset_after_policy_change();
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let _ = revoked;
+    }
+
     pub(crate) fn revoke_agent_proxy(&mut self) -> Result<(), ErrorCode> {
         let Some(proxy) = self.agent_proxy.as_mut() else {
             return if self.agent_close_uncertain {

@@ -65,7 +65,7 @@ const expectCode = async (run: () => Promise<unknown>, code: string) => {
 const bytes = (fill: number) => new Uint8Array(32).fill(fill);
 
 describe("production owner per-target lease identity", () => {
-  it("keeps terminal admission refusal scoped to one target", async () => {
+  it("keeps terminal leases scoped to one target", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
     const path = await fixture.fakeOwner("success");
@@ -80,14 +80,34 @@ describe("production owner per-target lease identity", () => {
         expect(second.generation).toHaveLength(32);
         expect(Buffer.from(first.generation).equals(Buffer.from(second.generation))).toBe(false);
 
-        // This owner is production-only and refuses the fixture terminal lane.
-        // The refusal names the exact target and leaves the other target usable.
-        yield* Effect.promise(() =>
-          expectCode(() => first.prepareProofTerminal(terminal), "operationDenied"),
+        // Production now serves the PTY lane. Each target reserves, opens and
+        // closes its own lease; one target's close cannot reach the other.
+        const firstLease = yield* Effect.promise(() => first.prepareProofTerminal(terminal));
+        const secondLease = yield* Effect.promise(() => second.prepareProofTerminal(terminal));
+        expect(firstLease.lease).toHaveLength(32);
+        expect(secondLease.lease).toHaveLength(32);
+        expect(Buffer.from(firstLease.lease).equals(Buffer.from(secondLease.lease))).toBe(false);
+
+        const opened = yield* Effect.promise(() =>
+          first.openReservedProofTerminal(firstLease.lease),
         );
+        expect(opened.live).toBe(true);
+        yield* Effect.promise(() => second.openReservedProofTerminal(secondLease.lease));
         yield* Effect.promise(() =>
-          expectCode(() => first.closeProofTerminal(bytes(1)), "operationDenied"),
+          first.writeProofTerminalInput(firstLease.lease, 1, new TextEncoder().encode("echo hi\n")),
         );
+        yield* Effect.promise(() => first.resizeProofTerminal(firstLease.lease, 100, 40));
+        const replay = yield* Effect.promise(() => first.replayProofTerminal(firstLease.lease, 0));
+        expect(replay.chunks.length).toBeGreaterThan(0);
+
+        const closed = yield* Effect.promise(() => first.closeProofTerminal(firstLease.lease));
+        expect(closed.live).toBe(false);
+        const stillLive = yield* Effect.promise(() =>
+          second.proofTerminalStatus(secondLease.lease),
+        );
+        expect(stillLive.live).toBe(true);
+        yield* Effect.promise(() => second.closeProofTerminal(secondLease.lease));
+
         yield* Effect.promise(() => second.inspectTrust());
         yield* Effect.promise(() => first.inspectTrust());
 

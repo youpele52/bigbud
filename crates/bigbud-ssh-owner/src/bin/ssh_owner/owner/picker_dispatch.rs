@@ -45,7 +45,8 @@ impl Owner {
     #[cfg(target_os = "linux")]
     pub(super) fn unlock_synthetic_posix_password(&mut self) -> Result<Outcome, ErrorCode> {
         let master = self
-            .picker_master
+            .lanes
+            .master
             .as_mut()
             .ok_or(ErrorCode::OperationDenied)?;
         master.unlock_synthetic(super::present(&self.transport)?, self.generation)?;

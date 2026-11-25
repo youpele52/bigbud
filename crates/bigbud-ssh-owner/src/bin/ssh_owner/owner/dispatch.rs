@@ -288,7 +288,7 @@ impl Owner {
                 Ok(self.agent_action(&operand).map(Outcome::ProofAgentAction))
             }
             Operation::ProofEnsurePeerCoordinatorKey(_) => {
-                let Some(state_dir) = &self.peer_state_dir else {
+                let Some(state_dir) = &self.owner_state_dir else {
                     return Ok(Err(ErrorCode::OperationDenied));
                 };
                 Ok(transport!()

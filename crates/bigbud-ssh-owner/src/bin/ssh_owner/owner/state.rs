@@ -18,8 +18,9 @@ pub(crate) struct Owner {
     pub(super) generation: Token,
     /// Authenticated profile binding used for peer enrollment metadata.
     pub(super) profile: Vec<u8>,
-    /// Owner-private profile state root for peer enrollment; absent off POSIX.
-    pub(super) peer_state_dir: Option<std::path::PathBuf>,
+    /// Owner-private profile state root: retirement, peer enrollment and
+    /// production master control paths. Absent off POSIX.
+    pub(super) owner_state_dir: Option<std::path::PathBuf>,
     pub(super) retirement: Option<Retirement>,
     pub(super) storage: Storage,
     /// Active target transport. `None` only while a production owner is at rest

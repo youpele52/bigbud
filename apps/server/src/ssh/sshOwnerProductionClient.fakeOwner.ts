@@ -156,12 +156,6 @@ const reply = (requestId, target, outcomeField, outcome) =>
     bytesField(3, generationFor(target)),
     bytesField(outcomeField, outcome),
   ]));
-const refuseIfConfigured = (target) => {
-  if (config.rejectTarget === undefined || target !== config.rejectTarget) return 0;
-  if (config.mode === "wrong-target") return 35;
-  if (config.mode === "policy-refusal") return 5;
-  return 0;
-};
 const handleGrant = (request) => {
   const requestId = field(request, 1).value;
   const target = text(field(request, 4) && field(request, 4).value);
@@ -174,30 +168,109 @@ const handleGrant = (request) => {
   }
   return grantReply(requestId, 0);
 };
+const refuseIfConfigured = (target) => {
+  if (config.rejectTarget === undefined || target !== config.rejectTarget) return 0;
+  if (config.mode === "wrong-target") return 35;
+  if (config.mode === "policy-refusal") return 5;
+  return 0;
+};
+// One live terminal lease per target. Production owners keep the exact target
+// and generation on the lease; the fake mirrors that identity so a client test
+// can prove one target's close never reaches another's terminal.
+const terminalLeases = new Map();
+const terminalLease = (target) => {
+  if (!terminalLeases.has(target)) {
+    const lease = Buffer.alloc(32, 0);
+    lease.writeUInt8(0x40 + terminalLeases.size, 0);
+    lease.write(target.slice(0, 24), 1, "utf8");
+    terminalLeases.set(target, lease);
+  }
+  return terminalLeases.get(target);
+};
+const proofTerminal = (lease, live) =>
+  Buffer.concat([
+    bytesField(1, lease),
+    uintField(2, 4242),
+    uintField(3, live ? 1 : 0),
+    bytesField(4, live ? Buffer.from("ready\n") : Buffer.alloc(0)),
+  ]);
+const handleTerminal = (requestId, target, operation) => {
+  const inner = parseFields(operation.value);
+  const requested = field(inner, 1) ? field(inner, 1).value : Buffer.alloc(0);
+  const known = terminalLeases.get(target);
+  switch (operation.field) {
+    case 28: // prepare_terminal
+      return reply(requestId, target, 23, bytesField(1, terminalLease(target)));
+    case 32: // cancel_terminal_reservation
+      terminalLeases.delete(target);
+      return reply(
+        requestId,
+        target,
+        23,
+        Buffer.concat([bytesField(1, requested), uintField(2, 1)]),
+      );
+    case 15: // open_terminal
+      if (!known || (requested.length !== 0 && !requested.equals(known))) {
+        return reply(requestId, target, 10, uintField(1, 2));
+      }
+      return reply(requestId, target, 14, proofTerminal(known, true));
+    case 16: // terminal_status
+    case 26: // terminal_input
+    case 27: // terminal_resize
+      if (!known || !requested.equals(known)) {
+        return reply(requestId, target, 10, uintField(1, 2));
+      }
+      return reply(requestId, target, 14, proofTerminal(known, true));
+    case 17: // close_terminal
+      if (!known || !requested.equals(known)) {
+        return reply(requestId, target, 10, uintField(1, 2));
+      }
+      terminalLeases.delete(target);
+      return reply(requestId, target, 14, proofTerminal(known, false));
+    case 33: // terminal_replay
+      if (!known || !requested.equals(known)) {
+        return reply(requestId, target, 10, uintField(1, 2));
+      }
+      return reply(
+        requestId,
+        target,
+        25,
+        Buffer.concat([
+          bytesField(1, known),
+          uintField(2, 1),
+          uintField(3, 2),
+          bytesField(4, Buffer.concat([uintField(1, 1), bytesField(2, Buffer.from("ready\n"))])),
+          Buffer.alloc(0),
+        ]),
+      );
+    default:
+      return reply(requestId, target, 10, uintField(1, 2));
+  }
+};
+const handleOperation = (requestId, target, operation) => {
+  if (!operation) return reply(requestId, target, 10, uintField(1, 2));
+  if (operation.field === 10) return reply(requestId, target, 11, trustVerified());
+  if (operation.field === 14) return reply(requestId, target, 13, bytesField(1, "/home/fixture"));
+  return handleTerminal(requestId, target, operation);
+};
 const handleRequest = (request) => {
   const requestId = field(request, 1).value;
   const target = text(field(request, 4) && field(request, 4).value);
   activity("request " + target);
   const operation = request.find((entry) => entry.field >= 10);
-  const isTrust = operation && operation.field === 10;
-  const isList = operation && operation.field === 14;
   if (!hydrated.has(target)) {
-    pending = { requestId, target, isTrust, isList };
+    pending = { requestId, target, operation };
     return send(7, bytesField(1, Buffer.from(target)));
   }
-  if (!operation || !(isTrust || isList)) return reply(requestId, target, 10, uintField(1, 2));
-  if (isTrust) return reply(requestId, target, 11, trustVerified());
-  return reply(requestId, target, 13, bytesField(1, "/home/fixture"));
+  return handleOperation(requestId, target, operation);
 };
 const handleSnapshot = (snapshot) => {
   const target = text(field(snapshot, 1).value);
   hydrated.add(target);
   if (!pending || pending.target !== target) return;
-  const { requestId, isTrust, isList } = pending;
+  const { requestId, operation } = pending;
   pending = null;
-  if (isTrust) reply(requestId, target, 11, trustVerified());
-  else if (isList) reply(requestId, target, 13, bytesField(1, "/home/fixture"));
-  else reply(requestId, target, 10, uintField(1, 2));
+  return handleOperation(requestId, target, operation);
 };
 let buffer = Buffer.alloc(0);
 let stage = 0;

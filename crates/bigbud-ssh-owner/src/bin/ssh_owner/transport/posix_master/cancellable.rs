@@ -49,6 +49,7 @@ impl PosixMasterSlot {
                     || PrivatePaths::new_in(root),
                     &[],
                     trust,
+                    false,
                 )?;
                 let master = self.admit(transport, generation)?;
                 checkpoint(cancel)?;

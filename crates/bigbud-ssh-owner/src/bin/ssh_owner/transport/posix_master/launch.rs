@@ -38,6 +38,20 @@ pub(super) fn validate_fixture_for_auth(
     paths::executable(Path::new(SSH))
 }
 
+/// Production master/PTY image admission. Same fences as the fixture minus the
+/// loopback requirement: only the bound system image, the target's own policy
+/// and identity files, and no proof agent or ambient SSH configuration.
+pub(super) fn validate_production(transport: &Transport) -> Result<Stamp, ErrorCode> {
+    if transport.config.ssh != Path::new(SSH) || transport.proof_agent.is_some() {
+        return Err(ErrorCode::ConfigUnsupported);
+    }
+    transport.revalidate_policy()?;
+    transport.identities.apply_to(&mut Command::new(SSH))?;
+    // Revalidate the image binding this owner reported at startup.
+    transport.images.ssh()?;
+    paths::executable(Path::new(SSH))
+}
+
 #[cfg(test)]
 pub(super) fn master_command(
     pinned: &PinnedSsh,

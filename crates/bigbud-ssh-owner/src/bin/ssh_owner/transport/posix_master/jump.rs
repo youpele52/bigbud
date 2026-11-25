@@ -5,6 +5,7 @@ mod diagnostic;
 mod observe;
 pub(crate) use observe::maybe_observe_key;
 
+use super::launch::validate_fixture_for_auth;
 use super::*;
 use diagnostic::Diagnostics;
 use std::{collections::HashSet, net::SocketAddr, process::Stdio};
@@ -192,7 +193,10 @@ impl Route {
             },
             &[],
             TrustRead::Default,
-            io.is_some(),
+            super::LinkMode {
+                forwarded: io.is_some(),
+                production: false,
+            },
         )?;
         if let Some(io) = io {
             command
