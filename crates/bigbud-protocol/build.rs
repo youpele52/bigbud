@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/resource_cleanup.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/search.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/workspace.proto");
+    println!("cargo:rerun-if-changed=../../protocol/remote-agent/terminal_host.proto");
 
     let protoc = protoc_bin_vendored::protoc_bin_path()
         .map_err(|error| format!("failed to resolve the vendored protobuf compiler: {error}"))?;
@@ -43,6 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "pty_close_all_response",
         "host_resource_report",
         "host_notice_replay_response",
+        "terminal_host_inventory_request",
+        "terminal_host_inventory_response",
+        "terminal_host_retire_ssh_spawn_request",
+        "terminal_host_retire_ssh_spawn_response",
     ] {
         config.boxed(format!(".bigbud.remote_agent.v1.Frame.payload.{field}"));
     }

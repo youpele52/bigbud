@@ -1,0 +1,84 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// Fixed read-only recipes; do not add arbitrary Git arguments here.
+message ProofWorkspaceGit {
+  string workspace_root = 1;
+  ProofWorkspaceGitAction action = 2;
+  // Validated repository-relative operands for the fixed mutation recipes only.
+  repeated string paths = 3;
+}
+
+enum ProofWorkspaceGitAction {
+  reserved 127;
+  PROOF_WORKSPACE_GIT_ACTION_UNSPECIFIED = 0;
+  PROOF_WORKSPACE_GIT_ACTION_STATUS_PORCELAIN_V2 = 1;
+  PROOF_WORKSPACE_GIT_ACTION_IS_INSIDE_WORK_TREE = 2;
+  PROOF_WORKSPACE_GIT_ACTION_STAGED_NUMSTAT = 3;
+  PROOF_WORKSPACE_GIT_ACTION_UNSTAGED_NUMSTAT = 4;
+  PROOF_WORKSPACE_GIT_ACTION_ORIGIN_DEFAULT_REF = 5;
+  PROOF_WORKSPACE_GIT_ACTION_ORIGIN_REMOTE_URL = 6;
+  PROOF_WORKSPACE_GIT_ACTION_STATUS_PORCELAIN_V2_NUL = 7;
+  PROOF_WORKSPACE_GIT_ACTION_SHOW_TOPLEVEL = 8;
+  PROOF_WORKSPACE_GIT_ACTION_RESTORE_TRACKED_PATHS = 9;
+  PROOF_WORKSPACE_GIT_ACTION_CLEAN_UNTRACKED_PATHS = 10;
+  PROOF_WORKSPACE_GIT_ACTION_STAGE_PATHS = 11;
+  PROOF_WORKSPACE_GIT_ACTION_UNTRACKED_NUMSTAT = 12;
+}
+
+message ProofWorkspaceGitResult {
+  optional int32 code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  // Additive: an ambiguous mutation outcome is explicit instead of inferred from a missing exit.
+  ProofWorkspaceGitOutcome outcome = 4;
+}
+
+enum ProofWorkspaceGitOutcome {
+  PROOF_WORKSPACE_GIT_OUTCOME_UNSPECIFIED = 0;
+  PROOF_WORKSPACE_GIT_OUTCOME_EXITED = 1;
+  PROOF_WORKSPACE_GIT_OUTCOME_CANCELLED = 2;
+  PROOF_WORKSPACE_GIT_OUTCOME_OUTCOME_UNKNOWN = 3;
+}
+
+// One destination only in the fixture. Bind all inputs to the trusted startup
+// approval and current owner generation before starting either child.
+message ProofGitTrackedPush {
+  ProofGitPushRepository repository = 1;
+  string remote_name = 2;
+  string source_ref = 3;
+  string destination_ref = 4;
+  string source_oid = 5;
+  ProofGitPushDestination destination = 6;
+  uint32 timeout_ms = 7;
+}
+
+message ProofGitPushRepository {
+  string worktree = 1;
+  string git_dir = 2;
+  string common_dir = 3;
+}
+
+message ProofGitPushDestination {
+  string effective_url = 1;
+  string execution_target_id = 2;
+  bytes target_generation = 3;
+  string host = 4;
+  string user = 5;
+  uint32 port = 6;
+  string repository_path = 7;
+  string expected_old_oid = 8;
+}
+
+message ProofGitTrackedPushReceipt {
+  ProofGitTrackedPushStatus status = 1;
+}
+
+enum ProofGitTrackedPushStatus {
+  PROOF_GIT_TRACKED_PUSH_STATUS_UNSPECIFIED = 0;
+  PROOF_GIT_TRACKED_PUSH_STATUS_DENIED_BEFORE_DISPATCH = 1;
+  PROOF_GIT_TRACKED_PUSH_STATUS_ACCEPTED = 2;
+  PROOF_GIT_TRACKED_PUSH_STATUS_UNCHANGED = 3;
+  PROOF_GIT_TRACKED_PUSH_STATUS_REJECTED = 4;
+  PROOF_GIT_TRACKED_PUSH_STATUS_UNCONFIRMED = 5;
+}

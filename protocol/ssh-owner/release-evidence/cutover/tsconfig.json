@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "files": [
+    "evidence.ts",
+    "check.ts",
+    "check.test.ts",
+    "check.roundTrip.test.ts",
+    "verify.ts",
+    "verify.roundTrip.ts",
+    "vitest.config.ts"
+  ]
+}

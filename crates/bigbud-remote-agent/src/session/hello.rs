@@ -102,6 +102,10 @@ impl AgentSession {
             (QUERY_RESPONDER_CAPABILITY, true),
             (SPOOL_CAPABILITY, host.spool().is_some()),
             (LOCAL_LAUNCH_CAPABILITY, host.local_desktop_host()),
+            (
+                super::terminal_host::HOST_RETIREMENT_CAPABILITY,
+                host.local_desktop_host(),
+            ),
         ]
         .into_iter()
         .filter(|(_, enabled)| *enabled)

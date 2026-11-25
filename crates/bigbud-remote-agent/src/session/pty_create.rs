@@ -21,6 +21,42 @@ fn wants_lifecycle(request: &v1::PtyCreateRequest) -> bool {
         || !request.activity_source.is_empty()
 }
 
+fn pane_identity(request: &v1::PtyCreateRequest) -> Option<super::pty_handlers::PtyPaneIdentity> {
+    let kind = if !request.pane_kind.is_empty() {
+        request.pane_kind.clone()
+    } else if request.local_launch
+        && std::path::Path::new(&request.shell)
+            .file_name()
+            .is_some_and(|name| name == "ssh")
+    {
+        "managed-ssh".to_owned()
+    } else {
+        "local".to_owned()
+    };
+    if !matches!(kind.as_str(), "local" | "managed-ssh") {
+        return None;
+    }
+    if request.thread_id.is_empty() && request.pane_id.is_empty() && request.pane_kind.is_empty() {
+        // Legacy create: no application identity was supplied, but the kind is still known.
+        return Some(super::pty_handlers::PtyPaneIdentity {
+            thread_id: String::new(),
+            pane_id: String::new(),
+            kind,
+        });
+    }
+    let bounded = |value: &str| {
+        value.len() <= 256 && value.is_ascii() && !value.bytes().any(|b| b.is_ascii_control())
+    };
+    if !bounded(&request.thread_id) || !bounded(&request.pane_id) {
+        return None;
+    }
+    Some(super::pty_handlers::PtyPaneIdentity {
+        thread_id: request.thread_id.clone(),
+        pane_id: request.pane_id.clone(),
+        kind,
+    })
+}
+
 impl AgentSession {
     pub fn prepare_pty_create(
         &mut self,
@@ -76,6 +112,16 @@ impl AgentSession {
         }
         let host = self.terminal_host.clone();
         let local_launch = request.local_launch;
+        let identity = pane_identity(&request);
+        if identity.is_none() {
+            return Err(SessionError::Pty("PTY_PANE_IDENTITY_INVALID".to_owned()));
+        }
+        let requested_kind = identity.as_ref().map(|identity| identity.kind.clone());
+        if requested_kind.as_deref() == Some("managed-ssh")
+            && host.as_ref().is_some_and(|host| host.ssh_spawn_retired())
+        {
+            return Err(SessionError::Pty("SSH_SPAWN_RETIRED".to_owned()));
+        }
         if local_launch && !host.as_ref().is_some_and(|host| host.local_desktop_host()) {
             return Err(SessionError::Pty(
                 "local launch requires a --local-desktop-host terminal host".to_owned(),
@@ -152,6 +198,7 @@ impl AgentSession {
                 handle: Arc::clone(&job.handle),
                 request_digest: request.request_digest.clone(),
                 expires_at: None,
+                pane_identity: identity.clone(),
                 lifecycle,
                 workspace_handle: request.workspace_handle.clone(),
             },

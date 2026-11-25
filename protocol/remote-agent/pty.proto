@@ -32,6 +32,12 @@ message PtyCreateRequest {
   // Added in 1.9. Opts this PTY into host lifecycle policy; false keeps today's
   // behavior and never counts toward the limit.
   bool lifecycle_managed = 17;
+  // Added in 1.10 for the X2 terminal-host inventory. Empty on a legacy create;
+  // the host then reports empty identity and infers the kind from the launch.
+  string thread_id = 18;
+  string pane_id = 19;
+  // "local" | "managed-ssh"; empty means infer from the launch command.
+  string pane_kind = 20;
 }
 
 message PtyCreateResponse {

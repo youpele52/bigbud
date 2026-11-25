@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package bigbud.ssh_owner.v1;
+
+// Exec-class owner verbs for the two distinct G2 authorities and the approved
+// direct ACP command. The owner selects the remote program, args, shell and
+// transport. No caller-supplied local program, environment, stdin, PTY or SSH
+// option can cross this boundary, and no verb can substitute for another.
+
+// run_thread_shell authority: the accepted user command bound to its thread
+// and backend-resolved target/workspace. Buffered, bounded and non-interactive.
+message ProofRunThreadShell {
+  string workspace_root = 1;
+  string cwd = 2;
+  string thread_id = 3;
+  string command = 4;
+  // Bounded by the owner to the existing 30 s default and 120 s ceiling.
+  uint32 timeout_ms = 5;
+}
+
+// run_provider_workspace_shell authority: a provider invocation bound to its
+// authorized workspace. Provenance is part of the grant operand, never a
+// caller-authored permission claim.
+message ProofRunProviderWorkspaceShell {
+  string workspace_root = 1;
+  string cwd = 2;
+  string provider = 3;
+  string session_id = 4;
+  string invocation_id = 5;
+  string command = 6;
+  uint32 timeout_ms = 7;
+}
+
+// run_acp_command authority: the fixed, non-interactive ACP recipe. The caller
+// can only name the approved workspace and cwd; the owner selects the program
+// and args and never converts this into an interactive shell.
+message ProofRunAcpCommand {
+  string workspace_root = 1;
+  string cwd = 2;
+}
+
+// Buffered owner-selected shell result. Truncation is not an error; an
+// ambiguous or timed-out outcome is a typed error and is never replayed.
+message ProofShellResult {
+  bytes output = 1;
+  uint32 exit_code = 2;
+  bool truncated = 3;
+  bool timed_out = 4;
+}
+
+// Fixed-recipe ACP command result. Output is the recipe stdout only.
+message ProofAcpCommandResult {
+  bytes output = 1;
+  uint32 exit_code = 2;
+  bool truncated = 3;
+}

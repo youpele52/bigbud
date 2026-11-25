@@ -1,0 +1,61 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// A trusted startup fixture binds the executable hash and exact session.
+// The caller cannot pass command text, environment, or configuration arguments.
+message ProofProviderScope {
+  string thread_id = 1;
+  uint64 session_epoch = 2;
+  string cwd = 3;
+  string binary = 4;
+  // Pi resume only. The proof binding refuses any value; the product service
+  // limits it to a bounded path inside the authorized workspace root.
+  optional string session_file = 5;
+}
+
+message ProofProviderVersion {
+  optional int32 code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}
+
+// Product provider service scope. The owner selects the executable, arguments
+// and (for OpenCode v1) the only forwarding authority at startup; a request
+// carries only the authorized session below.
+message ProviderServiceScope {
+  string thread_id = 1;
+  uint64 session_epoch = 2;
+  string cwd = 3;
+}
+
+message ProofOpencodeOpen {
+  ProofProviderScope scope = 1;
+  // Random private dispatcher reservation, accepted once by the bound owner.
+  bytes lease = 2;
+  // Product scope for the owner-configured OpenCode service. Mutually
+  // exclusive with `scope`.
+  ProviderServiceScope service_scope = 3;
+}
+
+message ProofOpencodeLease {
+  bytes lease = 1;
+}
+
+message ProofOpencodeState {
+  bytes lease = 1;
+  ProofOpencodePhase phase = 2;
+  optional uint32 local_port = 3;
+  optional uint32 exit_code = 4;
+}
+
+enum ProofOpencodePhase {
+  PROOF_OPENCODE_PHASE_UNSPECIFIED = 0;
+  PROOF_OPENCODE_PHASE_STARTING = 1;
+  PROOF_OPENCODE_PHASE_READY = 2;
+  PROOF_OPENCODE_PHASE_CLOSING = 3;
+  PROOF_OPENCODE_PHASE_CLOSED = 4;
+  PROOF_OPENCODE_PHASE_LOST = 5;
+  PROOF_OPENCODE_PHASE_UNCONFIRMED = 6;
+  PROOF_OPENCODE_PHASE_EXITED = 7;
+  PROOF_OPENCODE_PHASE_REJECTED = 8;
+}

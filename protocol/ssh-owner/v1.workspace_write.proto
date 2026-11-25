@@ -1,0 +1,151 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+message Empty {}
+
+message ProofWorkspaceWrite {
+  string workspace_root = 1;
+  string relative_path = 2;
+  // The isolated proof limits content to 48 KiB within the control frame.
+  // Production-sized payloads require operation-scoped native stream credit.
+  bytes contents = 3;
+}
+
+// Exclusive publication into an existing parent. Never interpret as overwrite.
+message ProofWorkspaceCreate {
+  string workspace_root = 1;
+  string relative_path = 2;
+  bytes contents = 3; // At most 48 KiB, including empty.
+}
+
+message ProofWorkspaceCreateResult {
+  oneof outcome {
+    Empty created = 1;
+    Empty already_exists = 2;
+  }
+}
+
+// Folder creation and permanent entry deletion for the exact bound workspace
+// root. Paths are relative components: no traversal, NUL, drive prefix or
+// symlink component is admitted. The parent must already exist.
+message ProofWorkspaceCreateDirectory {
+  string workspace_root = 1;
+  string relative_path = 2;
+}
+
+message ProofWorkspaceDeleteEntry {
+  string workspace_root = 1;
+  string relative_path = 2;
+  // The kind the user confirmed. A different real entry is refused.
+  bool expected_directory = 3;
+}
+
+message ProofWorkspaceEntryMutation {
+  oneof outcome {
+    Empty created = 1;
+    Empty already_exists = 2;
+    Empty deleted = 3;
+    Empty not_found = 4;
+  }
+}
+
+// Unguarded overwrite staged in contiguous bounded chunks. The owner holds at
+// most 512 KiB for one draft and dispatches exactly one bounded mutating write
+// on commit. A missing acknowledgement is unknown and is never replayed.
+message ProofWorkspaceWriteBinding {
+  string operation_id = 1;
+  string workspace_root = 2;
+  string relative_path = 3;
+  optional uint32 body_bytes = 4; // Required, including for an empty body; at most 512 KiB.
+}
+
+message ProofWorkspaceWriteBegin {
+  ProofWorkspaceWriteBinding binding = 1;
+}
+
+message ProofWorkspaceWriteChunk {
+  ProofWorkspaceWriteBinding binding = 1;
+  bytes lease = 2; // Exactly 40 opaque bytes.
+  uint32 offset = 3;
+  bytes data = 4; // Nonempty; at most 48 KiB.
+}
+
+message ProofWorkspaceWriteCommit {
+  ProofWorkspaceWriteBinding binding = 1;
+  bytes lease = 2;
+}
+
+message ProofWorkspaceWriteAbort {
+  ProofWorkspaceWriteBinding binding = 1;
+  bytes lease = 2;
+}
+
+message ProofWorkspaceWriteStage {
+  oneof outcome {
+    bytes begun = 1; // Exactly 40 opaque bytes.
+    uint32 chunk_accepted = 2; // Next contiguous offset.
+    Empty written = 3; // Commit dispatched and acknowledged.
+    Empty aborted = 4; // Draft discarded; nothing dispatched.
+  }
+}
+
+// Private direct-workspace fixture only. Each packet has a fresh request ID
+// and a canonical operand-bound grant; operation_id is stable across packets.
+message ProofWorkspaceGuardedWriteBinding {
+  string operation_id = 1;
+  string workspace_root = 2;
+  string relative_path = 3;
+  bytes expected_sha256 = 4; // Exactly 32 raw bytes.
+  bytes attempted_sha256 = 5; // Exactly 32 raw bytes.
+  optional uint32 body_bytes = 6; // Required, including for an empty body; at most 512 KiB.
+}
+
+message ProofWorkspaceGuardedWriteBegin {
+  ProofWorkspaceGuardedWriteBinding binding = 1;
+}
+
+message ProofWorkspaceGuardedWriteChunk {
+  ProofWorkspaceGuardedWriteBinding binding = 1;
+  bytes lease = 2; // Exactly 40 opaque bytes.
+  uint32 offset = 3;
+  bytes data = 4; // Nonempty; at most 48 KiB.
+}
+
+message ProofWorkspaceGuardedWriteCommit {
+  ProofWorkspaceGuardedWriteBinding binding = 1;
+  bytes lease = 2;
+}
+
+message ProofWorkspaceGuardedWriteAbort {
+  ProofWorkspaceGuardedWriteBinding binding = 1;
+  bytes lease = 2;
+}
+
+message ProofWorkspaceGuardedWriteStage {
+  oneof outcome {
+    bytes begun = 1; // Exactly 40 opaque bytes.
+    uint32 chunk_accepted = 2; // Next contiguous offset.
+    Empty validated_not_dispatched = 3; // No remote operation or file write.
+    Empty aborted = 4;
+  }
+}
+
+// Disposable proof only. The coordinator must commit durable intent before
+// requesting APPLY. Unlike validation-only COMMIT, APPLY can mutate the host.
+message ProofWorkspaceGuardedWriteApply {
+  ProofWorkspaceGuardedWriteBinding binding = 1;
+  bytes lease = 2;
+}
+
+message ProofGuardedWriteConflict {
+  optional bytes current_sha256 = 1; // Exactly 32 bytes when known; absent on missing/changed.
+}
+
+message ProofWorkspaceGuardedWriteResult {
+  oneof outcome {
+    bytes saved_sha256 = 1; // Exactly 32 raw bytes, equal to attempted_sha256.
+    ProofGuardedWriteConflict conflict = 2;
+    Empty terminal = 3; // Definitively did not publish.
+    Empty unknown = 4; // May have published; never replay APPLY.
+  }
+}

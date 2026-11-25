@@ -1,0 +1,17 @@
+[package]
+name = "ssh-owner-wire-fixtures"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+# Test-only package, intentionally not a member of the product workspace.
+[workspace]
+
+[dev-dependencies]
+prost = "=0.14.4"
+sha2 = "=0.10.9"
+
+[build-dependencies]
+prost-build = "=0.14.4"
+protoc-bin-vendored = "=3.2.0"

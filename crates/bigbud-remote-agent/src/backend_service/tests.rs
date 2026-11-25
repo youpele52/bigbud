@@ -128,6 +128,18 @@ fn independent_units_limit_to_initial_plus_five_and_never_embed_credentials() {
             "ExecStopPost=-/bin/sh -c 'case $$SERVICE_RESULT in success) exec /usr/bin/systemctl --user --no-ask-password reset-failed $$1;; esac' sh %n"
         ]
     );
+    let exec_stop = units
+        .backend
+        .lines()
+        .filter(|line| line.starts_with("ExecStop="))
+        .collect::<Vec<_>>();
+    assert_eq!(exec_stop.len(), 1);
+    assert!(exec_stop[0].contains("--backend-service drain"));
+    assert!(exec_stop[0].contains("config-v1"));
+    // The drain must run before the stop-post flush; it is never silently skipped.
+    assert!(
+        units.backend.find("ExecStop=").unwrap() < units.backend.find("ExecStopPost=").unwrap()
+    );
     assert!(!units.rust.contains("ExecStopPost="));
     assert!(!units.rust.contains("WantedBy="));
     assert!(units.backend.contains("WantedBy=default.target"));

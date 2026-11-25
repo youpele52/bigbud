@@ -1,0 +1,145 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// Read-only setup observation, never an installation command or completion authority.
+message ProofDeploymentHostProbe {
+  string deployment_request_id = 1;
+}
+
+message ProofDeploymentHostResult {
+  optional int32 code = 1;
+  string stdout = 2;
+  string stderr = 3;
+  // Operation lifecycle for typed deployment steps. Absent on a plain recipe exit.
+  ProofDeploymentOperationState state = 4;
+}
+
+// One typed deployment step for an exact request and its pinned operands. The
+// owner selects every program, argument, cwd and environment value; operands are
+// validated data, never shell text. A step that is dispatched but not confirmed
+// is reported unknown and is never replayed; its request id may be reattached.
+message ProofDeploymentAction {
+  string request_id = 1;
+  ProofDeploymentActionKind kind = 2;
+  string install_name = 3;
+  string archive_sha256 = 4;
+  string manifest_sha256 = 5;
+  // Exact HTTPS asset for a remote fetch. No other scheme is admitted.
+  string url = 6;
+  // Hard byte bound for the fetch; a declared or observed oversize is refused.
+  uint64 max_bytes = 7;
+  // Bounded archive bytes for the laptop upload path.
+  bytes contents = 8;
+  // Start only this configured authority. Boot enablement needs the consent flag.
+  string authority_id = 9;
+  bool enable_boot = 10;
+  // Graph-relative node and entry paths inside the published install.
+  string node_path = 11;
+  string entry_path = 12;
+  // Every required graph member and its pinned digest for publication.
+  repeated ProofDeploymentPinnedFile pins = 13;
+}
+
+enum ProofDeploymentActionKind {
+  PROOF_DEPLOYMENT_ACTION_KIND_UNSPECIFIED = 0;
+  // Write bounded archive bytes into this request's staging directory.
+  PROOF_DEPLOYMENT_ACTION_KIND_ARCHIVE_UPLOAD = 1;
+  // Discard exactly this request's staging directory; never a published install.
+  PROOF_DEPLOYMENT_ACTION_KIND_RESET = 2;
+  // Download the pinned HTTPS asset into staging and verify its digest.
+  PROOF_DEPLOYMENT_ACTION_KIND_FETCH = 3;
+  // Publish staging by one rename after every pinned digest matches.
+  PROOF_DEPLOYMENT_ACTION_KIND_PUBLISH = 4;
+  // Start the configured backend for this authority; never enables boot here.
+  PROOF_DEPLOYMENT_ACTION_KIND_START = 5;
+  // Cancel this operation lease only. Never a process-wide teardown.
+  PROOF_DEPLOYMENT_ACTION_KIND_CANCEL = 6;
+  // Read the retained outcome for one request id. Never dispatches work.
+  PROOF_DEPLOYMENT_ACTION_KIND_REATTACH = 7;
+}
+
+message ProofDeploymentPinnedFile {
+  // Graph-relative member path, validated before any filesystem operation.
+  string path = 1;
+  string sha256 = 2;
+}
+
+enum ProofDeploymentOperationState {
+  PROOF_DEPLOYMENT_OPERATION_STATE_UNSPECIFIED = 0;
+  PROOF_DEPLOYMENT_OPERATION_STATE_STARTED = 1;
+  PROOF_DEPLOYMENT_OPERATION_STATE_COMPLETED = 2;
+  PROOF_DEPLOYMENT_OPERATION_STATE_CANCELLED = 3;
+  // Dispatched without a confirmed result. Never replayed; reattach by id.
+  PROOF_DEPLOYMENT_OPERATION_STATE_OUTCOME_UNKNOWN = 4;
+  PROOF_DEPLOYMENT_OPERATION_STATE_REFUSED = 5;
+}
+
+message ProofDeploymentCompletion {
+  string deployment_request_id = 1;
+  string authority_id = 2;
+}
+
+message ProofDeploymentStageBegin {
+  string request_id = 1;
+  string install_name = 2;
+  string archive_sha256 = 3;
+  string manifest_sha256 = 4;
+}
+
+// One bounded manifest in the exact acknowledged fixture stage, never an archive.
+message ProofDeploymentManifestPut {
+  string request_id = 1;
+  string manifest_sha256 = 2;
+  bytes contents = 3;
+}
+
+// Read the reservation for exactly the workspace root bound at owner startup.
+message ProofWorkspaceModeInspect {
+  string root = 1;
+}
+
+message ProofWorkspaceModeInspection {
+  oneof result {
+    ProofWorkspaceModeReady ready = 1;
+    ProofWorkspaceModeRefusal refusal = 2;
+  }
+}
+
+enum ProofWorkspaceModeRefusal {
+  PROOF_WORKSPACE_MODE_REFUSAL_UNSPECIFIED = 0;
+  PROOF_WORKSPACE_MODE_REFUSAL_NOT_LINUX = 1;
+  PROOF_WORKSPACE_MODE_REFUSAL_NO_MACHINE_ID = 2;
+  PROOF_WORKSPACE_MODE_REFUSAL_MISSING_FOLDER = 3;
+  PROOF_WORKSPACE_MODE_REFUSAL_UNSAFE_STORAGE = 4;
+}
+
+message ProofWorkspaceModeReady {
+  string physical_root = 1;
+  string host_identity = 2;
+  uint32 account_uid = 3;
+  string realpath_sha256 = 4;
+  uint64 generation = 5;
+  optional string current_record = 6;
+  bytes publication_token = 7;
+}
+
+// Single-use token for one exact owner-retained observation in the current generation.
+message ProofWorkspaceModePublish {
+  string root = 1;
+  bytes publication_token = 2;
+  string next_record = 3;
+}
+
+message ProofWorkspaceModePublication {
+  ProofWorkspaceModePublishStatus status = 1;
+}
+
+enum ProofWorkspaceModePublishStatus {
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_UNSPECIFIED = 0;
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_COMMITTED = 1;
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_CONFLICT = 2;
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_UNCERTAIN = 3;
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_MISSING_FOLDER = 4;
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_UNSAFE_STORAGE = 5;
+  PROOF_WORKSPACE_MODE_PUBLISH_STATUS_REFUSED = 6;
+}

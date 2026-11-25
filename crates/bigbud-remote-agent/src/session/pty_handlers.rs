@@ -1,9 +1,18 @@
 use super::*;
 
+#[derive(Clone)]
+pub(super) struct PtyPaneIdentity {
+    pub(super) thread_id: String,
+    pub(super) pane_id: String,
+    pub(super) kind: String,
+}
+
 pub(super) struct PtySession {
     pub(super) handle: Arc<pty::PtyHandle>,
     pub(super) request_digest: Vec<u8>,
     pub(super) expires_at: Option<Instant>,
+    /// Application identity and kind for X2 inventory; absent on legacy creates.
+    pub(super) pane_identity: Option<PtyPaneIdentity>,
     /// Present only for PTYs created by a 1.9 client on a terminal host (plan §8.7 opt-in).
     pub(super) lifecycle: Option<Arc<super::pty_lifecycle::PtyLifecycle>>,
     /// The workspace root this session holds a reference on (plan §8.10).

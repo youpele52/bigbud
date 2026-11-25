@@ -137,6 +137,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "bigbud-ssh-owner"
+version = "0.1.0"
+dependencies = [
+ "bigbud-remote-agent",
+ "libc",
+ "prost",
+ "prost-build",
+ "protoc-bin-vendored",
+ "serde_json",
+ "sha2",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "bigbud-system"
 version = "0.1.0"
 dependencies = [

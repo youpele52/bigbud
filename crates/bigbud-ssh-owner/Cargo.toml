@@ -1,0 +1,41 @@
+[package]
+name = "bigbud-ssh-owner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "bigbud-ssh-owner"
+path = "src/bin/ssh_owner/main.rs"
+
+[dependencies]
+sha2.workspace = true
+
+[target.'cfg(any(unix, windows))'.dependencies]
+prost.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+bigbud-remote-agent = { path = "../bigbud-remote-agent" }
+libc = "0.2"
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Security_Cryptography",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Pipes",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+] }
+
+[build-dependencies]
+prost-build.workspace = true
+protoc-bin-vendored.workspace = true
+
+[lints]
+workspace = true

@@ -4,8 +4,8 @@
 //! have none and keep refusing lifecycle requests.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 
 use bigbud_protocol::v1;
@@ -85,6 +85,10 @@ pub(crate) struct HostLifecycle {
     pub(crate) probe: ProcessProbe,
     /// The last live snapshots, reused while their screen is unchanged (R7).
     pub(crate) snapshot_cache: Mutex<super::pty_screen_cache::SnapshotCache>,
+    /// Build A X2 retirement: once acknowledged, managed-SSH launches are refused.
+    ssh_spawn_retired: AtomicBool,
+    /// Durable across a host restart; absent only when the host has no state root.
+    retirement_marker: Option<PathBuf>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -97,6 +101,10 @@ impl HostLifecycle {
     /// A spool that cannot open only disables `terminal.spool`; the host still runs.
     pub(crate) fn new(epoch: &str, state_root: Option<&Path>, options: HostOptions) -> Arc<Self> {
         let now = options.clock.now_ms();
+        let retirement_marker = state_root.map(|root| root.join("ssh-spawn-retired"));
+        let ssh_spawn_retired = retirement_marker
+            .as_ref()
+            .is_some_and(|marker| marker.exists());
         let spool = state_root.and_then(|root| {
             SpoolStore::open(root, options.spool_limits)
                 .map_err(|error| eprintln!("terminal spool unavailable: {}", error.code()))
@@ -134,6 +142,8 @@ impl HostLifecycle {
             copy_bytes: AtomicUsize::new(0),
             probe: ProcessProbe::new(),
             snapshot_cache: Mutex::new(super::pty_screen_cache::SnapshotCache::default()),
+            ssh_spawn_retired: AtomicBool::new(ssh_spawn_retired),
+            retirement_marker,
         })
     }
 
@@ -143,6 +153,27 @@ impl HostLifecycle {
 
     pub(crate) fn local_desktop_host(&self) -> bool {
         self.local_desktop_host
+    }
+
+    pub(crate) fn ssh_spawn_retired(&self) -> bool {
+        self.ssh_spawn_retired.load(Ordering::SeqCst)
+    }
+
+    /// Durably records the retirement before acknowledging it. A host without a
+    /// state root keeps it in memory only and says so through the response code.
+    pub(crate) fn retire_ssh_spawn(&self) -> Result<(), &'static str> {
+        if let Some(marker) = &self.retirement_marker {
+            let temporary = marker.with_extension("staging");
+            std::fs::write(
+                &temporary,
+                b"retired
+",
+            )
+            .map_err(|_| "HOST_RETIREMENT_WRITE_FAILED")?;
+            std::fs::rename(&temporary, marker).map_err(|_| "HOST_RETIREMENT_WRITE_FAILED")?;
+        }
+        self.ssh_spawn_retired.store(true, Ordering::SeqCst);
+        Ok(())
     }
 
     pub(crate) fn spool(&self) -> Option<&SpoolStore> {

@@ -1,0 +1,27 @@
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rerun-if-changed=../v1.proto");
+    println!("cargo:rerun-if-changed=../v1.jump_failure.proto");
+    println!("cargo:rerun-if-changed=../v1.terminal.proto");
+    println!("cargo:rerun-if-changed=../v1.agent_proxy.proto");
+    println!("cargo:rerun-if-changed=../v1.workspace_git.proto");
+    println!("cargo:rerun-if-changed=../v1.deployment.proto");
+    println!("cargo:rerun-if-changed=../v1.provider.proto");
+    println!("cargo:rerun-if-changed=../v1.workspace_directory.proto");
+    println!("cargo:rerun-if-changed=../v1.workspace_write.proto");
+    println!("cargo:rerun-if-changed=../v1.shell.proto");
+    println!("cargo:rerun-if-changed=../v1.peer.proto");
+    println!("cargo:rerun-if-changed=../v1.transfer.proto");
+    prost_build::Config::new()
+        .boxed(".bigbud.ssh_owner.v1.Request.operation.proof_git_tracked_push")
+        .message_attribute(
+            ".bigbud.ssh_owner.v1.ProofTransferStreamControl",
+            "#[allow(dead_code)]",
+        )
+        .message_attribute(
+            ".bigbud.ssh_owner.v1.ProofTransferChildProgress",
+            "#[allow(dead_code)]",
+        )
+        .protoc_executable(protoc_bin_vendored::protoc_bin_path()?)
+        .compile_protos(&["../v1.proto"], &[".."])
+        .map_err(Into::into)
+}

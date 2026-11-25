@@ -16,6 +16,12 @@ impl AgentSession {
             Some(v1::frame::Payload::PtyListRequest(request)) if self.ready => {
                 Ok(self.handle_pty_list(request))
             }
+            Some(v1::frame::Payload::TerminalHostInventoryRequest(request)) if self.ready => {
+                Ok(self.handle_terminal_host_inventory(*request))
+            }
+            Some(v1::frame::Payload::TerminalHostRetireSshSpawnRequest(request)) if self.ready => {
+                Ok(self.handle_terminal_host_retire_ssh_spawn(*request))
+            }
             Some(v1::frame::Payload::PtyInputReconcileRequest(request)) if self.ready => {
                 Ok(self.handle_pty_input_reconcile(request))
             }

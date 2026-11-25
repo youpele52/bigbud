@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package bigbud.ssh_owner.v1;
+
+message JumpFailure {
+  uint32 leg = 1; // Zero for route-wide errors, otherwise one through five.
+  JumpStage stage = 2;
+}
+
+enum JumpStage {
+  JUMP_STAGE_UNSPECIFIED = 0;
+  JUMP_STAGE_ADMISSION = 1;
+  JUMP_STAGE_FORWARD = 2;
+  JUMP_STAGE_HANDSHAKE = 3;
+  JUMP_STAGE_LISTING = 4;
+  JUMP_STAGE_RETIREMENT = 5;
+}

@@ -11,6 +11,7 @@ import "remote-agent/pty_lifecycle.proto";
 import "remote-agent/resource_cleanup.proto";
 import "remote-agent/search.proto";
 import "remote-agent/workspace.proto";
+import "remote-agent/terminal_host.proto";
 
 message Frame {
   // Retired experimental terminal-backend payloads must never be reused.
@@ -124,5 +125,9 @@ message Frame {
     .bigbud.remote_agent.service_lease.v1.Response service_lease_resume_response = 125;
     .bigbud.remote_agent.service_lease.v1.ControlRequest service_lease_control_request = 126;
     .bigbud.remote_agent.service_lease.v1.Response service_lease_control_response = 127;
+    TerminalHostInventoryRequest terminal_host_inventory_request = 128;
+    TerminalHostInventoryResponse terminal_host_inventory_response = 129;
+    TerminalHostRetireSshSpawnRequest terminal_host_retire_ssh_spawn_request = 130;
+    TerminalHostRetireSshSpawnResponse terminal_host_retire_ssh_spawn_response = 131;
   }
 }

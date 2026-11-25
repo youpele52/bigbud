@@ -77,6 +77,8 @@ pub(crate) use pty_lifecycle_host::{HostLifecycle, HostOptions};
 pub(crate) use pty_screen::{SnapshotSource, SnapshotTransfer, produce as produce_snapshot};
 #[path = "retirement.rs"]
 mod retirement;
+#[path = "terminal_host.rs"]
+mod terminal_host;
 #[path = "workspace_entries.rs"]
 mod workspace_entries;
 #[path = "workspace_handlers.rs"]
@@ -104,6 +106,9 @@ mod process_attach_tests;
 #[cfg(test)]
 #[path = "pty_handlers.tests.rs"]
 mod pty_handler_tests;
+#[cfg(test)]
+#[path = "terminal_host.tests.rs"]
+mod terminal_host_tests;
 #[cfg(test)]
 #[path = "test_helpers.rs"]
 mod test_helpers;

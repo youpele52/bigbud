@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "files": [
+    "allowlist.ts",
+    "check.ts",
+    "check.test.ts",
+    "rules.ts",
+    "verify.ts",
+    "vitest.config.ts"
+  ]
+}
