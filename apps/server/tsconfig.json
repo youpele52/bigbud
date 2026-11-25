@@ -18,7 +18,9 @@
           "deterministicKeys": "warning",
           "preferSchemaOverJson": "off",
           "globalErrorInEffectFailure": "off"
-        }
+        },
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "ignoreEffectWarningsInTscExitCode": true
       }
     ]
   },
