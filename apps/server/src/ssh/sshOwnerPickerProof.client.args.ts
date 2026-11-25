@@ -1,4 +1,5 @@
 import type { PickerProofOwnerOptions } from "./sshOwnerPickerProof.client.types.ts";
+import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 
 /**
  * Builds the only argv a picker/production owner may receive. Fixture modes keep
@@ -24,8 +25,19 @@ export interface PickerProofRelayFixtureFacts {
   readonly authorityId: string;
 }
 
+export interface PickerProofTargetFacts {
+  readonly targetId: string;
+  readonly host: string;
+  readonly port: number;
+  readonly user: string;
+  readonly identityFile: string;
+  readonly knownHostsFile: string;
+}
+
 export interface PickerProofArgFacts {
   readonly profileBindingHex: string;
+  /** Pinned fixture target facts; absent in production mode. */
+  readonly target?: PickerProofTargetFacts;
   readonly attachmentSocket?: string;
   readonly aliasArgs: ReadonlyArray<string>;
   readonly agentFixture?: { readonly binaryPath: string; readonly sha256: string };
@@ -46,38 +58,38 @@ export function pickerProofLaunchArgs(
   const workspace =
     options.workspaceRoot === undefined ? [] : ["--workspace-root", options.workspaceRoot];
   if (production) {
+    // No target, host, port, user, identity or known-hosts argument: one owner
+    // serves every target from its request descriptors.
     return [
       "--production",
       "--profile",
       production.profileBindingText,
       "--state-dir",
       production.stateDirectory,
-      options.targetId,
+      "--ssh",
       options.sshBinary,
+      "--keyscan",
       options.keyscanBinary,
-      options.host,
-      String(options.port),
-      options.user,
-      options.identityFile,
-      options.knownHostsFile,
       ...attach,
       ...workspace,
     ];
   }
+  const target = facts.target;
+  if (!target) throw new PickerProofOwnerError("invalidOperands");
   const provider = facts.provider;
   const opencode = facts.opencode;
   const relay = facts.relay;
   return [
     facts.profileBindingHex,
-    options.targetId,
+    target.targetId,
     options.lockFile,
     options.sshBinary,
     options.keyscanBinary,
-    options.host,
-    String(options.port),
-    options.user,
-    options.identityFile,
-    options.knownHostsFile,
+    target.host,
+    String(target.port),
+    target.user,
+    target.identityFile,
+    target.knownHostsFile,
     ...facts.aliasArgs,
     ...attach,
     ...workspace,

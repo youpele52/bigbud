@@ -84,6 +84,9 @@ impl<T: PickerTransport> Session<T> {
             // The Windows fixture does not yet qualify the saved-alias binding.
             proof_alias_descriptor: Vec::new(),
             profile_binding: profile.to_vec(),
+            // Windows keeps its single pinned target until native multi-target
+            // evidence exists (plan W6).
+            multi_target: false,
         }))?;
         Ok(session)
     }
@@ -127,7 +130,15 @@ impl<T: PickerTransport> Session<T> {
     fn issue(&mut self, request: Request) -> ProofGrantReply {
         let grant = self.validate(&request).and_then(|operation| {
             self.storage.available()?;
-            self.grants.issue(&request, operation, Instant::now())
+            self.grants.issue(
+                &request,
+                crate::owner_grants::Binding {
+                    target_id: request.target_id.clone(),
+                    generation: request.target_generation.clone(),
+                },
+                operation,
+                Instant::now(),
+            )
         });
         let (grant, error) = match grant {
             Ok(token) => (token.to_vec(), ErrorCode::Unspecified),

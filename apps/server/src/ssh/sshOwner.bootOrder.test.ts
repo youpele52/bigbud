@@ -231,7 +231,7 @@ it.effect("opens admission with the real production client on the success path",
         artifact: fixture.artifact(path),
         facts: resolveSshOwnerLaunchFacts({
           ...fixture.profile,
-          targetId: profile,
+          target: { ...fixture.profile.target!, targetId: profile },
           stateDirectory: fixture.stateDirectory,
         }),
         sql,

@@ -1,21 +1,15 @@
 import { makeProofProviderProbe } from "./sshOwnerPickerProof.client.providerLease.ts";
-import { randomBytes } from "node:crypto";
 import { makePickerProofHealthClient } from "./sshOwnerPickerProof.client.health.ts";
 import {
   makePickerProofListClient,
   type SendPickerCancel,
 } from "./sshOwnerPickerProof.client.list.ts";
-import * as Effect from "effect/Effect";
-import { applySshOwnerTransition } from "../persistence/Layers/SshOwnerTransitions.ts";
 import {
-  decodeOwnerError,
-  encodeRequest,
-  encodeStorageResult,
   encodeStorageSnapshot,
   OWNER_MAJOR,
   PickerProofOwnerError,
-  PROOF_TOKEN_BYTES,
   type PickerProofOperation,
+  type ProofTargetDescriptorInput,
 } from "./sshOwnerPickerProof.codec.ts";
 import { makePickerProofWorkspaceClient } from "./sshOwnerPickerProof.client.workspace.ts";
 import { waitForProofAgentAdmission } from "./sshOwnerPickerProof.client.agentProxy.ts";
@@ -25,59 +19,91 @@ import { makePickerProofAgentActionClient } from "./sshOwnerPickerProof.client.a
 import { makePickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.client.peerEnrollment.ts";
 import { makePickerProofAliasClient } from "./sshOwnerPickerProof.client.aliases.ts";
 import type { ProofAgentProxyOperation } from "./sshOwnerPickerProof.codec.agentProxy.ts";
-import { verifyWorkspaceGitResult } from "./sshOwnerPickerProof.codec.git.ts";
-import { verifyProofTerminalReplay } from "./sshOwnerPickerProof.codec.terminal.ts";
-import type { Outcome } from "./sshOwnerPickerProof.codec.outcome.ts";
 import { invalid as invalidProtocol } from "./sshOwnerPickerProof.codec.wire.ts";
-import { verifyWorkspaceFile } from "./sshOwnerPickerProof.codec.workspaceFile.ts";
 import type { PickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
-import { expectedOutcome } from "./sshOwnerPickerProof.client.expectedOutcome.ts";
 import { makePickerProofDeploymentClient } from "./sshOwnerPickerProof.deployment.ts";
 import { makeProofTrackedGitClient } from "./sshOwnerPickerProof.client.trackedPush.ts";
 import type { ProofOpencodeOperation } from "./sshOwnerPickerProof.codec.opencode.ts";
-import { proofRequestPolicy } from "./sshOwnerPickerProof.client.requestPolicy.ts";
 import { hydratePickerProofTarget } from "./sshOwnerPickerProof.storage.ts";
 import { acceptPickerProofHello } from "./sshOwnerPickerProof.client.hello.ts";
 import {
+  createSessionExchange,
+  EMPTY,
+  type TargetState,
+} from "./sshOwnerPickerProof.client.session.exchange.ts";
+import {
+  type PickerProofBoundTarget,
+  type PickerProofHydratedStorage,
   type PickerProofOwner,
   type PickerProofSessionOptions,
 } from "./sshOwnerPickerProof.client.session.types.ts";
 
 export type {
+  PickerProofBoundTarget,
   PickerProofOwner,
   PickerProofSessionOptions,
 } from "./sshOwnerPickerProof.client.session.types.ts";
 
-const sameBytes = (left: Uint8Array, right: Uint8Array) => Buffer.from(left).equals(right);
-
 export async function openPickerProofSession(
   pipe: PickerProofPipe,
-  { targetId, sql, major, profileBinding }: Required<PickerProofSessionOptions>,
+  {
+    targetId,
+    sql,
+    major,
+    profileBinding,
+  }: Required<Omit<PickerProofSessionOptions, "targetId">> &
+    Pick<PickerProofSessionOptions, "targetId">,
   handshake: () => ReturnType<PickerProofPipe["exchange"]>,
   sendPickerCancel?: SendPickerCancel,
   onLost?: (listener: () => void) => () => void,
 ) {
-  let snapshot: Awaited<ReturnType<typeof hydratePickerProofTarget>>;
+  const states = new Map<string, TargetState>();
+  const primary: TargetState | undefined =
+    targetId === undefined ? undefined : { targetId, generation: EMPTY };
+  if (primary) states.set(primary.targetId, primary);
   let ownerEpoch: Uint8Array;
-  let generation: Uint8Array;
+  let ownerMultiTarget = false;
   let aliasDescriptor: Uint8Array | undefined;
+  let defaultTarget: TargetState | undefined;
   try {
-    const hydration = await handshake();
+    const first = await handshake();
     if (major !== OWNER_MAJOR) throw new PickerProofOwnerError("versionIncompatible");
-    if (hydration.kind !== "storageHydrate" || hydration.targetId !== targetId)
-      return invalidProtocol();
-    try {
-      snapshot = await hydratePickerProofTarget(sql, targetId);
-    } catch {
-      await pipe.exchange(encodeStorageSnapshot(targetId, undefined)).catch(() => undefined);
-      throw new PickerProofOwnerError("storageUnavailable");
-    }
-    const accepted = acceptPickerProofHello(
-      await pipe.exchange(encodeStorageSnapshot(targetId, snapshot)),
-      major,
-      profileBinding,
-    );
-    ({ ownerEpoch, generation, aliasDescriptor } = accepted);
+    let accepted: ReturnType<typeof acceptPickerProofHello>;
+    if (first.kind === "storageHydrate") {
+      // Pinned fixture handshake: storage first, then acceptance.
+      if (!primary || first.targetId !== primary.targetId) return invalidProtocol();
+      try {
+        primary.snapshot = await hydratePickerProofTarget(sql, primary.targetId);
+      } catch {
+        await pipe
+          .exchange(encodeStorageSnapshot(primary.targetId, undefined))
+          .catch(() => undefined);
+        throw new PickerProofOwnerError("storageUnavailable");
+      }
+      accepted = acceptPickerProofHello(
+        await pipe.exchange(encodeStorageSnapshot(primary.targetId, primary.snapshot)),
+        major,
+        profileBinding,
+      );
+      primary.generation = accepted.generation;
+      defaultTarget = primary;
+    } else if (first.kind === "helloAccepted") {
+      // Production owner without a pinned target: acceptance first; each target
+      // hydrates on its first admitted request.
+      accepted = acceptPickerProofHello(first, major, profileBinding);
+      if (accepted.multiTarget) {
+        if (primary) {
+          primary.generation = EMPTY;
+          defaultTarget = primary;
+        }
+      } else {
+        if (!primary) return invalidProtocol();
+        primary.generation = accepted.generation;
+        defaultTarget = primary;
+      }
+    } else return invalidProtocol();
+    ({ ownerEpoch, aliasDescriptor } = accepted);
+    ownerMultiTarget = accepted.multiTarget;
   } catch (error) {
     await pipe.close();
     if (
@@ -100,157 +126,14 @@ export async function openPickerProofSession(
     void pipe.close();
   };
 
-  async function run(operation: PickerProofOperation, beforeDispatch?: (id: Uint8Array) => void) {
-    const requestId = randomBytes(16);
-    const request = { requestId, ownerEpoch, generation, targetId, operation };
-    const expected =
-      operation.kind === "connect"
-        ? "connected"
-        : operation.kind === "disconnect"
-          ? "disconnected"
-          : undefined;
-    const { proofMutation, grantTimeout, replyTimeout } = proofRequestPolicy(operation);
-    let sent = false;
-    let preparing = false;
-    let committed = false;
-    let storageFailed = false;
-    let outcome: Outcome;
-    try {
-      const granted = await pipe.exchange(encodeRequest(request), grantTimeout);
-      if (granted.kind !== "grantReply" || !sameBytes(granted.requestId, requestId))
-        return invalidProtocol();
-      if (granted.error) {
-        outcome = { kind: "error", code: decodeOwnerError(granted.error) };
-      } else {
-        if (granted.grant.length !== PROOF_TOKEN_BYTES) return invalidProtocol();
-        const payload = encodeRequest(request, granted.grant);
-        preparing = true;
-        beforeDispatch?.(requestId);
-        preparing = false;
-        sent = true;
-        let reply = await pipe.exchange(payload, replyTimeout);
-        if (reply.kind === "storageTransition") {
-          if (
-            expected === undefined ||
-            !sameBytes(reply.requestId, requestId) ||
-            reply.targetId !== targetId ||
-            reply.writerEpoch !== snapshot.writerEpoch ||
-            reply.expectedSeq !== snapshot.seq ||
-            reply.disconnected !== (expected === "disconnected")
-          )
-            return invalidProtocol();
-          let seq: number | undefined;
-          try {
-            const result = await Effect.runPromise(
-              applySshOwnerTransition(sql, {
-                writerEpoch: snapshot.writerEpoch,
-                targetId,
-                expectedSeq: snapshot.seq,
-                requestId: requestId.toString("hex"),
-                desiredState: expected,
-              }),
-            );
-            if (result.kind === "committed") {
-              seq = result.seq;
-              committed = true;
-            }
-          } catch {
-            // No successful receipt means admission must remain closed until fresh hydration.
-          }
-          storageFailed = !committed;
-          if (seq !== undefined) snapshot.seq = seq;
-          reply = await pipe.exchange(encodeStorageResult(requestId, seq));
-        }
-        if (
-          reply.kind !== "reply" ||
-          !sameBytes(reply.requestId, requestId) ||
-          !sameBytes(reply.ownerEpoch, ownerEpoch)
-        ) {
-          return invalidProtocol();
-        }
-        outcome = reply.outcome;
-        if (outcome.kind === "connection") {
-          if (
-            !committed ||
-            outcome.value.state !== expected ||
-            reply.generation.length !== PROOF_TOKEN_BYTES ||
-            sameBytes(reply.generation, generation)
-          ) {
-            return invalidProtocol();
-          }
-          generation = reply.generation;
-        } else if (committed || !sameBytes(reply.generation, generation)) return invalidProtocol();
-      }
-      if (outcome.kind !== "error" && outcome.kind !== expectedOutcome[operation.kind])
-        return invalidProtocol();
-      if (operation.kind === "proofWorkspaceRead" && outcome.kind === "proofWorkspaceFile") {
-        verifyWorkspaceFile(operation.read, outcome.value);
-      }
-      if (operation.kind === "proofWorkspaceGit" && outcome.kind === "proofWorkspaceGit") {
-        verifyWorkspaceGitResult(operation.action, outcome.value);
-      }
-      if (
-        operation.kind === "proofWorkspaceContentSearch" &&
-        outcome.kind === "proofWorkspaceContentMatches" &&
-        outcome.value.matches.length > operation.limit
-      ) {
-        return invalidProtocol();
-      }
-      if (outcome.kind === "proofTerminal") {
-        if (
-          "lease" in operation &&
-          operation.lease !== undefined &&
-          !sameBytes(outcome.value.lease, operation.lease)
-        )
-          return invalidProtocol();
-        if (operation.kind === "closeProofTerminal" && outcome.value.live) return invalidProtocol();
-      }
-      if (outcome.kind === "proofTerminalReplay" && operation.kind === "proofTerminalReplay") {
-        verifyProofTerminalReplay(operation, outcome.value);
-      }
-      if (
-        outcome.kind === "proofTerminalCwd" &&
-        operation.kind === "proofTerminalCwd" &&
-        outcome.value !== operation.cwd
-      )
-        return invalidProtocol();
-      if (outcome.kind === "proofTerminalReservation") {
-        const cancelling = operation.kind === "cancelProofTerminalReservation";
-        if (
-          outcome.value.cancelled !== cancelling ||
-          (cancelling && !sameBytes(outcome.value.lease, operation.lease))
-        )
-          return invalidProtocol();
-      }
-      if (outcome.kind === "proofAgentProxy" && "pid" in operation) {
-        if (outcome.value.pid !== operation.pid || !sameBytes(outcome.value.lease, operation.lease))
-          return invalidProtocol();
-      }
-    } catch (error) {
-      if (
-        preparing ||
-        (error instanceof PickerProofOwnerError && error.code === "invalidOperands" && !sent)
-      )
-        throw error;
-      failClosed();
-      if (sent && (expected !== undefined || operation.kind === "approveTrust" || proofMutation)) {
-        throw new PickerProofOwnerError("outcomeUnknown");
-      }
-      throw error;
-    }
-    if (storageFailed) {
-      failClosed();
-      throw new PickerProofOwnerError("storageUnavailable");
-    }
-    if (outcome.kind === "error") {
-      // A correlated close timeout can still be reconciled by read-only status.
-      const unknown = outcome.code === "outcomeUnknown";
-      if (sent && proofMutation && unknown && operation.kind !== "closeProofAgentProxy")
-        failClosed();
-      throw new PickerProofOwnerError(outcome.code, outcome.jumpFailure);
-    }
-    return outcome;
-  }
+  const exchange = createSessionExchange({
+    pipe,
+    sql,
+    ownerEpoch,
+    states,
+    failClosed,
+  });
+  const run = exchange.run;
 
   const execute = async (
     operation: PickerProofOperation,
@@ -258,7 +141,7 @@ export async function openPickerProofSession(
   ) => {
     if (closed) throw new PickerProofOwnerError("ownerUnavailable");
     if (active || proxyCloseWaiting) throw new PickerProofOwnerError("operationDenied");
-    const current = run(operation, beforeDispatch);
+    const current = run(defaultTarget, operation, beforeDispatch);
     active = current;
     activeKind = operation.kind;
     try {
@@ -268,6 +151,73 @@ export async function openPickerProofSession(
       activeKind = undefined;
     }
   };
+
+  /**
+   * Binds one target for per-target requests. The descriptor is sent with every
+   * request; the owner keeps the generation and reports it back.
+   */
+  const bindTarget = (descriptor: ProofTargetDescriptorInput): PickerProofBoundTarget => {
+    const existing = states.get(descriptor.targetId);
+    const state: TargetState = existing ?? {
+      targetId: descriptor.targetId,
+      generation: descriptor.generation ?? EMPTY,
+    };
+    state.descriptor = descriptor;
+    if (descriptor.generation !== undefined && descriptor.generation.length > 0) {
+      state.generation = descriptor.generation;
+    }
+    states.set(state.targetId, state);
+    const runBound = async (
+      operation: PickerProofOperation,
+      beforeDispatch?: (id: Uint8Array) => void,
+    ) => {
+      if (closed) throw new PickerProofOwnerError("ownerUnavailable");
+      if (active || proxyCloseWaiting) throw new PickerProofOwnerError("operationDenied");
+      const current = run(state, operation, beforeDispatch);
+      active = current;
+      activeKind = operation.kind;
+      try {
+        return await current;
+      } finally {
+        active = undefined;
+        activeKind = undefined;
+      }
+    };
+    const trust = async (operation: PickerProofOperation) => {
+      const outcome = await runBound(operation);
+      return outcome.kind === "trust" ? outcome.value : invalidProtocol();
+    };
+    return {
+      targetId: state.targetId,
+      get generation() {
+        return Uint8Array.from(state.generation);
+      },
+      get hydratedStorage() {
+        return hydrated(state.snapshot);
+      },
+      inspectTrust: () => trust({ kind: "inspectTrust" }),
+      async approveTrust(challenge) {
+        if (!challenge.length || challenge.length > 1_024)
+          throw new PickerProofOwnerError("invalidOperands");
+        return trust({ kind: "approveTrust", challenge: Uint8Array.from(challenge) });
+      },
+      async connect() {
+        const outcome = await runBound({ kind: "connect" });
+        return outcome.kind === "connection" ? outcome.value : invalidProtocol();
+      },
+      async disconnect() {
+        const outcome = await runBound({ kind: "disconnect" });
+        return outcome.kind === "connection" ? outcome.value : invalidProtocol();
+      },
+      ...makePickerProofListClient(state.targetId, runBound, sendPickerCancel),
+      ...makePickerProofHealthClient(
+        state.targetId,
+        (beforeDispatch) => runBound({ kind: "proofSampleHealth" }, beforeDispatch),
+        sendPickerCancel,
+      ),
+    };
+  };
+
   const executeProofAgentProxy = async (
     operation: ProofAgentProxyOperation,
     beforeDispatch?: () => void,
@@ -310,7 +260,11 @@ export async function openPickerProofSession(
     closed = true;
     await active?.catch(() => undefined);
   };
-  const trackedGit = makeProofTrackedGitClient(targetId, () => generation, execute);
+  const generation = () => {
+    if (!defaultTarget) throw new PickerProofOwnerError("invalidOperands");
+    return defaultTarget.generation;
+  };
+  const trackedGit = makeProofTrackedGitClient(targetId ?? "", () => generation(), execute);
   const owner: PickerProofOwner = {
     get trackedGitTargetGeneration() {
       return trackedGit.trackedGitTargetGeneration;
@@ -319,35 +273,35 @@ export async function openPickerProofSession(
     get ownerEpoch() {
       return Uint8Array.from(ownerEpoch);
     },
+    get multiTarget() {
+      return ownerMultiTarget;
+    },
     get targetGeneration() {
-      return Uint8Array.from(generation);
+      return Uint8Array.from(generation());
     },
     get aliasDescriptor() {
       return aliasDescriptor && Uint8Array.from(aliasDescriptor);
     },
     get hydratedStorage() {
-      return {
-        writerEpoch: snapshot.writerEpoch,
-        seq: snapshot.seq,
-        disconnected: snapshot.disconnected,
-      };
+      return hydrated(defaultTarget?.snapshot);
     },
     onLost: onLost ?? (() => () => {}),
+    bindTarget,
     inspectTrust: () => trust({ kind: "inspectTrust" }),
     async approveTrust(challenge) {
       if (!challenge.length || challenge.length > 1_024)
         throw new PickerProofOwnerError("invalidOperands");
       return trust({ kind: "approveTrust", challenge: Uint8Array.from(challenge) });
     },
-    ...makePickerProofListClient(targetId, execute, sendPickerCancel),
+    ...makePickerProofListClient(targetId ?? "", execute, sendPickerCancel),
     ...makePickerProofAliasClient(execute),
-    ...makePickerProofWorkspaceClient(targetId, execute, sendPickerCancel),
-    ...makePickerProofDeploymentClient(targetId, execute),
+    ...makePickerProofWorkspaceClient(targetId ?? "", execute, sendPickerCancel),
+    ...makePickerProofDeploymentClient(targetId ?? "", execute),
     connect: () => transition("connect"),
     disconnect: () => transition("disconnect"),
     ...makePickerProofTerminalClient(execute, () => ({
       ownerEpoch: Uint8Array.from(ownerEpoch),
-      targetGeneration: Uint8Array.from(generation),
+      targetGeneration: Uint8Array.from(generation()),
     })),
     ...makePickerProofShellClient(execute),
     ...makePickerProofPeerEnrollmentClient(execute),
@@ -356,7 +310,7 @@ export async function openPickerProofSession(
       if (outcome.kind !== "proofSyntheticPosixPasswordUnlocked") return invalidProtocol();
     },
     ...makePickerProofHealthClient(
-      targetId,
+      targetId ?? "",
       (beforeDispatch) => execute({ kind: "proofSampleHealth" }, beforeDispatch),
       sendPickerCancel,
     ),
@@ -367,14 +321,26 @@ export async function openPickerProofSession(
   };
   return {
     owner,
+    bindTarget,
     stopAdmission,
     executeProofAgentProxy,
     executeProofOpencode,
     opencodeBinding: () => ({
       ownerEpoch: Uint8Array.from(ownerEpoch),
-      targetGeneration: Uint8Array.from(generation),
+      targetGeneration: Uint8Array.from(generation()),
     }),
-    probeProofProvider: makeProofProviderProbe(targetId, execute),
-    executeAgentAction: makePickerProofAgentActionClient(targetId, execute),
+    probeProofProvider: makeProofProviderProbe(targetId ?? "", execute),
+    executeAgentAction: makePickerProofAgentActionClient(targetId ?? "", execute),
+  };
+}
+
+function hydrated(
+  snapshot: Awaited<ReturnType<typeof hydratePickerProofTarget>> | undefined,
+): PickerProofHydratedStorage | undefined {
+  if (snapshot === undefined) return undefined;
+  return {
+    writerEpoch: snapshot.writerEpoch,
+    seq: snapshot.seq,
+    disconnected: snapshot.disconnected,
   };
 }

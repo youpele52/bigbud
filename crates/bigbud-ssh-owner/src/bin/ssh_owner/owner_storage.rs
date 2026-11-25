@@ -18,6 +18,17 @@ pub(super) struct Storage {
 }
 
 impl Storage {
+    /// The at-rest state of an owner that has no target yet (production mode).
+    /// Every question except a fresh hydration answers `StorageUnavailable`.
+    pub(super) fn unhydrated() -> Self {
+        Self {
+            writer_epoch: String::new(),
+            seq: 0,
+            disconnected: false,
+            failed: true,
+        }
+    }
+
     pub(super) fn hydrate(pipe: &mut impl PayloadPipe, target: &str) -> RunResult<Self> {
         pipe.send(Payload::ProofStorageHydrate(ProofStorageHydrate {
             target_id: target.into(),

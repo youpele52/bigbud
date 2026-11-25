@@ -15,6 +15,7 @@ mod folders;
 mod health;
 mod host_key;
 mod identity;
+pub(crate) use identity::literal_path as identity_is_literal;
 #[cfg(target_os = "linux")]
 pub(super) mod jump_binding;
 mod listing;

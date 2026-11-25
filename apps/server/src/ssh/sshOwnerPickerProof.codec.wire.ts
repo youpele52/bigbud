@@ -49,6 +49,8 @@ const wireErrorCodes = [
   "ownerRetirementUnverified",
   "shellTimedOut",
   "shellCancelled",
+  "targetUnknown",
+  "targetMismatch",
 ] as const;
 
 export type PickerProofOwnerErrorCode =

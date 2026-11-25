@@ -5,6 +5,8 @@ import type { PickerProofOwner } from "./sshOwnerPickerProof.client.session.type
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.ts";
 import type { SshOwnerArtifact, SshOwnerProfile } from "./sshOwnerProductionArtifact.ts";
 import type { SshOwnerProductionOwner } from "./sshOwnerProductionBoot.ts";
+import type { PickerProofBoundTarget } from "./sshOwnerPickerProof.client.session.types.ts";
+import type { SshOwnerTargetDescriptor } from "./sshOwnerProductionClient.launch.ts";
 import { SshOwnerClientError, fromPickerProofError } from "./sshOwnerProductionClient.errors.ts";
 import { assertSshOwnerHydrationAcknowledged } from "./sshOwnerProductionClient.hydration.ts";
 import {
@@ -43,6 +45,11 @@ export interface SshOwnerProductionHandle extends SshOwnerProductionOwner {
   readonly ownerEpoch: Uint8Array;
   readonly targetGeneration: Uint8Array;
   readonly state: () => SshOwnerOwnerState;
+  /**
+   * Binds one target on the shared owner (W3.7). Every request carries the
+   * descriptor; grants are bound to that exact target and generation.
+   */
+  target(descriptor: SshOwnerTargetDescriptor): PickerProofBoundTarget;
   /** Detach, or reap a non-surviving profile. Idempotent. */
   shutdown(): Effect.Effect<void>;
   onDeath(listener: () => void): () => void;
@@ -61,6 +68,15 @@ const clientError = (failure: SshOwnerClientError["failure"], message: string, c
   new SshOwnerClientError(failure, message, cause);
 
 const surviving = (profile: SshOwnerProfile) => profile !== "desktop-dev";
+
+/** Production is per-target only: a single-target owner cannot serve this client. */
+const requireMultiTarget = (owner: PickerProofOwner) => {
+  if (owner.multiTarget) return owner;
+  throw clientError(
+    "version-incompatible",
+    "The SSH owner pinned one target at startup; production requires per-target admission.",
+  );
+};
 
 function makeHandle(input: {
   artifact: SshOwnerArtifact;
@@ -108,6 +124,7 @@ function makeHandle(input: {
     ownerEpoch: input.owner.ownerEpoch,
     targetGeneration: input.owner.targetGeneration,
     state: () => state,
+    target: (descriptor) => input.owner.bindTarget(descriptor),
     onDeath(listener) {
       if (state === "dead") {
         listener();
@@ -122,7 +139,7 @@ function makeHandle(input: {
       Effect.try({
         try: () =>
           assertSshOwnerHydrationAcknowledged({
-            targetId: input.facts.targetId,
+            ...(input.facts.target === undefined ? {} : { targetId: input.facts.target.targetId }),
             snapshot,
             storage: input.owner.hydratedStorage,
             aliasDescriptor: input.owner.aliasDescriptor,
@@ -159,7 +176,7 @@ async function tryAttach(
   try {
     return await attachSshOwnerProduction({
       profileBinding: input.facts.profileBinding,
-      targetId: input.facts.targetId,
+      ...(input.facts.target === undefined ? {} : { targetId: input.facts.target.targetId }),
       sql: input.sql,
       descriptor,
     });
@@ -217,6 +234,7 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
       });
       if (attached) {
         negotiate(attached, input);
+        requireMultiTarget(attached);
         return makeHandle({
           artifact: input.artifact,
           facts,
@@ -246,7 +264,7 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
           facts,
           capability,
           profileBinding: facts.profileBinding,
-          targetId: facts.targetId,
+          ...(facts.target === undefined ? {} : { targetId: facts.target.targetId }),
           sql: input.sql,
           ...(input.deadlineMs === undefined ? {} : { deadlineMs: input.deadlineMs }),
         }),
@@ -259,6 +277,7 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
       try: async () => {
         try {
           negotiate(spawned, input);
+          requireMultiTarget(spawned);
           await writeSshOwnerAttachmentDescriptor(facts.attachFile, {
             version: 1,
             socketPath: facts.socketPath,

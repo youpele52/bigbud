@@ -75,18 +75,26 @@ describe("production owner client spawn", () => {
         expect(observation.argv[4]).toBe(facts.profileBindingText);
         expect(observation.argv[5]).toBe("--state-dir");
         expect(observation.argv[6]).toBe(fixture.stateDirectory);
-        expect(observation.argv.slice(7, 15)).toEqual([
-          facts.targetId,
+        // No target, host, port, user, identity or known-hosts argument: one
+        // owner resolves each request's descriptor.
+        expect(observation.argv.slice(7, 11)).toEqual([
+          "--ssh",
           "/usr/bin/ssh",
+          "--keyscan",
           "/usr/bin/ssh-keyscan",
+        ]);
+        expect(observation.argv[11]).toBe("--attach-socket");
+        expect(observation.argv).toHaveLength(13);
+        for (const positional of [
+          facts.target?.targetId,
           "127.0.0.1",
           "2222",
           "tester",
-          facts.identityFile,
-          facts.knownHostsFile,
-        ]);
-        expect(observation.argv[15]).toBe("--attach-socket");
-        expect(observation.argv).toHaveLength(17);
+          facts.target?.identityFile,
+          facts.target?.knownHostsFile,
+        ]) {
+          expect(observation.argv).not.toContain(positional);
+        }
         const descriptor = yield* Effect.promise(() =>
           readSshOwnerAttachmentDescriptor(
             resolveSshOwnerLaunchFacts(profileOf(fixture)).attachFile,

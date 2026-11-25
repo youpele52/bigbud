@@ -37,7 +37,7 @@ impl Owner {
         {
             return Err(ErrorCode::OperationDenied);
         }
-        if !self.transport.matches_workspace_root(&request.cwd)
+        if !super::present(&self.transport)?.matches_workspace_root(&request.cwd)
             || !valid_id(&request.thread_id)
             || !valid_id(&request.terminal_id)
             || !(1..=400).contains(&request.cols)
@@ -82,11 +82,11 @@ impl Owner {
         }
         let (id, launched) = if requested.is_empty()
             && self.preparation.is_none()
-            && !self.transport.has_workspace_root()
+            && !super::present(&self.transport)?.has_workspace_root()
         {
             (
                 random_token().map_err(|_| ErrorCode::OwnerUnavailable)?,
-                self.transport.open_proof_terminal(),
+                super::present(&self.transport)?.open_proof_terminal(),
             )
         } else {
             let prepared = self
@@ -98,7 +98,7 @@ impl Owner {
             let prep = self.preparation.take().ok_or(ErrorCode::OperationDenied)?;
             (
                 id,
-                self.transport
+                super::present(&self.transport)?
                     .open_prepared_terminal(&prep.cwd, prep.cols, prep.rows),
             )
         };

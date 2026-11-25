@@ -20,6 +20,8 @@ export type Frame =
       generation: Uint8Array;
       aliasDescriptor: Uint8Array;
       profileBinding: Uint8Array;
+      /** W3.7: the owner has no pinned target and resolves one per request. */
+      multiTarget: boolean;
     }
   | {
       kind: "reply";
@@ -48,7 +50,8 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         ownerEpoch = EMPTY,
         generation = EMPTY,
         aliasDescriptor = EMPTY,
-        profileBinding = EMPTY;
+        profileBinding = EMPTY,
+        multiTarget = false;
       decodeMessage(bytes, (number, wire, reader) => {
         if (number === 1) major = uintValue(wire, reader);
         else if (number === 2) minor = uintValue(wire, reader);
@@ -56,6 +59,7 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         else if (number === 4) generation = bytesValue(wire, reader);
         else if (number === 5) aliasDescriptor = bytesValue(wire, reader);
         else if (number === 6) profileBinding = bytesValue(wire, reader);
+        else if (number === 7) multiTarget = uintValue(wire, reader) === 1;
         else reader.skip(wire);
       });
       return {
@@ -66,6 +70,7 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
         generation,
         aliasDescriptor,
         profileBinding,
+        multiTarget,
       };
     }
     case 4:

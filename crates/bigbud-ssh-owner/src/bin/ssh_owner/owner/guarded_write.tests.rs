@@ -222,6 +222,7 @@ fn maximum_chunk_and_binding_fit_the_client_frame() -> TestResult {
         target_generation: vec![6; 32],
         target_id: "d".repeat(1024),
         grant: vec![7; 32],
+        target_descriptor: None,
         operation: Some(operation),
     };
     let frame = frames([Payload::Request(request)])?;

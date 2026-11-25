@@ -139,7 +139,7 @@ impl Owner {
             };
         }
         self.deployment_operation = Some(DeploymentOperation::new(&request_id));
-        match self.transport.deployment_step(&root, action) {
+        match super::present(&self.transport)?.deployment_step(&root, action) {
             Ok(result) => {
                 let state = if result.code == Some(0) {
                     State::Completed

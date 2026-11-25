@@ -38,6 +38,10 @@ import {
   writeProofTerminalOperation,
   type ProofTerminalOperation,
 } from "./sshOwnerPickerProof.codec.terminal.ts";
+export type {
+  ProofTargetDescriptorInput,
+  TARGET_DESCRIPTOR_LIMITS,
+} from "./sshOwnerPickerProof.codec.target.ts";
 import { EMPTY, message } from "./sshOwnerPickerProof.codec.wire.ts";
 import {
   writeWorkspaceContentSearch,
@@ -79,6 +83,10 @@ import {
   type ProofPeerEnrollmentOperation,
 } from "./sshOwnerPickerProof.codec.peerEnrollment.ts";
 import { refuseReservedTransferOperation } from "./sshOwnerPickerProof.codec.transfer.ts";
+import {
+  writeTargetDescriptor,
+  type ProofTargetDescriptorInput,
+} from "./sshOwnerPickerProof.codec.target.ts";
 
 export type {
   PickerProofConnection,
@@ -136,6 +144,8 @@ export interface PickerProofRequest {
   readonly ownerEpoch: Uint8Array;
   readonly generation: Uint8Array;
   readonly targetId: string;
+  /** W3.7 per-target admission; absent for the single pinned fixture target. */
+  readonly target?: ProofTargetDescriptorInput;
   readonly operation: PickerProofOperation;
 }
 
@@ -164,7 +174,7 @@ export const encodeAttachHello = (profileBinding: Uint8Array, major: number, pro
 
 export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =>
   message(grant === undefined ? 5 : 3, (writer) => {
-    const { requestId, ownerEpoch, generation, targetId, operation } = request;
+    const { requestId, ownerEpoch, generation, targetId, target, operation } = request;
     // C15 / W2 T-xfer: reserved transfer verbs are fixture-only and cannot be
     // emitted by the product encoder, even from a cast operation value.
     refuseReservedTransferOperation(operation);
@@ -173,6 +183,7 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
     writer.fieldBytes(3, generation);
     writer.fieldString(4, targetId);
     if (grant !== undefined) writer.fieldBytes(5, grant);
+    if (target !== undefined) writeTargetDescriptor(writer, target);
     const operands = new WireWriter();
     switch (operation.kind) {
       case "inspectTrust":

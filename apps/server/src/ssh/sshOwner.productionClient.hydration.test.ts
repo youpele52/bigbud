@@ -58,14 +58,14 @@ async function prepare(
   if (options.disconnected) {
     await Effect.runPromise(
       sql`INSERT INTO remote_execution_target_disconnects
-        (target_id, disconnected_at) VALUES (${fixture.profile.targetId}, 7)`,
+        (target_id, disconnected_at) VALUES (${fixture.profile.target!.targetId}, 7)`,
     );
   }
   if (options.aliasDescriptor) {
     await Effect.runPromise(
       sql`INSERT INTO ssh_alias_descriptor_bindings
         (profile_scope, target_id, descriptor_digest, approved_at)
-        VALUES (${fixture.stateDirectory}, ${fixture.profile.targetId},
+        VALUES (${fixture.stateDirectory}, ${fixture.profile.target!.targetId},
           ${options.aliasDescriptor.toString("hex")}, 7)`,
     );
   }
@@ -118,11 +118,13 @@ function bootInput(input: {
 }
 
 describe("production owner client hydration", () => {
-  it("hydrates the disconnect set and alias binding before admission", async () => {
+  it("validates hydration categories before admission", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
     const aliasDescriptor = Buffer.alloc(32, 5);
-    const path = await fixture.fakeOwner("success", aliasDescriptor);
+    // A multi-target owner reports no alias descriptor at startup; each target
+    // is hydrated before its first request.
+    const path = await fixture.fakeOwner("success");
     await withPersistence(fixture, (sql) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => prepare(fixture, sql, { aliasDescriptor, disconnected: true }));
@@ -149,13 +151,13 @@ describe("production owner client hydration", () => {
     );
   });
 
-  it("keeps admission closed when the disconnect set is only partially hydrated", async () => {
+  it("keeps admission closed while a retirement mirror row is unresolved", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
     const path = await fixture.fakeOwner("success");
     await withPersistence(fixture, (sql) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => prepare(fixture, sql, { disconnected: true }));
+        yield* Effect.promise(() => prepare(fixture, sql));
         const order: string[] = [];
         const outcome = yield* runSshOwnerBootSequence(
           bootInput({
@@ -167,14 +169,26 @@ describe("production owner client hydration", () => {
               facts: resolveSshOwnerLaunchFacts(fixture.profile),
               sql,
             }),
-            // The owner acknowledged a disconnect, but this snapshot omits it.
             snapshot: () =>
-              Effect.succeed({
+              Effect.sync(() => ({
                 durableDisconnects: [],
                 aliasDescriptorBindings: [],
-                retirementMirror: [],
+                retirementMirror: [
+                  {
+                    profileScope: fixture.stateDirectory,
+                    targetId: fixture.profile.target!.targetId,
+                    ownerEpoch: "epoch",
+                    generation: "gen",
+                    state: "intent" as const,
+                    pid: 7,
+                    startTime: "1",
+                    namespace: null,
+                    detail: "prior owner intent",
+                    updatedAt: 1,
+                  },
+                ],
                 paneBindings: [],
-              }),
+              })),
           }),
         );
         expect(outcome.kind).toBe("unavailable");
@@ -189,16 +203,13 @@ describe("production owner client hydration", () => {
     );
   });
 
-  it("reaps a spawned owner when alias hydration disagrees and reports a typed failure", async () => {
+  it("reaps a spawned owner when a direct pane binding is unresolved", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
-    const ownerDescriptor = Buffer.alloc(32, 5);
-    const path = await fixture.fakeOwner("success", ownerDescriptor);
+    const path = await fixture.fakeOwner("success");
     await withPersistence(fixture, (sql) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() =>
-          prepare(fixture, sql, { aliasDescriptor: Buffer.alloc(32, 6) }),
-        );
+        yield* Effect.promise(() => prepare(fixture, sql));
         const order: string[] = [];
         let handle: SshOwnerProductionOwner | undefined;
         const outcome = yield* runSshOwnerBootSequence(
@@ -211,6 +222,13 @@ describe("production owner client hydration", () => {
               facts: resolveSshOwnerLaunchFacts(fixture.profile),
               sql,
             }),
+            snapshot: () =>
+              Effect.succeed({
+                durableDisconnects: [],
+                aliasDescriptorBindings: [],
+                retirementMirror: [],
+                paneBindings: [{ ownerKey: "pane-1", state: "may-have-been-sent" }],
+              }),
             owner: (started) => {
               handle = started;
             },

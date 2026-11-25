@@ -10,20 +10,40 @@ impl Owner {
         {
             return Err(ErrorCode::OwnerUnavailable);
         }
-        if request.target_id != self.target
+        // The target and generation are resolved per request (see
+        // `owner::targets`); this only bounds the envelope.
+        if request.target_id.len() > 1_024
             || request.owner_epoch != self.epoch
             || request.request_id.is_empty()
             || request.request_id.len() > 128
         {
             return Err(ErrorCode::OperationDenied);
         }
-        if request.target_generation != self.generation {
+        // A named generation must still be current for its exact target. The
+        // pinned target lives in the owner's flat fields, other targets in the
+        // registry; both fence a rotated generation before any grant work.
+        let current = if request.target_id == self.target && self.transport.is_some() {
+            Some(self.generation)
+        } else {
+            self.targets.generation(&request.target_id)
+        };
+        if let Some(generation) = current
+            && generation != request.target_generation.as_slice()
+            // An empty generation is first use only for a descriptor target;
+            // the pinned target always has a generation to match.
+            && (!request.target_generation.is_empty() || request.target_descriptor.is_none())
+        {
             return Err(ErrorCode::StaleGeneration);
         }
         let operation = request
             .operation
             .clone()
             .ok_or(ErrorCode::OperationDenied)?;
+        // Production admits the connection/health/discovery verbs only. Every
+        // fixture-only verb stays refused before it can touch a bound target.
+        if self.production && !production_verb(&operation) {
+            return Err(ErrorCode::OperationDenied);
+        }
         if self
             .agent_fixture
             .as_ref()
@@ -134,4 +154,19 @@ impl Owner {
         }
         Ok(operation)
     }
+}
+
+/// Verbs a production owner admits. Everything else is a fixture/proof verb
+/// whose promotion is a separate change (plan W7).
+fn production_verb(operation: &Operation) -> bool {
+    matches!(
+        operation,
+        Operation::InspectTrust(_)
+            | Operation::ApproveTrust(_)
+            | Operation::Connect(_)
+            | Operation::Disconnect(_)
+            | Operation::ListFolders(_)
+            | Operation::ListAliases(_)
+            | Operation::ProofSampleHealth(_)
+    )
 }

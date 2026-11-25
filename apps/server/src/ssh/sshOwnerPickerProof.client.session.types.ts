@@ -13,7 +13,11 @@ import type { PickerProofAliasClient } from "./sshOwnerPickerProof.client.aliase
 
 export interface PickerProofSessionOptions {
   readonly profileBinding: Uint8Array;
-  readonly targetId: string;
+  /**
+   * Pinned fixture target, or the production client's primary target. A
+   * production owner started without a target has none at spawn.
+   */
+  readonly targetId?: string;
   readonly sql: SqlClient.SqlClient;
   readonly major?: number;
 }
@@ -22,6 +26,21 @@ export interface PickerProofHydratedStorage {
   readonly writerEpoch: string;
   readonly seq: number;
   readonly disconnected: boolean;
+}
+
+/**
+ * One resolved target on a shared owner (W3.7). Every request carries the
+ * descriptor; grants are bound to this exact target and generation.
+ */
+export interface PickerProofBoundTarget extends PickerProofListClient, PickerProofHealthClient {
+  readonly targetId: string;
+  /** Current generation; rotates on Connect/Disconnect. */
+  readonly generation: Uint8Array;
+  readonly hydratedStorage?: PickerProofHydratedStorage | undefined;
+  inspectTrust(): Promise<PickerProofTrust>;
+  approveTrust(challenge: Uint8Array): Promise<PickerProofTrust>;
+  connect(): Promise<PickerProofConnection>;
+  disconnect(): Promise<PickerProofConnection>;
 }
 
 export interface PickerProofOwner
@@ -36,14 +55,20 @@ export interface PickerProofOwner
     PickerProofPeerEnrollmentClient,
     PickerProofAliasClient {
   readonly ownerEpoch: Uint8Array;
+  /** The owner started without a pinned target (W3.7). */
+  readonly multiTarget: boolean;
   /** Current owner target generation; rotates on Connect/Disconnect. */
   readonly targetGeneration: Uint8Array;
   /** Owner-resolved alias route/trust digest; undefined without an alias policy. */
   readonly aliasDescriptor?: Uint8Array | undefined;
   /** The exact storage snapshot this session acknowledged during its handshake. */
-  readonly hydratedStorage?: PickerProofHydratedStorage;
+  readonly hydratedStorage?: PickerProofHydratedStorage | undefined;
   /** Fires once when the inherited channel is lost unexpectedly (not on detach). */
   onLost(listener: () => void): () => void;
+  /** Binds one target for per-target requests (W3.7). */
+  bindTarget(
+    input: import("./sshOwnerPickerProof.codec.target.ts").ProofTargetDescriptorInput,
+  ): PickerProofBoundTarget;
   inspectTrust(): Promise<PickerProofTrust>;
   approveTrust(challenge: Uint8Array): Promise<PickerProofTrust>;
   connect(): Promise<PickerProofConnection>;

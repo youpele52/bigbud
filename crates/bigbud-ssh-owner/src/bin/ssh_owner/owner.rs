@@ -1,5 +1,7 @@
+mod activation;
 mod admission;
 mod agent_proxy;
+mod bootstrap;
 mod deployment_operation;
 mod dispatch;
 mod guarded_write;
@@ -23,10 +25,10 @@ pub(super) use posix_picker::is_disposable_picker;
 mod rebind_tests;
 mod reconnect;
 pub(crate) mod retirement;
-pub(crate) use retirement::Retirement;
 mod state;
 pub(crate) use state::Owner;
 mod stage;
+mod targets;
 mod terminal;
 mod tracked_push;
 #[cfg(test)]
@@ -36,9 +38,10 @@ pub(super) use tracked_push::Startup as TrackedPushStartup;
 mod workspace_mode;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod workspace_readiness;
+pub(crate) use bootstrap::bootstrap;
 pub(super) use deployment_operation::DeploymentOperation;
-use reconnect::ReconnectAdmission;
 pub(super) use stage::StageBinding;
+pub(crate) use targets::{TargetAuthority, TargetStartup};
 use terminal::TerminalPreparation;
 
 use std::{
@@ -50,13 +53,11 @@ use std::{
 use crate::{
     RunResult, Token,
     owner_agent_proxy::AgentProxyFixture,
-    owner_attachment::Attachment,
-    owner_grants::{Grants, budget::Budget},
+    owner_grants::Grants,
     owner_pipe::{Pipe, protocol_error},
     owner_storage::Storage,
-    owner_trust::TrustApproval,
     random_token,
-    transport::{Transport, TransportConfig},
+    transport::TransportConfig,
     v1::{
         Error, ErrorCode, Hello, HelloAccepted, ProofGrantReply, Reply, Request, frame::Payload,
         reply::Outcome, request::Operation,
@@ -68,8 +69,7 @@ const MINOR: u32 = 0;
 
 pub(super) struct OwnerStartup<'a> {
     pub(super) profile: &'a [u8],
-    pub(super) target: String,
-    pub(super) config: TransportConfig,
+    pub(super) startup: TargetStartup,
     pub(super) route_facts: crate::config::RouteFacts,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) profile_lock_path: &'a Path,
@@ -89,235 +89,15 @@ pub(super) struct OwnerStartup<'a> {
     pub(super) tracked_push: Option<TrackedPushStartup>,
 }
 
-pub(super) fn bootstrap<R: Read, W: Write>(
-    pipe: &mut Pipe<R, W>,
-    startup: OwnerStartup<'_>,
-) -> RunResult<(Owner, Option<Attachment>)> {
-    let OwnerStartup {
-        profile,
-        target,
-        config,
-        route_facts,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        profile_lock_path,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        posix_picker,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        workspace_snapshot_cancel,
-        attach_path,
-        agent_fixture,
-        identity_agent_path,
-        stage,
-        #[cfg(target_os = "linux")]
-        tracked_push,
-        #[cfg(target_os = "linux")]
-        opencode_recipe,
-        #[cfg(target_os = "linux")]
-        opencode_service,
-    } = startup;
-    let Some(Payload::Hello(hello)) = pipe.recv()? else {
-        return Err(protocol_error().into());
-    };
-    if !valid_hello(&hello, profile) {
-        crate::startup_profile::report_hello_if_production(route_facts.production());
-        return Err(protocol_error().into());
-    }
-    #[cfg(target_os = "macos")]
-    posix_picker::fence_residual_leases(profile_lock_path, &config, posix_picker.is_some())
-        .map_err(|_| protocol_error())?;
-    #[cfg(target_os = "linux")]
-    posix_picker::fence_linux_password_leases(profile_lock_path, &config, posix_picker)
-        .map_err(|_| protocol_error())?;
-    let epoch = random_token()?;
-    // The owner intent is written before any owned child can spawn. A prior
-    // unresolved intent or unverifiable child record refuses admission here.
-    #[cfg(target_os = "macos")]
-    let disposable = profile_lock_path
-        .parent()
-        .is_some_and(posix_picker::is_disposable_root);
-    #[cfg(target_os = "linux")]
-    let disposable = profile_lock_path
-        .parent()
-        .is_some_and(posix_picker::is_linux_disposable_root);
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let retirement = match Retirement::open(profile_lock_path, epoch, disposable) {
-        Ok(value) => Some(value),
-        Err(code) => {
-            crate::owner::retirement::report_refusal(code);
-            return Err(protocol_error().into());
-        }
-    };
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let retirement: Option<Retirement> = None;
-    let attachment = match attach_path {
-        Some(path) => {
-            let capability = hello
-                .proof_attachment_capability
-                .as_slice()
-                .try_into()
-                .map_err(|_| protocol_error())?;
-            Some(Attachment::bind(path, capability)?)
-        }
-        None if hello.proof_attachment_capability.is_empty() => None,
-        None => return Err(protocol_error().into()),
-    };
-    let generation = random_token()?;
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let guarded_write = guarded_write::for_startup(
-        &config,
-        profile_lock_path,
-        generation,
-        guarded_write::Blockers {
-            agent_fixture: agent_fixture.is_some(),
-            identity_agent: identity_agent_path.is_some(),
-            stage: stage.is_some(),
-            posix_picker: posix_picker.is_some(),
-            connector: route_facts.connector().is_some(),
-            snapshot_cancel: workspace_snapshot_cancel.is_some(),
-            #[cfg(target_os = "linux")]
-            tracked_push_or_opencode: tracked_push.is_some()
-                || opencode_recipe.is_some()
-                || opencode_service.is_some(),
-            #[cfg(not(target_os = "linux"))]
-            tracked_push_or_opencode: false,
-            production: route_facts.production(),
-        },
-    );
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let (workspace_readiness_fixture, snapshot_only_fixture) =
-        workspace_readiness::fixture_selection(
-            &config,
-            profile_lock_path,
-            attach_path.is_some(),
-            identity_agent_path.is_some(),
-            agent_fixture.is_some(),
-            stage.is_some(),
-            workspace_snapshot_cancel.is_some(),
-        );
-    #[cfg(target_os = "linux")]
-    let tracked_push = tracked_push
-        .map(|binding| tracked_push::TrackedPushState::start(binding, &config, &target, generation))
-        .transpose()?;
-    #[cfg(target_os = "linux")]
-    let (mut transport, jump_picker) = if !route_facts.production()
-        && std::env::var_os("BIGBUD_SSH_OWNER_PICKER_JUMP").as_deref()
-            == Some(std::ffi::OsStr::new("approved-disposable"))
-    {
-        if posix_picker.is_some()
-            || attach_path.is_some()
-            || agent_fixture.is_some()
-            || identity_agent_path.is_some()
-            || stage.is_some()
-            || tracked_push.is_some()
-            || opencode_recipe.is_some()
-            || opencode_service.is_some()
-            || guarded_write.is_some()
-        {
-            return Err(protocol_error().into());
-        }
-        let (transport, picker) = crate::transport::jump_binding::JumpPicker::bind(
-            config,
-            profile_lock_path,
-            &route_facts,
-            retirement.clone(),
-        )
-        .map_err(|_| protocol_error())?;
-        (transport, Some(picker))
-    } else {
-        (
-            Transport::new_with_facts(config, &route_facts).map_err(|_| protocol_error())?,
-            None,
-        )
-    };
-    #[cfg(not(target_os = "linux"))]
-    let mut transport =
-        Transport::new_with_facts(config, &route_facts).map_err(|_| protocol_error())?;
-    if let Some(path) = identity_agent_path {
-        transport
-            .bind_proof_agent(path)
-            .map_err(|_| protocol_error())?;
-    }
-    #[cfg(target_os = "linux")]
-    if workspace_snapshot_cancel.is_some() {
-        transport
-            .require_snapshot_fixture_image()
-            .map_err(|_| protocol_error())?;
-    }
-    #[cfg(target_os = "linux")]
-    let picker_cancel = match posix_picker {
-        Some(crate::startup_bindings::PosixPickerFixture::CancellableMuxRead) => {
-            Some(picker_cancel::CancelInbox::bind()?)
-        }
-        _ => None,
-    };
-    #[cfg(target_os = "macos")]
-    let (posix_picker, picker_cancel) = match posix_picker {
-        Some(crate::startup_bindings::PosixPickerFixture::CancellableRead) => {
-            (None, Some(picker_cancel::CancelInbox::bind()?))
-        }
-        mode @ Some(crate::startup_bindings::PosixPickerFixture::CancellableMuxRead) => {
-            (mode, Some(picker_cancel::CancelInbox::bind()?))
-        }
-        mode => (mode, None),
-    };
-    let storage = Storage::hydrate(pipe, &target)?;
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let peer_state_dir = profile_lock_path.parent().map(std::path::Path::to_path_buf);
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let peer_state_dir = None;
-    let owner = Owner {
-        target,
-        epoch,
-        generation,
-        profile: profile.to_vec(),
-        peer_state_dir,
-        storage,
-        retirement: retirement.clone(),
-        transport,
-        grants: Grants::new(Budget::for_startup(route_facts.production())),
-        trust: TrustApproval::default(),
-        reconnect: ReconnectAdmission::default(),
-        #[cfg(target_os = "linux")]
-        jump_picker,
-        terminal: None,
-        supervised_terminal: false,
-        preparation: None,
-        terminal_uncertain: false,
-        agent_fixture,
-        agent_proxy: None,
-        agent_close_uncertain: false,
-        agent_actions: Default::default(),
-        stage,
-        deployment_operation: None,
-        guarded_write,
-        workspace_mode_observation: None,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        workspace_readiness_fixture,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        picker_cancel,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        workspace_snapshot_cancel,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        snapshot_only_fixture,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        picker_master: posix_picker
-            .map(|mode| posix_picker::MasterPicker::new(mode, retirement.clone())),
-        #[cfg(target_os = "linux")]
-        opencode_recipe: opencode_recipe.map(std::sync::Arc::new),
-        #[cfg(target_os = "linux")]
-        opencode_service: opencode_service.map(std::sync::Arc::new),
-        #[cfg(target_os = "linux")]
-        opencode_lease: None,
-        #[cfg(target_os = "linux")]
-        tracked_push,
-    };
-    owner.send_accepted(pipe)?;
-    Ok((owner, attachment))
-}
-
 pub(super) fn valid_hello(hello: &Hello, profile: &[u8]) -> bool {
     // Exact compatibility for the fixture-only proof messages.
     hello.major == MAJOR && hello.minor == MINOR && hello.profile_binding == profile
+}
+
+/// Borrows the active target transport. Only a production owner at rest has
+/// none, and it admits no transport operation before binding a target.
+pub(super) fn present<T>(slot: &Option<T>) -> Result<&T, ErrorCode> {
+    slot.as_ref().ok_or(ErrorCode::OwnerUnavailable)
 }
 
 impl Owner {
@@ -345,7 +125,15 @@ impl Owner {
     pub(super) fn rebind<R: Read, W: Write>(&mut self, pipe: &mut Pipe<R, W>) -> RunResult<()> {
         self.reset_guarded_write();
         let generation = random_token()?;
-        let storage = Storage::hydrate(pipe, &self.target)?;
+        // Cached target snapshots are stale after a writer rebind; each target
+        // re-hydrates on its next admitted request. The bound target hydrates
+        // now, exactly as the single-target owner did.
+        self.targets.invalidate_storage();
+        let storage = if self.transport.is_some() {
+            Storage::hydrate(pipe, &self.target)?
+        } else {
+            Storage::unhydrated()
+        };
         if self.terminal_uncertain
             || self.agent_close_uncertain
             || storage.allow_network() == Err(ErrorCode::TargetDisconnected)
@@ -365,16 +153,25 @@ impl Owner {
     }
 
     fn send_accepted<R: Read, W: Write>(&self, pipe: &mut Pipe<R, W>) -> RunResult<()> {
+        // A production owner has no pinned target: it reports no generation and
+        // each target's generation is learned per request.
+        let multi_target = self.targets.pinned().is_none();
         pipe.send(Payload::HelloAccepted(HelloAccepted {
             major: MAJOR,
             minor: MINOR,
             owner_epoch: self.epoch.to_vec(),
-            proof_target_generation: self.generation.to_vec(),
+            proof_target_generation: if multi_target {
+                Vec::new()
+            } else {
+                self.generation.to_vec()
+            },
             proof_alias_descriptor: self
                 .transport
-                .alias_descriptor()
+                .as_ref()
+                .and_then(crate::transport::Transport::alias_descriptor)
                 .map_or_else(Vec::new, Vec::from),
             profile_binding: self.profile.clone(),
+            multi_target,
         }))
     }
 

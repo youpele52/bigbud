@@ -21,6 +21,8 @@ mod operands;
 mod peer_enrollment_vectors;
 #[path = "support/shell_vectors.rs"]
 mod shell_vectors;
+#[path = "support/target_vectors.rs"]
+mod target_vectors;
 #[path = "support/terminal_vectors.rs"]
 mod terminal_vectors;
 #[path = "support/transfer_vectors.rs"]
@@ -98,6 +100,7 @@ fn request(operation: Operation) -> Payload {
         target_generation: vec![4],
         target_id: "fixture-target".into(),
         grant: vec![0x80, 0],
+        target_descriptor: None,
         operation: Some(operation),
     })
 }
@@ -162,23 +165,13 @@ fn s1_wire_goldens() {
     native_lease_vectors::verify(&mut values);
     peer_enrollment_vectors::verify(&mut values);
     shell_vectors::verify(&mut values);
+    target_vectors::verify(&mut values);
     terminal_vectors::verify(&mut values);
     transfer_vectors::verify(&mut values);
     workspace_vectors::verify(&mut values);
     for (name, payload) in [
         ("hello", hello(1)),
         ("incompatible_major", hello(2)),
-        (
-            "hello_accepted",
-            Payload::HelloAccepted(HelloAccepted {
-                major: 1,
-                minor: 0,
-                owner_epoch: vec![0, 0x2a],
-                proof_target_generation: Vec::new(),
-                proof_alias_descriptor: Vec::new(),
-                profile_binding: vec![0, 0x61, 0xff],
-            }),
-        ),
         ("inspect_trust", request(Operation::InspectTrust(Empty {}))),
         ("approve_trust", request(approve([0, 0xfe, 0xff]))),
         ("connect", request(Operation::Connect(Empty {}))),

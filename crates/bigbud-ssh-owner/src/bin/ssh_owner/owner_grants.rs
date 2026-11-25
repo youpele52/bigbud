@@ -19,11 +19,20 @@ const GRANT_TTL: Duration = Duration::from_secs(15);
 const MAX_PENDING: usize = 32;
 const MAX_CONSUMED: usize = 4096;
 
+/// The exact target a grant is bound to. A grant never satisfies a request for
+/// another target or a stale generation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Binding {
+    pub(super) target_id: String,
+    pub(super) generation: Vec<u8>,
+}
+
 struct Grant {
     request_id: Vec<u8>,
     operands: Token,
     class: Class,
     expires: Instant,
+    binding: Binding,
 }
 
 // Lives only in the authenticated pipe session. Every use is also validated
@@ -54,6 +63,7 @@ impl Grants {
     pub(super) fn issue(
         &mut self,
         request: &Request,
+        binding: Binding,
         operation: Operation,
         now: Instant,
     ) -> Result<Token, ErrorCode> {
@@ -94,6 +104,7 @@ impl Grants {
             operands: operand_digest(operation),
             class,
             expires: now + GRANT_TTL,
+            binding,
         });
         Ok(token)
     }
@@ -103,7 +114,7 @@ impl Grants {
         request: &Request,
         operation: Operation,
         now: Instant,
-    ) -> Result<(), ErrorCode> {
+    ) -> Result<Binding, ErrorCode> {
         let token =
             <&Token>::try_from(request.grant.as_slice()).map_err(|_| ErrorCode::OperationDenied)?;
         let Entry::Occupied(entry) = self.pending.entry(*token) else {
@@ -116,6 +127,14 @@ impl Grants {
             self.budget.release(class);
             return Err(ErrorCode::OperationDenied);
         }
+        // Target and generation are compared before the request is accepted, so a
+        // grant issued for one target can never authorize another.
+        if grant.binding.target_id != request.target_id {
+            return Err(ErrorCode::TargetMismatch);
+        }
+        if grant.binding.generation != request.target_generation {
+            return Err(ErrorCode::StaleGeneration);
+        }
         if grant.request_id != request.request_id
             || grant.operands != operand_digest(operation)
             || self.consumed.contains(&request.request_id)
@@ -125,10 +144,10 @@ impl Grants {
         if self.consumed.len() >= MAX_CONSUMED {
             return Err(ErrorCode::OwnerUnavailable);
         }
-        let class = entry.remove().class;
-        self.budget.release(class);
+        let grant = entry.remove();
+        self.budget.release(grant.class);
         self.consumed.insert(request.request_id.clone());
-        Ok(())
+        Ok(grant.binding)
     }
 }
 
@@ -160,15 +179,26 @@ mod tests {
         })
     }
 
+    fn binding(target: &str, generation: &[u8]) -> Binding {
+        Binding {
+            target_id: target.into(),
+            generation: generation.to_vec(),
+        }
+    }
+
     #[test]
     fn grants_bind_request_and_operand_and_are_single_use() {
         let now = Instant::now();
         let mut grants = Grants::default();
         let mut req = Request {
             request_id: vec![1],
+            target_id: "target-a".into(),
             ..Request::default()
         };
-        req.grant = grants.issue(&req, list(None), now).unwrap().to_vec();
+        req.grant = grants
+            .issue(&req, binding("target-a", &[]), list(None), now)
+            .unwrap()
+            .to_vec();
         assert_eq!(
             grants.consume(&req, list(Some("other")), now),
             Err(ErrorCode::OperationDenied)
@@ -183,7 +213,10 @@ mod tests {
             Err(ErrorCode::OperationDenied)
         );
         req.request_id = vec![1];
-        assert_eq!(grants.consume(&req, list(Some("")), now), Ok(()));
+        assert_eq!(
+            grants.consume(&req, list(Some("")), now),
+            Ok(binding("target-a", &[]))
+        );
         assert_eq!(
             grants.consume(&req, list(None), now),
             Err(ErrorCode::OperationDenied)
@@ -191,8 +224,46 @@ mod tests {
         req.grant.clear();
         grants.revoke_pending();
         assert_eq!(
-            grants.issue(&req, list(None), now),
+            grants.issue(&req, binding("target-a", &[]), list(None), now),
             Err(ErrorCode::OperationDenied)
+        );
+    }
+
+    #[test]
+    fn grants_bind_the_exact_target_and_generation() {
+        let now = Instant::now();
+        let mut grants = Grants::default();
+        let mut req = Request {
+            request_id: vec![1],
+            target_id: "target-a".into(),
+            ..Request::default()
+        };
+        let generation = [9u8; 32];
+        req.grant = grants
+            .issue(&req, binding("target-a", &generation), list(None), now)
+            .unwrap()
+            .to_vec();
+        // The same request id and operands under another target is refused typed.
+        let other = Request {
+            target_id: "target-b".into(),
+            ..req.clone()
+        };
+        assert_eq!(
+            grants.consume(&other, list(None), now),
+            Err(ErrorCode::TargetMismatch)
+        );
+        let stale = Request {
+            target_generation: vec![7; 32],
+            ..req.clone()
+        };
+        assert_eq!(
+            grants.consume(&stale, list(None), now),
+            Err(ErrorCode::StaleGeneration)
+        );
+        req.target_generation = generation.to_vec();
+        assert_eq!(
+            grants.consume(&req, list(None), now),
+            Ok(binding("target-a", &generation))
         );
     }
 
@@ -202,15 +273,22 @@ mod tests {
         let mut grants = Grants::default();
         let mut req = Request {
             request_id: vec![1],
+            target_id: "target-a".into(),
             ..Request::default()
         };
-        req.grant = grants.issue(&req, list(None), now).unwrap().to_vec();
+        req.grant = grants
+            .issue(&req, binding("target-a", &[]), list(None), now)
+            .unwrap()
+            .to_vec();
         assert_eq!(
             grants.consume(&req, list(None), now + GRANT_TTL),
             Err(ErrorCode::OperationDenied)
         );
         req.grant.clear();
-        req.grant = grants.issue(&req, list(None), now).unwrap().to_vec();
+        req.grant = grants
+            .issue(&req, binding("target-a", &[]), list(None), now)
+            .unwrap()
+            .to_vec();
         grants.revoke_pending();
         assert_eq!(
             grants.consume(&req, list(None), now),

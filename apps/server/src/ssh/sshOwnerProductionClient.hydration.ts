@@ -17,7 +17,12 @@ import type { SshOwnerHydrationSnapshot } from "./sshOwnerProductionHydration.ts
  */
 
 export interface SshOwnerHydrationAck {
-  readonly targetId: string;
+  /**
+   * The primary target, when the profile names one. A production owner started
+   * without a target hydrates each target on its first request instead, so the
+   * target-scoped checks are skipped rather than invented.
+   */
+  readonly targetId?: string;
   readonly snapshot: SshOwnerHydrationSnapshot;
   readonly storage: PickerProofHydratedStorage | undefined;
   readonly aliasDescriptor: Uint8Array | undefined;
@@ -33,7 +38,16 @@ const unboundPaneStates = new Set(["may-have-been-sent", "outcome-unknown"]);
  */
 export function assertSshOwnerHydrationAcknowledged(input: SshOwnerHydrationAck): void {
   const { targetId, snapshot, storage, aliasDescriptor } = input;
-  if (!storage || !storage.writerEpoch || !Number.isSafeInteger(storage.seq) || storage.seq < 0) {
+  if (targetId === undefined || storage === undefined) {
+    // Multi-target production: no target-wide acknowledgement exists at startup.
+    // Each target's writer epoch, sequence and disconnect flag are supplied to
+    // the owner before its first network operation (the owner asks, the backend
+    // answers from this same store), so only categories that are unresolved
+    // regardless of target can block admission here.
+    assertUnresolvedCategories(snapshot);
+    return;
+  }
+  if (storage.writerEpoch.length === 0 || !Number.isSafeInteger(storage.seq) || storage.seq < 0) {
     throw new SshOwnerClientError(
       "hydration-failed",
       "The SSH owner did not acknowledge a writer epoch and sequence; admission stays closed.",
@@ -66,6 +80,10 @@ export function assertSshOwnerHydrationAcknowledged(input: SshOwnerHydrationAck)
       "The SSH owner's alias descriptor does not match the stored binding.",
     );
   }
+  assertUnresolvedCategories(snapshot);
+}
+
+function assertUnresolvedCategories(snapshot: SshOwnerHydrationSnapshot): void {
   if (snapshot.retirementMirror.length > 0) {
     throw new SshOwnerClientError(
       "hydration-retirement-unresolved",

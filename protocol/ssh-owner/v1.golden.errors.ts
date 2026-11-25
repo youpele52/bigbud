@@ -40,4 +40,6 @@ export const errorCases = {
   error_windows_password_unsupported: error(29),
   error_keyboard_interactive_unsupported: error(30),
   error_owner_retirement_unverified: error(31),
+  error_target_unknown: error(34),
+  error_target_mismatch: error(35),
 } satisfies Record<string, Message>;

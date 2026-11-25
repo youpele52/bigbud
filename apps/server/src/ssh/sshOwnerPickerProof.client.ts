@@ -9,7 +9,7 @@ import { makeProofCodexClient } from "./sshOwnerPickerProof.client.codex.ts";
 import { validateProofProviderFixture } from "./sshOwnerPickerProof.codec.provider.ts";
 
 import { makeProofClientRelay } from "./sshOwnerPickerProof.client.relay.ts";
-import { isIP, isIPv4 } from "node:net";
+import { isIPv4 } from "node:net";
 import { dirname, isAbsolute } from "node:path";
 import { randomBytes } from "node:crypto";
 
@@ -72,11 +72,35 @@ export type {
   PickerProofAttachOptions,
   PickerProofOwnerOptions,
 } from "./sshOwnerPickerProof.client.types.ts";
+
+/** The pinned fixture target facts; a production owner has none. */
+function fixtureTarget(options: PickerProofOwnerOptions) {
+  const { targetId, host, port, user, identityFile, knownHostsFile } = options;
+  if (
+    targetId === undefined ||
+    host === undefined ||
+    port === undefined ||
+    user === undefined ||
+    identityFile === undefined ||
+    knownHostsFile === undefined ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65_535 ||
+    user.length === 0
+  ) {
+    throw new PickerProofOwnerError("invalidOperands");
+  }
+  return { targetId, host, port, user, identityFile, knownHostsFile };
+}
 import type {
   LaunchedPickerProofOwner,
   PickerProofAttachOptions,
   PickerProofOwnerOptions,
 } from "./sshOwnerPickerProof.client.types.ts";
+
+// Fixture-only peer relay startup facts. In production mode no peer fixture can
+// be selected, so these placeholders never reach an SSH launch.
+const FIXTURE_PEER = { host: "127.0.0.1", port: 1, user: "owner" } as const;
 
 /** Only for the private S1 proof. No product composition and no legacy SSH fallback. */
 export async function startPickerProofOwner(
@@ -84,27 +108,25 @@ export async function startPickerProofOwner(
 ): Promise<LaunchedPickerProofOwner> {
   const session = copyPickerProofSessionOptions(options);
   const { profileBinding, targetId, major } = session;
-  const { binary, host, port, user, workspaceRoot } = options;
+  const { binary, workspaceRoot } = options;
   const production = options.productionLaunch;
+  const fixture = production === undefined ? fixtureTarget(options) : undefined;
   if (
     ![
       binary,
       options.lockFile,
       options.sshBinary,
       options.keyscanBinary,
-      options.identityFile,
-      options.knownHostsFile,
+      ...(fixture === undefined ? [] : [fixture.identityFile, fixture.knownHostsFile]),
     ].every(isAbsolute) ||
     (workspaceRoot !== undefined && (!isAbsolute(workspaceRoot) || workspaceRoot.includes("\0"))) ||
     (options.devInteractiveTerminal === true &&
       (process.platform !== "darwin" || workspaceRoot === undefined)) ||
-    (production === undefined
-      ? host !== "::1" && !(isIPv4(host) && host.startsWith("127."))
-      : host.length === 0 || host.length > 255 || isIP(host) === 0) ||
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65_535 ||
-    !user
+    (fixture !== undefined &&
+      fixture.host !== "::1" &&
+      !(isIPv4(fixture.host) && fixture.host.startsWith("127."))) ||
+    (fixture === undefined &&
+      (options.host !== undefined || options.port !== undefined || options.user !== undefined))
   )
     throw new PickerProofOwnerError("invalidOperands");
   const agentFixture =
@@ -187,6 +209,7 @@ export async function startPickerProofOwner(
   if (attachment) await assertPrivatePickerProofSocketDirectory(attachment.socketPath);
   const launchArgs = pickerProofLaunchArgs(options, {
     profileBindingHex: profileBinding.toString("hex"),
+    ...(fixture === undefined ? {} : { target: fixture }),
     ...(attachment ? { attachmentSocket: attachment.socketPath } : {}),
     aliasArgs,
     ...(agentFixture ? { agentFixture } : {}),
@@ -252,7 +275,7 @@ export async function startPickerProofOwner(
   return Object.assign(
     owner,
     makeProofCodexClient(
-      targetId,
+      targetId ?? "",
       codex,
       pipe.takeAgentProxyPipes,
       executeProofAgentProxy,
@@ -262,7 +285,7 @@ export async function startPickerProofOwner(
       ...(opencode || options.opencodeService
         ? {
             opencodeOwner: makeProofOpencodeOwner(
-              targetId,
+              targetId ?? "",
               opencode,
               options.opencodeService?.binaryPath,
               opencodeBinding,
@@ -271,26 +294,26 @@ export async function startPickerProofOwner(
           }
         : {}),
       openPeerRelay: makeProofPeerRelay(
-        targetId,
+        targetId ?? "",
         scoped.peer,
-        { host, port, user },
+        fixture ?? FIXTURE_PEER,
         pipe.takeAgentProxyPipes,
         executeProofAgentProxy,
       ),
       openGitUpload: makeProofGitUpload(
-        targetId,
+        targetId ?? "",
         scoped.gitUpload,
         pipe.takeAgentProxyPipes,
         executeProofAgentProxy,
       ),
       openGitAdvertisement: makeProofGitAdvertisement(
-        targetId,
+        targetId ?? "",
         scoped.git,
         pipe.takeAgentProxyPipes,
         executeProofAgentProxy,
       ),
       piRpcOwner: makeProofPiClient(
-        targetId,
+        targetId ?? "",
         pi,
         options.providerService?.kind === "pi" ? options.providerService.binaryPath : undefined,
         pipe.takeAgentProxyPipes,
@@ -299,13 +322,13 @@ export async function startPickerProofOwner(
       ),
       runAgentAction: executeAgentAction,
       openProofAgentProxy: makeProofAgentProxyClient(
-        targetId,
+        targetId ?? "",
         agentFixture,
         pipe.takeAgentProxyPipes,
         executeProofAgentProxy,
       ),
       openClientRelay: makeProofClientRelay(
-        targetId,
+        targetId ?? "",
         relay,
         pipe.takeAgentProxyPipes,
         executeProofAgentProxy,
@@ -317,7 +340,7 @@ export async function startPickerProofOwner(
             requestId,
             ownerEpoch: owner.ownerEpoch,
             generation: owner.targetGeneration,
-            targetId,
+            targetId: targetId ?? "",
             operation,
           }),
         );

@@ -130,6 +130,7 @@ fn request(accepted: &HelloAccepted, id: u8, operation: Operation) -> Request {
         target_generation: accepted.proof_target_generation.clone(),
         target_id: TARGET.into(),
         grant: Vec::new(),
+        target_descriptor: None,
         operation: Some(operation),
     }
 }

@@ -30,7 +30,12 @@ impl Owner {
         self.agent_fixture
             .as_mut()
             .ok_or(ErrorCode::OperationDenied)?
-            .probe_provider(&self.transport, kind, request, self.generation)
+            .probe_provider(
+                super::present(&self.transport)?,
+                kind,
+                request,
+                self.generation,
+            )
     }
 
     pub(super) fn open_provider(
@@ -65,7 +70,7 @@ impl Owner {
             .agent_fixture
             .as_mut()
             .ok_or(ErrorCode::OperationDenied)?;
-        match open(fixture, &self.transport) {
+        match open(fixture, super::present(&self.transport)?) {
             Ok(lease) => {
                 let proxy = self.agent_proxy.insert(lease);
                 proxy.status()

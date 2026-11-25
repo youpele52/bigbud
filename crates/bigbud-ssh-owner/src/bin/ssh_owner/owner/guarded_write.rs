@@ -201,7 +201,10 @@ impl Owner {
             let binding = binding(self.generation, apply.binding)?;
             let lease = lease(&apply.lease)?;
             let verified = guarded.take_verified(&binding, lease, Instant::now())?;
-            Ok(apply_proof::dispatch(&self.transport, &verified))
+            Ok(apply_proof::dispatch(
+                super::present(&self.transport)?,
+                &verified,
+            ))
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {

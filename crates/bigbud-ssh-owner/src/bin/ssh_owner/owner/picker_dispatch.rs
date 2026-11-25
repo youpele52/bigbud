@@ -16,13 +16,14 @@ impl Owner {
             return inbox.run(request_id, |is_cancelled| {
                 let result = match &mut self.picker_master {
                     Some(master) => master.list_cancellable(
-                        &self.transport,
+                        super::present(&self.transport)?,
                         self.generation,
                         path,
                         is_cancelled,
                     ),
                     #[cfg(target_os = "macos")]
-                    None => self.transport.list_folders_cancellable(path, is_cancelled),
+                    None => super::present(&self.transport)?
+                        .list_folders_cancellable(path, is_cancelled),
                     // Linux binds the inbox only to the owned mux lane.
                     #[cfg(target_os = "linux")]
                     None => Err(ErrorCode::OperationDenied.into()),
@@ -36,9 +37,9 @@ impl Owner {
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         if let Some(master) = &mut self.picker_master {
-            return master.list(&self.transport, self.generation, path);
+            return master.list(super::present(&self.transport)?, self.generation, path);
         }
-        self.transport.list_folders(path)
+        super::present(&self.transport)?.list_folders(path)
     }
 
     #[cfg(target_os = "linux")]
@@ -47,7 +48,7 @@ impl Owner {
             .picker_master
             .as_mut()
             .ok_or(ErrorCode::OperationDenied)?;
-        master.unlock_synthetic(&self.transport, self.generation)?;
+        master.unlock_synthetic(super::present(&self.transport)?, self.generation)?;
         Ok(Outcome::ProofSyntheticPosixPasswordUnlocked(
             crate::v1::Empty {},
         ))

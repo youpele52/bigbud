@@ -22,7 +22,7 @@ pub(super) struct Observation {
 impl Owner {
     pub(super) fn inspect_workspace_mode(&mut self, root: String) -> Result<Outcome, ErrorCode> {
         self.workspace_mode_observation = None;
-        let data = self.transport.inspect_workspace_mode(&root)?;
+        let data = super::present(&self.transport)?.inspect_workspace_mode(&root)?;
         let mut reply = ProofWorkspaceModeInspection::from(data.clone());
         if let Some(proof_workspace_mode_inspection::Result::Ready(ready)) = &mut reply.result {
             let token = random_token().map_err(|_| ErrorCode::OwnerUnavailable)?;
@@ -59,7 +59,7 @@ impl Owner {
             .workspace_mode_observation
             .take()
             .ok_or(ErrorCode::OperationDenied)?;
-        let status = match self.transport.publish_workspace_mode(
+        let status = match super::present(&self.transport)?.publish_workspace_mode(
             &request.root,
             &observed.data,
             &request.next_record,

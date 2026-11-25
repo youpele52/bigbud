@@ -13,6 +13,7 @@ interface HelloAcceptedFrame {
   readonly generation?: Uint8Array;
   readonly aliasDescriptor?: Uint8Array;
   readonly profileBinding?: Uint8Array;
+  readonly multiTarget?: boolean;
 }
 
 /** Validate the owner's HelloAccepted before admitting any request on the session. */
@@ -30,11 +31,14 @@ export function acceptPickerProofHello(
     generation,
     aliasDescriptor = new Uint8Array(),
     profileBinding = new Uint8Array(),
+    multiTarget = false,
   } = accepted;
   if (
     ownerEpoch?.length !== PROOF_TOKEN_BYTES ||
-    generation?.length !== PROOF_TOKEN_BYTES ||
-    (aliasDescriptor.length !== 0 && aliasDescriptor.length !== 32)
+    // A multi-target owner has no pinned target, so it reports no generation.
+    generation?.length !== (multiTarget ? 0 : PROOF_TOKEN_BYTES) ||
+    (aliasDescriptor.length !== 0 && aliasDescriptor.length !== 32) ||
+    (multiTarget && aliasDescriptor.length !== 0)
   ) {
     return invalidProtocol();
   }
@@ -47,6 +51,7 @@ export function acceptPickerProofHello(
   return {
     ownerEpoch,
     generation,
+    multiTarget,
     aliasDescriptor: aliasDescriptor.length ? Uint8Array.from(aliasDescriptor) : undefined,
   };
 }

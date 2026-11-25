@@ -96,14 +96,15 @@ impl Owner {
         if let Some(inbox) = &mut self.picker_cancel {
             return self.reconnect.sample(Instant::now, seed, || {
                 inbox.run(request_id, |cancelled| {
-                    self.transport.sample_health_cancellable(cancelled)
+                    super::present(&self.transport)?.sample_health_cancellable(cancelled)
                 })
             });
         }
         #[cfg(not(target_os = "macos"))]
         let _ = request_id;
-        self.reconnect
-            .sample(Instant::now, seed, || self.transport.sample_health())
+        self.reconnect.sample(Instant::now, seed, || {
+            super::present(&self.transport)?.sample_health()
+        })
     }
 }
 

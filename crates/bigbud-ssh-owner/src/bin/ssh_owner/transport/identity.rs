@@ -145,7 +145,7 @@ fn macos_temp_alias(path: &Path) -> PathBuf {
     path.to_owned()
 }
 
-pub(super) fn literal_path(path: &Path) -> bool {
+pub(crate) fn literal_path(path: &Path) -> bool {
     // These paths go through OpenSSH's own config/token parser, not a shell.
     // Only literal fixture paths are supported; no glob, tilde, percent or env expansion.
     path.is_absolute()

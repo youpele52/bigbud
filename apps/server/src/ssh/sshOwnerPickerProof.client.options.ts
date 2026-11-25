@@ -13,9 +13,13 @@ export function copyPickerProofSessionOptions({
     major > 0xffff_ffff ||
     profileBinding.length === 0 ||
     profileBinding.length > 128 ||
-    !targetId ||
-    Buffer.byteLength(targetId) > 1_024
+    (targetId !== undefined && (!targetId || Buffer.byteLength(targetId) > 1_024))
   )
     throw new PickerProofOwnerError("invalidOperands");
-  return { profileBinding: Buffer.from(profileBinding), targetId, sql, major };
+  return {
+    profileBinding: Buffer.from(profileBinding),
+    ...(targetId === undefined ? {} : { targetId }),
+    sql,
+    major,
+  };
 }

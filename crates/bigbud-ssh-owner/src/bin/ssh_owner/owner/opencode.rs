@@ -112,8 +112,8 @@ impl Owner {
         if self.opencode_lease.is_some() || !recipe.matches(&scope) {
             return Err(ErrorCode::OperationDenied);
         }
-        let host = self.transport.host().to_owned();
-        let pinned = self.transport.pinned_opencode_v1_ssh()?;
+        let host = super::present(&self.transport)?.host().to_owned();
+        let pinned = super::present(&self.transport)?.pinned_opencode_v1_ssh()?;
         self.spawn_opencode(token, move |cancelled, port| {
             recipe.run(
                 pinned,
@@ -147,8 +147,8 @@ impl Owner {
         if self.opencode_lease.is_some() || !recipe.matches(scope) {
             return Err(ErrorCode::OperationDenied);
         }
-        let host = self.transport.host().to_owned();
-        let pinned = self.transport.pinned_opencode_v1_ssh()?;
+        let host = super::present(&self.transport)?.host().to_owned();
+        let pinned = super::present(&self.transport)?.pinned_opencode_v1_ssh()?;
         self.spawn_opencode(token, move |cancelled, port| {
             recipe.run(
                 pinned,

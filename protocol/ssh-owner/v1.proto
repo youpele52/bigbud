@@ -73,6 +73,12 @@ message HelloAccepted {
   // production client refuses a session whose echo differs, and the owner
   // refuses a Hello whose binding differs from its startup profile.
   bytes profile_binding = 6;
+  // W3.7: the owner was started without a pinned target and resolves every
+  // target-scoped request from its `TargetDescriptor`. When set,
+  // `proof_target_generation` describes no target and must be empty; the
+  // generation of each target is reported per request. Absent or false keeps
+  // the single pinned fixture target and its handshake generation.
+  bool multi_target = 7;
 }
 
 // The owner validates the stable request ID, current epoch and target
@@ -92,6 +98,13 @@ message Request {
   bytes target_generation = 3;
   string target_id = 4;
   bytes grant = 5;
+  // W3.7 per-target admission. Target-scoped requests name their exact target
+  // here; the owner resolves policy, trust, identity, connector rules and the
+  // target generation from it and refuses an unsupported or changed target
+  // before any dial. Absent for the single pinned fixture target, and refused
+  // in production, where the owner starts without a target. `target_id` and
+  // `target_generation` must equal the descriptor's own fields when present.
+  TargetDescriptor target_descriptor = 6;
 
   // Frozen production verb names (engineering decision; W1.1). Field numbers and
   // the existing `proof_*` names stay unchanged; promotion of any variant into
@@ -275,6 +288,55 @@ message ListFolders {
 // Empty operand: the owner reads only its own bound config scope.
 message ListAliases {}
 
+// Where the target came from. `ALIAS` means `target_id` names an alias in the
+// owner's own alias config scope and the owner re-resolves it; `STRUCTURED`
+// means the explicit fields win and no alias policy is consulted.
+enum TargetKind {
+  TARGET_KIND_UNSPECIFIED = 0;
+  TARGET_KIND_ALIAS = 1;
+  TARGET_KIND_STRUCTURED = 2;
+}
+
+// Authentication mode offered for this target. v1 admits key mode only; agent
+// and password are typed as unsupported policy before any dial. This is a mode,
+// never credential material.
+enum TargetAuthMode {
+  TARGET_AUTH_MODE_UNSPECIFIED = 0;
+  TARGET_AUTH_MODE_KEY = 1;
+  TARGET_AUTH_MODE_AGENT = 2;
+  TARGET_AUTH_MODE_PASSWORD = 3;
+}
+
+// Additive target descriptor (W3.7). It carries exactly the facts the owner
+// needs to resolve one target and nothing else: no credential bytes, no raw
+// config text and no caller-chosen transport options. Bounds, enforced by both
+// the owner and the TypeScript client before use:
+//
+//   encoded descriptor             <= 4 KiB
+//   target_id                     1..1024 bytes
+//   host                          1..45 bytes, IP literal only
+//   user                          1..64 bytes, [A-Za-z0-9._-]
+//   identity_reference            1..1024 bytes, absolute literal path
+//   trust_reference               1..1024 bytes, absolute literal path
+//   host_key_alias                0..255 bytes
+//   generation                    0 or 32 bytes; empty requests first use
+//
+// `generation` is the target generation the caller last observed. The owner
+// mints it on first use, binds it to every grant and reports it in each Reply;
+// a request that names a stale generation is refused before any transport work.
+message TargetDescriptor {
+  string target_id = 1;
+  TargetKind kind = 2;
+  string host = 3;
+  uint32 port = 4;
+  string user = 5;
+  TargetAuthMode auth_mode = 6;
+  string identity_reference = 7;
+  string host_key_alias = 8;
+  string trust_reference = 9;
+  bytes generation = 10;
+}
+
 // The route kind is a fact, not a display string. `jump_hops` is meaningful
 // only for `ALIAS_ROUTE_KIND_JUMP`.
 enum AliasRouteKind {
@@ -440,6 +502,12 @@ enum ErrorCode {
   ERROR_CODE_SHELL_TIMED_OUT = 32;
   // Cancellation targeted this operation lease only. Never replay.
   ERROR_CODE_SHELL_CANCELLED = 33;
+  // The request named no descriptor and no pinned target, or named a target the
+  // owner has not resolved in this epoch. Refused before any transport work.
+  ERROR_CODE_TARGET_UNKNOWN = 34;
+  // The descriptor, grant or request disagree about the exact target (or its
+  // resolved policy digest). A grant for one target never satisfies another.
+  ERROR_CODE_TARGET_MISMATCH = 35;
 }
 
 message Trust {

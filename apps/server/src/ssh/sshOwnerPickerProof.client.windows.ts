@@ -38,9 +38,11 @@ export async function startWindowsPickerProofOwner(
 ): Promise<WindowsPickerProofOwner> {
   const { binary, lockFile, port, user, identityFile, knownHostsFile } = options;
   const session = copyPickerProofSessionOptions(options);
+  const targetId = session.targetId;
   if (
+    targetId === undefined ||
     ![binary, lockFile, identityFile, knownHostsFile].every(isDriveAbsolute) ||
-    session.targetId.includes("\0") ||
+    targetId.includes("\0") ||
     !Number.isInteger(port) ||
     port < 1 ||
     port > 65_535 ||
@@ -53,7 +55,7 @@ export async function startWindowsPickerProofOwner(
 
   const pipe = spawnWindowsPickerProofPipe(binary, [
     session.profileBinding.toString("hex"),
-    session.targetId,
+    targetId,
     lockFile,
     String(port),
     user,

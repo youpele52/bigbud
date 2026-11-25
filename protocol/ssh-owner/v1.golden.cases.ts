@@ -21,6 +21,24 @@ export const reply = (tag: number, outcome: Message): Message => [
   [4, [...correlation, [tag, outcome]]],
 ];
 const list = (path?: string): Message => (path === undefined ? [] : [[1, path]]);
+
+/** W3.7 additive target descriptor; no credential material or raw config text. */
+export const targetDescriptor: Message = [
+  [1, "ssh:host=a"],
+  [2, 2],
+  [3, "127.0.0.1"],
+  [4, 2222],
+  [5, "tester"],
+  [6, 1],
+  [7, "/home/fixture/.ssh/id_ed25519"],
+  [8, "fixture-host"],
+  [9, "/home/fixture/.ssh/known_hosts"],
+];
+/** The descriptor names its own target, so the envelope carries no generation. */
+const descriptorCorrelation: Message = [
+  [1, bytes("0180ff")],
+  [2, bytes("002a")],
+];
 export const challenge = (value = "00feff"): Message => [[1, bytes(value)]];
 export const pickerPath = "~/café/資料";
 const sequence = (first: number) => Buffer.from(Array.from({ length: 32 }, (_, i) => first + i));
@@ -63,6 +81,18 @@ export const wireCases: Record<string, Message> = {
       ],
     ],
   ],
+  // W3.7: a production owner has no pinned target and reports no generation.
+  hello_accepted_multi_target: [
+    [
+      2,
+      [
+        [1, 1],
+        [3, bytes("002a")],
+        [6, bytes("0061ff")],
+        [7, true],
+      ],
+    ],
+  ],
   hello_attach_bootstrap: [[1, [...attachHello, [4, sequence(0)]]]],
   attach_probe: [[11, [[1, sequence(32)]]]],
   attach_challenge: [
@@ -80,6 +110,18 @@ export const wireCases: Record<string, Message> = {
       [
         [1, attachHello],
         [2, bytes("4d37008410d3ce6598d07a89f42a18172795ab30d2ab8ae7d46cd86a2e2563f4")],
+      ],
+    ],
+  ],
+  target_descriptor_request: [
+    [
+      3,
+      [
+        ...descriptorCorrelation,
+        [4, "ssh:host=a"],
+        [5, bytes("8000")],
+        [6, targetDescriptor],
+        [10, []],
       ],
     ],
   ],

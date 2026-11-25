@@ -1,13 +1,8 @@
 use super::{ProfileRefusal, parse};
-use crate::{
-    config::{RouteFacts, resolve_with_facts},
-    startup_profile::{ProfileKind, digest},
-};
 use std::{
     ffi::OsString,
     fs,
-    io::Write,
-    os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
+    os::unix::fs::{DirBuilderExt, MetadataExt},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
@@ -21,13 +16,13 @@ fn root() -> PathBuf {
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
     fs::DirBuilder::new().mode(0o700).create(&root).unwrap();
-    fs::canonicalize(&root).unwrap()
+    fs::canonicalize(root).unwrap()
 }
 
 fn binding(root: &Path) -> String {
     let metadata = fs::symlink_metadata(root).unwrap();
-    let digest = digest(
-        ProfileKind::DesktopPackaged,
+    let digest = crate::startup_profile::digest(
+        crate::startup_profile::ProfileKind::DesktopPackaged,
         root.to_str().unwrap(),
         &metadata.dev().to_string(),
         &metadata.ino().to_string(),
@@ -41,57 +36,84 @@ fn binding(root: &Path) -> String {
     )
 }
 
+/// The production shape: profile, state directory and OpenSSH images only.
+/// No target, host, port, user, identity or known-hosts argument.
 fn args(root: &Path, extras: &[&str]) -> Vec<OsString> {
-    let mut values = vec![
+    let mut values: Vec<OsString> = vec![
         "--profile".into(),
         binding(root).into(),
         "--state-dir".into(),
         root.as_os_str().into(),
-        "ssh:fixture".into(),
+        "--ssh".into(),
         "/usr/bin/ssh".into(),
+        "--keyscan".into(),
         "/usr/bin/ssh-keyscan".into(),
-        "203.0.113.10".into(),
-        "2222".into(),
-        "tester".into(),
-        "/tmp/identity".into(),
-        "/tmp/known_hosts".into(),
     ];
     values.extend(extras.iter().map(|value| OsString::from(*value)));
     values
 }
 
 #[test]
-fn requires_profile_and_state_directory_together() {
+fn requires_profile_state_directory_and_both_images() {
     let root = root();
-    let mut missing = args(&root, &[]);
-    missing.drain(0..4);
-    assert_eq!(
-        parse(missing.into_iter()).unwrap_err(),
-        ProfileRefusal::MissingFlag
-    );
-    let mut no_state = args(&root, &[]);
-    no_state.drain(2..4);
-    assert_eq!(
-        parse(no_state.into_iter()).unwrap_err(),
-        ProfileRefusal::MissingFlag
-    );
-    let mut no_profile = args(&root, &[]);
-    no_profile.drain(0..2);
-    assert_eq!(
-        parse(no_profile.into_iter()).unwrap_err(),
-        ProfileRefusal::MissingFlag
-    );
+    for (label, mut values) in [
+        ("profile", args(&root, &[])),
+        ("state", args(&root, &[])),
+        ("ssh", args(&root, &[])),
+        ("keyscan", args(&root, &[])),
+    ] {
+        let range = match label {
+            "profile" => 0..2,
+            "state" => 2..4,
+            "ssh" => 4..6,
+            _ => 6..8,
+        };
+        values.drain(range);
+        assert_eq!(
+            parse(values.into_iter()).unwrap_err(),
+            ProfileRefusal::MissingFlag,
+            "{label}"
+        );
+    }
     fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
-fn accepts_a_non_loopback_production_host_without_the_proof_environment() {
+fn parses_a_target_free_production_launch() {
     let root = root();
     let parsed = parse(args(&root, &[]).into_iter()).expect("production args");
-    assert_eq!(parsed.host.to_string(), "203.0.113.10");
-    assert_eq!(parsed.port, 2222);
-    assert_eq!(parsed.user, "tester");
     assert_eq!(parsed.state_directory, fs::canonicalize(&root).unwrap());
+    assert_eq!(parsed.ssh, PathBuf::from("/usr/bin/ssh"));
+    assert_eq!(parsed.keyscan, PathBuf::from("/usr/bin/ssh-keyscan"));
+    assert!(parsed.system_config.is_none());
+    assert!(parsed.alias_config.is_none());
+    assert!(parsed.attach_path.is_none());
+    assert!(parsed.workspace_root.is_none());
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn refuses_target_positionals_from_the_fixture_shape() {
+    let root = root();
+    // `<target> <ssh> <keyscan> <host> <port> <user> <identity> <known-hosts>`
+    // is fixture-only argv and a conflict in production mode.
+    let values = args(
+        &root,
+        &[
+            "ssh:fixture",
+            "/usr/bin/ssh",
+            "/usr/bin/ssh-keyscan",
+            "203.0.113.10",
+            "2222",
+            "tester",
+            "/tmp/identity",
+            "/tmp/known_hosts",
+        ],
+    );
+    assert_eq!(
+        parse(values.into_iter()).unwrap_err(),
+        ProfileRefusal::Conflict
+    );
     fs::remove_dir_all(&root).unwrap();
 }
 
@@ -138,53 +160,54 @@ fn rejects_every_fixture_flag() {
 }
 
 #[test]
-fn production_accepts_a_real_shaped_config_and_refuses_unsupported_policy() {
+fn a_system_config_requires_an_alias_scope() {
     let root = root();
-    let identity = root.join("identity");
-    let pins = root.join("pins");
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&identity)
-        .unwrap()
-        .write_all(b"synthetic key material")
-        .unwrap();
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&pins)
-        .unwrap();
-    let config = root.join("config");
-    fs::write(
-        &config,
-        format!(
-            "Host picker\n HostName 203.0.113.10\n Port 2222\n User remote\n\
-             IdentityFile {}\n UserKnownHostsFile {}\n",
-            identity.display(),
-            pins.display()
-        ),
+    let system = root.join("ssh_config");
+    fs::write(&system, "Host *\n User remote\n").unwrap();
+    assert_eq!(
+        parse(args(&root, &["--system-config", system.to_str().unwrap()]).into_iter()).unwrap_err(),
+        ProfileRefusal::MalformedProfile
+    );
+    let parsed = parse(
+        args(
+            &root,
+            &[
+                "--system-config",
+                system.to_str().unwrap(),
+                "--alias-config",
+                system.to_str().unwrap(),
+            ],
+        )
+        .into_iter(),
     )
-    .unwrap();
-    let facts = RouteFacts::default().with_production();
-    let resolved =
-        resolve_with_facts(&config, None, "picker", &facts, true).expect("real-shaped config");
-    assert_eq!(resolved.host.to_string(), "203.0.113.10");
-    assert_eq!(resolved.port, 2222);
-    assert_eq!(resolved.user, "remote");
-    assert_eq!(resolved.identity, fs::canonicalize(&identity).unwrap());
+    .expect("alias scope admits a system config");
+    assert!(parsed.system_config.is_some());
+    assert!(parsed.alias_config.is_some());
+    fs::remove_dir_all(&root).unwrap();
+}
 
-    fs::write(
-        &config,
-        format!(
-            "Host picker\n HostName 203.0.113.10\n ProxyCommand /bin/false\n\
-             IdentityFile {}\n UserKnownHostsFile {}\n",
-            identity.display(),
-            pins.display()
-        ),
-    )
-    .unwrap();
-    assert!(resolve_with_facts(&config, None, "picker", &facts, true).is_err());
+#[test]
+fn refuses_a_profile_binding_for_another_state_directory() {
+    let root = root();
+    let other = root.join("other");
+    fs::DirBuilder::new().mode(0o700).create(&other).unwrap();
+    let mut values = args(&root, &[]);
+    values[1] = binding(&other).into();
+    assert_eq!(
+        parse(values.into_iter()).unwrap_err(),
+        ProfileRefusal::ProfileMismatch
+    );
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn refuses_a_relative_image_path() {
+    let root = root();
+    let mut values = args(&root, &[]);
+    values[5] = "ssh".into();
+    assert_eq!(
+        parse(values.into_iter()).unwrap_err(),
+        ProfileRefusal::MalformedProfile
+    );
     fs::remove_dir_all(&root).unwrap();
 }

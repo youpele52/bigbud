@@ -52,7 +52,8 @@ impl Fixture {
             target_generation: vec![owner.generation],
             target_id: owner.target.into(),
             grant: vec![grant.token],
-            operation: Some(operation),
+            target_descriptor: None,
+        operation: Some(operation),
         };
         Self {
             owner,

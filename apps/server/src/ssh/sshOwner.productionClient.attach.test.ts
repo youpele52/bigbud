@@ -73,11 +73,9 @@ async function makeFakeAttachOwner(input: {
   profileBinding: Buffer;
   targetId: string;
   rejectProof?: boolean;
-  aliasDescriptor?: Buffer;
   echoProfileBinding?: Buffer;
 }): Promise<FakeAttachOwner> {
   const epoch = Buffer.alloc(32, 3);
-  const generation = Buffer.alloc(32, 4);
   let accepted = 0;
   const sockets = new Set<Socket>();
   const server: Server = createServer((socket) => {
@@ -114,18 +112,17 @@ async function makeFakeAttachOwner(input: {
           );
           stage = 1;
         } else if (stage === 1 && readBytesField(body, 13)) {
-          stage = 2;
-          socket.write(frame(7, bytesField(1, Buffer.from(input.targetId))));
-        } else if (stage === 2 && readBytesField(body, 8)) {
+          // Production is multi-target: acceptance first, no pinned target and
+          // no generation. Each target hydrates on its first request.
           stage = 3;
           accepted += 1;
           const hello = Buffer.concat([
             uintField(1, 1),
             uintField(2, 0),
             bytesField(3, epoch),
-            bytesField(4, generation),
+            bytesField(4, Buffer.alloc(0)),
             bytesField(6, input.echoProfileBinding ?? input.profileBinding),
-            ...(input.aliasDescriptor ? [bytesField(5, input.aliasDescriptor)] : []),
+            uintField(7, 1),
           ]);
           socket.write(frame(2, hello));
         }
@@ -193,7 +190,7 @@ describe("production owner client attach", () => {
       socketPath: facts.socketPath,
       capability,
       profileBinding: facts.profileBinding,
-      targetId: facts.targetId,
+      targetId: facts.target?.targetId ?? "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
     });
     cleanup.push(server.close);
     await withPersistence(fixture, (sql) =>
@@ -217,7 +214,7 @@ describe("production owner client attach", () => {
       socketPath: facts.socketPath,
       capability,
       profileBinding: facts.profileBinding,
-      targetId: facts.targetId,
+      targetId: facts.target?.targetId ?? "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
       rejectProof: true,
     });
     cleanup.push(server.close);
@@ -240,7 +237,7 @@ describe("production owner client attach", () => {
       socketPath: facts.socketPath,
       capability,
       profileBinding: facts.profileBinding,
-      targetId: facts.targetId,
+      targetId: facts.target?.targetId ?? "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
     });
     cleanup.push(server.close);
     await withPersistence(fixture, (sql) =>
@@ -266,7 +263,7 @@ describe("production owner client attach", () => {
       socketPath: facts.socketPath,
       capability,
       profileBinding: facts.profileBinding,
-      targetId: facts.targetId,
+      targetId: facts.target?.targetId ?? "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
     });
     cleanup.push(server.close);
     await withPersistence(fixture, (sql) =>
@@ -289,7 +286,7 @@ describe("production owner client attach", () => {
       socketPath: facts.socketPath,
       capability,
       profileBinding: facts.profileBinding,
-      targetId: facts.targetId,
+      targetId: facts.target?.targetId ?? "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
     });
     cleanup.push(server.close);
     await writeSshOwnerAttachmentDescriptor(facts.attachFile, {
@@ -316,7 +313,7 @@ describe("production owner client attach", () => {
       socketPath: facts.socketPath,
       capability,
       profileBinding: facts.profileBinding,
-      targetId: facts.targetId,
+      targetId: facts.target?.targetId ?? "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
       echoProfileBinding: Buffer.alloc(32, 0xee),
     });
     cleanup.push(server.close);

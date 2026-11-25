@@ -26,8 +26,15 @@ export interface ProductionFixture {
   readonly stateDirectory: string;
   readonly observationFile: string;
   readonly profile: SshOwnerProductionProfile;
+  readonly activityFile: string;
   artifact(path: string, profile?: SshOwnerArtifact["profile"]): SshOwnerArtifact;
-  fakeOwner(mode: FakeOwnerMode, aliasDescriptor?: Buffer): Promise<string>;
+  fakeOwner(
+    mode: FakeOwnerMode,
+    options?: {
+      readonly aliasDescriptor?: Buffer;
+      readonly rejectTarget?: string;
+    },
+  ): Promise<string>;
   observation(): Promise<FakeOwnerObservation>;
   exists(path: string): Promise<boolean>;
   dispose(): Promise<void>;
@@ -40,18 +47,23 @@ export async function makeProductionFixture(): Promise<ProductionFixture> {
   const stateDirectory = join(root, "state");
   await mkdir(stateDirectory, { mode: 0o700 });
   const observationFile = join(root, "observation.json");
+  const activityFile = join(root, "activity.log");
   return {
     root,
     stateDirectory,
     observationFile,
+    activityFile,
     profile: {
       stateDirectory,
-      targetId: "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
-      host: "127.0.0.1",
-      port: 2_222,
-      user: "tester",
-      identityFile: join(root, "id_ed25519"),
-      knownHostsFile: join(root, "known_hosts"),
+      target: {
+        targetId: "ssh:host=fixture&auth=ssh-key&transport=direct-ssh",
+        kind: "structured",
+        host: "127.0.0.1",
+        port: 2_222,
+        user: "tester",
+        identityFile: join(root, "id_ed25519"),
+        knownHostsFile: join(root, "known_hosts"),
+      },
     },
     artifact: (path, profile = "desktop-dev") => ({
       profile,
@@ -59,11 +71,15 @@ export async function makeProductionFixture(): Promise<ProductionFixture> {
       target,
       evidence: "header",
     }),
-    fakeOwner: (mode, aliasDescriptor) =>
+    fakeOwner: (mode, options = {}) =>
       writeFakeSshOwnerBinary(root, {
         mode,
         observationFile,
-        ...(aliasDescriptor === undefined ? {} : { aliasDescriptor }),
+        activityFile,
+        ...(options.aliasDescriptor === undefined
+          ? {}
+          : { aliasDescriptor: options.aliasDescriptor }),
+        ...(options.rejectTarget === undefined ? {} : { rejectTarget: options.rejectTarget }),
       }),
     observation: async () =>
       JSON.parse(await readFile(observationFile, "utf8")) as FakeOwnerObservation,

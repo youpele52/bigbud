@@ -97,17 +97,24 @@ describe("production SSH owner launch mode", () => {
         expect(observation.argv[4]).toBe(facts.profileBindingText);
         expect(observation.argv[5]).toBe("--state-dir");
         expect(observation.argv[6]).toBe(fixture.stateDirectory);
-        expect(observation.argv[7]).toBe(facts.targetId);
-        expect(observation.argv.slice(8, 15)).toEqual([
+        expect(observation.argv.slice(7)).toEqual([
+          "--ssh",
           "/usr/bin/ssh",
+          "--keyscan",
           "/usr/bin/ssh-keyscan",
+          "--attach-socket",
+          facts.socketPath,
+        ]);
+        for (const positional of [
+          facts.target?.targetId,
           "127.0.0.1",
           "2222",
           "tester",
-          facts.identityFile,
-          facts.knownHostsFile,
-        ]);
-        expect(observation.argv.slice(15)).toEqual(["--attach-socket", facts.socketPath]);
+          facts.target?.identityFile,
+          facts.target?.knownHostsFile,
+        ]) {
+          expect(observation.argv).not.toContain(positional);
+        }
         for (const flag of FIXTURE_FLAGS) expect(observation.argv).not.toContain(flag);
         expect(observation.argv).not.toContain("--workspace-root");
         expect(observation.argv).not.toContain("--dev-interactive-terminal");

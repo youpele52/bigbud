@@ -96,7 +96,12 @@ impl crate::owner::Owner {
             return Err(ErrorCode::OperationDenied);
         }
         let artifact = artifact_operand(action, operand)?;
-        let result = run(&self.transport, action, operand, artifact.as_ref())?;
+        let result = run(
+            crate::owner::present(&self.transport)?,
+            action,
+            operand,
+            artifact.as_ref(),
+        )?;
         self.agent_actions.record(&operand.operation_id, &result)?;
         Ok(result)
     }

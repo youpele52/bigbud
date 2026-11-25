@@ -144,13 +144,21 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use crate::owner_grants::Grants;
+    use crate::owner_grants::{Binding, Grants};
     use crate::v1::{Empty, ListFolders, ProofWorkspaceIndex, Request};
 
     fn request(id: u8) -> Request {
         Request {
             request_id: vec![id],
+            target_id: "ssh:fixture".into(),
             ..Request::default()
+        }
+    }
+
+    fn binding() -> Binding {
+        Binding {
+            target_id: "ssh:fixture".into(),
+            generation: Vec::new(),
         }
     }
 
@@ -209,16 +217,25 @@ mod tests {
         let now = Instant::now();
         let mut grants = Grants::new(Budget::new(4, 2));
         let mut first = request(1);
-        first.grant = grants.issue(&first, index(), now).unwrap().to_vec();
+        first.grant = grants
+            .issue(&first, binding(), index(), now)
+            .unwrap()
+            .to_vec();
         let mut second = request(2);
-        second.grant = grants.issue(&second, index(), now).unwrap().to_vec();
+        second.grant = grants
+            .issue(&second, binding(), index(), now)
+            .unwrap()
+            .to_vec();
         let mut interactive = request(3);
-        interactive.grant = grants.issue(&interactive, list(), now).unwrap().to_vec();
+        interactive.grant = grants
+            .issue(&interactive, binding(), list(), now)
+            .unwrap()
+            .to_vec();
         assert_eq!(grants.budget.active(Class::Background), 2);
         assert_eq!(grants.budget.active(Class::Interactive), 1);
 
         // Consume releases the background slot.
-        assert_eq!(grants.consume(&first, index(), now), Ok(()));
+        assert_eq!(grants.consume(&first, index(), now), Ok(binding()));
         assert_eq!(grants.budget.active(Class::Background), 1);
 
         // Expiry releases the interactive slot without a consume.
@@ -245,16 +262,19 @@ mod tests {
         let mut grants = Grants::new(Budget::new(4, 2));
         for id in 1..=2 {
             let mut request = request(id);
-            request.grant = grants.issue(&request, index(), now).unwrap().to_vec();
+            request.grant = grants
+                .issue(&request, binding(), index(), now)
+                .unwrap()
+                .to_vec();
         }
         let blocked = request(3);
         assert_eq!(
-            grants.issue(&blocked, index(), now),
+            grants.issue(&blocked, binding(), index(), now),
             Err(ErrorCode::SessionQuota)
         );
         // Interactive capacity is still admitted on the same owner.
         let interactive = request(4);
-        assert!(grants.issue(&interactive, list(), now).is_ok());
+        assert!(grants.issue(&interactive, binding(), list(), now).is_ok());
     }
 
     #[test]

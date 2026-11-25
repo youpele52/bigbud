@@ -1,4 +1,3 @@
-import { isIP } from "node:net";
 import { join } from "node:path";
 
 import {
@@ -9,6 +8,10 @@ import {
 } from "./sshOwnerPickerProof.client.ts";
 import type { PickerProofSessionOptions } from "./sshOwnerPickerProof.client.session.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.ts";
+import {
+  validateTargetDescriptor,
+  type ProofTargetDescriptorInput,
+} from "./sshOwnerPickerProof.codec.target.ts";
 import {
   PickerProofStartupTimeoutError,
   PickerProofStartupConfigError,
@@ -33,7 +36,8 @@ import { SSH_OWNER_WIRE_LIMITS } from "./sshOwnerProductionClient.negotiate.ts";
  *
  * The caller supplies the verified artifact facts and this profile binding; it
  * never supplies the owner executable, its argv or its environment. The
- * OpenSSH images are the owner's own allowlisted system paths.
+ * OpenSSH images are the owner's own allowlisted system paths. A production
+ * owner starts with no target: each target arrives as a request descriptor.
  *
  * @module sshOwnerProductionClient.launch
  */
@@ -47,18 +51,18 @@ const OWNER_DIRECTORY = "ssh-owner";
 const ATTACH_FILE = "attach.json";
 const LOCK_FILE = "owner.lock";
 const SOCKET_FILE = "owner.sock";
-const USER_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
+/** One target a production owner may serve, named per request. */
+export type SshOwnerTargetDescriptor = ProofTargetDescriptorInput;
 
 export interface SshOwnerProductionProfile {
   /** Private state directory whose `ssh-owner/` child holds the profile's owner facts. */
   readonly stateDirectory: string;
-  readonly targetId: string;
-  /** A real user-configured destination; production is not loopback-bound. */
-  readonly host: string;
-  readonly port: number;
-  readonly user: string;
-  readonly identityFile: string;
-  readonly knownHostsFile: string;
+  /**
+   * Optional primary target used for hydration/attach verification. The owner
+   * itself starts without a target and resolves every request's descriptor.
+   */
+  readonly target?: SshOwnerTargetDescriptor;
   readonly workspaceRoot?: string;
   /** Exact initiating profile kind; omitted in fixtures, defaults to `desktop-dev`. */
   readonly kind?: SshOwnerProfile;
@@ -68,17 +72,12 @@ export interface SshOwnerLaunchFacts {
   readonly profileBinding: Buffer;
   readonly profileBindingText: string;
   readonly stateDirectory: string;
-  readonly targetId: string;
   readonly directory: string;
   readonly lockFile: string;
   readonly socketPath: string;
   readonly attachFile: string;
-  readonly host: string;
-  readonly port: number;
-  readonly user: string;
-  readonly identityFile: string;
-  readonly knownHostsFile: string;
   readonly workspaceRoot?: string;
+  readonly target?: SshOwnerTargetDescriptor;
 }
 
 const invalid = (message: string, cause?: unknown) =>
@@ -97,19 +96,16 @@ export function resolveSshOwnerLaunchFacts(
   }
   if (
     !absolutePath(profile.stateDirectory) ||
-    !profile.targetId ||
-    Buffer.byteLength(profile.targetId) > 1_024 ||
-    !profile.host ||
-    isIP(profile.host) === 0 ||
-    !Number.isInteger(profile.port) ||
-    profile.port < 1 ||
-    profile.port > 65_535 ||
-    !USER_PATTERN.test(profile.user) ||
-    !absolutePath(profile.identityFile) ||
-    !absolutePath(profile.knownHostsFile) ||
     (profile.workspaceRoot !== undefined && !absolutePath(profile.workspaceRoot))
   ) {
     throw invalid("The SSH owner production profile is not a valid launch binding.");
+  }
+  if (profile.target !== undefined) {
+    try {
+      validateTargetDescriptor(profile.target);
+    } catch (cause) {
+      throw invalid("The SSH owner target descriptor is not valid.", cause);
+    }
   }
   const identity =
     binding ??
@@ -129,17 +125,12 @@ export function resolveSshOwnerLaunchFacts(
     profileBinding: identity.digest,
     profileBindingText: identity.text,
     stateDirectory: identity.stateDirectory,
-    targetId: profile.targetId,
     directory,
     lockFile: join(directory, LOCK_FILE),
     socketPath,
     attachFile: join(directory, ATTACH_FILE),
-    host: profile.host,
-    port: profile.port,
-    user: profile.user,
-    identityFile: profile.identityFile,
-    knownHostsFile: profile.knownHostsFile,
     ...(profile.workspaceRoot === undefined ? {} : { workspaceRoot: profile.workspaceRoot }),
+    ...(profile.target === undefined ? {} : { target: profile.target }),
   };
 }
 
@@ -167,16 +158,11 @@ export async function spawnSshOwnerProduction(
   return startPickerProofOwner({
     binary: input.artifact.path,
     profileBinding: input.profileBinding,
-    targetId: input.targetId,
     sql: input.sql,
     lockFile: facts.lockFile,
     sshBinary: SSH_OWNER_SYSTEM_SSH,
     keyscanBinary: SSH_OWNER_SYSTEM_KEYSCAN,
-    host: facts.host,
-    port: facts.port,
-    user: facts.user,
-    identityFile: facts.identityFile,
-    knownHostsFile: facts.knownHostsFile,
+    ...(facts.target === undefined ? {} : { targetId: facts.target.targetId }),
     ...(facts.workspaceRoot === undefined ? {} : { workspaceRoot: facts.workspaceRoot }),
     attachment: { socketPath: facts.socketPath, capability: input.capability },
     ...productionLaunchOptions(input),
@@ -191,7 +177,7 @@ export async function attachSshOwnerProduction(
 ): Promise<PickerProofOwner> {
   return attachPickerProofOwner({
     profileBinding: input.profileBinding,
-    targetId: input.targetId,
+    ...(input.targetId === undefined ? {} : { targetId: input.targetId }),
     sql: input.sql,
     socketPath: input.descriptor.socketPath,
     capability: input.descriptor.capability,

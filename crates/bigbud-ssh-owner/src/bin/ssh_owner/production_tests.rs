@@ -42,9 +42,11 @@ fn production_bootstrap_refuses_a_hello_for_another_profile() {
         &mut pipe,
         OwnerStartup {
             profile: b"expected-profile",
-            target: "ssh:fixture".into(),
             route_facts: RouteFacts::default().with_production(),
-            config,
+            startup: crate::owner::TargetStartup::Pinned {
+                target: "ssh:fixture".into(),
+                config,
+            },
             profile_lock_path: Path::new("/tmp/not-reached/owner.lock"),
             posix_picker: None,
             workspace_snapshot_cancel: None,

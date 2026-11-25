@@ -77,8 +77,10 @@ impl Fixture {
             &mut Pipe::new(initial.as_slice(), Vec::new()),
             OwnerStartup {
                 profile: &[1],
-                target: TARGET.into(),
-                config,
+                startup: crate::owner::TargetStartup::Pinned {
+                    target: TARGET.into(),
+                    config,
+                },
                 route_facts: Default::default(),
                 profile_lock_path: &self.0.join("owner.lock"),
                 posix_picker: None,

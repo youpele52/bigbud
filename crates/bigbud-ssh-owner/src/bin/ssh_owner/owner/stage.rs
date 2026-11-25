@@ -45,7 +45,7 @@ impl Owner {
         }
         // Once dispatch is attempted, no later request may replay this stage.
         let mut binding = self.stage.take().ok_or(ErrorCode::OperationDenied)?;
-        let outcome = self.transport.begin_graph_stage(
+        let outcome = super::present(&self.transport)?.begin_graph_stage(
             &binding.root,
             operands(request),
             operands(&binding.approved),
@@ -83,7 +83,7 @@ impl Owner {
         // Even if a durable link's reply is lost, this approval is spent and cannot replay.
         // The root and approved scope stay bound for the remaining typed steps.
         binding.manifest_put = true;
-        let outcome = self.transport.put_graph_manifest(
+        let outcome = super::present(&self.transport)?.put_graph_manifest(
             &binding.root_path,
             ManifestOperands {
                 request_id: &request.request_id,

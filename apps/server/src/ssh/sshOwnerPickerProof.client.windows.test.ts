@@ -93,6 +93,7 @@ it("launches only the private native dispatcher and hydrates it from the selecte
     writer.fieldUint(1, OWNER_MAJOR);
     writer.fieldBytes(3, epoch);
     writer.fieldBytes(4, Buffer.alloc(32, 4));
+    writer.fieldBytes(6, profileBinding);
   });
   const responses = [hydrate, accepted];
   const { sent, kill } = fakeDispatcher(() => responses.shift());

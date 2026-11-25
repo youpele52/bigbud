@@ -29,11 +29,15 @@ export interface PickerProofOwnerOptions
   readonly lockFile: string;
   readonly sshBinary: string;
   readonly keyscanBinary: string;
-  readonly host: string;
-  readonly port: number;
-  readonly user: string;
-  readonly identityFile: string;
-  readonly knownHostsFile: string;
+  /**
+   * Fixture target facts. A production owner starts without a target, so these
+   * are absent there and every target comes from a request descriptor.
+   */
+  readonly host?: string;
+  readonly port?: number;
+  readonly user?: string;
+  readonly identityFile?: string;
+  readonly knownHostsFile?: string;
   readonly aliasConfig?: PickerProofAliasConfig;
   readonly attachment?: PickerProofAttachment;
   readonly workspaceRoot?: string;

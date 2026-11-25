@@ -19,7 +19,8 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 target_generation: b"gen".to_vec(),
                 target_id: target(),
                 grant: Vec::new(),
-                operation: Some(Operation::ListFolders(ListFolders::default())),
+                target_descriptor: None,
+        operation: Some(Operation::ListFolders(ListFolders::default())),
             }),
         ),
         (
@@ -81,7 +82,8 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 target_generation: b"\x04".to_vec(),
                 target_id: "fixture-target".into(),
                 grant: b"\x80\x00".to_vec(),
-                operation: Some(Operation::ListAliases(ListAliases {})),
+                target_descriptor: None,
+        operation: Some(Operation::ListAliases(ListAliases {})),
             }),
         ),
         (

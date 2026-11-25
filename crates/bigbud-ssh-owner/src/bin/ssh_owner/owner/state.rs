@@ -1,5 +1,6 @@
 use super::reconnect::ReconnectAdmission;
 use super::retirement::Retirement;
+use super::targets::{Registry as TargetRegistry, TargetAuthority};
 use super::{
     DeploymentOperation, SnapshotCancelInbox, StageBinding, TerminalPreparation, guarded_write,
     picker_cancel, posix_picker, terminal, workspace_mode,
@@ -25,7 +26,15 @@ pub(crate) struct Owner {
     pub(super) peer_state_dir: Option<std::path::PathBuf>,
     pub(super) retirement: Option<Retirement>,
     pub(super) storage: Storage,
-    pub(crate) transport: Transport,
+    /// Active target transport. `None` only while a production owner is at rest
+    /// between requests; every admitted request activates a resolved target.
+    pub(crate) transport: Option<Transport>,
+    /// All targets this epoch resolved, plus the pinned fixture target.
+    pub(super) targets: TargetRegistry,
+    /// Production launch mode: per-target descriptors, no pinned target.
+    pub(super) production: bool,
+    /// Owner-started images and config roots used to resolve descriptors.
+    pub(super) authority: Option<TargetAuthority>,
     pub(super) grants: Grants,
     pub(super) trust: TrustApproval,
     pub(super) reconnect: ReconnectAdmission,

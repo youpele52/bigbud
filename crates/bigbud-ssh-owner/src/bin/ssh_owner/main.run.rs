@@ -286,9 +286,11 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
         &mut pipe,
         owner::OwnerStartup {
             profile: &profile,
-            target,
             route_facts: route_facts.bind(&transport)?,
-            config: transport,
+            startup: owner::TargetStartup::Pinned {
+                target,
+                config: transport,
+            },
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             profile_lock_path: std::path::Path::new(&lock),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
