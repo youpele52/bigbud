@@ -53,6 +53,11 @@ export interface PickerProofOwnerOptions
   readonly identityAgentPath?: string;
   /** Startup-bound Linux proof, never derived from an operation or renderer input. */
   readonly installedAgentStateDir?: string;
+  /**
+   * Production launch only: use the cleared environment allowlist and bound the
+   * handshake. Callers never supply the executable, argv or environment.
+   */
+  readonly productionLaunch?: { readonly startupDeadlineMs: number };
 }
 
 export type PickerProofAttachOptions = PickerProofSessionOptions & PickerProofAttachment;
@@ -72,6 +77,8 @@ export interface LaunchedPickerProofOwner
   runAgentAction(input: PickerProofAgentActionInput): Promise<AgentActionResult>;
   detach(): Promise<void>;
   retireSupervised(): Promise<void>;
+  /** Kills the exact spawned child; production maps this to `reap`. */
+  retireSpawned(): Promise<void>;
   killForTest(): Promise<void>;
   /** Proof-only: issue a grant without executing; returns the typed error number. */
   issueProofGrantForTest(operation: PickerProofOperation): Promise<number | undefined>;

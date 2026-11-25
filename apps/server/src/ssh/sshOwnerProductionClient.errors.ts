@@ -1,0 +1,94 @@
+import * as Data from "effect/Data";
+
+import type { SshOwnerProfile } from "./sshOwnerProductionArtifact.ts";
+import {
+  SshOwnerUnavailableError,
+  type SshOwnerUnavailableReason,
+} from "./sshOwnerStartupRefusal.ts";
+
+/**
+ * Typed failures of the production native owner client. Every failure keeps SSH
+ * admission closed; none routes to a legacy executor.
+ *
+ * @module sshOwnerProductionClient.errors
+ */
+
+export type SshOwnerClientFailure =
+  | "invalid-profile"
+  | "unsupported-platform"
+  | "attachment-invalid"
+  | "attachment-refused"
+  | "second-owner-refused"
+  | "owner-start-failed"
+  | "startup-timeout"
+  | "version-incompatible"
+  | "capability-missing"
+  | "wire-limit-exceeded"
+  | "wire-protocol-invalid"
+  | "hydration-failed"
+  | "hydration-disconnect-mismatch"
+  | "hydration-alias-mismatch"
+  | "hydration-retirement-unresolved"
+  | "hydration-pane-unbound"
+  | "owner-died";
+
+export class SshOwnerClientError extends Data.TaggedError("SshOwnerClientError")<{
+  readonly code: "sshOwnerClientError";
+  readonly failure: SshOwnerClientFailure;
+  readonly message: string;
+  readonly cause?: unknown;
+}> {
+  constructor(failure: SshOwnerClientFailure, message: string, cause?: unknown) {
+    super({ code: "sshOwnerClientError", failure, message, ...(cause ? { cause } : {}) });
+  }
+}
+
+const reasonByFailure: Record<SshOwnerClientFailure, SshOwnerUnavailableReason> = {
+  "invalid-profile": "owner-profile-unavailable",
+  "unsupported-platform": "owner-incompatible",
+  "attachment-invalid": "owner-start-failed",
+  "attachment-refused": "owner-second-instance",
+  "second-owner-refused": "owner-second-instance",
+  "owner-start-failed": "owner-start-failed",
+  "startup-timeout": "owner-startup-timeout",
+  "version-incompatible": "owner-version-incompatible",
+  "capability-missing": "owner-capability-missing",
+  "wire-limit-exceeded": "owner-protocol-invalid",
+  "wire-protocol-invalid": "owner-protocol-invalid",
+  "hydration-failed": "hydration-failed",
+  "hydration-disconnect-mismatch": "hydration-failed",
+  "hydration-alias-mismatch": "hydration-failed",
+  "hydration-retirement-unresolved": "hydration-failed",
+  "hydration-pane-unbound": "hydration-failed",
+  "owner-died": "owner-died",
+};
+
+/** Converts a client failure into the composition's typed unavailable result. */
+export function toSshOwnerUnavailable(
+  error: SshOwnerClientError,
+  profile: SshOwnerProfile,
+): SshOwnerUnavailableError {
+  return new SshOwnerUnavailableError({
+    code: "sshOwnerUnavailable",
+    reason: reasonByFailure[error.failure],
+    message: `${profile}: ${error.message}`,
+  });
+}
+
+/** Classifies a shared proof-client error without inventing a second protocol. */
+export function fromPickerProofError(error: unknown): SshOwnerClientError {
+  if (error instanceof SshOwnerClientError) return error;
+  const code =
+    error instanceof Error && "code" in error ? (error as { readonly code: unknown }).code : "";
+  const message = error instanceof Error ? error.message : "SSH owner startup failed.";
+  if (code === "versionIncompatible") {
+    return new SshOwnerClientError("version-incompatible", message, error);
+  }
+  if (code === "protocolError") {
+    return new SshOwnerClientError("wire-protocol-invalid", message, error);
+  }
+  if (code === "invalidOperands") {
+    return new SshOwnerClientError("invalid-profile", message, error);
+  }
+  return new SshOwnerClientError("owner-start-failed", message, error);
+}

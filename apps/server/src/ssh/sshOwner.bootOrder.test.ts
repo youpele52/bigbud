@@ -17,6 +17,9 @@ import {
   readSshOwnerHydrationSnapshot,
   type SshOwnerHydrationSnapshot,
 } from "./sshOwnerProductionHydration.ts";
+import { resolveSshOwnerLaunchFacts } from "./sshOwnerProductionClient.launch.ts";
+import { startOrAttachSshOwnerProduction } from "./sshOwnerProductionClient.ts";
+import { makeProductionFixture } from "./sshOwnerProductionClient.fixture.ts";
 
 const profile = "state-dir";
 
@@ -199,5 +202,44 @@ it.effect("hydrates all four durable categories", () =>
     assert.equal(snapshot.retirementMirror.length, 1);
     assert.equal(snapshot.retirementMirror[0]?.state, "intent");
     assert.deepEqual(snapshot.paneBindings, [{ ownerKey: "pane-1", state: "prepared" }]);
+  }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
+);
+
+it.effect("opens admission with the real production client on the success path", () =>
+  Effect.gen(function* () {
+    const sql = yield* migrated;
+    yield* commitLegacyRetirement(sql, {
+      profileScope: profile,
+      artifactId: "build-a",
+      decision: "drain-now",
+      drainedLeases: [],
+      pendingItems: [],
+    });
+    const fixture = yield* Effect.promise(() => makeProductionFixture());
+    yield* Effect.addFinalizer(() => Effect.promise(() => fixture.dispose()));
+    const path = yield* Effect.promise(() => fixture.fakeOwner("success"));
+    const order: string[] = [];
+    const outcome = yield* runSshOwnerBootSequence({
+      ...bootInput(sql, order),
+      // The production client replaces the injected fake owner on this path.
+      startOrAttachOwner: startOrAttachSshOwnerProduction({
+        artifact: fixture.artifact(path),
+        facts: resolveSshOwnerLaunchFacts({
+          ...fixture.profile,
+          targetId: profile,
+          stateDirectory: fixture.stateDirectory,
+        }),
+        sql,
+      }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            order.push("owner");
+          }),
+        ),
+      ),
+    });
+    assert.equal(outcome.kind, "open");
+    assert.deepEqual(order, ["lock", "marker", "owner", "hydrate", "admission"]);
+    if (outcome.kind === "open") yield* outcome.owner.shutdown?.() ?? Effect.void;
   }).pipe(Effect.provide(NodeSqliteClient.layerMemory())),
 );

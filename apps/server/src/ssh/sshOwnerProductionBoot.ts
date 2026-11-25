@@ -37,6 +37,12 @@ export interface SshOwnerProductionOwner {
   readonly profile: SshOwnerProfile;
   readonly artifactPath: string;
   readonly hydrate: (snapshot: SshOwnerHydrationSnapshot) => Effect.Effect<void, Error>;
+  /** Present on the composed production handle; absent on boot-sequence fakes. */
+  readonly onDeath?: (listener: () => void) => () => void;
+  /** Detach a surviving owner or reap a disposable one. */
+  readonly shutdown?: () => Effect.Effect<void>;
+  /** Hydration refused admission: reap a spawned owner or detach an attached one. */
+  readonly abortHydration?: () => Effect.Effect<void>;
 }
 
 export type SshOwnerBootOutcome =
@@ -113,11 +119,13 @@ export const runSshOwnerBootSequence = Effect.fn("runSshOwnerBootSequence")(
 
       const hydrated = yield* Effect.exit(input.hydrate(owner));
       if (hydrated._tag === "Failure") {
+        yield* Effect.exit(owner.abortHydration?.() ?? owner.shutdown?.() ?? Effect.void);
         return unavailableFrom("hydrate", "hydration-failed", hydrated.cause);
       }
 
       const admitted = yield* Effect.exit(input.openAdmission(owner));
       if (admitted._tag === "Failure") {
+        yield* Effect.exit(owner.shutdown?.() ?? Effect.void);
         return unavailableFrom("admission", "admission-failed", admitted.cause);
       }
 

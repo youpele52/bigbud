@@ -118,6 +118,14 @@ export class PickerProofStartupRetirementError extends PickerProofOwnerError {
   }
 }
 
+/** The bounded production handshake expired; the child has been killed. */
+export class PickerProofStartupTimeoutError extends PickerProofOwnerError {
+  constructor(readonly deadlineMs: number) {
+    super("ownerUnavailable");
+    this.message = `The SSH owner did not complete its startup handshake within ${deadlineMs} ms.`;
+  }
+}
+
 function isDirective(value: unknown): value is Directive {
   return typeof value === "string" && Object.hasOwn(remedies, value);
 }

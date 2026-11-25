@@ -15,9 +15,14 @@ import {
   runSshOwnerBootSequence,
   type SshOwnerBootOutcome,
   type SshOwnerBootStep,
-  type SshOwnerProductionOwner,
 } from "./sshOwnerProductionBoot.ts";
 import { readSshOwnerHydrationSnapshot } from "./sshOwnerProductionHydration.ts";
+import {
+  startProductionOwnerForBoot,
+  type SshOwnerProductionHandle,
+} from "./sshOwnerProductionClient.ts";
+import type { SshOwnerProductionProfile } from "./sshOwnerProductionClient.launch.ts";
+import { toSshOwnerUnavailable } from "./sshOwnerProductionClient.errors.ts";
 import {
   readSshOwnerStartupState,
   SshOwnerUnavailableError,
@@ -34,9 +39,9 @@ import type { TrustedStandaloneSshOwnerManifestEntry } from "./sshOwnerExecutabl
  *
  * 1. Flip `SSH_OWNER_PRODUCTION_ACTIVATION` in
  *    `packages/shared/src/SshOwnerActivation.ts` to `true`.
- * 2. Replace `startProductionOwner` with the composed native owner client
- *    (the W2 provider/terminal/workspace tracks) so `start or attach` returns a
- *    real owner handle instead of the typed `owner-client-not-composed` result.
+ * 2. Supply the trusted `ownerProfile` binding (the W2 T-alias profile source)
+ *    when calling `configureSshOwner`; the native client itself is composed and
+ *    starts, attaches, hydrates and shuts down a real owner.
  * 3. Delete cutover inventory rows 1–51, the D1–D5 type dependents, the dev
  *    fixture selector (`sshOwnerDevMode.fixture.ts`) and every remaining
  *    `sshOwnerSelection.ts` fence call site that guards deleted legacy code.
@@ -76,10 +81,16 @@ export interface ConfigureSshOwnerOptions {
   readonly platform?: NodeJS.Platform;
   readonly arch?: string;
   readonly trustedManifestEntry?: TrustedStandaloneSshOwnerManifestEntry;
+  /**
+   * Profile binding for the native owner client. Production W7 supplies the
+   * verified endpoint; without it the owner cannot start and SSH stays closed.
+   */
+  readonly ownerProfile?: SshOwnerProductionProfile;
 }
 
 let configuration: SshOwnerProductionConfiguration = { kind: "inactive" };
 let admission: SshOwnerAdmission = { kind: "inactive" };
+let launchProfile: SshOwnerProductionProfile | undefined;
 
 export const readSshOwnerProductionConfiguration = () => configuration;
 export const readSshOwnerAdmission = () => admission;
@@ -88,6 +99,7 @@ export const readSshOwnerAdmission = () => admission;
 export function resetSshOwnerProductionStateForTest(): void {
   configuration = { kind: "inactive" };
   admission = { kind: "inactive" };
+  launchProfile = undefined;
 }
 
 /**
@@ -105,8 +117,10 @@ export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
   if (!activated) {
     configuration = { kind: "inactive" };
     admission = { kind: "inactive" };
+    launchProfile = undefined;
     return configuration;
   }
+  launchProfile = options.ownerProfile;
   const resolution = yield* resolveSshOwnerArtifact({
     config,
     entryUrl,
@@ -126,14 +140,35 @@ export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
 
 function startProductionOwner(
   artifact: SshOwnerArtifact,
-): Effect.Effect<SshOwnerProductionOwner, SshOwnerUnavailableError> {
-  return Effect.fail(
-    new SshOwnerUnavailableError({
-      code: "sshOwnerUnavailable",
-      reason: "owner-client-not-composed",
-      message: `The verified ${artifact.profile} SSH owner at ${artifact.path} has no composed native client yet; SSH stays unavailable and local work continues.`,
-    }),
+  sql: SqlClient.SqlClient,
+  profile: SshOwnerProductionProfile | undefined,
+): Effect.Effect<SshOwnerProductionHandle, SshOwnerUnavailableError> {
+  if (!profile) {
+    return Effect.fail(
+      new SshOwnerUnavailableError({
+        code: "sshOwnerUnavailable",
+        reason: "owner-profile-unavailable",
+        message: `The verified ${artifact.profile} SSH owner has no production profile binding; SSH stays unavailable and local work continues.`,
+      }),
+    );
+  }
+  return startProductionOwnerForBoot({ artifact, profile, sql }).pipe(
+    Effect.mapError((error) => toSshOwnerUnavailable(error, artifact.profile)),
   );
+}
+
+/** Owner death after admission is typed-closed; it never falls back to legacy. */
+export function closeSshOwnerAdmissionOnOwnerDeath(): void {
+  admission = {
+    kind: "closed",
+    step: "owner-attach",
+    error: new SshOwnerUnavailableError({
+      code: "sshOwnerUnavailable",
+      reason: "owner-died",
+      message:
+        "The SSH owner exited after admission; SSH stays closed and there is no legacy fallback.",
+    }),
+  };
 }
 
 function recordOutcome(outcome: SshOwnerBootOutcome): void {
@@ -184,7 +219,7 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
         profileScope: config.stateDir,
         ownerPresent: Effect.succeed(true),
       }),
-      startOrAttachOwner: startProductionOwner(configured.artifact),
+      startOrAttachOwner: startProductionOwner(configured.artifact, sql, launchProfile),
       hydrate: (owner) =>
         readSshOwnerHydrationSnapshot(sql, config.stateDir).pipe(
           Effect.flatMap((snapshot) => owner.hydrate(snapshot)),
@@ -192,6 +227,11 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
       openAdmission: () => Effect.void,
     });
     recordOutcome(outcome);
+    if (outcome.kind === "open") {
+      const owner = outcome.owner as SshOwnerProductionHandle;
+      owner.onDeath?.(closeSshOwnerAdmissionOnOwnerDeath);
+      yield* Effect.addFinalizer(() => owner.shutdown?.() ?? Effect.void);
+    }
     if (outcome.kind === "unavailable")
       yield* Effect.logWarning("SSH admission stayed closed", {
         step: outcome.step,

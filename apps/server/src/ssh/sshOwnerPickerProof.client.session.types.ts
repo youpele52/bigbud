@@ -18,6 +18,12 @@ export interface PickerProofSessionOptions {
   readonly major?: number;
 }
 
+export interface PickerProofHydratedStorage {
+  readonly writerEpoch: string;
+  readonly seq: number;
+  readonly disconnected: boolean;
+}
+
 export interface PickerProofOwner
   extends
     PickerProofListClient,
@@ -34,6 +40,10 @@ export interface PickerProofOwner
   readonly targetGeneration: Uint8Array;
   /** Owner-resolved alias route/trust digest; undefined without an alias policy. */
   readonly aliasDescriptor?: Uint8Array | undefined;
+  /** The exact storage snapshot this session acknowledged during its handshake. */
+  readonly hydratedStorage?: PickerProofHydratedStorage;
+  /** Fires once when the inherited channel is lost unexpectedly (not on detach). */
+  onLost(listener: () => void): () => void;
   inspectTrust(): Promise<PickerProofTrust>;
   approveTrust(challenge: Uint8Array): Promise<PickerProofTrust>;
   connect(): Promise<PickerProofConnection>;

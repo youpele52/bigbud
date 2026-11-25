@@ -19,6 +19,18 @@ interface Exchange {
   readonly timer: NodeJS.Timeout;
 }
 
+export interface PickerProofSpawnOptions {
+  /** Cleared environment plus an explicit allowlist; never the caller's environment. */
+  readonly environment?: Readonly<Record<string, string>>;
+  /**
+   * Re-exec through the fixed system `env -i` helper so a runtime that merges
+   * ambient `.env` values into `spawn({ env })` cannot leak them to the owner.
+   */
+  readonly clearEnvironment?: boolean;
+  /** Bounds the whole handshake; expiry kills the child and rejects the exchange. */
+  readonly startupDeadlineMs?: number;
+}
+
 /** No inbox: an owner frame must answer the single in-flight exchange. */
 export function makePickerProofPipe(input: Writable, output: Readable, stop: () => Promise<void>) {
   const header = Buffer.alloc(4);
@@ -27,6 +39,7 @@ export function makePickerProofPipe(input: Writable, output: Readable, stop: () 
   let bodyOffset = 0;
   let pending: Exchange | undefined;
   let failure: PickerProofOwnerError | undefined;
+  const lostListeners = new Set<() => void>();
 
   const takePending = () => {
     const exchange = pending;
@@ -42,6 +55,7 @@ export function makePickerProofPipe(input: Writable, output: Readable, stop: () 
   const fail = (error: PickerProofOwnerError) => {
     if (failure) return;
     retire(error);
+    for (const listener of lostListeners) listener();
     void stop();
   };
   const lost = () => fail(new PickerProofOwnerError("ownerUnavailable"));
@@ -110,10 +124,24 @@ export function makePickerProofPipe(input: Writable, output: Readable, stop: () 
     },
     retire,
     lost,
+    failed: () => failure !== undefined,
+    onLost(listener: () => void) {
+      if (failure) {
+        listener();
+        return () => {};
+      }
+      lostListeners.add(listener);
+      return () => {
+        lostListeners.delete(listener);
+      };
+    },
   };
 }
 
-export type PickerProofPipe = Pick<ReturnType<typeof makePickerProofPipe>, "exchange" | "close">;
+export type PickerProofPipe = Pick<
+  ReturnType<typeof makePickerProofPipe>,
+  "exchange" | "close" | "onLost"
+>;
 
 export function connectPickerProofPipe(socketPath: string): PickerProofPipe {
   const socket = createConnection({ path: socketPath });
@@ -131,12 +159,28 @@ export function spawnPickerProofPipe(
   enableAgentProxy: boolean,
   enablePickerCancellation = false,
   supervised = false,
+  options: PickerProofSpawnOptions = {},
 ) {
   if (Number(enableAgentProxy) + Number(enablePickerCancellation) + Number(supervised) > 1)
     throw new PickerProofOwnerError("invalidOperands");
-  const child = spawn(binary, args, {
+  const environment = options.environment ?? {
+    BIGBUD_SSH_OWNER_PICKER_PROOF: "1",
+    HOME: cwd,
+    PATH: "/usr/bin:/bin",
+  };
+  const clear = options.clearEnvironment === true && process.platform !== "win32";
+  const command = clear ? "/usr/bin/env" : binary;
+  const commandArgs = clear
+    ? [
+        "-i",
+        ...Object.entries(environment).map(([key, value]) => `${key}=${value}`),
+        binary,
+        ...args,
+      ]
+    : args;
+  const child = spawn(command, commandArgs, {
     cwd,
-    env: { BIGBUD_SSH_OWNER_PICKER_PROOF: "1", HOME: cwd, PATH: "/usr/bin:/bin" },
+    env: clear ? {} : { ...environment },
     stdio: [
       "pipe",
       "pipe",
@@ -193,9 +237,29 @@ export function spawnPickerProofPipe(
   // is returned. Do not read or copy bytes here (including during acquisition).
   for (const stream of [stdin, stdout, stderr]) stream?.on("error", () => {});
 
+  let startupTimedOut = false;
+  let startupTimer: NodeJS.Timeout | undefined;
+  const sealStartup = () => {
+    if (startupTimer) clearTimeout(startupTimer);
+    startupTimer = undefined;
+  };
+  if (options.startupDeadlineMs !== undefined) {
+    startupTimer = setTimeout(() => {
+      // A protocol failure already owns the shutdown path; do not mask its type.
+      if (pipe.failed()) return;
+      startupTimedOut = true;
+      pipe.lost();
+      kill();
+    }, options.startupDeadlineMs);
+    startupTimer.unref();
+  }
+
   return {
     exchange: pipe.exchange,
     close: pipe.close,
+    onLost: pipe.onLost,
+    sealStartup,
+    startupTimedOut: () => startupTimedOut,
     ...startupDiagnostic,
     sendPickerCancellation(id: Uint8Array) {
       if (

@@ -55,6 +55,7 @@ export async function openPickerProofSession(
   { targetId, sql, major }: Required<PickerProofSessionOptions>,
   handshake: () => ReturnType<PickerProofPipe["exchange"]>,
   sendPickerCancel?: SendPickerCancel,
+  onLost?: (listener: () => void) => () => void,
 ) {
   let snapshot: Awaited<ReturnType<typeof hydratePickerProofTarget>>;
   let ownerEpoch: Uint8Array;
@@ -323,6 +324,14 @@ export async function openPickerProofSession(
     get aliasDescriptor() {
       return aliasDescriptor && Uint8Array.from(aliasDescriptor);
     },
+    get hydratedStorage() {
+      return {
+        writerEpoch: snapshot.writerEpoch,
+        seq: snapshot.seq,
+        disconnected: snapshot.disconnected,
+      };
+    },
+    onLost: onLost ?? (() => () => {}),
     inspectTrust: () => trust({ kind: "inspectTrust" }),
     async approveTrust(challenge) {
       if (!challenge.length || challenge.length > 1_024)

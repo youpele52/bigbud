@@ -37,10 +37,8 @@ import {
   PickerProofOwnerError,
   type PickerProofOperation,
 } from "./sshOwnerPickerProof.codec.ts";
-import {
-  PickerProofStartupConfigError,
-  PickerProofStartupRetirementError,
-} from "./sshOwnerPickerProof.startupDiagnostic.ts";
+import { makePickerProofOwnerLifecycle } from "./sshOwnerPickerProof.client.lifecycle.ts";
+import { throwPickerProofStartupError } from "./sshOwnerPickerProof.client.startupError.ts";
 import { spawnPickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
 import { validateProviderServiceStartup } from "./sshOwnerPickerProof.client.services.ts";
 
@@ -255,6 +253,13 @@ export async function startPickerProofOwner(
         scoped.gitUpload !== undefined,
       scoped.pickerCancellation,
       Boolean(attachment && options.devInteractiveTerminal),
+      options.productionLaunch === undefined
+        ? {}
+        : {
+            environment: { BIGBUD_SSH_OWNER_PICKER_PROOF: "1" },
+            clearEnvironment: true,
+            startupDeadlineMs: options.productionLaunch.startupDeadlineMs,
+          },
     );
   } catch {
     throw new PickerProofOwnerError("ownerUnavailable");
@@ -273,17 +278,16 @@ export async function startPickerProofOwner(
     session,
     () => pipe.exchange(encodeHello(profileBinding, major, attachment?.capability)),
     scoped.pickerCancellation ? pipe.sendPickerCancellation : undefined,
-  ).catch((error: unknown) => {
-    const retirement = pipe.startupRetirementDiagnostic();
-    if (retirement && error instanceof PickerProofOwnerError && error.code === "ownerUnavailable") {
-      throw new PickerProofStartupRetirementError(retirement);
-    }
-    const diagnostic = pipe.startupConfigDiagnostic();
-    if (diagnostic && error instanceof PickerProofOwnerError && error.code === "ownerUnavailable") {
-      throw new PickerProofStartupConfigError(diagnostic);
-    }
-    throw error;
-  });
+    pipe.onLost,
+  )
+    .then((session) => {
+      pipe.sealStartup();
+      return session;
+    })
+    .catch((error: unknown) => {
+      pipe.sealStartup();
+      throwPickerProofStartupError(error, pipe, options.productionLaunch?.startupDeadlineMs);
+    });
   pipe.sealStartupConfigDiagnostic();
   return Object.assign(
     owner,
@@ -362,20 +366,7 @@ export async function startPickerProofOwner(
         }
         return reply.error === 0 ? undefined : reply.error;
       },
-      async detach() {
-        await stopAdmission();
-        await pipe.detach();
-      },
-      async retireSupervised() {
-        const drained = stopAdmission();
-        await pipe.retireSupervised();
-        await drained;
-      },
-      async killForTest() {
-        const drained = stopAdmission();
-        await pipe.killForTest();
-        await drained;
-      },
+      ...makePickerProofOwnerLifecycle(pipe, stopAdmission),
     },
   );
 }
@@ -387,8 +378,13 @@ export async function attachPickerProofOwner(
   const session = copyPickerProofSessionOptions(options);
   const { socketPath, capability } = copyPickerProofAttachment(options);
   const pipe = await connectPickerProofAttachment(socketPath);
-  const { owner } = await openPickerProofSession(pipe, session, () =>
-    exchangePickerProofAttachmentHello(pipe, capability, session.profileBinding, session.major),
+  const { owner } = await openPickerProofSession(
+    pipe,
+    session,
+    () =>
+      exchangePickerProofAttachmentHello(pipe, capability, session.profileBinding, session.major),
+    undefined,
+    pipe.onLost,
   );
   return owner;
 }
