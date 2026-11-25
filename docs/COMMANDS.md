@@ -55,6 +55,10 @@ Bun scripts remain the source of truth for workflow implementation. The just rec
 | `bun run start:marketing`          | `just start-marketing`          |
 | `bun run start:mock-update-server` | `just start-mock-update-server` |
 
+On macOS, prefix `bun run dev` / `just dev` or `bun run dev:desktop` / `just dev-desktop` with `BIGBUD_SSH_OWNER=1` to build the owner and run the normal app with a separate development profile and one disposable SSH target. See the [manual test runbook](/Users/youpele/DevWorld/bigbud/protocol/ssh-owner/MANUAL-TEST.md#macos-normal-app-dev-opt-in). This flag is off by default and cannot activate in packaged releases.
+
+For the stock OpenSSH backend replacement proof, run `BIGBUD_SSH_OWNER=1 BIGBUD_SSH_OWNER_RETAIN=1 bun run dev` (or `just dev` with the same environment). This is non-root macOS Bun development only, with the generated loopback target and no custom SSH config. The launcher keeps the fixture alive across one unexpected backend exit; stopping the launcher retires it. The default, desktop, Linux, Windows, and packaged launch paths do not enable retention.
+
 ## Root: builds
 
 | Bun                                  | just                              |
@@ -634,7 +638,18 @@ bigbud backend enable --authority 00000000000000000000000000000000 --confirm-sta
 bigbud backend disable-boot --authority 00000000000000000000000000000000
 bigbud backend start --authority 00000000000000000000000000000000
 bigbud backend stop --authority 00000000000000000000000000000000
+bigbud backend stop --authority 00000000000000000000000000000000 --for-upgrade
+bigbud backend stop --authority 00000000000000000000000000000000 --for-upgrade --i-have-saved-my-work
 ```
+
+`--for-upgrade` runs the W3.2 drain before the unit stops. The CLI sends one bounded request to the
+running backend's owner-only drain socket. Without `--i-have-saved-my-work`, an attached UI must
+confirm the pane drain; the CLI otherwise exits with `consent-required` and nothing is drained.
+The explicit flag is the recorded non-interactive consent. A foreign token, unknown artifact,
+concurrent drain, cancel or failure exits non-zero with a typed reason and writes no marker. The
+deployed unit uses this path from `ExecStop` before graph replacement. The live backend drain
+handler and installer/updater hook are still pending, so the current command can return
+`unavailable` rather than faking success.
 
 Replace the example paths, request UUID and authority. Keep executable files separate from backend
 data and account service state. Setup stages the units and admits the signed Rust runtime; backend
@@ -649,6 +664,33 @@ continues. Start launches the staged backend for this session without enabling b
 changing lingering; the backend then starts its Rust unit. Stop ends both units, including Rust
 terminals, and keeps configuration, data and boot policy. A partial setup must be preserved for inspection; repeating its request does not repair or
 overwrite it. These are installed CLI subcommands, with no separate Bun script or just recipe.
+
+## Offline database commands
+
+`bigbud canonical-thread-cleanup`, `bigbud canonical-event-compaction` and
+`bigbud legacy-orphan-recovery` open `state.sqlite` directly. Both their dry-run and `--apply`
+forms hold `<stateDir>/backend.lock` before the database or migrations open, so a live backend
+is refused with exit 1 instead of racing it. Stop the desktop app/backend, or use a different
+`BIGBUD_HOME`. `--apply` on cleanup and orphan recovery still requires `--server-stopped`.
+Commands that delegate to a running backend (`backend`, `mobile`, `peer`, `remote-agent`,
+`command-line`, and the root server) take no CLI-side copy of the lock, except
+`backend stop --for-upgrade`, which acquires it because it performs the offline W3.2 drain.
+
+### Owner retirement recovery (operator only)
+
+If the SSH owner refuses with `ownerRetirementUnverified`, stop bigbud and re-verify the exact
+journal record before doing anything else:
+
+```sh
+bigbud-ssh-owner --retirement-recover \
+  --lock <stateDir>/backend.lock \
+  --record owner.retirement.master.<slot>
+```
+
+The command re-reads the record and clears it only when the recorded process is provably absent
+or provably belongs to a different process (PID reuse). A live exact instance, an unreadable
+record and an unknown name all refuse. It never signals or adopts a process. Use the full record
+name printed by the journal (one per master/connector instance); do not delete files by hand.
 
 ## Remote account mobile pairing
 

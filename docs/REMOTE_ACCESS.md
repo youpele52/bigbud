@@ -38,18 +38,18 @@ The public walkthrough is in [the website's documentation source](../apps/market
 
 ## Standalone server configuration
 
-The server accepts CLI flags and environment variables. The [CLI configuration](../apps/server/src/cli/cli.config.ts) is authoritative; use `--help` for the full list.
+The server accepts CLI flags and environment variables. The [CLI configuration](../apps/server/src/cli/cli.config.ts) is authoritative; use `--help` for the full list. Legacy `T3CODE_*` configuration variables are no longer supported; update existing launch configurations to use their `BIGBUD_*` equivalents.
 
-| CLI flag                | Preferred environment variable | Compatibility alias   |
-| ----------------------- | ------------------------------ | --------------------- |
-| `--mode <web\|desktop>` | `BIGBUD_MODE`                  | `T3CODE_MODE`         |
-| `--port <number>`       | `BIGBUD_PORT`                  | `T3CODE_PORT`         |
-| `--host <address>`      | `BIGBUD_HOST`                  | `T3CODE_HOST`         |
-| `--base-dir <path>`     | `BIGBUD_HOME`                  | `T3CODE_HOME`         |
-| `--dev-url <url>`       | `VITE_DEV_SERVER_URL`          | none                  |
-| `--no-browser`          | `BIGBUD_NO_BROWSER`            | `T3CODE_NO_BROWSER`   |
-| `--auth-token <token>`  | `BIGBUD_AUTH_TOKEN`            | `T3CODE_AUTH_TOKEN`   |
-| `--bootstrap-fd <fd>`   | `BIGBUD_BOOTSTRAP_FD`          | `T3CODE_BOOTSTRAP_FD` |
+| CLI flag                | Environment variable  |
+| ----------------------- | --------------------- |
+| `--mode <web\|desktop>` | `BIGBUD_MODE`         |
+| `--port <number>`       | `BIGBUD_PORT`         |
+| `--host <address>`      | `BIGBUD_HOST`         |
+| `--base-dir <path>`     | `BIGBUD_HOME`         |
+| `--dev-url <url>`       | `VITE_DEV_SERVER_URL` |
+| `--no-browser`          | `BIGBUD_NO_BROWSER`   |
+| `--auth-token <token>`  | `BIGBUD_AUTH_TOKEN`   |
+| `--bootstrap-fd <fd>`   | `BIGBUD_BOOTSTRAP_FD` |
 
 For example, after building, a backend can bind to its Tailscale IPv4 address:
 

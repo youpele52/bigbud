@@ -14,6 +14,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 ## Unreleased
 
 - **Choose reasoning effort for a delegated chat:** Ask a supported agent to start a chat with a listed model and effort tier. bigbud reports the tier it configured, or why it kept the model’s normal effort. Retained OpenCode V2 tool installations need bootstrap ABI 6 to offer this choice; remote runtimes without a target-qualified catalog report effort support as unknown.
+- **Know when a host needs a different SSH sign-in:** If a host only accepts keyboard-interactive sign-in, bigbud now explains that this method is not supported and asks for an SSH key, instead of prompting for a password or one-time code. Windows hosts say the same, because Windows SSH is key-only. Nothing you type is cached, stored or sent.
 
 ## v0.4.1 (22 November, 2026)
 
