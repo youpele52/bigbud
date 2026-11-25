@@ -4,7 +4,7 @@ use std::{
     os::{
         fd::AsRawFd,
         unix::{
-            fs::{FileTypeExt, MetadataExt},
+            fs::{FileTypeExt, MetadataExt, PermissionsExt},
             net::{UnixListener, UnixStream},
         },
     },
@@ -132,13 +132,12 @@ impl OwnedSocket {
                 ));
             }
         }
-        // SAFETY: this fixture is single-threaded and has not started any SSH child.
-        // The process-wide mask is restored before returning or spawning anything.
-        let previous = unsafe { libc::umask(0o177) };
-        let listener = UnixListener::bind(&path);
-        // SAFETY: previous is the mask returned by the immediately preceding call.
-        unsafe { libc::umask(previous) };
-        let listener = listener?;
+        // The parent directory is already verified 0700 and owned by this uid, so it
+        // is the access boundary; other users cannot traverse to the socket. Bind
+        // normally and tighten the socket's own mode afterwards rather than
+        // mutating the process-wide umask, which would race other threads.
+        let listener = UnixListener::bind(&path)?;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
         let metadata = fs::symlink_metadata(&path)?;
         if !owned_socket(&metadata, uid) {
             return Err(invalid_input());
