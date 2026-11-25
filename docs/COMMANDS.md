@@ -226,6 +226,8 @@ first. The closure is a superset of what Vite bundles. Outputs must not exist.
 
 ## Root: checks, tests, and cleanup
 
+**Typecheck exit-code caveat (25 November 2026).** `@effect/language-service` reports suggestion and warning diagnostics through the TypeScript program. `tsc --noEmit` prints them as `message TS…` / `warning TS…`, reports **zero** `error TS…` diagnostics, yet can exit non-zero depending on which diagnostics the plugin emits. Treat `error TS…` output as the type-failure signal and the exit code as unreliable until the plugin reporting is fixed; do not mark a package type-clean on the exit code alone. See the finish-line plan's risk table.
+
 | Bun                                 | just                             |
 | ----------------------------------- | -------------------------------- |
 | `bun run typecheck`                 | `just typecheck`                 |
