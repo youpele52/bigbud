@@ -48,26 +48,36 @@ function inferOcrTempExtension(input: {
   return ".png";
 }
 
-async function runTesseract(filePath: string): Promise<string | null> {
+async function runTesseract(filePath: string, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
   try {
     const { stdout } = await execFileAsync("tesseract", [filePath, "stdout"], {
       maxBuffer: 10 * 1024 * 1024,
       timeout: 30_000,
+      ...(signal ? { signal } : {}),
     });
     const text = normalizeExtractedText(stdout);
     return text.length > 0 ? text : null;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }
 
-async function renderPdfPagesToPngs(filePath: string, outputBase: string): Promise<string[]> {
+async function renderPdfPagesToPngs(
+  filePath: string,
+  outputBase: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  signal?.throwIfAborted();
   try {
     await execFileAsync("pdftoppm", ["-png", "-f", "1", "-l", "3", filePath, outputBase], {
       maxBuffer: 2 * 1024 * 1024,
       timeout: 30_000,
+      ...(signal ? { signal } : {}),
     });
   } catch {
+    signal?.throwIfAborted();
     return [];
   }
 
@@ -80,15 +90,18 @@ async function renderPdfPagesToPngs(filePath: string, outputBase: string): Promi
     .map((file) => join(directory, file));
 }
 
-async function extractPdfOcrTextFromFile(filePath: string): Promise<string | null> {
+async function extractPdfOcrTextFromFile(
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
   const tempDir = await mkdtemp(join(tmpdir(), "bigbud-pdf-ocr-"));
   try {
-    const pages = await renderPdfPagesToPngs(filePath, join(tempDir, "page"));
+    const pages = await renderPdfPagesToPngs(filePath, join(tempDir, "page"), signal);
     if (pages.length === 0) return null;
 
     const pageTexts: string[] = [];
     for (const pagePath of pages) {
-      const text = await runTesseract(pagePath);
+      const text = await runTesseract(pagePath, signal);
       if (text) pageTexts.push(text);
     }
 
@@ -119,20 +132,24 @@ export async function extractOcrTextFromFile(input: {
   readonly filePath: string;
   readonly mimeType: string;
   readonly fileName: string;
+  readonly signal?: AbortSignal;
 }): Promise<string | null> {
+  input.signal?.throwIfAborted();
   const mimeType = input.mimeType.toLowerCase();
   const fileName = input.fileName.toLowerCase();
   if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
-    return extractPdfOcrTextFromFile(input.filePath);
+    return extractPdfOcrTextFromFile(input.filePath, input.signal);
   }
-  return runTesseract(input.filePath);
+  return runTesseract(input.filePath, input.signal);
 }
 
 export async function extractOcrTextFromBuffer(input: {
   readonly bytes: Uint8Array;
   readonly mimeType: string;
   readonly fileName: string;
+  readonly signal?: AbortSignal;
 }): Promise<string | null> {
+  input.signal?.throwIfAborted();
   const tempDir = await mkdtemp(join(tmpdir(), "bigbud-ocr-buffer-"));
   const tempPath = join(
     tempDir,
@@ -142,9 +159,10 @@ export async function extractOcrTextFromBuffer(input: {
     })}`,
   );
   try {
-    await writeFile(tempPath, input.bytes);
+    await writeFile(tempPath, input.bytes, input.signal ? { signal: input.signal } : undefined);
     return extractOcrTextFromFile({
       filePath: tempPath,
+      ...(input.signal ? { signal: input.signal } : {}),
       mimeType: input.mimeType,
       fileName: input.fileName,
     });

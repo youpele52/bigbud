@@ -3,6 +3,7 @@ import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 import { readPromptTextFromUrl } from "./documentUrl.ts";
+import { documentTransport } from "./documentUrl.test.fixture.ts";
 
 function makeSimplePdf(text: string): Uint8Array {
   const objects = [
@@ -45,11 +46,13 @@ describe("documentUrl", () => {
   it("extracts readable text from a generic HTML page", async () => {
     const result = await readPromptTextFromUrl({
       url: "https://example.com/report",
-      fetchImpl: async () =>
-        new Response(
-          "<html><head><title>Report</title></head><body><main><h1>Status</h1><p>Everything works.</p></main></body></html>",
-          { headers: { "content-type": "text/html; charset=utf-8" } },
-        ),
+      transport: documentTransport(
+        () =>
+          new Response(
+            "<html><head><title>Report</title></head><body><main><h1>Status</h1><p>Everything works.</p></main></body></html>",
+            { headers: { "content-type": "text/html; charset=utf-8" } },
+          ),
+      ),
     });
 
     expect(result).not.toBeNull();
@@ -70,12 +73,12 @@ describe("documentUrl", () => {
 
     const result = await readPromptTextFromUrl({
       url: "https://arxiv.org/abs/1234.56789",
-      fetchImpl: async (input) => {
+      transport: documentTransport((input) => {
         fetchedUrl = String(input);
         return new Response(pdfBytes, {
           headers: { "content-type": "application/pdf" },
         });
-      },
+      }),
     });
 
     expect(fetchedUrl).toBe("https://arxiv.org/pdf/1234.56789.pdf");
@@ -95,10 +98,10 @@ describe("documentUrl", () => {
 
     const result = await readPromptTextFromUrl({
       url: "https://eprint.iacr.org/2024/123",
-      fetchImpl: async (input) => {
+      transport: documentTransport((input) => {
         fetchedUrl = String(input);
         return new Response(pdfBytes, { headers: { "content-type": "application/pdf" } });
-      },
+      }),
     });
 
     expect(fetchedUrl).toBe("https://eprint.iacr.org/2024/123.pdf");
@@ -109,13 +112,15 @@ describe("documentUrl", () => {
   it("extracts remote text files from binary responses using the response filename", async () => {
     const result = await readPromptTextFromUrl({
       url: "https://example.com/download",
-      fetchImpl: async () =>
-        new Response(new TextEncoder().encode("remote text body"), {
-          headers: {
-            "content-type": "application/octet-stream",
-            "content-disposition": 'attachment; filename="notes.txt"',
-          },
-        }),
+      transport: documentTransport(
+        () =>
+          new Response(new TextEncoder().encode("remote text body"), {
+            headers: {
+              "content-type": "application/octet-stream",
+              "content-disposition": 'attachment; filename="notes.txt"',
+            },
+          }),
+      ),
     });
 
     expect(result?.resolvedUrl).toBe("https://example.com/download");

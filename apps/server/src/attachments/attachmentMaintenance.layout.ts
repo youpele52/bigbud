@@ -127,6 +127,9 @@ export const ATTACHMENT_HOLDS_SQL = `
   SELECT 'referenced', ref.attachment_id FROM managed_attachment_references AS ref
   WHERE ref.active = 1 AND ref.attachment_id IN (SELECT value FROM ids)
   UNION ALL
+  SELECT 'referenced', attachment_id FROM recovered_queue_draft_attachments
+  WHERE attachment_id IN (SELECT value FROM ids)
+  UNION ALL
   SELECT DISTINCT 'referenced', ids.value
   FROM (
     SELECT COALESCE(message.attachments_json, activity.payload_json, '') AS text
