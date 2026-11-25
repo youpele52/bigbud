@@ -1,3 +1,4 @@
+import { hasPendingInteractionGate } from "../PendingInteractionGate.logic.ts";
 import { makeReservedQueuedPromptFlushCommand } from "../QueuedPromptFlush.control.ts";
 import { ProviderKind, type OrchestrationTurnControlOperation } from "@bigbud/contracts";
 import { Effect, Exit, Schema } from "effect";
@@ -125,6 +126,7 @@ export function makeProcessTurnSteerRequested(input: {
     const capabilities = yield* input.providerService.getCapabilities(provider);
     const steerTurn = input.providerService.steerTurn;
     const native =
+      !hasPendingInteractionGate(thread) &&
       capabilities.turnControl?.nativeSteer === true &&
       steerTurn !== undefined &&
       canNativelySteerQueuedPrefix(prefix);

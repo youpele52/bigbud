@@ -170,6 +170,30 @@ const make = Effect.gen(function* () {
       );
     return yield* decode(rows[0]);
   });
+  const reopenUndispatchedIntent = Effect.fn("ProviderTurnAdmissions.reopenUndispatchedIntent")(
+    function* (current: ProviderTurnAdmission, updatedAt: string) {
+      if (
+        current.namespace !== "foreground" ||
+        current.state !== "dispatch-intent" ||
+        (current.binding.provider !== "muse" && current.binding.provider !== "opencodeV2")
+      )
+        return yield* new ProviderTurnAdmissionConflict({
+          detail: "This admission does not support reopening before wire dispatch.",
+        });
+      const rows = yield* sql<Row>`UPDATE provider_turn_admissions
+      SET state = 'reserved', revision = revision + 1, updated_at = ${updatedAt}
+      WHERE ${where(current)} AND state = 'dispatch-intent' AND revision = ${current.revision}
+        AND binding_json = ${JSON.stringify(current.binding)} AND fingerprint = ${current.fingerprint}
+        AND native_admission_id = ${current.nativeAdmissionId} AND turn_id = ${current.turnId}
+        AND (${admissionOwnerAvailable(sql, current.ownerThreadId)}) AND (${admissionOwnerAvailable(sql, current.binding.threadId)})
+      RETURNING ${columns}`.pipe(
+        Effect.mapError(toPersistenceSqlError("admissions.reopenUndispatchedIntent")),
+      );
+      if (!rows[0])
+        return yield* new ProviderTurnAdmissionConflict({ detail: "Stale admission fence." });
+      return yield* decode(rows[0]);
+    },
+  );
   const listUnresolved: ProviderTurnAdmissionsShape["listUnresolved"] = Effect.fn(
     "ProviderTurnAdmissions.listUnresolved",
   )(function* (limit) {
@@ -272,6 +296,7 @@ const make = Effect.gen(function* () {
     reserve,
     transition,
     settleProvenRefusal,
+    reopenUndispatchedIntent,
     listUnresolved,
     latestBound,
   } satisfies ProviderTurnAdmissionsShape;

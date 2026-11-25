@@ -16,6 +16,11 @@ export const QUEUE_FLUSH_COMMAND_PREFIX = "queue-flush:";
 /** Commands after which a thread may have become idle for queued-prompt dispatch. */
 function isLifecycleFlushTrigger(command: OrchestrationCommand): boolean {
   return (
+    // If closure committed before parking, there will be no later close event to wake the queue.
+    // The post-commit policy still checks the stored fence, all other approvals, and queue holds.
+    (command.type === "thread.message.submit" &&
+      command.redeliverSentMessage === true &&
+      command.pendingInteractionGate !== undefined) ||
     command.type === "thread.session.set" ||
     command.type === "thread.turn.start.failed" ||
     command.type === "thread.approval.respond" ||
@@ -25,6 +30,7 @@ function isLifecycleFlushTrigger(command: OrchestrationCommand): boolean {
     command.type === "thread.turn-control.set" ||
     command.type === "thread.queued-prompt.flush-cancel" ||
     command.type === "thread.queued-prompt.remove" ||
+    (command.type === "thread.queued-prompt.recovered" && command.action === "send") ||
     // The provider accepted a requested turn, which clears its pending-start gate. The
     // reactor records it after any running stamp, so a still-running turn keeps blocking.
     (command.type === "thread.activity.append" &&

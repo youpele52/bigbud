@@ -12,6 +12,7 @@ import { Equal, Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
+import { pendingInteractionGateAtAdmission } from "./PendingInteractionGate.logic.ts";
 import { withEventBase } from "./deciderHelpers.ts";
 
 export const MAX_QUEUED_PROMPTS = 5;
@@ -151,8 +152,15 @@ export function makeQueuedPrompt(input: {
       command.type === "thread.message.submit"
         ? command.originSegments
         : command.message.originSegments;
+    const pendingInteractionGate =
+      command.type === "thread.message.submit" &&
+      isSentMessageRedelivery(command) &&
+      command.pendingInteractionGate
+        ? pendingInteractionGateAtAdmission(command.pendingInteractionGate, input.targetThread)
+        : undefined;
     return {
       id: command.message.messageId,
+      ...(pendingInteractionGate ? { pendingInteractionGate } : {}),
       text: command.message.text.trim(),
       createdAt: command.createdAt,
       ...(attachments.length > 0 ? { attachments } : {}),

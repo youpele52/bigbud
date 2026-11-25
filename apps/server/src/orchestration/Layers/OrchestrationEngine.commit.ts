@@ -16,6 +16,7 @@ import { projectEvent } from "../projector.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
 import type { CommandEnvelope } from "./OrchestrationEngine.commandEnvelope.ts";
+import { commitRecoveredQueueCommand } from "./OrchestrationEngine.recoveredQueue.ts";
 import { recordAppendedEventMetrics } from "./OrchestrationEngine.commandMetrics.ts";
 import { makeMetadataCommitHooks } from "./OrchestrationEngine.metadataGeneration.ts";
 import { makeRecoveryIntentRecorder } from "./OrchestrationEngine.recoveryIntents.ts";
@@ -66,6 +67,7 @@ export const makeCanonicalCommandCommit = Effect.fn("makeCanonicalCommandCommit"
         : eventBases;
     const events =
       retentionClaim?.claimed === false || metadataCommit?.apply === false ? [] : acceptedEvents;
+    yield* commitRecoveredQueueCommand(sql, envelope.command, currentReadModel, events);
     for (const nextEvent of events) {
       const savedEvent = yield* eventStore.append(nextEvent);
       yield* recordAppendedEventMetrics(savedEvent);

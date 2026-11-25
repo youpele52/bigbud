@@ -162,6 +162,8 @@ export const ProviderRuntimeEventBase = Schema.Struct({
   sessionEpoch: Schema.optional(NonNegativeInt),
   itemId: Schema.optional(RuntimeItemId),
   requestId: Schema.optional(RuntimeRequestId),
+  /** Provider-local incarnation of a request ID, when needed for durable correlation. */
+  requestGeneration: Schema.optional(TrimmedNonEmptyString),
   providerRefs: Schema.optional(ProviderRefs),
   raw: Schema.optional(RuntimeEventRaw),
 });

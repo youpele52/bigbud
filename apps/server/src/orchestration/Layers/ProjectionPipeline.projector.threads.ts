@@ -11,6 +11,7 @@ import {
   ORCHESTRATION_PROJECTOR_NAMES,
   type AttachmentSideEffects,
 } from "./ProjectionPipeline.helpers.ts";
+import { queuedPromptsAfterInteractionActivity } from "../PendingInteractionGate.logic.ts";
 import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
 import { advancesThreadActivityAt } from "./ProjectionPipeline.projector.projects.lastUsed.ts";
 import { projectThreadQueueControlEvent } from "./ProjectionPipeline.projector.threadQueueControl.ts";
@@ -298,6 +299,14 @@ export function makeThreadsProjector(
         }
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
+          ...(event.type === "thread.activity-appended"
+            ? {
+                queuedPrompts: queuedPromptsAfterInteractionActivity(
+                  existingRow.value.queuedPrompts,
+                  event.payload.activity,
+                ),
+              }
+            : {}),
           updatedAt: event.occurredAt,
         });
         return;

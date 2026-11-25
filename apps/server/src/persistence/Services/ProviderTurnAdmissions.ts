@@ -76,6 +76,11 @@ export interface ProviderTurnAdmissionsShape {
     current: ProviderTurnAdmission,
     updatedAt: string,
   ) => Effect.Effect<ProviderTurnAdmission, ProviderTurnAdmissionError>;
+  /** Only for the owner of this exact revision when its wire callback was never invoked. */
+  readonly reopenUndispatchedIntent?: (
+    current: ProviderTurnAdmission,
+    updatedAt: string,
+  ) => Effect.Effect<ProviderTurnAdmission, ProviderTurnAdmissionError>;
   readonly listUnresolved: (
     limit: number,
   ) => Effect.Effect<ReadonlyArray<ProviderTurnAdmission>, ProviderTurnAdmissionError>;

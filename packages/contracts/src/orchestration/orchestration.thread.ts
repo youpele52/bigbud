@@ -27,6 +27,7 @@ import { ThreadForkOrigin } from "./orchestration.fork";
 import { OrchestrationTask } from "./orchestration.thread.tasks";
 import { ThreadRecovery } from "./orchestration.recovery";
 import { ThreadOrganizationField } from "./orchestration.organization";
+import { PendingInteractionGate } from "./orchestration.pendingInteractionGate";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -215,6 +216,7 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
    * redelivers it under the same message ID instead of adding a second message.
    */
   alreadySent: Schema.optional(Schema.Boolean),
+  pendingInteractionGate: Schema.optional(PendingInteractionGate),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 

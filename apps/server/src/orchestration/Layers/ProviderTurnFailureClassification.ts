@@ -100,8 +100,9 @@ function classifyError(error: unknown): TurnStartFailureClass {
   const explicit = explicitFailureClass(error);
   if (explicit !== undefined) return explicit;
   const text = failureText(error);
-  if (PROVIDER_BUSY_TURN_DETAIL.test(text)) return "busy";
   if (UNSAFE_TO_REPLAY_DETAIL.test(text)) return "unsafe-to-replay";
+  // Diagnostic wording only; queue admission requires a typed pre-dispatch refusal.
+  if (PROVIDER_BUSY_TURN_DETAIL.test(text)) return "busy";
   if (AUTH_OR_QUOTA_DETAIL.test(text)) return "auth-or-quota";
   if (PROVIDER_UNAVAILABLE_DETAIL.test(text)) return "provider-unavailable";
   if (isProviderContextLimitError(error)) return "context-limit";

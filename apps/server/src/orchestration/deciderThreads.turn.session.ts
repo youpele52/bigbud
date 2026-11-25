@@ -8,6 +8,8 @@ import type {
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
+import { hasPendingInteractionGate } from "./PendingInteractionGate.logic.ts";
+import { queueDecisionError } from "./QueuedPromptDecision.logic.ts";
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
 import { requireThreadReadyForMutation } from "./deciderThreads.turn.start.ts";
@@ -92,6 +94,11 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
         ) {
           return [];
         }
+        if (
+          command.queuedPromptIdsAfterSettlement !== undefined &&
+          hasPendingInteractionGate(thread)
+        )
+          return yield* queueDecisionError("queue_waiting_for_user");
         const interruptPrefix =
           command.queuedPromptIdsAfterSettlement === undefined
             ? undefined
@@ -147,6 +154,8 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
         };
       case "thread.turn.steer":
         yield* requireThreadReadyForMutation({ thread, command });
+        if (hasPendingInteractionGate(thread))
+          return yield* queueDecisionError("queue_waiting_for_user");
         if (
           command.sessionEpoch !== undefined &&
           command.sessionEpoch !== (thread.session?.sessionEpoch ?? 0)

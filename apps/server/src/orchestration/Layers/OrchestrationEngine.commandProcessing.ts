@@ -1,3 +1,4 @@
+import { decideRecoveredQueueCommand } from "./OrchestrationEngine.recoveredQueue.ts";
 import { recordCommandResultMetrics } from "./OrchestrationEngine.commandMetrics.ts";
 import { makeCanonicalCommandCommit } from "./OrchestrationEngine.commit.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
@@ -126,10 +127,12 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                   envelope.command.undoAutomaticMoveId) ||
                 (yield* terminalIdleBlocked(envelope.command))
                   ? []
-                  : yield* decideOrchestrationCommand({
-                      command: envelope.command,
-                      readModel: currentReadModel,
-                    });
+                  : envelope.command.type === "thread.queued-prompt.recovered"
+                    ? yield* decideRecoveredQueueCommand(sql, envelope.command, currentReadModel)
+                    : yield* decideOrchestrationCommand({
+                        command: envelope.command,
+                        readModel: currentReadModel,
+                      });
               if (
                 Option.isSome(workspaceModeGate) &&
                 (!Array.isArray(eventBase) || eventBase.length)
@@ -138,7 +141,9 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               const eventBases = yield* ProjectWorkspace.prepareProjectWorkspaceEvents(
                 envelope.command,
                 currentReadModel,
-                Array.isArray(eventBase) ? eventBase : [eventBase],
+                Array.isArray(eventBase)
+                  ? eventBase
+                  : [eventBase as Omit<OrchestrationEvent, "sequence">],
                 {
                   stateDir: workspaceConfig.stateDir,
                   sql,
@@ -233,12 +238,17 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               envelope.result,
               dispatchResult,
             );
-            yield* enqueueLifecycleFlush(
-              input.commandAdmission,
-              envelope.command,
-              input.readModel(),
-              () => Option.isSome(maintenance) && maintenance.value.isClosed(),
-            );
+            if (
+              envelope.command.type !== "thread.queued-prompt.remove" ||
+              exit.value.committedEventCount > 0
+            ) {
+              yield* enqueueLifecycleFlush(
+                input.commandAdmission,
+                envelope.command,
+                input.readModel(),
+                () => Option.isSome(maintenance) && maintenance.value.isClosed(),
+              );
+            }
             return true;
           }
           const error = Cause.squash(exit.cause) as OrchestrationDispatchError;

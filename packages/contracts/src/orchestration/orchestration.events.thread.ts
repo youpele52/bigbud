@@ -183,6 +183,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
 });
 
 export const ThreadTurnStartRequestedPayload = Schema.Struct({
+  releaseEmptyQueueHold: Schema.optional(Schema.Literal(true)),
   usageAttribution: Schema.optional(UsageAttribution),
   threadId: ThreadId,
   messageId: MessageId,

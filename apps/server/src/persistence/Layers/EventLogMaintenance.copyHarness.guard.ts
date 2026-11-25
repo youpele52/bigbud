@@ -27,7 +27,7 @@ export const bigbudStateRoots = (
   env: Readonly<Record<string, string | undefined>> = process.env,
   home: string = homedir(),
 ): ReadonlyArray<string> =>
-  [join(home, ".bigbud"), env.BIGBUD_HOME, env.T3CODE_HOME]
+  [join(home, ".bigbud"), env.BIGBUD_HOME]
     .filter((root): root is string => typeof root === "string" && root.length > 0)
     .map(realOrResolved);
 
