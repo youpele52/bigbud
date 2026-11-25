@@ -150,6 +150,7 @@ fn running_handle_and_reaped_exit_are_observed_without_inventory_mutation() {
         "pty-live".to_owned(),
         PtySession {
             handle: Arc::clone(&handle),
+            pane_identity: None,
             request_digest: vec![4],
             expires_at: None,
             lifecycle: None,

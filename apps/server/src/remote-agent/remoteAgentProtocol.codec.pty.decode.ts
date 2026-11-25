@@ -1,3 +1,4 @@
+import { decodeTerminalHostFrame } from "./remoteAgentProtocol.codec.terminalHost.ts";
 import { decodePtyInventoryFrame } from "./remoteAgentProtocol.codec.pty.inventory.ts";
 import { decodePtyInputReconcileFrame } from "./remoteAgentProtocol.codec.pty.input.ts";
 import {
@@ -29,6 +30,7 @@ export function decodePtyFrame(field: number, bytes: Uint8Array): RemoteAgentFra
       bytes,
     ) ??
     decodePtyInputReconcileFrame(field, bytes) ??
-    decodePtyLifecycleFrame(field, bytes)
+    decodePtyLifecycleFrame(field, bytes) ??
+    decodeTerminalHostFrame(field, bytes)
   );
 }

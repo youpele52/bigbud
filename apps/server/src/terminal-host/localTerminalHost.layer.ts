@@ -24,6 +24,7 @@ import {
   resolveLocalTerminalHostMode,
   type LocalTerminalHostMode,
 } from "./localTerminalHost.paths.ts";
+import { latchTerminalHostPreference } from "./localTerminalHost.preference.ts";
 import { probeLocalTerminalHost } from "./localTerminalHost.probe.ts";
 import { makeLocalTerminalHostProcesses } from "./localTerminalHost.process.ts";
 import { makeLocalTerminalHostRegistry } from "./localTerminalHost.registry.ts";
@@ -39,9 +40,15 @@ export function localTerminalHostSelection(input: {
   readonly environment?: NodeJS.ProcessEnv;
   readonly platform?: NodeJS.Platform;
   readonly rootExists?: (root: string) => boolean;
+  /** Overrides the saved Settings preference (tests); defaults to the value latched at startup. */
+  readonly preferenceEnabled?: boolean;
 }): LocalTerminalHostMode | undefined {
   if ((input.platform ?? process.platform) === "win32") return undefined;
-  const mode = resolveLocalTerminalHostMode(input.environment ?? process.env);
+  const mode = resolveLocalTerminalHostMode(
+    input.environment ?? process.env,
+    undefined,
+    input.preferenceEnabled ?? latchTerminalHostPreference(input.stateDir),
+  );
   if (mode === "enabled") return mode;
   const { root } = localTerminalHostPaths(input.stateDir);
   return (input.rootExists ?? existsSync)(root) ? mode : undefined;

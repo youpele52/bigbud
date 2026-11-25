@@ -14,10 +14,30 @@ export class CliBackendLockError extends Data.TaggedError("CliBackendLockError")
   readonly cause?: unknown;
 }> {}
 
+/** Acquire without a Scope; the caller decides whether to release on success or leave the lock. */
+export const acquireBackendLockForCli = (input: {
+  readonly stateDir: string;
+  readonly port: number;
+  readonly command: string;
+  readonly mode?: "read" | "write";
+}) =>
+  Effect.tryPromise({
+    try: () => acquireStateDirLock({ stateDir: input.stateDir, port: input.port }),
+    catch: (cause) =>
+      new CliBackendLockError({
+        message:
+          cause instanceof StateDirLockError
+            ? `${input.command} ${input.mode === "read" ? "reads" : "writes"} the bigbud database and needs exclusive access. ${cause.message}`
+            : `${input.command} could not check the bigbud backend lock in ${input.stateDir}.`,
+        cause,
+      }),
+  }).pipe(Effect.map((handle) => ({ release: () => handle.release().catch(() => undefined) })));
+
 export const holdBackendLockForCli = (input: {
   readonly stateDir: string;
   readonly port: number;
   readonly command: string;
+  readonly mode?: "read" | "write";
 }) =>
   Effect.acquireRelease(
     Effect.tryPromise({
@@ -26,8 +46,8 @@ export const holdBackendLockForCli = (input: {
         new CliBackendLockError({
           message:
             cause instanceof StateDirLockError
-              ? `${input.command} --apply needs the bigbud backend stopped. ${cause.message}`
-              : `${input.command} --apply could not check the bigbud backend lock in ${input.stateDir}.`,
+              ? `${input.command} ${input.mode === "read" ? "reads" : "writes"} the bigbud database and needs exclusive access. ${cause.message}`
+              : `${input.command} could not check the bigbud backend lock in ${input.stateDir}.`,
           cause,
         }),
     }),

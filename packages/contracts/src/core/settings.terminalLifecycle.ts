@@ -6,8 +6,11 @@ import { Schema } from "effect";
  */
 export const TerminalLifecycleSettingsFields = {
   terminalsKeepRunningAfterQuit: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  /** Runs new local terminals in the background terminal host. Read at startup; applies after a restart. */
+  terminalHostEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
 };
 
 export const TerminalLifecycleSettingsPatchFields = {
   terminalsKeepRunningAfterQuit: Schema.optionalKey(Schema.Boolean),
+  terminalHostEnabled: Schema.optionalKey(Schema.Boolean),
 };

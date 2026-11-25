@@ -5,6 +5,7 @@ import {
   PTY_CREATE_REQUEST_LIFECYCLE_FIELDS,
   PTY_CREATE_RESPONSE_LIMIT_FIELDS,
 } from "./remoteAgentProtocol.codec.pty.lifecycle.ts";
+import { encodeTerminalHostFrame } from "./remoteAgentProtocol.codec.terminalHost.ts";
 import { encodeTableExtension } from "./remoteAgentProtocol.codec.table.ts";
 import {
   type RemoteAgentFrame,
@@ -235,7 +236,8 @@ export function encodePtyFrame(
       return (
         encodePtyInventoryFrame(frame) ??
         encodePtyInputReconcileFrame(frame) ??
-        encodePtyLifecycleFrame(frame)
+        encodePtyLifecycleFrame(frame) ??
+        encodeTerminalHostFrame(frame)
       );
   }
 }

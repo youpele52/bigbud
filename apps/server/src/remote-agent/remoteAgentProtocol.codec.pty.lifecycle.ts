@@ -17,6 +17,9 @@ export const PTY_CREATE_REQUEST_LIFECYCLE_FIELDS: TableSchema = [
   [15, "spool", "bool"],
   [16, "localLaunch", "bool"],
   [17, "lifecycleManaged", "bool"],
+  [18, "threadId", "string"],
+  [19, "paneId", "string"],
+  [20, "paneKind", "string"],
 ];
 export const PTY_CREATE_RESPONSE_LIMIT_FIELDS: TableSchema = [
   [8, "limit", "uint"],

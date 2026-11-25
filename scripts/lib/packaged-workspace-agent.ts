@@ -14,11 +14,14 @@ export function findPackagedWorkspaceAgent(
   directory: string,
   platform: DesktopBuildPlatform,
 ): string | undefined {
-  const suffix = getPackagedWorkspaceAgentSuffix(platform);
+  return findPackagedResource(directory, getPackagedWorkspaceAgentSuffix(platform));
+}
+
+export function findPackagedResource(directory: string, suffix: string): string | undefined {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      const nested = findPackagedWorkspaceAgent(path, platform);
+      const nested = findPackagedResource(path, suffix);
       if (nested) return nested;
     } else if (entry.isFile() && path.replaceAll("\\", "/").endsWith(suffix)) {
       return path;

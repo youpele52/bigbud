@@ -7,6 +7,7 @@ import {
   REMOTE_AGENT_TERMINAL_QUERY_RESPONDER_CAPABILITY,
   REMOTE_AGENT_TERMINAL_SCREEN_CAPABILITY,
 } from "../remote-agent/remoteAgentProtocol.ptyLifecycle.ts";
+import { latchedTerminalHostPreference } from "./localTerminalHost.preference.ts";
 
 /** One pool target for every local host generation; each generation is its own binding (F2). */
 export const LOCAL_TERMINAL_HOST_TARGET_ID = "local-terminal-host";
@@ -39,14 +40,21 @@ export const LOCAL_TERMINAL_HOST_REQUIRED_CAPABILITIES: ReadonlyArray<string> = 
  */
 export type LocalTerminalHostMode = "enabled" | "adopt-only";
 
-/** Before Q1 the host is opt-in (`=== "1"`); after Q1 it is opt-out (`=== "0"`). */
+/**
+ * Before Q1 the host is opt-in (`=== "1"`); after Q1 it is opt-out (`=== "0"`). An explicit
+ * `BIGBUD_TERMINAL_HOST` of `"1"` or `"0"` always wins; otherwise the saved Settings preference
+ * opts in before Q1.
+ */
 export function resolveLocalTerminalHostMode(
   environment: NodeJS.ProcessEnv = process.env,
   qualified: boolean = LOCAL_TERMINAL_HOST_QUALIFIED,
+  preferenceEnabled: boolean = latchedTerminalHostPreference(),
 ): LocalTerminalHostMode {
   const value = environment.BIGBUD_TERMINAL_HOST;
-  if (qualified) return value === "0" ? "adopt-only" : "enabled";
-  return value === "1" ? "enabled" : "adopt-only";
+  if (value === "1") return "enabled";
+  if (value === "0") return "adopt-only";
+  if (qualified) return "enabled";
+  return preferenceEnabled ? "enabled" : "adopt-only";
 }
 
 export interface LocalTerminalHostPaths {
@@ -117,4 +125,12 @@ export function localTerminalHostStagedBinaryPath(
     localTerminalHostRuntimeSegment(buildDigest),
     "bigbud-remote-agent",
   );
+}
+
+/** An explicit `BIGBUD_TERMINAL_HOST` value overrides the Settings toggle. */
+export function terminalHostControlledByEnvironment(
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const value = environment.BIGBUD_TERMINAL_HOST;
+  return value === "1" || value === "0";
 }
