@@ -92,6 +92,11 @@ describe("desktop release assets", () => {
       "server-organization-supervisor-linux-arm64",
       "server-organization-supervisor-win32-x64.exe",
       "server-organization-supervisor-win32-arm64.exe",
+      "server-ssh-owner-darwin-arm64",
+      "server-ssh-owner-darwin-x64",
+      "server-ssh-owner-linux-x64",
+      "server-ssh-owner-linux-arm64",
+      "server-ssh-owner-win32-x64.exe",
     ];
     for (const name of files) {
       writeFileSync(join(directory, name), name);
@@ -120,6 +125,16 @@ describe("desktop release assets", () => {
     rmSync(join(directory, "server-organization-supervisor-linux-arm64"));
     expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).toThrow(
       "Missing packaged organisation supervisor: linux-arm64",
+    );
+    writeFileSync(join(directory, "server-organization-supervisor-linux-arm64"), "supervisor");
+    rmSync(join(directory, "server-ssh-owner-linux-arm64"));
+    expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).toThrow(
+      "Missing packaged SSH owner: server-ssh-owner-linux-arm64",
+    );
+    writeFileSync(join(directory, "server-ssh-owner-linux-arm64"), "owner");
+    writeFileSync(join(directory, "server-ssh-owner-win32-arm64.exe"), "owner");
+    expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).toThrow(
+      "Unexpected packaged SSH owner: server-ssh-owner-win32-arm64.exe",
     );
   });
 
@@ -187,6 +202,11 @@ describe("desktop release assets", () => {
       "server-organization-supervisor-linux-arm64",
       "server-organization-supervisor-win32-x64.exe",
       "server-organization-supervisor-win32-arm64.exe",
+      "server-ssh-owner-darwin-arm64",
+      "server-ssh-owner-darwin-x64",
+      "server-ssh-owner-linux-x64",
+      "server-ssh-owner-linux-arm64",
+      "server-ssh-owner-win32-x64.exe",
     ]) {
       writeFileSync(join(directory, name), name);
     }

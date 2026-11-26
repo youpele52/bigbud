@@ -16,6 +16,7 @@ import {
   type SshOwnerUnavailableReason,
 } from "./sshOwnerStartupRefusal.ts";
 import {
+  findStandaloneSshOwnerTarget,
   StandaloneSshOwnerExecutableError,
   verifyStandaloneSshOwnerExecutable,
   type TrustedStandaloneSshOwnerManifestEntry,
@@ -76,25 +77,19 @@ const unavailable = (reason: SshOwnerUnavailableReason, message: string) =>
 const binaryName = (platform: WorkspaceAgentTarget["platform"]) =>
   platform === "win32" ? "bigbud-ssh-owner.exe" : "bigbud-ssh-owner";
 
-const packagedTargetSupported = (target: WorkspaceAgentTarget) =>
-  (target.platform === "darwin" && target.arch === "arm64") ||
-  (target.platform === "win32" && target.arch === "x64");
-
-const standaloneTargetSupported = (target: WorkspaceAgentTarget) =>
-  !(target.platform === "win32" && target.arch === "arm64");
-
+/**
+ * D (packaged), N and R all ship the U4 owner cells: macOS arm64/x64, Linux x64/arm64 and
+ * Windows x64. Windows arm64 has no owner in v1. The list lives in `scripts/lib/packaged-ssh-owner.ts`
+ * (via `findStandaloneSshOwnerTarget`) so packaging and discovery cannot drift.
+ */
 function resolveTarget(
   platform: NodeJS.Platform,
   arch: string,
   profile: SshOwnerProfile,
 ): WorkspaceAgentTarget | undefined {
-  const target = findWorkspaceAgentTarget(platform, arch);
-  if (!target) return undefined;
-  if (profile === "desktop-packaged") return packagedTargetSupported(target) ? target : undefined;
-  if (profile === "standalone" || profile === "remote-backend") {
-    return standaloneTargetSupported(target) ? target : undefined;
-  }
-  return target;
+  return profile === "desktop-dev"
+    ? findWorkspaceAgentTarget(platform, arch)
+    : findStandaloneSshOwnerTarget(platform, arch);
 }
 
 function resolvePackagedPath(entryUrl: string, target: WorkspaceAgentTarget): string {

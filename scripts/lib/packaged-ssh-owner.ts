@@ -1,41 +1,53 @@
 import { spawnSync } from "node:child_process";
 import { accessSync, constants, lstatSync } from "node:fs";
 
+// Relative source import: release jobs run this with plain `node` before any `bun install`.
+import {
+  isSshOwnerReleaseTarget,
+  type SshOwnerTarget,
+} from "../../packages/shared/src/SshOwnerTargets.ts";
 import { type DesktopBuildPlatform } from "./packaged-workspace-agent.ts";
 import {
   assertNativeArtifactTarget,
   findDesktopWorkspaceAgentTarget,
+  WORKSPACE_AGENT_TARGETS,
   type WorkspaceAgentTarget,
 } from "./workspace-agent-target.ts";
 
 export const SSH_OWNER_BINARY_NAME = "bigbud-ssh-owner";
 
-type SshOwnerDesktopTarget = Extract<
-  WorkspaceAgentTarget,
-  { platform: "darwin"; arch: "arm64" } | { platform: "win32"; arch: "x64" }
->;
+/** U4 native owner cells; the list itself lives in `@bigbud/shared/SshOwnerTargets`. */
+export type SshOwnerDesktopTarget = Extract<WorkspaceAgentTarget, SshOwnerTarget>;
+
+export { isSshOwnerReleaseTarget };
+
+export const SSH_OWNER_RELEASE_TARGETS: readonly SshOwnerDesktopTarget[] =
+  WORKSPACE_AGENT_TARGETS.filter(isSshOwnerReleaseTarget);
 
 export function findDesktopSshOwnerTarget(
   platform: DesktopBuildPlatform,
   arch: string,
 ): SshOwnerDesktopTarget | undefined {
   const target = findDesktopWorkspaceAgentTarget(platform, arch);
-  if (
-    (target?.platform === "darwin" && target.arch === "arm64") ||
-    (target?.platform === "win32" && target.arch === "x64")
-  ) {
-    return target;
-  }
-  return undefined;
+  return isSshOwnerReleaseTarget(target) ? target : undefined;
+}
+
+export function sshOwnerBinaryName(platform: SshOwnerDesktopTarget["platform"]): string {
+  return `${SSH_OWNER_BINARY_NAME}${platform === "win32" ? ".exe" : ""}`;
+}
+
+/** Release asset the standalone N package is assembled from (mirrors `server-workspace-agent-*`). */
+export function sshOwnerReleaseAssetName(target: SshOwnerDesktopTarget): string {
+  return `server-ssh-owner-${target.platform}-${target.arch}${target.platform === "win32" ? ".exe" : ""}`;
 }
 
 export function sshOwnerServerRelativePath(platform: SshOwnerDesktopTarget["platform"]): string {
-  return `ssh-owner/bin/${SSH_OWNER_BINARY_NAME}${platform === "win32" ? ".exe" : ""}`;
+  return `ssh-owner/bin/${sshOwnerBinaryName(platform)}`;
 }
 
 export function assertSshOwnerBinary(binaryPath: string, target: SshOwnerDesktopTarget): void {
   if (!lstatSync(binaryPath).isFile()) throw new Error(`SSH owner is not a file: ${binaryPath}`);
-  if (target.platform === "darwin") accessSync(binaryPath, constants.X_OK);
+  if (target.platform !== "win32") accessSync(binaryPath, constants.X_OK);
   assertNativeArtifactTarget(binaryPath, target, "SSH owner");
 }
 

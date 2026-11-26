@@ -123,7 +123,8 @@ describe("createBuildConfig", () => {
         binaries: [
           "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
           "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
-          ...(arch === "arm64" ? ["Contents/Resources/server/ssh-owner/bin/bigbud-ssh-owner"] : []),
+          // U4: both Mac architectures ship and sign the native SSH owner.
+          "Contents/Resources/server/ssh-owner/bin/bigbud-ssh-owner",
         ],
         entitlements: "/resources/entitlements.mac.plist",
         entitlementsInherit: "/resources/entitlements.mac.plist",

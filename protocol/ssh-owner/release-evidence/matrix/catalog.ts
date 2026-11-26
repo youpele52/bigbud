@@ -49,13 +49,17 @@ export const slots = [
   ...targetSlots("D", ["win32", "x64"], "nsis"),
   ...targets.flatMap((target) => targetSlots("V-E", target, "electron-dev")),
   ...targets.flatMap((target) => targetSlots("V-B", target, "bun-dev")),
-  ...targets.flatMap((target) =>
-    ["node-web", "node-desktop"].flatMap((mode) => targetSlots("N", target, mode)),
-  ),
+  // U4: standalone N ships Linux x64/arm64, macOS arm64/x64 and Windows x64; no Windows arm64 in v1.
+  ...targets
+    .filter(([os, arch]) => !(os === "win32" && arch === "arm64"))
+    .flatMap((target) =>
+      ["node-web", "node-desktop"].flatMap((mode) => targetSlots("N", target, mode)),
+    ),
   ...targetSlots("R", ["linux", "x64"], "signed-gnu-graph"),
   ...targetSlots("R", ["linux", "arm64"], "signed-gnu-graph"),
   excluded("no-linux-arm64-installer", "D"),
   excluded("no-win32-arm64-installer", "D"),
+  excluded("no-win32-arm64-standalone", "N"),
   excluded("outside-native-targets", "N"),
   excluded("linux-musl", "N"),
   excluded("linux-musl", "R"),

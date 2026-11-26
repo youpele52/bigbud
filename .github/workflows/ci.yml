@@ -572,6 +572,10 @@ jobs:
       - name: Smoke test packaged delivery supervisor
         run: bun run verify:packaged-desktop-supervisor -- release "${{ matrix.platform }}"
 
+      # U4: the verified owner copy becomes the standalone N asset (server-ssh-owner-*).
+      - name: Verify packaged SSH owner without activation
+        run: node scripts/verify-packaged-ssh-owner.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish
+
       - name: Smoke test Windows installer update over a running helper
         if: matrix.platform == 'win'
         shell: pwsh
@@ -658,9 +662,12 @@ jobs:
         run: |
           cargo build --locked --release --package bigbud-remote-agent
           cargo build --locked --release --package bigbud-desktop-supervisor
+          cargo build --locked --release --package bigbud-ssh-owner
       - name: Stage native server artifact
         run: |
           mkdir -p release-publish
+          # U4 N Linux arm64 cell: verified inactive owner, staged as server-ssh-owner-linux-arm64.
+          node scripts/verify-packaged-ssh-owner.ts --binary target/release/bigbud-ssh-owner linux arm64 release-publish
           cp target/release/bigbud-desktop-supervisor release-publish/server-organization-supervisor-linux-arm64
           node --input-type=module -e "import { smokeTestThreadOrganizationBinary } from './scripts/lib/thread-organization-smoke.ts'; await smokeTestThreadOrganizationBinary('./release-publish/server-organization-supervisor-linux-arm64');"
           cp target/release/bigbud-remote-agent release-publish/server-workspace-agent-linux-arm64

@@ -37,6 +37,9 @@ on:
       - "scripts/remote-backend-graph/**"
       - "scripts/lib/artifact-build/**"
       - "scripts/lib/remote-backend-control/**"
+      - "scripts/verify-packaged-ssh-owner.ts"
+      - "scripts/lib/packaged-ssh-owner.ts"
+      - "crates/bigbud-ssh-owner/**"
 
 permissions:
   contents: read
@@ -211,6 +214,101 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: remote-backend-graph-${{ matrix.target }}
+          path: release-publish/*
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}
+
+  # U4 R cells: the native SSH owner for each graph target, built on the remote agent's glibc floor
+  # (ubuntu-22.04) and verified without activation in the same image the graph smoke uses.
+  remote_backend_ssh_owner_build:
+    name: Build remote backend SSH owner ${{ matrix.label }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+            platform: linux/amd64
+            arch: x64
+          - label: Linux arm64
+            target: aarch64-unknown-linux-gnu
+            platform: linux/arm64
+            arch: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.target }}
+
+      - name: Install cross linker
+        if: startsWith(matrix.target, 'aarch64-')
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-aarch64-linux-gnu
+
+      - name: Build native SSH owner
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --locked --release --package bigbud-ssh-owner --target "${{ matrix.target }}"
+
+      - name: Set up QEMU for arm64 execution checks
+        if: startsWith(matrix.target, 'aarch64-')
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
+
+      - name: Verify native SSH owner without activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          owner="target/${{ matrix.target }}/release/bigbud-ssh-owner"
+          # Static ELF identity on the host; the inactive fail-closed start runs in the target image.
+          node --input-type=module -e "
+            import { assertSshOwnerBinary, findDesktopSshOwnerTarget } from './scripts/lib/packaged-ssh-owner.ts';
+            assertSshOwnerBinary(process.argv[1], findDesktopSshOwnerTarget('linux', process.argv[2]));
+          " "$owner" "${{ matrix.arch }}"
+          status=0
+          docker run --rm --network none --read-only --platform "${{ matrix.platform }}" \
+            -v "$PWD/$owner:/opt/bigbud-ssh-owner:ro" debian:bookworm-slim \
+            /opt/bigbud-ssh-owner > owner-smoke.out 2> owner-smoke.err || status=$?
+          if [[ "$status" != 1 || -s owner-smoke.out ]] ||
+            [[ "$(tr -d '\r\n' < owner-smoke.err)" != "S1 picker proof owner stopped" ]]; then
+            echo "::error::SSH owner did not reject inactive startup (exit $status)"
+            cat owner-smoke.out owner-smoke.err
+            exit 1
+          fi
+
+      - name: Stage SSH owner asset
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_VERSION:-$(node -p "require('./apps/server/package.json').version")-ci.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}}"
+          prefix="bigbud-backend-graph-${version}-${{ matrix.target }}"
+          mkdir -p release-publish
+          cp "target/${{ matrix.target }}/release/bigbud-ssh-owner" "release-publish/${prefix}.ssh-owner"
+          chmod 755 "release-publish/${prefix}.ssh-owner"
+          (cd release-publish && sha256sum "${prefix}.ssh-owner" > "${prefix}.ssh-owner.sha256")
+
+      - name: Upload SSH owner artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: remote-backend-graph-ssh-owner-${{ matrix.target }}
           path: release-publish/*
           if-no-files-found: error
           retention-days: ${{ inputs.retention_days || 0 }}

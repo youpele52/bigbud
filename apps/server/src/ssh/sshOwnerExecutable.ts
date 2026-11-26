@@ -3,7 +3,12 @@ import { constants, type BigIntStats } from "node:fs";
 import { access, lstat, open, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 
-import { findWorkspaceAgentTarget } from "../../../../scripts/lib/workspace-agent-target.ts";
+import {
+  findWorkspaceAgentTarget,
+  type WorkspaceAgentTarget,
+} from "../../../../scripts/lib/workspace-agent-target.ts";
+import { isSshOwnerReleaseTarget } from "@bigbud/shared/SshOwnerTargets";
+
 import { matchesSshOwnerExecutableTarget } from "./sshOwnerExecutable.header.ts";
 
 const MAX_BYTES = 512 * 1024 * 1024;
@@ -44,6 +49,70 @@ export class StandaloneSshOwnerExecutableError extends Error {
     super(`Standalone SSH owner verification failed: ${reason}.`, options);
     this.name = "StandaloneSshOwnerExecutableError";
   }
+}
+
+/** U4 owner cells (single source: `isSshOwnerReleaseTarget`): Linux x64/arm64, macOS arm64/x64 and Windows x64. No Windows arm64 in v1. */
+export function findStandaloneSshOwnerTarget(
+  platform: NodeJS.Platform,
+  arch: string,
+): WorkspaceAgentTarget | undefined {
+  const target = findWorkspaceAgentTarget(platform, arch);
+  return isSshOwnerReleaseTarget(target) ? target : undefined;
+}
+
+const ownerFilename = (target: WorkspaceAgentTarget) =>
+  target.platform === "win32" ? "bigbud-ssh-owner.exe" : "bigbud-ssh-owner";
+
+/** Package-relative member path, staged by `apps/server/scripts/sshOwner.ts`. */
+export function standaloneSshOwnerRelativePath(target: WorkspaceAgentTarget): string {
+  return `ssh-owner/${target.platform}-${target.arch}/${ownerFilename(target)}`;
+}
+
+export type StandaloneSshOwnerLocation =
+  /** The published package member; must still pass `verifyStandaloneSshOwnerExecutable`. */
+  | { readonly kind: "packaged"; readonly path: string; readonly target: WorkspaceAgentTarget }
+  /** A checkout's `cargo build --release` output; header evidence only, never release-trusted. */
+  | { readonly kind: "dev"; readonly path: string; readonly target: WorkspaceAgentTarget }
+  | {
+      readonly kind: "missing";
+      readonly reason: "unsupportedTarget" | "missingAsset";
+      readonly candidates: readonly string[];
+    };
+
+/**
+ * Locate the N owner without trusting it: the packaged member under `distDirectory`, else (only when
+ * a checkout root is given) `<repoRoot>/target/release`. Never consults PATH or the environment, and
+ * a missing owner is typed rather than falling back to a legacy executor.
+ */
+export async function locateStandaloneSshOwnerExecutable(input: {
+  readonly distDirectory: string;
+  readonly repoRoot?: string;
+  readonly platform?: NodeJS.Platform;
+  readonly arch?: string;
+}): Promise<StandaloneSshOwnerLocation> {
+  const target = findStandaloneSshOwnerTarget(
+    input.platform ?? process.platform,
+    input.arch ?? process.arch,
+  );
+  if (!target) return { kind: "missing", reason: "unsupportedTarget", candidates: [] };
+  const candidates: { readonly kind: "packaged" | "dev"; readonly path: string }[] = [
+    { kind: "packaged", path: join(input.distDirectory, standaloneSshOwnerRelativePath(target)) },
+  ];
+  if (input.repoRoot !== undefined) {
+    candidates.push({
+      kind: "dev",
+      path: join(input.repoRoot, "target", "release", ownerFilename(target)),
+    });
+  }
+  for (const candidate of candidates) {
+    const stat = await lstat(candidate.path).catch(() => undefined);
+    if (stat?.isFile()) return { kind: candidate.kind, path: candidate.path, target };
+  }
+  return {
+    kind: "missing",
+    reason: "missingAsset",
+    candidates: candidates.map((candidate) => candidate.path),
+  };
 }
 
 function sameFile(a: BigIntStats, b: BigIntStats): boolean {
@@ -89,16 +158,16 @@ export async function verifyStandaloneSshOwnerExecutable({
   platform = process.platform,
   arch = process.arch,
 }: StandaloneSshOwnerExecutableInput): Promise<string> {
-  const target = findWorkspaceAgentTarget(platform, arch);
+  const target = findStandaloneSshOwnerTarget(platform, arch);
   if (!target) throw new StandaloneSshOwnerExecutableError("unsupportedTarget");
 
   const targetDirectory = `${target.platform}-${target.arch}`;
-  const filename = target.platform === "win32" ? "bigbud-ssh-owner.exe" : "bigbud-ssh-owner";
+  const filename = ownerFilename(target);
   const { relativePath, sha256, sizeBytes } = trustedManifestEntry;
   if (
     trustedManifestEntry.platform !== target.platform ||
     trustedManifestEntry.arch !== target.arch ||
-    relativePath !== `ssh-owner/${targetDirectory}/${filename}` ||
+    relativePath !== standaloneSshOwnerRelativePath(target) ||
     !/^[0-9a-f]{64}$/.test(sha256) ||
     !Number.isSafeInteger(sizeBytes) ||
     sizeBytes < 1 ||

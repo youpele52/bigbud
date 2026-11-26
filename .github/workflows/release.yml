@@ -257,9 +257,12 @@ jobs:
         run: |
           cargo build --locked --release --package bigbud-remote-agent
           cargo build --locked --release --package bigbud-desktop-supervisor
+          cargo build --locked --release --package bigbud-ssh-owner
       - name: Stage native server artifact
         run: |
           mkdir -p release-publish
+          # U4 N Linux arm64 cell: verified inactive owner, staged as server-ssh-owner-linux-arm64.
+          node scripts/verify-packaged-ssh-owner.ts --binary target/release/bigbud-ssh-owner linux arm64 release-publish
           cp target/release/bigbud-desktop-supervisor release-publish/server-organization-supervisor-linux-arm64
           node --input-type=module -e "import { smokeTestThreadOrganizationBinary } from './scripts/lib/thread-organization-smoke.ts'; await smokeTestThreadOrganizationBinary('./release-publish/server-organization-supervisor-linux-arm64');"
           cp target/release/bigbud-remote-agent release-publish/server-workspace-agent-linux-arm64
@@ -316,6 +319,7 @@ jobs:
         release-assets/bigbud-backend-graph-*
         release-assets/server-workspace-agent-*
         release-assets/server-organization-supervisor-*
+        release-assets/server-ssh-owner-*
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -441,6 +445,8 @@ jobs:
               test -f "release-assets/${prefix}${suffix}"
             done
             (cd release-assets && sha256sum --check "${prefix}.tar.gz.sha256")
+            # U4 R cell: the verified native SSH owner for this graph target.
+            (cd release-assets && sha256sum --check "${prefix}.ssh-owner.sha256")
           done
           if compgen -G 'release-assets/bigbud-backend-graph-*.fixture-public-key.pem' > /dev/null; then
             echo "::error::Release graph assets were signed with a CI fixture key"; exit 1

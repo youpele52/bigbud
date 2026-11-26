@@ -72,7 +72,7 @@ export const stagePackagedSshOwner = Effect.fn("stagePackagedSshOwner")(function
   yield* assertBinary(plan.source);
   yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
   yield* fs.copyFile(plan.source, destination);
-  if (plan.target.platform === "darwin") yield* fs.chmod(destination, 0o755);
+  if (plan.target.platform !== "win32") yield* fs.chmod(destination, 0o755);
   yield* assertBinary(destination);
   yield* Effect.try({
     try: () => verifyInactiveSshOwner(destination, plan.target),

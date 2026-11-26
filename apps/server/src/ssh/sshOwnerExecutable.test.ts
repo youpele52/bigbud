@@ -90,7 +90,6 @@ describe("standalone SSH owner executable verification", () => {
     ["darwin", "x64"],
     ["linux", "arm64"],
     ["linux", "x64"],
-    ["win32", "arm64"],
     ["win32", "x64"],
   ] as const)(
     "verifies the exact %s/%s package member without running it",
@@ -99,6 +98,13 @@ describe("standalone SSH owner executable verification", () => {
       await expect(verifyStandaloneSshOwnerExecutable(input)).resolves.toBe(path);
     },
   );
+
+  it("rejects Windows arm64, which U4 does not ship in v1", async () => {
+    const { input } = await stage("win32", "arm64");
+    await expect(verifyStandaloneSshOwnerExecutable(input)).rejects.toMatchObject({
+      reason: "unsupportedTarget",
+    });
+  });
 
   it("rejects an unsupported runtime and a manifest for another target", async () => {
     const { input } = await stage("linux", "x64");

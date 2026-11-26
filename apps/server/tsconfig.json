@@ -30,6 +30,7 @@
     "tsdown.clientRelay.config.ts",
     "scripts",
     "integration",
-    "../../scripts/lib"
+    "../../scripts/lib",
+    "../../packages/shared/src/SshOwnerTargets.ts"
   ]
 }

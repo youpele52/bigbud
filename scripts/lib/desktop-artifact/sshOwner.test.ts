@@ -36,7 +36,7 @@ function peFixture(machine: number) {
 }
 
 describe("desktop SSH owner packaging", () => {
-  it("plans native locked release builds for the two packaging targets", () => {
+  it("plans native locked release builds for the Mac arm64 and Windows x64 hosts", () => {
     const repoRoot = join(tmpdir(), "repo");
     const macPlan = sshOwnerBuildPlan({
       repoRoot,
@@ -68,14 +68,29 @@ describe("desktop SSH owner packaging", () => {
     }
   });
 
-  it("does not plan an owner for Intel Mac, Windows arm64, Linux or universal builds", () => {
+  it("plans the U4 cells (Intel Mac cross build, Linux) but not Windows arm64 or universal", () => {
+    const repoRoot = join(tmpdir(), "repo");
+    const intel = sshOwnerBuildPlan({
+      repoRoot,
+      platform: "mac",
+      arch: "x64",
+      hostPlatform: "darwin",
+      hostArch: "arm64",
+    });
+    expect(intel?.cargoArgs).toContain("x86_64-apple-darwin");
+    expect(intel?.source).toBe(
+      join(repoRoot, "target", "x86_64-apple-darwin", "release", "bigbud-ssh-owner"),
+    );
+    for (const arch of ["x64", "arm64"] as const) {
+      expect(sshOwnerBuildPlan({ repoRoot, platform: "linux", arch })?.relativePath).toBe(
+        "ssh-owner/bin/bigbud-ssh-owner",
+      );
+    }
     for (const [platform, arch] of [
-      ["mac", "x64"],
       ["win", "arm64"],
-      ["linux", "x64"],
       ["mac", "universal"],
     ] as const) {
-      expect(sshOwnerBuildPlan({ repoRoot: tmpdir(), platform, arch })).toBeUndefined();
+      expect(sshOwnerBuildPlan({ repoRoot, platform, arch })).toBeUndefined();
     }
   });
 
