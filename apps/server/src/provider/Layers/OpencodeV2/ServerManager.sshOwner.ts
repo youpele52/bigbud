@@ -5,7 +5,7 @@ import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import type { PickerProofProductionProxyClient } from "../../../ssh/sshOwnerPickerProof.client.productionProxy.ts";
 import type { ProofOpencodeState } from "../../../ssh/sshOwnerPickerProof.codec.opencode.ts";
 import { PickerProofOwnerError } from "../../../ssh/sshOwnerPickerProof.codec.wire.ts";
-import { assertDevelopmentVersion } from "./Compatibility.ts";
+import { verifyV2OwnedContract } from "./Compatibility.owned.ts";
 import { makeOwnedClient, v2Request } from "./Client.ts";
 import type { OwnedV2Process, V2IsolatedProcessConfig } from "./ServerManager.types.ts";
 
@@ -289,7 +289,12 @@ export async function startOwnedV2SshProcess(
     const endpoint = `http://127.0.0.1:${localPort}`;
     const client = makeOwnedClient({ endpoint, password });
     const info = await v2Request("server.info", (signal) => client.server.info({ signal }));
-    assertDevelopmentVersion(info.version);
+    await verifyV2OwnedContract({
+      endpoint,
+      password,
+      version: info.version,
+      signal: lifetime.signal,
+    });
     if (lost) throw new PickerProofOwnerError("transportLost");
     return {
       client,

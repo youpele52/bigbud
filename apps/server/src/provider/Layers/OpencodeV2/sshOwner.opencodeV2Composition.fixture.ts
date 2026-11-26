@@ -16,6 +16,7 @@ import {
   SelectedV2OwnerError,
   type V2OwnerSessionSource,
 } from "./ServerManager.ownerV2.selected.ts";
+import { v2OfficialContract } from "./SharedService.official.fixture.ts";
 import type { OwnedV2Process, V2IsolatedProcessConfig } from "./ServerManager.types.ts";
 
 /** Shared fixtures for the selected OpenCode v2 owner composition tests. */
@@ -38,23 +39,27 @@ export const config = (targetId = "ssh:fixture"): V2IsolatedProcessConfig => ({
   workspaceRoot: `/srv/${targetId.replaceAll(/[^a-z0-9]/gi, "_")}`,
 });
 
-/** Loopback v2 fixture: authenticated `/api/info` only. */
-export async function v2Server(password: string, requests: string[]) {
+/** Loopback v2 fixture: authenticated `/api/info` plus the consumed OpenAPI contract. */
+export async function v2Server(password: string, requests: string[], version = "2.1.4") {
+  const contract = v2OfficialContract();
   const server = http.createServer((request, response) => {
     requests.push(`${request.url} ${request.headers.authorization ?? ""}`);
+    if (
+      request.headers.authorization !==
+      `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
+    ) {
+      response.writeHead(401);
+      response.end();
+      return;
+    }
     if (request.url === "/api/info") {
-      if (
-        request.headers.authorization !==
-        `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
-      ) {
-        response.writeHead(401);
-        response.end();
-        return;
-      }
       response.setHeader("content-type", "application/json");
-      response.end(
-        JSON.stringify({ version: "2.1.4", pid: 4242, urls: [], paths: { tmp: "/tmp" } }),
-      );
+      response.end(JSON.stringify({ version, pid: 4242, urls: [], paths: { tmp: "/tmp" } }));
+      return;
+    }
+    if (request.url === "/openapi.json") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(contract));
       return;
     }
     response.writeHead(404);

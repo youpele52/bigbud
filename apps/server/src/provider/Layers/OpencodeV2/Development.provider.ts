@@ -14,6 +14,7 @@ import type { V2DevelopmentConfig } from "./Development.config.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2ProcessLease } from "./ServerManager.ts";
 import { assertDevelopmentVersion, OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
+import { assertV2OwnedVersion } from "./Compatibility.owned.ts";
 import {
   assertV2SharedQualifiedVersion,
   isV2SharedUpdateRecommended,
@@ -43,6 +44,9 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   let lastModels: ServerProvider["models"] = [];
   // Remote V2 workspaces require the shared native service (Application.targets.remote.ts), so
   // every non-shared snapshot opts out regardless of its health.
+  const shared = Boolean(config.process.sharedService);
+  // Owner-selected SSH runtimes are stable-2.x targets verified by their live contract.
+  const remoteOwned = !config.process.sharedService && config.process.runtimeTargetId !== "local";
   const remoteWorkspaceSupport = config.process.sharedService
     ? {}
     : { supportsLocalRuntimeRemoteWorkspace: false };
@@ -68,6 +72,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
       );
       version = info.version;
       if (config.process.sharedService) assertV2SharedQualifiedVersion(info.version);
+      else if (remoteOwned) assertV2OwnedVersion(info.version);
       else assertDevelopmentVersion(info.version);
       phase = "model.list";
       const catalog = await readV2NativeCatalog(lease.process.client, config.workspace, {
@@ -82,7 +87,6 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
       );
       phase = "catalog normalization";
       const nativeModels = normalizeV2Catalog(catalog, config.workspace, providers);
-      const shared = Boolean(config.process.sharedService);
       // Release qualification evidence is not a readiness gate; only an outdated service warns.
       const outdated = shared && isV2SharedUpdateRecommended(info.version);
       phase = "integration.list";
@@ -164,7 +168,9 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
                 ]
                   .filter(Boolean)
                   .join(" ")
-              : `${catalogMessage}Configure a provider in the isolated profile; accounts are not verified by browsing. ${V2_LOCAL_TOOL_LIMITATION}`,
+              : remoteOwned
+                ? `${catalogMessage}Connected to OpenCode on this remote target; accounts are not verified by browsing.`
+                : `${catalogMessage}Configure a provider in the isolated profile; accounts are not verified by browsing. ${V2_LOCAL_TOOL_LIMITATION}`,
           },
         }),
         ...(!application ? { developmentOnly: true } : {}),
@@ -227,7 +233,9 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
             auth: { status: "unknown" },
             message: config.process.sharedService
               ? v2SharedDiscoveryFailure(phase, config.workspace, error)
-              : `V2 readiness failed. Check the executable, qualified private runtime ${OPENCODE_V2_CLIENT_VERSION}, and isolated profile. No fallback was attempted.`,
+              : remoteOwned
+                ? "V2 remote readiness failed. Check the OpenCode executable and configuration on this target. No local fallback was attempted."
+                : `V2 readiness failed. Check the executable, qualified private runtime ${OPENCODE_V2_CLIENT_VERSION}, and isolated profile. No fallback was attempted.`,
           },
         }),
         ...(!application ? { developmentOnly: true } : {}),

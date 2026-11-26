@@ -10,6 +10,8 @@ import type { PickerProofProductionProxyClient } from "../../../ssh/sshOwnerPick
 import { V2SshOwnerUnavailable, makeV2SshOwner } from "./ServerManager.sshOwner.ts";
 import { startOwnedV2Process } from "./ServerManager.child.ts";
 import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import { v2OfficialContract } from "./SharedService.official.fixture.ts";
+import { V2SharedServiceError } from "./SharedService.errors.ts";
 import {
   startSelectedV2OwnerProcess,
   type V2OwnerSessionSource,
@@ -43,23 +45,31 @@ const config: V2IsolatedProcessConfig = {
   workspaceRoot: "/srv/work",
 };
 
-/** Loopback v2 fixture: authenticated `/api/info` only, no models or tools. */
-async function v2Server(password: string, requests: string[]) {
+/** Loopback v2 fixture: authenticated `/api/info` plus the consumed OpenAPI contract. */
+async function v2Server(
+  password: string,
+  requests: string[],
+  version = "2.1.4",
+  contract: unknown = v2OfficialContract(),
+) {
   const server = http.createServer((request, response) => {
     requests.push(`${request.url} ${request.headers.authorization ?? ""}`);
+    if (
+      request.headers.authorization !==
+      `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
+    ) {
+      response.writeHead(401);
+      response.end();
+      return;
+    }
     if (request.url === "/api/info") {
-      if (
-        request.headers.authorization !==
-        `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
-      ) {
-        response.writeHead(401);
-        response.end();
-        return;
-      }
       response.setHeader("content-type", "application/json");
-      response.end(
-        JSON.stringify({ version: "2.1.4", pid: 4242, urls: [], paths: { tmp: "/tmp" } }),
-      );
+      response.end(JSON.stringify({ version, pid: 4242, urls: [], paths: { tmp: "/tmp" } }));
+      return;
+    }
+    if (request.url === "/openapi.json") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(contract));
       return;
     }
     response.writeHead(404);
@@ -132,6 +142,61 @@ describe("OpenCode v2 SSH owner acquisition", () => {
     await process.close();
     expect(calls).toContain("close");
     expect(process.isRunning()).toBe(false);
+  });
+
+  it("accepts a stable 2.x owner runtime after verifying the live contract", async () => {
+    const requests: string[] = [];
+    const password = "e".repeat(64);
+    const port = await v2Server(password, requests, "2.4.2");
+    const calls: string[] = [];
+    const owner = makeV2SshOwner(
+      ownerClient(port, password, calls),
+      config.runtimeTargetId,
+      binding,
+      config.binaryPath,
+    );
+    const process = track(await startOwnedV2Process(config, undefined, owner));
+    expect((await process.client.server.info()).version).toBe("2.4.2");
+    expect(requests.some((request) => request.startsWith("/openapi.json "))).toBe(true);
+    await process.close();
+  });
+
+  it("refuses a prerelease owner runtime before reading the contract", async () => {
+    const requests: string[] = [];
+    const password = "f".repeat(64);
+    const port = await v2Server(password, requests, "2.4.2-preview");
+    const calls: string[] = [];
+    const owner = makeV2SshOwner(
+      ownerClient(port, password, calls),
+      config.runtimeTargetId,
+      binding,
+      config.binaryPath,
+    );
+    await expect(startOwnedV2Process(config, undefined, owner)).rejects.toBeInstanceOf(
+      V2SharedServiceError,
+    );
+    expect(requests.some((request) => request.startsWith("/openapi.json "))).toBe(false);
+  });
+
+  it("refuses an incompatible owner contract before returning a process", async () => {
+    const requests: string[] = [];
+    const password = "g".repeat(64);
+    const port = await v2Server(password, requests, "2.4.2", {
+      openapi: "3.1.0",
+      paths: {},
+      components: { schemas: {} },
+    });
+    const calls: string[] = [];
+    const owner = makeV2SshOwner(
+      ownerClient(port, password, calls),
+      config.runtimeTargetId,
+      binding,
+      config.binaryPath,
+    );
+    await expect(startOwnedV2Process(config, undefined, owner)).rejects.toMatchObject({
+      stage: "compatibility",
+    });
+    expect(calls).toContain("close");
   });
 
   it.each([
