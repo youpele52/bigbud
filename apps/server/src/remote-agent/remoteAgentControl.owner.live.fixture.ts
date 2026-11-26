@@ -9,7 +9,13 @@ import {
 } from "../provider/Layers/OpencodeV2/ServerManager.sshOwner.production.native.fixture.ts";
 import type { PickerProofBoundTarget } from "../ssh/sshOwnerPickerProof.client.session.types.ts";
 import type { SshOwnerProductionRegistration } from "../ssh/sshOwnerProductionRegistry.ts";
-import { canonicalizeRemoteAgentArtifact } from "./remoteAgentArtifact.ts";
+import {
+  canonicalizeRemoteAgentArtifact,
+  remoteAgentTargetCandidates,
+  selectRemoteAgentArtifact,
+} from "./remoteAgentArtifact.ts";
+import { downloadRemoteAgentArtifact } from "./remoteAgentArtifactDownload.ts";
+import { makeRemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.ts";
 import type { RemoteAgentOwnerControlDependencies } from "./remoteAgentControl.owner.ts";
 import { REMOTE_AGENT_PROTOCOL_MAJOR, REMOTE_AGENT_PROTOCOL_MINOR } from "./remoteAgentProtocol.ts";
 
@@ -31,8 +37,38 @@ const agents = JSON.parse(process.env.BIGBUD_TEST_TAGENT_AGENTS ?? "[]") as Read
   readonly version: string;
   readonly buildDigest: string;
 }>;
-export const liveReady = external !== undefined && agents.length >= 3;
-export const LABEL = "local build, not release-trusted (E7 open)";
+/**
+ * Release mode (E7, C2): BIGBUD_TEST_TAGENT_RELEASES='["0.4.1-beta.1", …]' (three published
+ * releases). Each source comes from the normal release loader (pinned release keys, no trust
+ * override) and the bytes from the normal artifact download.
+ */
+const releases = JSON.parse(
+  process.env.BIGBUD_TEST_TAGENT_RELEASES ?? "[]",
+) as ReadonlyArray<string>;
+export const releaseMode = releases.length >= 3;
+export const liveReady = external !== undefined && (agents.length >= 3 || releaseMode);
+export const LABEL = releaseMode
+  ? `release v${releases[0]}, pinned release key`
+  : "local build, not release-trusted (E7 open)";
+
+export type LiveBuild = ReturnType<typeof signedBuild>;
+
+/** The build a Debian aarch64 (glibc) host selects from release `index`, or a local signed build. */
+export async function liveBuild(index: number): Promise<LiveBuild> {
+  if (!releaseMode) return signedBuild(index);
+  const source = await makeRemoteAgentInstallSourceLoader(releaseEnvironment(index))();
+  const artifact = selectRemoteAgentArtifact(
+    source.manifest,
+    remoteAgentTargetCandidates("aarch64-unknown-linux-gnu", "glibc"),
+  );
+  const bytes = await downloadRemoteAgentArtifact(artifact);
+  return { artifact, bytes, source } as unknown as LiveBuild;
+}
+
+/** The normal release-source environment for release `index` (no install-source override). */
+export function releaseEnvironment(index: number): NodeJS.ProcessEnv {
+  return { ...process.env, BIGBUD_REMOTE_AGENT_RELEASE_VERSION: releases[index]! };
+}
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 

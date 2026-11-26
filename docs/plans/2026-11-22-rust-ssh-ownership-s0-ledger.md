@@ -1458,11 +1458,7 @@ Decision U25 (option A, full legacy parity) and its design entry are in the [fin
   - **Open.** No server-boot caller supplies a trusted `InstalledStartupBinding`. Its production source (local owner store versus configuration) is undecided.
 - **Stage 5 (live): done, 3/3.**
   - **Setup.** The macOS production owner (debug, this tree) targeted the OrbStack Debian guest: a root sshd on `192.168.139.96:42996` in a private mount namespace, a namespace-only account `bbtag` (uid 60026, bind-mounted `passwd`/`group`/`shadow` copies) and a 512 MiB tmpfs home. Generated host and client keys with an explicit pin.
-  - **Agent bytes: local build, not release-trusted (E7 open).** Three `cargo zigbuild --locked --release` aarch64 builds of `bigbud-remote-agent`, each about 6.9 MB:
-    - 0.9.1-e7open, SHA-256 `10740254…8232`
-    - 0.9.2-e7open, SHA-256 `58718de4…a7`
-    - 0.9.3-e7open
-      Each was signed with a disposable ed25519 key, so the signature check, the TypeScript byte check and the remote size/SHA-256 check all run.
+  - **Agent bytes (superseded by C2 below): release `v0.4.1-beta.1`, pinned `release-2026` key.** These runs first used local `cargo zigbuild` builds; every live test has since been rerun 3/3 against the published release bytes through the normal release install source. See "E7 C2" below.
   - **Three acceptance tests, 3/3 consecutive runs:**
     1. `remoteAgentControl.owner.agentInstall.linux.test.ts`
        - Install through the unchanged manager: a streamed upload, `placedProbe` reports `managed`, and the registry runtime has the legacy path. Read-only status matches the runtime.
@@ -1493,7 +1489,7 @@ Decision U25 (option A, full legacy parity) and its design entry are in the [fin
 - **Decision (a) wired (U25, 26 November 2026).** The trusted startup binding is the local owner store's bound runtime and epoch.
   - **New module.** [`remoteAgentComposition.installedStartup.production.ts`](/Users/youpele/DevWorld/bigbud/apps/server/src/remote-agent/remoteAgentComposition.installedStartup.production.ts) is forked from `RemoteAgentRuntimeBindingsLive` under activation. It waits for owner registration, then composes only targets with a stored binding and an admitted registry, observing through the owner proxy. An offline host, an unadmitted registry or a missing binding composes nothing and refuses nothing.
   - **Routing.** `routeProductionRemoteAgentProxy` makes the remaining legacy `RemoteAgentConnection.ssh` call sites (admission, candidate health, legacy binding) owner-proxied under activation. `remoteAgentConnection.ts` is untouched because it is at 400 lines.
-  - **Live (macOS production owner → same namespace-only Debian account, tmpfs home; agent bytes are a local build, not release-trusted, E7 open), 3/3.** `remoteAgentControl.owner.agentStartup.linux.test.ts` ran with `BIGBUD_SSH_OWNER_ACTIVATION=1`:
+  - **Live (macOS production owner → same namespace-only Debian account, tmpfs home; agent bytes rerun against release `v0.4.1-beta.1`, see E7 C2), 3/3.** `remoteAgentControl.owner.agentStartup.linux.test.ts` ran with `BIGBUD_SSH_OWNER_ACTIVATION=1`:
     1. A fresh admission went through the product path: the update coordinator, the install manager on owner deps and `remoteAgentAdmission.fresh`. It wrote the local SQLite owner store.
     2. Server-side restart: the owner process was shut down and a new one started, the store was reopened from the same SQLite file, and in-memory startup state was cleared.
     3. `composeProductionInstalledStartups` reported `ready`. The observed epoch equals the stored binding's epoch.
@@ -1531,3 +1527,67 @@ Inspected at `a763e31ab3` (clean tree). Decision **D1: the Build A ceiling is 18
 - **Build A refuses nothing it must open.** The only refusal is a schema newer than 187. `v0.4.0` (main, ceiling 180) databases upgrade forward through 181–187. Downgrade below Build A is unsupported, which the changelog states.
 - **Checks.** `bun run --cwd apps/server vitest run src/persistence/Migrations/18[1-7]_*.test.ts src/persistence/Migrations.downgradeGuard.test.ts` (together with the A3 drain, lock and host tests): 13 files, 43 tests passed.
 - **Frozen.** After Build A publishes, 181–187 cannot change; any fix needs migration 188 or later, which B must then also carry in A's successor.
+
+## E7 C2: U25 live tests against release v0.4.1-beta.1 (26 November 2026)
+
+- **Bytes and source.** Published release `v0.4.1-beta.1` (run `45884270704`, tag commit `9ebafafadd39f5bf6d6d9444c8d0fbe041c432df`, prerelease).
+  - **Install source.** The normal release loader (`makeRemoteAgentInstallSourceLoader`) fetched `remote-agent-install-source.v2.json`. The manifest was verified against the pinned `release-2026` key. No install-source URL/PATH override was set and no trust override was used. The tag was selected with `BIGBUD_REMOTE_AGENT_RELEASE_VERSION`, because an unpackaged checkout otherwise follows `releases/latest` (= `v0.4.0`).
+  - **Download.** Bytes came through the normal artifact download (`downloadRemoteAgentArtifact`).
+  - **Selected build.** On the Debian 13 aarch64 (glibc) guest the selection is `bigbud-remote-agent-0.4.1-beta.1-aarch64-unknown-linux-musl`, SHA-256 `4c444d30310991200a6164fd6b1c9731669490180f4ff99a2572cfb3fbc5851a`, 6,656,592 bytes; the selector prefers static musl.
+  - **Other builds.** The tests that need second and third builds (update, two-slot capacity, orphan reclaim) used the published aarch64 musl builds of `v0.4.0` (`4dffc41a30bc…`) and `v0.4.0-beta.7` (`118d969558fa…`). Both are signed with `release-2026` and come through the same loader.
+  - **Other `v0.4.1-beta.1` digests (C1).** x86_64 gnu `139a824ce0c5…`, aarch64 gnu `a26d9e7fde24…`, x86_64 musl `d01a2c9cbf91…`.
+- **Run, 3/3 consecutive.** All five U25 live tests passed in each run:
+  - `agentInstall`
+  - `agentProxy`
+  - `agentReattach`
+  - `agentStartup`, with `BIGBUD_SSH_OWNER_ACTIVATION=1`
+  - `parity`
+
+  Setup: macOS production owner (debug, this tree) against the Debian guest, with a disposable root sshd in a private mount namespace, a namespace-only account `bbtag` and a 512 MiB tmpfs home.
+
+- **Result.** sshd accepted 943 sessions. No agent process was left on the account. The sshd, account, guest scratch and Mac keys were removed.
+- **E7 status.** Committed: release-trusted Linux agent bytes exist and the U25 acceptance passes on them.
+
+## Build A artifact IDs: v0.4.1-beta.1 (W4, 26 November 2026)
+
+- **Release.** `v0.4.1-beta.1`, a GitHub prerelease published 2026-11-26T19:51:17Z with 65 assets.
+  - **Workflow.** "Release Desktop And Remote Agent", run `45884270704`, attempt 1, conclusion `success`.
+  - **Commit.** `9ebafafadd39f5bf6d6d9444c8d0fbe041c432df`.
+- **Signing and schema.**
+  - **Authenticode.** `authenticodeMode: unsigned` (D2): the Windows installer is not code-signed, and SmartScreen prompts as documented.
+  - **Agent signing key.** `signingKeyId: release-2026` (agent manifests).
+  - **Schema ceiling.** 187, the highest migration ID in the tag's `Migrations.ts`; see the A2 review.
+- **Remote-agent manifests.**
+  - `remote-agent-manifest.json`: `9089526db2e432b1662f8dadee350df5b9798d02e33ace2879e41fb203bb04ed`
+  - `remote-agent-manifest.v2.json`: `0230194ad6797e87a4670082c3a04698af2248cf187d6006acd6beabee657a52`
+  - `remote-agent-install-source.json`: `45615db36990dff721858242957612ff4c754565ee5704e0e57398bb0624ee1f`
+  - `remote-agent-install-source.v2.json`: `a6fdcdb5b1569a8f8d8193d3847d8c63b6bdd10f17c797d1b18687ce5d37f4bc`
+- **Remote-agent binaries (`bigbud-remote-agent-0.4.1-beta.1-*`).**
+  - x86_64-unknown-linux-gnu: `139a824ce0c5eb7835d045ac2c3eac7b3e8908ab86c4aa943fd776b21d1eedc6`
+  - aarch64-unknown-linux-gnu: `a26d9e7fde24e0bc7d30bfb1c60d5d03a49305dcb00203758fba5024dc3f94ea`
+  - x86_64-unknown-linux-musl: `d01a2c9cbf9144f7bff0ea4a7607d361f6b8373b9c71e23c3539dacec673da96`
+  - aarch64-unknown-linux-musl: `4c444d30310991200a6164fd6b1c9731669490180f4ff99a2572cfb3fbc5851a`
+- **SSH owner (`server-ssh-owner-*`).**
+  - darwin-arm64: `2caf73f34abbb1334615b2a8f5953587bf41df3ddbb06c7f3e07af35f6b8d553`
+  - darwin-x64: `0af2513455c6824c0159ec61cd0d56e81503f635bb75df8c3198ce309db7159b`
+  - linux-arm64: `6bfd4452bea6282dce6d1d7dbfe97ebc2151954a665e6fdc1a7ba363978a7654`
+  - linux-x64: `a2eae3d730f8d7ac07ba7a9ac10d5520a22656b53c23d09c42a62da24ffd758c`
+  - win32-x64.exe: `7f69a6bcc903c96c182869aed8bebf36e673b1e9fb89acee19793a79652a24c9`
+- **Remote backend graph (`bigbud-backend-graph-0.4.1-beta.1-*`).**
+  - aarch64-unknown-linux-gnu:
+    - `.tar.gz`: `4a2eed53ac3d3463532192dd90a6c8dbf6f9adef7d2baf1c6b175e0634b18f6b`
+    - `.manifest.json`: `c0e42bc00d0b7dac385b0e344e0f26288c3169764a4f60b0403f173018179f68`
+    - `.provenance.json`: `72b60c9228aa909026cd987d08b271a61de2b6f3ce09225f6b16db82eb7696ce`
+    - `.ssh-owner`: `cda90504b7f45c8d2dd602507b3797c63481b911dc7ad1dde4238cbf0253bde9`
+  - x86_64-unknown-linux-gnu:
+    - `.tar.gz`: `fee498e3bf56986d4d1f67716e56da59c37be1f7f2a8fe35a1a589e46beff8a1`
+    - `.manifest.json`: `b18f2af731a3c159ace3677675ab9de4162a438e3ecf78a8f3e47ef7faa6b506`
+    - `.provenance.json`: `a4975b8cd14ebe6db035c42104db3f66f95e32de6715571172adb46aafcf0f55`
+    - `.ssh-owner`: `afed0e0326ea0f71d7ffffdf2e1453b8c5111f9a2d18674e90f13b512b2efcb0`
+- **Desktop installers.**
+  - macOS arm64 `.dmg`: `f71f4c31340d08f1a65746e195580f0c5d61a97113e3e20fa20f6a92a248d89b`
+  - macOS x64 `.dmg`: `2a34e27ee262582d79642db978f02bf7afb99fea4069981a44f2c3028426517a`
+  - Linux x64 `.AppImage`: `54ec67252cce287316c135fa0e01d49f4445e48de5fd7e66d50259bff7e27cb3`
+  - Linux x64 `.deb`: `d09389f44bb0ca3e2981af6a53d6a1e5b6f2a7de5cb1a0b3401a2b6c6edc0175`
+  - Windows x64 `.exe` (NSIS, unsigned): `94bd11773a97d821917a12157918e1773eaba3fb53990115d5506cf8913455ad`
+- **Source of the digests.** GitHub's per-asset `sha256` (`gh release view --json assets`). The four agent binaries were also re-checked locally against the manifest in C1. W6 takes these as its "A" inputs.

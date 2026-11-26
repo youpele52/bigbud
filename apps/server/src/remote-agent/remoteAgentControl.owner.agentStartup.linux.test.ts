@@ -19,6 +19,7 @@ import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
 import { getConfiguredRemoteAgentComposition } from "./remoteAgentDefault.ts";
 import { clearInstalledRemoteAgentStartups } from "./remoteAgentInstalledStartup.state.ts";
 import { makeRemoteAgentInstallManager } from "./remoteAgentInstallManager.ts";
+import { makeRemoteAgentInstallSourceLoader } from "./remoteAgentInstallSource.ts";
 import { configureRemoteAgentOwners } from "./remoteAgentOwners.ts";
 import { readRemoteAgentRegistryReadOnly } from "./remoteAgentReadOnlyStatus.ts";
 import { makeRemoteAgentUpdateCoordinator } from "./remoteAgentUpdate.coordinator.ts";
@@ -27,7 +28,9 @@ import {
   harnessShell,
   LABEL,
   liveReady,
-  signedBuild,
+  liveBuild,
+  releaseEnvironment,
+  releaseMode,
   withOwner,
   type OwnerLive,
 } from "./remoteAgentControl.owner.live.fixture.ts";
@@ -82,11 +85,11 @@ it.skipIf(!activated)(
   `normal startup observes and proxies the locally bound agent after a restart (${LABEL})`,
   async () => {
     harnessShell(external!, 'rm -rf -- "$HOME/.bigbud"');
-    const build = signedBuild(0);
+    const build = await liveBuild(0);
     let installs = 0;
     const bound = await asServer(async (_owner, target) => {
       const manager = makeRemoteAgentInstallManager({
-        readArtifactBytes: async () => build.bytes,
+        ...(releaseMode ? {} : { readArtifactBytes: async () => build.bytes }),
         referencedBuildIds: async () => new Set(),
       });
       const coordinator = makeRemoteAgentUpdateCoordinator({
@@ -97,9 +100,10 @@ it.skipIf(!activated)(
             return manager.install(input);
           },
         },
-        loadInstallSource: Object.assign(async () => build.source, {
-          refresh: async () => build.source,
-        }),
+        // Release mode: the normal release loader (pinned keys); local mode: the signed build.
+        loadInstallSource: releaseMode
+          ? makeRemoteAgentInstallSourceLoader(releaseEnvironment(0))
+          : Object.assign(async () => build.source, { refresh: async () => build.source }),
         hasReusableCredentials: async () => true,
       });
       const requestId = randomUUID();

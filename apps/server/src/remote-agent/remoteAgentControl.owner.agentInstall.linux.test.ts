@@ -11,7 +11,9 @@ import {
   harnessShell,
   LABEL,
   liveReady,
-  signedBuild,
+  liveBuild,
+  releaseMode,
+  type LiveBuild,
   withOwner,
   type OwnerLive,
 } from "./remoteAgentControl.owner.live.fixture.ts";
@@ -22,12 +24,16 @@ import {
  * adoption, status/control and removal, all through typed `agent_control` leases.
  * Agent bytes: local build, not release-trusted (E7 open).
  */
-function manager({ live }: OwnerLive) {
-  const builds = [0, 1, 2].map(signedBuild);
+function manager({ live }: OwnerLive, builds: ReadonlyArray<LiveBuild>) {
   return makeRemoteAgentInstallManager({
     ...makeOwnerRemoteAgentInstallDependencies(live),
-    readArtifactBytes: async (artifact) =>
-      builds.find((build) => build.artifact.sha256 === artifact.sha256)!.bytes,
+    // Release mode keeps the normal artifact download; local builds are read from disk.
+    ...(releaseMode
+      ? {}
+      : {
+          readArtifactBytes: async (artifact: { readonly sha256: string }) =>
+            builds.find((build) => build.artifact.sha256 === artifact.sha256)!.bytes,
+        }),
     referencedBuildIds: async () => new Set(),
     terminalOwners: async () => ({ owners: [], truncated: false }),
   });
@@ -38,12 +44,13 @@ it.skipIf(!liveReady)(
   async () => {
     harnessShell(external!, 'rm -rf -- "$HOME/.bigbud"');
     await withOwner(async (owner) => {
-      const installer = manager(owner);
+      const builds = await Promise.all([0, 1, 2].map(liveBuild));
+      const installer = manager(owner, builds);
       const exec = makeRemoteAgentOwnerExec(owner.live, owner.targetId);
       const control = await makeOwnerRemoteAgentInstallDependencies(owner.live).openControl!(
         owner.targetId,
       );
-      const [first, second, third] = [0, 1, 2].map(signedBuild);
+      const [first, second, third] = builds;
 
       // Install: 6.9 MB streamed on the lease socket (no 48 KiB frame), verified remotely.
       const installed = await installer.install({

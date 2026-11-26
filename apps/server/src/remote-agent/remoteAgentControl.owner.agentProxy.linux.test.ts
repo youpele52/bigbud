@@ -11,7 +11,8 @@ import {
   harnessShell,
   LABEL,
   liveReady,
-  signedBuild,
+  liveBuild,
+  releaseMode,
   withOwner,
 } from "./remoteAgentControl.owner.live.fixture.ts";
 
@@ -26,10 +27,10 @@ it.skipIf(!liveReady)(
   async () => {
     harnessShell(external!, 'rm -rf -- "$HOME/.bigbud"');
     await withOwner(async (owner) => {
-      const build = signedBuild(0);
+      const build = await liveBuild(0);
       const installer = makeRemoteAgentInstallManager({
         ...makeOwnerRemoteAgentInstallDependencies(owner.live),
-        readArtifactBytes: async () => build.bytes,
+        ...(releaseMode ? {} : { readArtifactBytes: async () => build.bytes }),
         referencedBuildIds: async () => new Set(),
       });
       await installer.install({ executionTargetId: owner.targetId, source: build.source });
