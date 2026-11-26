@@ -9,7 +9,7 @@
  *
  * @module codexAppServerManager.pendingStarts
  */
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { CodexAppServerProcess } from "./codexAppServerManager.processHandle.ts";
 
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 
@@ -26,7 +26,7 @@ export interface CodexPendingStart {
    * the session is registered, so a stop always finds one or the other. Throws,
    * with the child killed, when the start was cancelled or the spawn failed.
    */
-  readonly accept: (child: ChildProcessWithoutNullStreams) => ChildProcessWithoutNullStreams;
+  readonly accept: (child: CodexAppServerProcess) => CodexAppServerProcess;
   /** Ends the pending start after its starter failed, and rethrows. */
   readonly fail: (error: unknown) => never;
 }

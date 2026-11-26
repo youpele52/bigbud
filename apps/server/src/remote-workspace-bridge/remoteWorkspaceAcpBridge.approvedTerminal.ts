@@ -7,6 +7,7 @@ import type * as AcpSchema from "effect-acp/schema";
 import type { AcpSessionRuntimeShape } from "../provider/acp/AcpSessionRuntime.ts";
 import type { AcpTerminalSshOwner } from "./remoteWorkspaceAcpTerminal.owner.ts";
 import { createOwnedAcpTerminal } from "./remoteWorkspaceAcpTerminal.owner.ts";
+import { acpCommandText, isAcpPwdRequest } from "./remoteWorkspaceAcpTerminal.owner.command.ts";
 import type { AcpTerminalApprovalProducer } from "./remoteWorkspaceAcpApproval.ts";
 import { AcpRequestError } from "effect-acp/errors";
 
@@ -61,6 +62,14 @@ export function registerApprovedTerminalHandlers(context: ApprovedTerminalContex
             sessionEpoch: context.sessionEpoch,
             acpSessionId: sessionId,
             cwd,
+            // U21: any command but the fixed `pwd` is approved as its exact text.
+            ...(isAcpPwdRequest({
+              command: request.command,
+              args: request.args ?? [],
+              environment: request.env ?? [],
+            })
+              ? {}
+              : { command: acpCommandText(request.command, request.args ?? []) }),
           });
           const terminalId = randomUUID();
           const process = await createOwnedAcpTerminal(

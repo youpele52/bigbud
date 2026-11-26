@@ -10,6 +10,7 @@ import {
   type AcpCommandApproval,
   type AcpOwnerCommand,
 } from "./remoteWorkspaceAcpTerminal.owner.ts";
+import { isAdmissibleAcpShellText } from "./remoteWorkspaceAcpTerminal.owner.command.ts";
 
 export const ACP_APPROVAL_TTL_MS = 60_000;
 
@@ -20,6 +21,8 @@ export interface AcpTerminalApprovalRequest {
   readonly sessionEpoch: number;
   readonly acpSessionId: string;
   readonly cwd: string;
+  /** U21: the exact command text for the ACP shell grant; absent for the fixed `pwd`. */
+  readonly command?: string;
 }
 
 export interface AcpTerminalApprovalProducer {
@@ -75,6 +78,9 @@ export function makeAcpTerminalApprovalProducer(options: {
       ) {
         throw new AcpTerminalOwnerError("unsupported-cwd");
       }
+      if (request.command !== undefined && !isAdmissibleAcpShellText(request.command)) {
+        throw new AcpTerminalOwnerError("unsupported-command");
+      }
       const identity: AcpApprovalIdentity = {
         requestId: request.requestId,
         threadId: request.threadId,
@@ -87,7 +93,9 @@ export function makeAcpTerminalApprovalProducer(options: {
         executionTargetId: options.targetId,
         workspaceRoot: options.workspaceRoot,
         cwd: request.cwd,
-        operation: "print-working-directory",
+        ...(request.command === undefined
+          ? { operation: "print-working-directory" as const }
+          : { operation: "shell-command" as const, command: request.command }),
         expiresAt: now() + ttlMs,
         generation: options.generation(),
       };

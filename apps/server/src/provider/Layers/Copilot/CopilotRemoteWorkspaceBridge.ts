@@ -4,6 +4,7 @@ import { createRemoteWorkspaceSessionFsBridge } from "../../../remote-workspace-
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type { SessionFsOwnerCapability } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.ownerProvider.ts";
 import { isSshOwnerDevFixtureSelected } from "../../../ssh/sshOwnerSelection.ts";
+import { usesProductionAcpBridge } from "../../../remote-workspace-bridge/remoteWorkspaceAcpBridge.production.ts";
 import {
   runToolCommand,
   resolveToolTransportTarget,
@@ -49,7 +50,8 @@ function normalizeRemoteCommandResult(output: string, exitCode: number): ToolRes
 
 function createRemoteBashTool(workspaceTarget: WorkspaceTarget): Tool<{ command: string }> {
   const transportTarget = resolveToolTransportTarget(workspaceTarget);
-  const selected = isSshOwnerDevFixtureSelected();
+  // The selected dev owner and production activation both refuse arbitrary shell text.
+  const selected = isSshOwnerDevFixtureSelected() || usesProductionAcpBridge(workspaceTarget);
   return {
     name: "bash",
     description: selected

@@ -55,12 +55,16 @@ try {
   } else if (input.purpose === "default") {
     const { V2ImplementationSelection } =
       await import("./Orchestration.implementation.selection.ts");
-    const { V2ThreadImplementationRegistry } = await import("./Orchestration.implementation.ts");
+    const { v2DefaultImplementationVersion, V2ThreadImplementationRegistry } =
+      await import("./Orchestration.implementation.ts");
     const selection = await V2ImplementationSelection.open(
       input.artifact,
       new V2ThreadImplementationRegistry(),
     );
-    await selection.select("v5", authority);
+    await selection.select(
+      v2DefaultImplementationVersion(input.artifact.bootstrapAbi),
+      authority,
+    );
   } else {
     const { acquireV2PluginPublicationLock } = await import("./PluginSetup.lock.ts");
     const { v2NativePluginDirectory } = await import("./PluginSetup.fs.ts");

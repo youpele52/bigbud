@@ -19,7 +19,7 @@ import type { ActivePiSession } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { PiAdapterMethodDependencies } from "./Adapter.methods.types.ts";
 import { createPiRpcProcess } from "./RpcProcess.ts";
-import { selectedDevPiRpcOwner } from "./RpcProcess.owner.selected.ts";
+import { selectedPiRpcOwner } from "./RpcProcess.owner.selected.ts";
 import { getPiRpcCapabilityDenial } from "./RpcProcess.selection.ts";
 import { normalizeString, readResumeCursor, toMessage } from "./Adapter.utils.ts";
 
@@ -43,13 +43,13 @@ export function makePiStartSession(
     // Local Pi keeps its child path and must not bind or start the remote owner.
     const selectedOwner = isLocalProviderRuntimeTarget(providerRuntimeTarget)
       ? undefined
-      : yield* selectedDevPiRpcOwner().pipe(
+      : yield* selectedPiRpcOwner(providerRuntimeTarget.executionTargetId).pipe(
           Effect.mapError(
             (cause) =>
               new ProviderAdapterProcessError({
                 provider: PROVIDER,
                 threadId: input.threadId,
-                detail: toMessage(cause, "Failed to reach the source-dev SSH owner."),
+                detail: toMessage(cause, "Failed to reach the selected SSH owner."),
                 cause,
               }),
           ),

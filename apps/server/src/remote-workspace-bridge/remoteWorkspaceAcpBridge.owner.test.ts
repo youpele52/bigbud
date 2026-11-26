@@ -38,7 +38,7 @@ function fixture() {
       architecture: "x86_64" as const,
     })),
     readProofWorkspaceFile,
-    writeProofWorkspaceFile: vi.fn(async () => undefined),
+    writeProofWorkspaceFile: vi.fn(async (_: unknown) => undefined),
     createProofWorkspaceDirectory: vi.fn(async () => "created" as const),
     deleteProofWorkspaceEntry: vi.fn(async () => "deleted" as const),
   };
@@ -59,6 +59,7 @@ function fixture() {
   return {
     data,
     readProofWorkspaceFile,
+    writeProofWorkspaceFile: owner.writeProofWorkspaceFile,
     changeGeneration: () => {
       generation = "replacement";
     },
@@ -103,7 +104,7 @@ it("composes the selected owner into ACP callbacks and preserves bounded text", 
   };
   try {
     expect(bridge.clientCapabilities).toEqual({
-      fs: { readTextFile: true, writeTextFile: false },
+      fs: { readTextFile: true, writeTextFile: true },
       terminal: false,
     });
     await Effect.runPromise(bridge.registerHandlers(handlers as unknown as AcpSessionRuntimeShape));
@@ -112,12 +113,32 @@ it("composes the selected owner into ACP callbacks and preserves bounded text", 
     const [terminal] = handlers.handleCreateTerminal.mock.calls[0]!;
     const request = { sessionId: "live", path: `${bridge.cwd}/file.txt` };
     await expect(Effect.runPromise(read(request))).rejects.toThrow();
+    // W2 T-shell ACP writes: refused before the caller is bound.
+    await expect(Effect.runPromise(write({ ...request, content: "early" }))).rejects.toThrow();
     bridge.bindCaller?.("live");
     await expect(Effect.runPromise(read({ ...request, sessionId: "other" }))).rejects.toThrow();
     for (const path of ["../outside", "/srv/project-other/file", ".bigbud/session-state/file"]) {
       await expect(Effect.runPromise(read({ ...request, path }))).rejects.toThrow();
     }
-    await expect(Effect.runPromise(write({ ...request, content: "denied" }))).rejects.toThrow();
+    for (const path of ["../outside", "/srv/project-other/file", ".bigbud/session-state/file"]) {
+      await expect(Effect.runPromise(write({ ...request, path, content: "x" }))).rejects.toThrow();
+    }
+    await expect(
+      Effect.runPromise(write({ ...request, sessionId: "other", content: "x" })),
+    ).rejects.toThrow();
+    await expect(
+      Effect.runPromise(write({ ...request, content: "x".repeat(512 * 1024 + 1) })),
+    ).rejects.toThrow();
+    expect(setup.writeProofWorkspaceFile).not.toHaveBeenCalled();
+    await expect(Effect.runPromise(write({ ...request, content: "written α" }))).resolves.toEqual(
+      {},
+    );
+    expect(setup.writeProofWorkspaceFile).toHaveBeenCalledExactlyOnceWith({
+      executionTargetId: targetId,
+      workspaceRoot,
+      relativePath: "file.txt",
+      contents: new TextEncoder().encode("written α"),
+    });
     await expect(
       Effect.runPromise(terminal({ sessionId: "live", command: "pwd" })),
     ).rejects.toThrow();

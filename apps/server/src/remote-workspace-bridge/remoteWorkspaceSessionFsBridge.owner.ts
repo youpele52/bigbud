@@ -54,6 +54,23 @@ export async function bindSessionFsOwner(
   const generation = await withOwner(targetId, async (owner) => identity(owner));
   let caller: string | undefined;
   let closed = false;
+  /** The caller-bound, workspace-contained relative path, or a typed refusal. */
+  const workspaceRelative = (sessionId: string, inputPath: string, bridgeCwd: string) => {
+    if (closed || caller === undefined || sessionId !== caller) throw sessionFsUnavailable();
+    if (!inputPath || inputPath.includes("\0") || inputPath.split("/").includes(".."))
+      throw sessionFsUnavailable();
+    const resolved = resolveSessionFsPath(inputPath, workspaceRoot, bridgeCwd);
+    if (resolved.kind !== "workspace" || !resolved.path.startsWith(`${workspaceRoot}/`))
+      throw sessionFsUnavailable();
+    const relativePath = resolved.path.slice(workspaceRoot.length + 1);
+    if (
+      !relativePath ||
+      relativePath === REMOTE_WORKSPACE_SESSION_STATE_PATH ||
+      relativePath.startsWith(`${REMOTE_WORKSPACE_SESSION_STATE_PATH}/`)
+    )
+      throw sessionFsUnavailable();
+    return relativePath;
+  };
   return {
     workspaceRoot,
     bindCaller(sessionId: string) {
@@ -65,19 +82,7 @@ export async function bindSessionFsOwner(
       closed = true;
     },
     async readBytes(sessionId: string, inputPath: string, bridgeCwd: string) {
-      if (closed || caller === undefined || sessionId !== caller) throw sessionFsUnavailable();
-      if (!inputPath || inputPath.includes("\0") || inputPath.split("/").includes(".."))
-        throw sessionFsUnavailable();
-      const resolved = resolveSessionFsPath(inputPath, workspaceRoot, bridgeCwd);
-      if (resolved.kind !== "workspace" || !resolved.path.startsWith(`${workspaceRoot}/`))
-        throw sessionFsUnavailable();
-      const relativePath = resolved.path.slice(workspaceRoot.length + 1);
-      if (
-        !relativePath ||
-        relativePath === REMOTE_WORKSPACE_SESSION_STATE_PATH ||
-        relativePath.startsWith(`${REMOTE_WORKSPACE_SESSION_STATE_PATH}/`)
-      )
-        throw sessionFsUnavailable();
+      const relativePath = workspaceRelative(sessionId, inputPath, bridgeCwd);
       const result = await withOwner(targetId, async (owner) => {
         if (closed || identity(owner) !== generation) throw sessionFsUnavailable();
         const reply = await owner.readProofWorkspaceFile({
@@ -99,6 +104,25 @@ export async function bindSessionFsOwner(
       )
         throw sessionFsUnavailable();
       return result.data;
+    },
+    /**
+     * ACP `fs/write_text_file` (W2 T-shell). Same caller, path and generation
+     * fences as reads; at most 512 KiB of UTF-8 through the owner's bounded
+     * write verb. Never retried: an ambiguous write surfaces as an error.
+     */
+    async writeText(sessionId: string, inputPath: string, bridgeCwd: string, content: string) {
+      const relativePath = workspaceRelative(sessionId, inputPath, bridgeCwd);
+      const contents = new TextEncoder().encode(content);
+      if (contents.byteLength > MAX_FILE_BYTES) throw sessionFsUnavailable();
+      await withOwner(targetId, async (owner) => {
+        if (closed || identity(owner) !== generation) throw sessionFsUnavailable();
+        await owner.writeProofWorkspaceFile({
+          executionTargetId: targetId,
+          workspaceRoot,
+          relativePath,
+          contents,
+        });
+      });
     },
   };
 }

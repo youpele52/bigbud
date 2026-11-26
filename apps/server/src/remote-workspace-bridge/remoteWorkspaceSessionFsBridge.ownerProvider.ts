@@ -5,6 +5,10 @@ import type { SessionFsFileInfo, SessionFsProvider } from "@github/copilot-sdk";
 
 import { SelectedSshOwnerWorkspaceBridgeError } from "./remoteWorkspaceReadiness.ts";
 import {
+  makeSessionFsOwnerEntries,
+  type SessionFsEntryOwnerMethods,
+} from "./remoteWorkspaceSessionFsBridge.ownerEntries.ts";
+import {
   REMOTE_WORKSPACE_SESSION_STATE_PATH,
   resolveSessionFsPath,
   resolveSessionStateFsPath,
@@ -12,7 +16,8 @@ import {
 
 const MAX_FILE_BYTES = 512 * 1024;
 
-export interface SessionFsOwnerMethods {
+/** Entry verbs are optional: an owner without them keeps the typed refusal. */
+export interface SessionFsOwnerMethods extends Partial<SessionFsEntryOwnerMethods> {
   probeProofWorkspaceReadiness(input: {
     executionTargetId: string;
     workspaceRoot: string;
@@ -92,8 +97,17 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
       throw unsupported("path");
     return value;
   };
+  // The root itself is a valid target for listing and entry info, never for mutation.
+  const entryPath = (pathname: string): string => {
+    const resolved = resolve(pathname);
+    if (resolved.kind === "workspace" && resolved.path === capability.workspaceRoot) return "";
+    const value = relative(pathname);
+    if (value === undefined) throw unsupported("path");
+    return value;
+  };
+  const entries = makeSessionFsOwnerEntries(capability);
 
-  return {
+  const provider: SessionFsProvider = {
     async readFile(pathname: string): Promise<string> {
       if (resolve(pathname).kind === "session-state")
         return fs.readFile(statePath(pathname), "utf8");
@@ -144,7 +158,9 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
         await fs.appendFile(filePath, content, "utf8");
         return;
       }
-      throw unsupported("append");
+      const relativePath = relative(pathname);
+      if (!relativePath) throw unsupported("append");
+      return entries.appendFile(relativePath, content, () => provider.writeFile(pathname, content));
     },
     async exists(pathname: string): Promise<boolean> {
       if (resolve(pathname).kind === "session-state")
@@ -152,7 +168,7 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
           .access(statePath(pathname))
           .then(() => true)
           .catch(() => false);
-      throw unsupported("exists");
+      return entries.exists(entryPath(pathname));
     },
     async stat(pathname: string): Promise<SessionFsFileInfo> {
       if (resolve(pathname).kind === "session-state") {
@@ -165,7 +181,7 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
           birthtime: stats.birthtime.toISOString(),
         };
       }
-      throw unsupported("stat");
+      return entries.stat(entryPath(pathname), pathname);
     },
     async mkdir(pathname: string, recursive: boolean): Promise<void> {
       if (resolve(pathname).kind === "session-state") {
@@ -185,7 +201,7 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
     },
     async readdir(pathname: string): Promise<string[]> {
       if (resolve(pathname).kind === "session-state") return fs.readdir(statePath(pathname));
-      throw unsupported("readdir");
+      return entries.readdir(entryPath(pathname));
     },
     async readdirWithTypes(pathname: string) {
       if (resolve(pathname).kind === "session-state") {
@@ -195,15 +211,17 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
           type: entry.isDirectory() ? ("directory" as const) : ("file" as const),
         }));
       }
-      throw unsupported("readdir");
+      return entries.readdirWithTypes(entryPath(pathname));
     },
-    async rm(pathname: string, recursive: boolean): Promise<void> {
+    async rm(pathname: string, recursive: boolean, force = false): Promise<void> {
       if (resolve(pathname).kind === "session-state") {
         await fs.rm(statePath(pathname), { recursive, force: false });
         return;
       }
-      // An rm request does not carry the confirmed kind. Refuse rather than guess.
-      throw unsupported("rm");
+      // The owner's entry info supplies the kind the rm request does not carry.
+      const relativePath = relative(pathname);
+      if (!relativePath) throw unsupported("rm");
+      return entries.rm(relativePath, recursive, force, pathname);
     },
     async rename(sourcePath: string, destinationPath: string): Promise<void> {
       if (
@@ -216,7 +234,11 @@ export function createSelectedSessionFsProvider(input: SelectedProviderInput): S
         await fs.rename(source, destination);
         return;
       }
-      throw unsupported("rename");
+      const source = relative(sourcePath);
+      const destination = relative(destinationPath);
+      if (!source || !destination) throw unsupported("rename");
+      return entries.rename(source, destination, sourcePath);
     },
   };
+  return provider;
 }

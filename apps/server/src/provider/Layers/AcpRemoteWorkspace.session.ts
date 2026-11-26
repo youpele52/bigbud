@@ -18,6 +18,10 @@ import {
 import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import type { SessionFsOwnerWorkspace } from "../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.owner.ts";
 import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
+import {
+  makeProductionAcpWorkspace,
+  usesProductionAcpBridge,
+} from "../../remote-workspace-bridge/remoteWorkspaceAcpBridge.production.ts";
 import { isRemoteWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import { resolveProviderExecutionContext } from "../providerExecutionContext.ts";
@@ -68,7 +72,16 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
 
     let remoteBridge: RemoteWorkspaceAcpBridge | undefined;
     if (isRemoteWorkspaceTarget(executionContext.workspaceTarget)) {
-      const selected = isSshOwnerDevFixtureSelected();
+      const workspaceTarget = executionContext.workspaceTarget;
+      // W2 T-shell: production activation composes the owner bridge for `ssh:` targets.
+      const production = usesProductionAcpBridge(workspaceTarget)
+        ? makeProductionAcpWorkspace({
+            targetId: workspaceTarget.executionTargetId,
+            // An absent root is refused by the session-FS binding, never defaulted.
+            workspaceRoot: workspaceTarget.cwd ?? "",
+          })
+        : undefined;
+      const selected = isSshOwnerDevFixtureSelected() || production !== undefined;
       const useRemoteAgentPty =
         !selected &&
         input.ptyResolver !== undefined &&
@@ -82,14 +95,29 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
             readmeLines: [
               `This directory runs ${input.provider} against a remote workspace.`,
               selected
-                ? "Only bounded, read-only ACP file requests are available."
+                ? production
+                  ? "Bounded ACP file reads and writes and the approved pwd terminal run through the SSH owner."
+                  : "Only bounded ACP file reads and writes are available."
                 : useRemoteAgentPty
                   ? "ACP filesystem and terminal requests are routed through the bigbud remote agent."
                   : "ACP filesystem and terminal requests are routed directly over SSH.",
               "",
             ],
             ...(input.readinessProbe ? { readinessProbe: input.readinessProbe } : {}),
-            ...(input.sessionFsOwner ? { sessionFsOwner: input.sessionFsOwner } : {}),
+            ...(production
+              ? {
+                  ownerSelected: true,
+                  sessionFsOwner: production.sessionFsOwner,
+                  acpTerminal: {
+                    owner: production.terminalOwner,
+                    producer: production.producer,
+                    threadId: input.sessionInput.threadId,
+                    sessionEpoch: 0,
+                  },
+                }
+              : input.sessionFsOwner
+                ? { sessionFsOwner: input.sessionFsOwner }
+                : {}),
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({

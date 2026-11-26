@@ -42,6 +42,28 @@ export async function resolveSelectedPiRpcOwner(
 }
 
 /**
+ * The Pi owner for one remote runtime target: the selected dev owner first (it never falls back
+ * to production), then, under `SSH_OWNER_PRODUCTION_ACTIVATION`, the live production owner bound
+ * to this exact target. The production module is loaded lazily, like the dev runtime.
+ */
+export const selectedPiRpcOwner = Effect.fn("selectedPiRpcOwner")(function* (
+  executionTargetId: string,
+) {
+  if (isSshOwnerDevFixtureSelected()) return yield* selectedDevPiRpcOwner();
+  const { resolveProductionPiRpcOwner } = yield* Effect.promise(
+    () => import("./RpcProcess.owner.production.ts"),
+  );
+  return yield* Effect.tryPromise({
+    try: () => resolveProductionPiRpcOwner(executionTargetId),
+    catch: (cause) =>
+      new SelectedPiOwnerError({
+        message: "Failed to bind the production SSH owner for Pi.",
+        cause,
+      }),
+  });
+});
+
+/**
  * Effect-shaped entry point used by the Pi adapter composition. The dev runtime module is
  * imported lazily so an unselected or local-only graph never loads the owner fixture stack.
  */

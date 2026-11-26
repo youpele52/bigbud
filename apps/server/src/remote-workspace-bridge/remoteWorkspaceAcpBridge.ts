@@ -90,6 +90,8 @@ export async function createRemoteWorkspaceAcpBridge(input: {
   readonly readmeLines: ReadonlyArray<string>;
   readonly readinessProbe?: RemoteWorkspaceReadinessProbe;
   readonly sessionFsOwner?: SessionFsOwnerWorkspace;
+  /** Production activation owner bridge (W2 T-shell); same branch as the dev fixture. */
+  readonly ownerSelected?: boolean;
   /**
    * Composed approved-terminal producer. The selected bridge advertises
    * `terminal` only when both the owner port and this producer exist.
@@ -101,7 +103,7 @@ export async function createRemoteWorkspaceAcpBridge(input: {
     readonly sessionEpoch: number;
   };
 }): Promise<RemoteWorkspaceAcpBridge> {
-  if (isSshOwnerDevFixtureSelected()) {
+  if (isSshOwnerDevFixtureSelected() || input.ownerSelected === true) {
     const reader = await bindSessionFsOwner(input.sessionFsOwner, input.workspaceTarget);
     const bridge = await createRemoteWorkspaceBridge(input);
     const denied = () => Effect.fail(acpInternalError(sessionFsUnavailable()));
@@ -112,7 +114,7 @@ export async function createRemoteWorkspaceAcpBridge(input: {
       cwd: bridge.cwd,
       initialCwd: reader.workspaceRoot,
       clientCapabilities: {
-        fs: { readTextFile: true, writeTextFile: false },
+        fs: { readTextFile: true, writeTextFile: true },
         terminal: approved !== undefined,
       },
       bindCaller: (sessionId) => {
@@ -135,7 +137,21 @@ export async function createRemoteWorkspaceAcpBridge(input: {
               catch: acpInternalError,
             }),
           );
-          yield* acp.handleWriteTextFile(denied);
+          // W2 T-shell ACP writes: the owner's bounded write verb, caller-bound.
+          yield* acp.handleWriteTextFile((request) =>
+            Effect.tryPromise({
+              try: async () => {
+                await reader.writeText(
+                  request.sessionId,
+                  request.path,
+                  bridge.cwd,
+                  request.content,
+                );
+                return {};
+              },
+              catch: acpInternalError,
+            }),
+          );
           if (!approved) {
             yield* acp.handleCreateTerminal(denied);
             return;

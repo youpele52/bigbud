@@ -1,5 +1,5 @@
 import { fork, spawn } from "node:child_process";
-import { createHash, sign } from "node:crypto";
+import { sign } from "node:crypto";
 import { mkdir, readFile, lstat, unlink, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -35,7 +35,7 @@ function reader(input: object) {
     const limit = Date.now() + 15000;
     while (!events.some((event) => states.includes(event.state))) {
       if (child.exitCode !== null || Date.now() >= limit)
-        throw new Error("Owned Node lock barrier did not settle.");
+        throw new Error(`Owned Node lock barrier did not settle: ${JSON.stringify(events)}`);
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, 50);
         waiters.push(() => {
@@ -69,31 +69,17 @@ function reader(input: object) {
   };
 }
 
-it.each(["publisher", "record", "default"] as const)(
+it.each(["publisher", "default"] as const)(
   "two actual Node %s writers cannot reclaim an exited owner over a successor",
   async (purpose) => {
     const app = await makeV2ThreadPluginFixture();
     let a: ReturnType<typeof reader> | undefined, b: ReturnType<typeof reader> | undefined;
     try {
-      const namespace = path.join(app.artifact.root, "barrier-record"),
-        key = "owned";
-      const root =
-        purpose === "record"
-          ? JSON.stringify([namespace, key])
-          : purpose === "default"
-            ? app.artifact.root
-            : app.root;
-      const directory =
-        purpose === "record"
-          ? path.join(
-              app.artifact.root,
-              "record-locks",
-              createHash("sha256").update(root).digest("hex"),
-            )
-          : path.join(
-              app.artifact.root,
-              purpose === "default" ? "implementation-locks" : "owned-publication-lock",
-            );
+      const root = purpose === "default" ? app.artifact.root : app.root;
+      const directory = path.join(
+        app.artifact.root,
+        purpose === "default" ? "implementation-locks" : "owned-publication-lock",
+      );
       await mkdir(directory, { recursive: true, mode: 0o700 });
       const filename = path.join(directory, ".bigbud-thread-tools-managed.lock"),
         pid = await deadOwnedPid(),

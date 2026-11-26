@@ -46,10 +46,23 @@ interface AcpTerminalCommandProofOptions {
   ) => Promise<A>;
 }
 
-function validatedCwd(approved: AcpOwnerCommand, targetId: string, workspaceRoot: string): string {
+export function validatedCwd(
+  approved: AcpOwnerCommand,
+  targetId: string,
+  workspaceRoot: string,
+): string {
   if (approved.operation !== "print-working-directory") {
     throw new AcpTerminalOwnerError("unsupported-command");
   }
+  return validatedScope(approved, targetId, workspaceRoot);
+}
+
+/** Target and workspace-contained cwd of any approved ACP terminal operation. */
+export function validatedScope(
+  approved: AcpOwnerCommand,
+  targetId: string,
+  workspaceRoot: string,
+): string {
   if (approved.executionTargetId !== targetId) {
     throw new AcpTerminalOwnerError("unsupported-target");
   }

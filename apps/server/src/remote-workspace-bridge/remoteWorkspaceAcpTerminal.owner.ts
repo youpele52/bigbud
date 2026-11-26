@@ -10,6 +10,11 @@ import type {
   AcpTerminalCwdObserver,
 } from "./remoteWorkspaceAcpTerminal.owner.proof.ts";
 import { makeOwnedAcpTerminalProcess } from "./remoteWorkspaceAcpTerminal.owner.process.ts";
+import {
+  acpCommandText,
+  isAcpPwdRequest,
+  isAdmissibleAcpShellText,
+} from "./remoteWorkspaceAcpTerminal.owner.command.ts";
 
 export interface AcpApprovalIdentity {
   readonly requestId: ApprovalRequestId;
@@ -24,7 +29,10 @@ export interface AcpOwnerCommand {
   readonly executionTargetId: string;
   readonly workspaceRoot: string;
   readonly cwd: string;
-  readonly operation: "print-working-directory";
+  /** `pwd` is the fixed recipe; `shell-command` is the U21 ACP shell grant. */
+  readonly operation: "print-working-directory" | "shell-command";
+  /** U21: the exact approved command text (only for `shell-command`). */
+  readonly command?: string;
   /** Absolute epoch milliseconds; a receipt is unusable at or after this instant.
    *  Production approval producers always set it; the proof helper may omit it. */
   readonly expiresAt?: number;
@@ -50,6 +58,12 @@ export interface AcpTerminalSshOwner {
    * that resolves outside the workspace (including symlinks). Honor abort during acquisition
    * and reap any lease not returned. This port is not a native protocol implementation. */
   readonly runAcpCommand: (
+    request: AcpOwnerCommand,
+    acquisitionSignal: AbortSignal,
+  ) => Promise<AcpOwnerCommandLease>;
+  /** U21: run one approved ACP terminal command as its own owner grant. Optional:
+   *  an owner without it refuses every command except the fixed `pwd` recipe. */
+  readonly runAcpShell?: (
     request: AcpOwnerCommand,
     acquisitionSignal: AbortSignal,
   ) => Promise<AcpOwnerCommandLease>;
@@ -97,6 +111,7 @@ export function issueAcpTerminalCommandApproval(
       workspaceRoot: command.workspaceRoot,
       cwd: command.cwd,
       operation: command.operation,
+      ...(command.command === undefined ? {} : { command: command.command }),
       expiresAt: command.expiresAt ?? Number.POSITIVE_INFINITY,
       generation: command.generation ?? "",
     }),
@@ -143,6 +158,7 @@ type ApprovalSelection = Pick<
 function consumeAcpApproval(
   input: AcpOwnerInput,
   { identity, approval, signal, generation, now }: ApprovalSelection,
+  allowShell = false,
 ): AcpOwnerCommand {
   signal.throwIfAborted();
   const target = parseSshExecutionTarget(input.executionTargetId);
@@ -153,7 +169,12 @@ function consumeAcpApproval(
   ) {
     throw new AcpTerminalOwnerError("unsupported-target");
   }
-  if (input.command !== "pwd" || input.args?.length || input.environment?.length) {
+  const pwd = isAcpPwdRequest(input);
+  const commandText = pwd ? undefined : acpCommandText(input.command, input.args ?? []);
+  if (
+    !pwd &&
+    (!allowShell || input.environment?.length || !isAdmissibleAcpShellText(commandText!))
+  ) {
     throw new AcpTerminalOwnerError("unsupported-command");
   }
   const { workspaceRoot } = input;
@@ -176,7 +197,8 @@ function consumeAcpApproval(
     approved.executionTargetId !== input.executionTargetId ||
     approved.workspaceRoot !== workspaceRoot ||
     approved.cwd !== cwd ||
-    approved.operation !== "print-working-directory"
+    approved.operation !== (pwd ? "print-working-directory" : "shell-command") ||
+    approved.command !== commandText
   ) {
     throw new AcpTerminalOwnerError("approval-mismatch");
   }
@@ -215,8 +237,11 @@ export async function createOwnedAcpTerminal(
   const { owner, signal } = selection;
   signal.throwIfAborted();
   if (!owner) throw new AcpTerminalOwnerError("ssh-owner-unavailable");
-  const approved = consumeAcpApproval(input, selection);
-  const lease = await owner.runAcpCommand(approved, signal);
+  const approved = consumeAcpApproval(input, selection, owner.runAcpShell !== undefined);
+  const lease =
+    approved.operation === "shell-command" && owner.runAcpShell
+      ? await owner.runAcpShell(approved, signal)
+      : await owner.runAcpCommand(approved, signal);
   const terminal = makeOwnedAcpTerminalProcess(lease, signal);
   if (signal.aborted) {
     await terminal.close();

@@ -21,6 +21,9 @@ import {
   type SessionFsOwnerCapability,
 } from "./remoteWorkspaceSessionFsBridge.ownerProvider.ts";
 import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
+import { usesProductionAcpBridge } from "./remoteWorkspaceAcpBridge.production.ts";
+import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
+import { withProductionWorkspaceOwner } from "../ws/wsSshOwnerProduction.workspace.ts";
 export {
   createErrnoError,
   REMOTE_WORKSPACE_SESSION_STATE_PATH,
@@ -48,9 +51,24 @@ export async function createRemoteWorkspaceSessionFsBridge(
   prefix: string,
   readmeLines: ReadonlyArray<string>,
   readinessProbe: RemoteWorkspaceReadinessProbe = probeRemoteWorkspaceReadiness,
-  sessionFsOwner?: SessionFsOwnerCapability,
+  selectedOwner?: SessionFsOwnerCapability,
 ): Promise<RemoteWorkspaceSessionFsBridge> {
-  const selected = isSshOwnerDevFixtureSelected() && workspaceTarget.location === "remote";
+  // W2 T-files: production activation binds the live owner's exact target and the
+  // session's own root (the same workspace verbs as the ACP bridge); no legacy path.
+  const production: SessionFsOwnerCapability | undefined =
+    workspaceTarget.location === "remote" && usesProductionAcpBridge(workspaceTarget)
+      ? {
+          targetId: workspaceTarget.executionTargetId,
+          // An absent root is refused by the owner's root rule, never defaulted.
+          workspaceRoot: workspaceTarget.cwd ?? "",
+          withOwner: (id, use, signal) =>
+            withProductionWorkspaceOwner(readSshOwnerProductionOwner, id, use, signal),
+        }
+      : undefined;
+  const sessionFsOwner: SessionFsOwnerCapability | undefined = production ?? selectedOwner;
+  const selected =
+    (isSshOwnerDevFixtureSelected() || production !== undefined) &&
+    workspaceTarget.location === "remote";
   // A provider-supplied readiness probe cannot grant authority to the legacy session FS.
   assertRemoteWorkspaceBridgeOperationSupported(
     workspaceTarget,

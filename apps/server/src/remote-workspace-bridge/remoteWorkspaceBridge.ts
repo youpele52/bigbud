@@ -35,7 +35,10 @@ export async function createRemoteWorkspaceBridge(input: {
 }): Promise<RemoteWorkspaceBridge> {
   assertRemoteWorkspaceTarget(input.workspaceTarget);
 
-  const cwd = input.directory ?? (await fs.mkdtemp(path.join(os.tmpdir(), input.prefix)));
+  // Canonical (macOS `/var` → `/private/var`): agents report the physical cwd, and the
+  // session-FS path mapping compares against this exact prefix.
+  const cwd =
+    input.directory ?? (await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), input.prefix))));
   if (input.directory) {
     await fs.mkdir(cwd, { recursive: true, mode: 0o700 });
     if (

@@ -159,6 +159,12 @@ export interface ProductionV2Options {
   readonly binding?: OpencodeV2ServiceBinding;
   /** Present target 0 as an `~/.ssh/config`-style alias resolved by the owner. */
   readonly aliasFirstTarget?: boolean;
+  /**
+   * W2 T-alias: write that alias the way a real user config does: declared in
+   * an ordered `Include config.d/*.conf`, two names on one `Host` line, `Host *`
+   * defaults after it, the key under `~/.ssh/keys/` and no `Port` when it is 22.
+   */
+  readonly userProfileLayout?: boolean;
 }
 
 export const LIVE_ALIAS = "bb-oc-alias";
@@ -172,6 +178,7 @@ export const LIVE_ALIAS = "bb-oc-alias";
 async function asAlias(
   root: string,
   target: LiveTarget,
+  userProfile = false,
 ): Promise<{ target: LiveTarget; config: string }> {
   const { descriptor } = target;
   const real = path.join(root, "alias-home-real");
@@ -183,6 +190,40 @@ async function asAlias(
   await copyFile(descriptor.identityFile, identityFile);
   await copyFile(descriptor.knownHostsFile, knownHostsFile);
   const config = path.join(home, ".ssh", "config");
+  if (userProfile) {
+    await mkdir(path.join(real, ".ssh", "keys"), { mode: 0o700 });
+    await mkdir(path.join(real, ".ssh", "config.d"), { mode: 0o700 });
+    const key = path.join(home, ".ssh", "keys", "work_ed25519");
+    await copyFile(descriptor.identityFile, key);
+    await writeFile(
+      path.join(real, ".ssh", "config.d", "10-work.conf"),
+      [
+        `Host ${LIVE_ALIAS} ${LIVE_ALIAS}-second`,
+        `  HostName ${descriptor.host}`,
+        ...(descriptor.port === 22 ? [] : [`  Port ${descriptor.port}`]),
+        `  User ${descriptor.user}`,
+        "  IdentityFile ~/.ssh/keys/work_ed25519",
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+    await writeFile(
+      config,
+      [
+        "# personal defaults",
+        "Include config.d/*.conf",
+        "",
+        "Host *",
+        "  IdentitiesOnly yes",
+        `  UserKnownHostsFile ${knownHostsFile}`,
+        "  ServerAliveInterval 30",
+        "",
+      ].join("\n"),
+      { mode: 0o600 },
+    );
+    const resolved = await resolveProductionTargetDescriptor(`ssh:${LIVE_ALIAS}`, { home });
+    return { target: { ...target, descriptor: resolved }, config };
+  }
   await writeFile(
     config,
     [
@@ -238,7 +279,7 @@ export async function withProductionV2Owner<A>(
       });
     }
     if (options.aliasFirstTarget) {
-      const alias = await asAlias(fixture.root, targets[0]!);
+      const alias = await asAlias(fixture.root, targets[0]!, options.userProfileLayout);
       targets[0] = alias.target;
       aliasConfig = alias.config;
     }

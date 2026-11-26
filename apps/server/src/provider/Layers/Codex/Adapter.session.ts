@@ -22,6 +22,7 @@ import {
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { isSshOwnerSelected } from "../../../ssh/sshOwnerSelection.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
@@ -124,10 +125,15 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         delegatedModelChoice: true,
         peerTools: peerToolsOfferedTo(input.threadId),
       });
-      const mergedConfigArgs = mergeCodexConfigArgs(
-        remoteWorkspaceBridge?.configArgs,
-        orchestrationConfig,
-      );
+      // The orchestration MCP config names local paths (node, bridge script) that an
+      // owner-run remote app-server cannot start, and the owner refuses free-form `-c`
+      // overrides; such a session keeps the dynamic orchestration tools only.
+      const ownerRemote =
+        isSshOwnerSelected() &&
+        !isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget);
+      const mergedConfigArgs = ownerRemote
+        ? (remoteWorkspaceBridge?.configArgs ?? [])
+        : mergeCodexConfigArgs(remoteWorkspaceBridge?.configArgs, orchestrationConfig);
       const cleanupBridge = composeBridgeCleanups(
         remoteWorkspaceBridge?.cleanup,
         orchestrationBridge.cleanup,
@@ -152,7 +158,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         customModels: codexSettings.customModels,
         ...(homePath ? { homePath } : {}),
         ...(mergedConfigArgs.length > 0 ? { configArgs: mergedConfigArgs } : {}),
-        expectedMcpServerNames: [orchestrationConfig.serverName],
+        expectedMcpServerNames: ownerRemote ? [] : [orchestrationConfig.serverName],
         ...(remoteWorkspaceBridge
           ? { requiredMcpServerNames: [REMOTE_WORKSPACE_MCP_SERVER_NAME] }
           : {}),

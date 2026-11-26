@@ -10,7 +10,7 @@ import {
   v2ThreadPrivateDirectory,
   listV2ThreadPrivateDirectory,
 } from "./Orchestration.storage.ts";
-import { lockV2ThreadRecord } from "./Orchestration.records.lock.ts";
+import { quarantineV2RecordLocks } from "./Orchestration.records.recovery.ts";
 import { publishV2WindowsRecord } from "./Orchestration.records.windows.ts";
 
 interface SignedRecord {
@@ -20,6 +20,29 @@ interface SignedRecord {
 }
 const bytes = (record: Pick<SignedRecord, "revision" | "value">) =>
   Buffer.from(JSON.stringify(["bigbud.thread.record.v1", record.revision, record.value]));
+
+/** Wait for the previous in-process writer without outliving the caller's operation authority. */
+function waitForV2RecordTurn(previous: Promise<unknown>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted)
+    return Promise.reject(signal.reason ?? new Error("V2 record update aborted."));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener("abort", onAbort);
+      reject(signal.reason ?? new Error("V2 record update aborted."));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    previous.then(
+      () => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
 
 /** Signed private app records are evidence, never repaired from native guesses. */
 export class V2ThreadRecords {
@@ -44,7 +67,10 @@ export class V2ThreadRecords {
     privateKey: string,
     publicKey: string,
   ) {
-    return new V2ThreadRecords(await ensureV2ThreadPrivateChild(root, name), privateKey, publicKey);
+    const directory = await ensureV2ThreadPrivateChild(root, name);
+    // The backend lock is the cross-process fence; legacy per-record lock files are stale.
+    await quarantineV2RecordLocks(root);
+    return new V2ThreadRecords(directory, privateKey, publicKey);
   }
 
   private filename(key: string) {
@@ -147,33 +173,17 @@ export class V2ThreadRecords {
     const authority = captureV2OperationAuthority(extra);
     authority.assertCurrent();
     const filename = this.filename(key);
-    if (V2ThreadRecords.locks.has(filename)) throw new Error("V2 thread-tools record update busy.");
-    const operation = this.replaceExclusive(key, expected, value, authority);
-    V2ThreadRecords.locks.set(filename, operation);
+    const previous = V2ThreadRecords.locks.get(filename);
+    const turn = Promise.withResolvers<void>();
+    const tail = (previous ?? Promise.resolve()).then(() => turn.promise);
+    V2ThreadRecords.locks.set(filename, tail);
     try {
-      return await operation;
-    } finally {
-      if (V2ThreadRecords.locks.get(filename) === operation) V2ThreadRecords.locks.delete(filename);
-    }
-  }
-
-  private async replaceExclusive(
-    key: string,
-    expected: string | undefined,
-    value: unknown,
-    authority: V2OperationAuthority,
-  ) {
-    const unlock = await lockV2ThreadRecord(
-      this.directory,
-      key,
-      this.privateKey,
-      this.publicKey,
-      authority,
-    );
-    try {
+      if (previous) await waitForV2RecordTurn(previous, authority.signal);
+      authority.assertCurrent();
       return await this.replaceLocked(key, expected, value, authority);
     } finally {
-      await unlock();
+      turn.resolve();
+      if (V2ThreadRecords.locks.get(filename) === tail) V2ThreadRecords.locks.delete(filename);
     }
   }
 

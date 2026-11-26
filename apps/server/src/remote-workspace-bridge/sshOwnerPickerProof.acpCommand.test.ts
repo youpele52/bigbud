@@ -103,7 +103,11 @@ it("ignores stdin and refuses interactive conversion or agent-mode terminals", a
     ...base,
     sshOwner: selection,
   });
-  expect(runAcpCommand).toHaveBeenCalledExactlyOnceWith(command, selection.signal);
+  // The consumed approval also carries its (here unbounded) expiry and empty generation.
+  expect(runAcpCommand).toHaveBeenCalledExactlyOnceWith(
+    { ...command, expiresAt: Number.POSITIVE_INFINITY, generation: "" },
+    selection.signal,
+  );
   output.resume();
   await terminal.close();
 

@@ -1,3 +1,4 @@
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -60,10 +61,11 @@ describe.skipIf(process.platform === "win32")("assertSupportedRemoteCodexCliVers
       *--version*) echo "codex-cli 0.167.0" ;;
       *) printf "ready\\n" ;;
     esac`);
-    const child = await startRemoteCodexAppServerProcessAsync({
+    // The unselected legacy branch returns a local child process.
+    const child = (await startRemoteCodexAppServerProcessAsync({
       ...input("198.51.100.1"),
       configArgs: ["-c", "feature=true"],
-    });
+    })) as ChildProcessWithoutNullStreams;
     const closed = once(child, "close");
     const chunks: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
