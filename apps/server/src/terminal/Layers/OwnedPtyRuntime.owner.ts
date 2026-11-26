@@ -15,7 +15,10 @@ export const findNativeTerminalRecovery = Effect.fn("terminal.findNativeTerminal
     request: { threadId: string; cwd: string },
     terminalId: string,
   ) {
-    if (!runtime?.localSshClient || runtime.nativeSshWorkspaceRoot !== request.cwd)
+    if (
+      !runtime?.localSshClient ||
+      (runtime.nativeSshWorkspaceRoot !== request.cwd && !runtime.nativeSshProduction)
+    )
       return undefined;
     const key = ownedTerminalOwnerRouteKey(request.threadId, terminalId);
     const route = yield* Effect.tryPromise(() => runtime.owners().get(key));

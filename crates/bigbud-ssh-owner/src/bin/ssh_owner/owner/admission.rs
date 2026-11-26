@@ -148,18 +148,25 @@ impl Owner {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         if matches!(operation, Operation::ProofWorkspaceReadiness(_))
             && !self.workspace_readiness_fixture
+            && !self.production
         {
             return Err(ErrorCode::OperationDenied);
         }
         if super::guarded_write::is_guarded_write(&operation) {
-            if !self
-                .guarded_write
-                .as_ref()
-                .is_some_and(|guarded| guarded.allows(&operation))
+            // Production: the target's own guarded-write lane (owner/guarded_write.production.rs).
+            if !self.production
+                && !self
+                    .guarded_write
+                    .as_ref()
+                    .is_some_and(|guarded| guarded.allows(&operation))
             {
                 return Err(ErrorCode::OperationDenied);
             }
-            self.storage.allow_network()?;
+            // Production resolves the target after admission; dispatch re-checks
+            // that target's own durable state before any network work.
+            if !self.production {
+                self.storage.allow_network()?;
+            }
         }
         Ok(operation)
     }
@@ -192,8 +199,50 @@ fn production_verb(operation: &Operation) -> bool {
     );
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let opencode = false;
+    // U15: the read-only Git upload lease and the gated receive (push) lease.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let git_upload = matches!(
+        operation,
+        Operation::GitUploadOpen(_)
+            | Operation::GitUploadStatus(_)
+            | Operation::GitUploadClose(_)
+            | Operation::GitReceiveOpen(_)
+            | Operation::GitReceiveStatus(_)
+            | Operation::GitReceiveClose(_)
+    );
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let git_upload = false;
+    // W2 T-shell: per-target exec leases with the request's own workspace root.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let shell = matches!(
+        operation,
+        Operation::RunThreadShell(_)
+            | Operation::RunProviderWorkspaceShell(_)
+            | Operation::RunAcpCommand(_)
+            | Operation::RunAcpShell(_)
+            | Operation::ShellStatus(_)
+            | Operation::ShellClose(_)
+    );
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let shell = false;
+    // W2 T-backend: per-target deployment step and client relay leases.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let backend = super::backend::production_verb(operation);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let backend = false;
+    // W2 T-prov: per-target Pi/Codex probe and provider leases.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let providers = super::provider_lease::production_verb(operation);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let providers = false;
     agent
         || opencode
+        || git_upload
+        || shell
+        || backend
+        || providers
+        || workspace::production_workspace_verb(operation)
+        || workspace::production_terminal_verb(operation)
         || matches!(
             operation,
             Operation::InspectTrust(_)
@@ -214,3 +263,6 @@ fn production_verb(operation: &Operation) -> bool {
                 | Operation::ProofCloseTerminal(_)
         )
 }
+
+#[path = "admission.workspace.rs"]
+mod workspace;

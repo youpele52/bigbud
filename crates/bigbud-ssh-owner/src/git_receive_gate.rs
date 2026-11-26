@@ -14,7 +14,8 @@ mod conductor;
 #[path = "git_receive_gate.report.rs"]
 mod report;
 pub use conductor::{
-    BoundTrackedReceive, ForwardedTrackedReceive, TrackedReceiveError, observe_unchanged,
+    AdvertisedReceive, BoundTrackedReceive, ForwardedTrackedReceive, TrackedReceiveError,
+    bind_advertised, observe_unchanged,
 };
 pub use report::{DestinationReceipt, PushReceipt, read_receive_report, summarize_push_receipts};
 
@@ -44,6 +45,27 @@ impl ApprovedTrackedUpdate<'_> {
     pub fn validate(&self) -> Result<(), ReceiveGateError> {
         check_approval(self)
     }
+
+    /// U15 first publish: an all-zero old OID of the source's width, a valid
+    /// branch ref and a nonzero source. Only the production advertised binding
+    /// admits it, and only when the live advertisement lacks the ref.
+    pub fn validate_creation(&self) -> Result<(), ReceiveGateError> {
+        check_creation(self)
+    }
+}
+
+fn check_creation(approval: &ApprovedTrackedUpdate<'_>) -> Result<(), ReceiveGateError> {
+    let zero = approval.advertised_old_oid.len() == approval.approved_source_oid.len()
+        && approval.advertised_old_oid.bytes().all(|byte| byte == b'0');
+    let formats = check_approval(&ApprovedTrackedUpdate {
+        advertised_old_oid: approval.approved_source_oid,
+        ..*approval
+    });
+    if zero && formats.is_ok() {
+        Ok(())
+    } else {
+        Err(ReceiveGateError::InvalidApproval)
+    }
 }
 
 /// Read exactly one command packet and its flush boundary before permitting forwarding.
@@ -53,7 +75,20 @@ pub fn authorize_receive_prefix(
     reader: &mut impl Read,
     approval: ApprovedTrackedUpdate<'_>,
 ) -> Result<Vec<u8>, ReceiveGateError> {
-    check_approval(&approval)?;
+    authorize_prefix(reader, approval, false)
+}
+
+/// `creation` admits the all-zero old OID of a first publish (production only).
+fn authorize_prefix(
+    reader: &mut impl Read,
+    approval: ApprovedTrackedUpdate<'_>,
+    creation: bool,
+) -> Result<Vec<u8>, ReceiveGateError> {
+    if creation {
+        check_creation(&approval)?;
+    } else {
+        check_approval(&approval)?;
+    }
     let mut header = [0; 4];
     read(reader, &mut header)?;
     let len = packet_length(header).ok_or(ReceiveGateError::MalformedCommand)?;

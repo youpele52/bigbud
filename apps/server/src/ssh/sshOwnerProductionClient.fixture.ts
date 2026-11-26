@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -88,8 +89,36 @@ export async function makeProductionFixture(): Promise<ProductionFixture> {
         () => true,
         () => false,
       ),
-    dispose: () => rm(root, { recursive: true, force: true }),
+    dispose: async () => {
+      await reapOwnersUnder(root);
+      await rm(root, { recursive: true, force: true });
+    },
   };
+}
+
+/**
+ * Bounded reap of every process whose command line names this fixture root (an
+ * owner started with `--state-dir <root>/state`). A run that ended before its
+ * handle shut down (a failed or interrupted test) must not leave an owner serving
+ * an attach socket under a directory that is about to be removed.
+ */
+export async function reapOwnersUnder(root: string, timeoutMs = 3_000): Promise<number[]> {
+  const list = () => {
+    try {
+      return execFileSync("pgrep", ["-f", "--", `--state-dir ${root}/`], { encoding: "utf8" })
+        .split("\n")
+        .map(Number)
+        .filter((pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid);
+    } catch {
+      return [];
+    }
+  };
+  const found = list();
+  for (const pid of found) killIfAlive(pid);
+  const deadline = Date.now() + timeoutMs;
+  while (found.some(pidAlive) && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  return found;
 }
 
 export function newCapability() {

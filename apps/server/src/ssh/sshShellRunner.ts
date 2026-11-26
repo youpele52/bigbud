@@ -1,3 +1,4 @@
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
 import { Effect } from "effect";
 
 import {
@@ -6,40 +7,16 @@ import {
 } from "../shell/Services/ThreadShellRunner.ts";
 import { isSshOwnerDevFixtureSelected } from "./sshOwnerSelection.ts";
 import {
-  THREAD_SHELL_DEFAULT_TIMEOUT_MS,
-  THREAD_SHELL_MAX_TIMEOUT_MS,
+  boundedTimeout,
+  ownerShellError,
   truncateShellOutput,
   type SshShellOwnerAccess,
 } from "./sshShellRunner.owner.ts";
 import { runSshCommand } from "./sshProcess.ts";
+import { makeProductionShellRunner } from "./sshShellRunner.production.ts";
 
 const SHELL_TIMEOUT_MS = 30_000;
 const SHELL_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
-
-function boundedTimeout(timeoutMs: number | null | undefined): number {
-  if (timeoutMs === null || timeoutMs === undefined || timeoutMs <= 0) {
-    return THREAD_SHELL_DEFAULT_TIMEOUT_MS;
-  }
-  return Math.max(1, Math.min(Math.floor(timeoutMs), THREAD_SHELL_MAX_TIMEOUT_MS));
-}
-
-function ownerShellError(cause: unknown): string {
-  if (cause instanceof Error && "code" in cause) {
-    switch ((cause as { code?: unknown }).code) {
-      case "shellTimedOut":
-        return "The remote shell command timed out. The owner lease was terminated and the command was not replayed.";
-      case "shellCancelled":
-        return "The remote shell command was cancelled for this thread. It was not replayed.";
-      case "outcomeUnknown":
-        return "The remote shell outcome is unknown. The command was not replayed.";
-      case "workspacePathDenied":
-        return "The remote shell workspace or cwd was refused by the owner.";
-      case "ownerUnavailable":
-        return "The SSH owner is unavailable. No legacy shell was started.";
-    }
-  }
-  return cause instanceof Error ? cause.message : "Failed to run shell command over the SSH owner.";
-}
 
 function makeOwnerRunner(
   executionTargetId: string,
@@ -100,10 +77,13 @@ function makeOwnerRunner(
 export function makeSshShellRunner(
   executionTargetId: string,
   ownerAccess?: SshShellOwnerAccess,
+  activation: boolean = SSH_OWNER_PRODUCTION_ACTIVATION,
 ): ThreadShellRunnerShape {
   if (isSshOwnerDevFixtureSelected()) {
     return makeOwnerRunner(executionTargetId, ownerAccess);
   }
+  // W2 T-shell: production activation runs the owner exec lease; no legacy launch.
+  if (activation) return makeProductionShellRunner(executionTargetId);
   const activeThreads = new Set<string>();
 
   return {

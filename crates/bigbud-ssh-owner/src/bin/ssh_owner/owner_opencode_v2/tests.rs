@@ -145,17 +145,17 @@ fn a_discovering_recipe_sends_an_empty_operand_and_the_owner_discovery_script() 
     // owner-shipped script text, never a request operand.
     assert!(command.contains(" bigbud-opencode-v2 '' '/srv/a/project' "));
     assert!(command.contains(" SHELL=\"$SHELL\" "));
-    let discover = include_str!("discover.sh");
     for needle in [
-        "command -v opencode",
+        "command -v $1",
         "/usr/bin/timeout -s KILL 5",
         "$HOME/.opencode/bin/opencode",
         "/usr/bin/readlink -e",
         "missing",
     ] {
-        assert!(discover.contains(needle), "{needle}");
+        assert!(LAUNCH.contains(needle), "{needle}");
     }
-    assert!(LAUNCH.contains("select_binary || missing"));
+    assert!(LAUNCH.contains("select_binary opencode || missing"));
+    assert!(LAUNCH.contains("capture_login_env || exit 126"));
 }
 
 #[test]

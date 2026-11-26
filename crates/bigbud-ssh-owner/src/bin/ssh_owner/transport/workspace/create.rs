@@ -10,7 +10,7 @@ pub(in super::super::super) fn run(
     operand: &v1::ProofWorkspaceCreate,
 ) -> Result<v1::ProofWorkspaceCreateResult, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         &operand.relative_path,
         false,

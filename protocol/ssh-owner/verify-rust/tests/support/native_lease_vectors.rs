@@ -22,6 +22,8 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     );
 
     opencode_vectors::verify(values);
+    super::git_upload_vectors::verify(values);
+    super::remote_backend_vectors::verify(values);
 
     assert_frame(
         values,
@@ -270,6 +272,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 terminal_id: "pane".into(),
                 cols: 96,
                 rows: 34,
+                shell: None,
             }),
         ),
         (

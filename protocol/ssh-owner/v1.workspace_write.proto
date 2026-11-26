@@ -149,3 +149,48 @@ message ProofWorkspaceGuardedWriteResult {
     Empty unknown = 4; // May have published; never replay APPLY.
   }
 }
+
+// W2 T-files session-FS verbs (production). Each names the request's own root
+// and one root-relative entry; the owner's path walk refuses a symlink anywhere
+// on it and never follows one. No command, argv or environment is sent.
+
+// Request 122 `workspace_entry_info`: lstat of one entry (the root itself when
+// `relative_path` is empty). Reply 73.
+message WorkspaceEntryInfoRequest {
+  string workspace_root = 1;
+  string relative_path = 2;
+}
+
+// Reply 73. `kind`: 1 missing, 2 regular file, 3 directory, 4 other. Times are
+// milliseconds since the Unix epoch; birth time falls back to ctime.
+message WorkspaceEntryInfo {
+  uint32 kind = 1;
+  uint64 size = 2;
+  uint64 mtime_ms = 3;
+  uint64 birthtime_ms = 4;
+}
+
+// Request 123 `workspace_rename`: within one root; the destination must not
+// exist unless `replace` is set. With `replace`, an existing regular-file
+// destination is replaced by one atomic rename(2) (never copy+delete); a
+// directory destination is refused. Reply 74.
+message WorkspaceRenameRequest {
+  string workspace_root = 1;
+  string relative_path = 2;
+  string destination_path = 3;
+  bool replace = 4;
+}
+
+// Request 124 `workspace_append`: at most 48 KiB to an existing regular file.
+// Reply 74. A missing acknowledgement is `outcome_unknown`; never replay.
+message WorkspaceAppendRequest {
+  string workspace_root = 1;
+  string relative_path = 2;
+  bytes contents = 3;
+}
+
+// Reply 74. `result`: 1 done, 2 source not found, 3 destination exists, 4 not
+// a regular file.
+message WorkspaceEntryChange {
+  uint32 result = 1;
+}

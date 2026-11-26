@@ -19,16 +19,18 @@ const WORKSPACE: &str = "/home/picker/workspace";
 
 struct Fixture(PathBuf);
 
+/// Parallel tests in one process need distinct roots; a timestamp can collide.
+static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
             "bigbud-terminal-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
+        // A previous run with the same pid may have left this root behind.
+        let _leftover = fs::remove_dir_all(&root);
         fs::DirBuilder::new().mode(0o700).create(&root).unwrap();
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
@@ -125,6 +127,7 @@ fn prepare(owner: &mut Owner) -> ProofTerminalReservation {
             terminal_id: "terminal".into(),
             cols: 80,
             rows: 24,
+            shell: None,
         })
         .unwrap()
 }

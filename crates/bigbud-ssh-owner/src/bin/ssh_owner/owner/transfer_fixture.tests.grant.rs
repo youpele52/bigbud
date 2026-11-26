@@ -145,3 +145,48 @@ fn transfer_fixture_operands_are_bounded_and_traversal_free() {
         Some(ErrorCode::InvalidOperands)
     );
 }
+
+/// Regression: the production owner's admission allowlist keeps growing per
+/// lane, so pin that neither reserved transfer verb is admitted there and that
+/// the dispatcher still refuses both before any target, storage or lane gate.
+#[test]
+fn transfer_fixture_verbs_stay_refused_by_the_production_owner() {
+    use crate::owner::Pipe;
+    use crate::owner::terminal::production_tests::support::Fixture;
+    use crate::v1::{ProofPackagedRsync, ProofTransferStream, Request, request::Operation};
+
+    let fixture = Fixture::new();
+    let mut owner = fixture.owner(None);
+    let operations = [
+        Operation::ProofTransferStream(ProofTransferStream::default()),
+        Operation::ProofPackagedRsync(ProofPackagedRsync::default()),
+    ];
+    for operation in operations {
+        let request = Request {
+            request_id: vec![1],
+            owner_epoch: owner.epoch.to_vec(),
+            target_id: "ssh:production-a".into(),
+            operation: Some(operation.clone()),
+            ..Request::default()
+        };
+        assert_eq!(
+            owner.validate(&request).err(),
+            Some(ErrorCode::OperationDenied),
+            "admission: {operation:?}"
+        );
+        let mut written = Vec::new();
+        let dispatched = owner
+            .execute(
+                &mut Pipe::new([].as_slice(), &mut written),
+                &request.request_id,
+                operation.clone(),
+            )
+            .expect("dispatch result");
+        assert_eq!(
+            dispatched.err(),
+            Some(ErrorCode::OperationDenied),
+            "dispatch: {operation:?}"
+        );
+        assert!(written.is_empty(), "no frame for {operation:?}");
+    }
+}

@@ -90,10 +90,12 @@ function ownerFailure(
 /** Folder create and permanent delete for the exact selected fixture target/root only. */
 export function withSelectedEntryMutations(
   backend: WorkspaceMutationsShape,
-  binding: SelectedEntryMutationBinding | undefined,
+  bindingFor: (input: EntryInput) => SelectedEntryMutationBinding | undefined,
 ): WorkspaceMutationsShape {
-  const selected = (input: EntryInput): SelectedEntryMutationBinding | undefined =>
-    binding && binding.withOwner && isFixture(input, binding) ? binding : undefined;
+  const selected = (input: EntryInput): SelectedEntryMutationBinding | undefined => {
+    const binding = bindingFor(input);
+    return binding?.withOwner && isFixture(input, binding) ? binding : undefined;
+  };
   const unsupported = (input: EntryInput, operation: string) =>
     failure(
       input,

@@ -9,8 +9,9 @@ use super::*;
 use crate::v1::ErrorCode;
 use std::{fs, os::unix::fs::DirBuilderExt};
 
+// Shared with the provider lease owner tests (one module, one temp-dir counter).
 #[path = "production_terminal_tests.support.rs"]
-mod support;
+pub(in crate::owner) mod support;
 
 use support::{Fixture, request};
 

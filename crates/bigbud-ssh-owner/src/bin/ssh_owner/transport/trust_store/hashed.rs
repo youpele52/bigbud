@@ -97,7 +97,7 @@ pub(super) fn read(
     if !match_record(&record, label, deadline, directory)? {
         return Err(CHANGED);
     }
-    Ok(Pin { key, record })
+    Ok(Pin::single(record, key))
 }
 
 pub(super) fn validate_field(field: &str) -> Result<(), ErrorCode> {

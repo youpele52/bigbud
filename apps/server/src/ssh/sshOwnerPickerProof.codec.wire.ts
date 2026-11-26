@@ -55,9 +55,12 @@ const wireErrorCodes = [
   "targetHostUnresolved",
   "providerExecutableUnavailable",
 ] as const;
+/** Lane-allocated codes past the dense table (W2 T-term owns 55–58). */
+const sparseErrorCodes = { 55: "terminalShellUnavailable" } as const;
 
 export type PickerProofOwnerErrorCode =
   | Exclude<(typeof wireErrorCodes)[number], undefined>
+  | (typeof sparseErrorCodes)[keyof typeof sparseErrorCodes]
   | "versionIncompatible"
   | "profileMismatch"
   | "protocolError";
@@ -106,4 +109,5 @@ export const boolValue = (wire: number, reader: WireReader) => {
   return value === 1;
 };
 
-export const decodeOwnerError = (value: number) => wireErrorCodes[value] ?? invalid();
+export const decodeOwnerError = (value: number) =>
+  wireErrorCodes[value] ?? sparseErrorCodes[value as keyof typeof sparseErrorCodes] ?? invalid();

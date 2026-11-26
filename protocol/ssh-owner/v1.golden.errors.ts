@@ -45,4 +45,5 @@ export const errorCases = {
   error_pane_unrecoverable: error(36),
   error_target_host_unresolved: error(37),
   error_provider_executable_unavailable: error(38),
+  error_terminal_shell_unavailable: error(55),
 } satisfies Record<string, Message>;

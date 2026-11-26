@@ -39,7 +39,7 @@ it("maps typed folder mutations and refuses ambiguous outcomes without replay", 
       throw new PickerProofOwnerError("outcomeUnknown");
     },
   });
-  const runtime = withSelectedEntryMutations(unsupportedWorkspaceMutations, unknown);
+  const runtime = withSelectedEntryMutations(unsupportedWorkspaceMutations, () => unknown);
   const create = { executionTargetId: targetId, cwd, relativePath: "folder" };
   const remove = { ...create, relativePath: "folder", expectedKind: "directory" as const };
   expect(await run(runtime.createDirectory(create))).toMatchObject({
@@ -56,8 +56,7 @@ it("maps typed folder mutations and refuses ambiguous outcomes without replay", 
 });
 
 it("reports typed already-exists and not-found as terminal refusals", async () => {
-  const runtime = withSelectedEntryMutations(
-    unsupportedWorkspaceMutations,
+  const runtime = withSelectedEntryMutations(unsupportedWorkspaceMutations, () =>
     binding({
       create: async () => "alreadyExists",
       remove: async () => "notFound",
@@ -76,7 +75,7 @@ it("reports typed already-exists and not-found as terminal refusals", async () =
 
 it("refuses traversal and disconnected targets before acquiring the owner", async () => {
   const blocked = binding({});
-  const runtime = withSelectedEntryMutations(unsupportedWorkspaceMutations, blocked);
+  const runtime = withSelectedEntryMutations(unsupportedWorkspaceMutations, () => blocked);
   for (const relativePath of ["../outside", "a/../../b", "a\\b", ""]) {
     expect(
       await run(runtime.createDirectory({ executionTargetId: targetId, cwd, relativePath })),
@@ -89,7 +88,7 @@ it("refuses traversal and disconnected targets before acquiring the owner", asyn
       throw new RemoteTargetDisconnectedError(targetId);
     },
   });
-  const offline = withSelectedEntryMutations(unsupportedWorkspaceMutations, disconnected);
+  const offline = withSelectedEntryMutations(unsupportedWorkspaceMutations, () => disconnected);
   expect(
     await run(
       offline.createDirectory({ executionTargetId: targetId, cwd, relativePath: "folder" }),
@@ -105,7 +104,7 @@ it("delegates non-selected targets to the composed backend", async () => {
       Effect.succeed({ relativePath: "local", disposition: "deleted" as const }),
     ),
   };
-  const runtime = withSelectedEntryMutations(backend, binding({}));
+  const runtime = withSelectedEntryMutations(backend, () => binding({}));
   expect(
     await Effect.runPromise(
       runtime.createDirectory({

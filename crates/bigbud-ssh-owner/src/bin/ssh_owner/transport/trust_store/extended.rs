@@ -1,5 +1,6 @@
 //! Ordered trust sources for the scoped config path. A matching unsupported
 //! or revoked policy is a refusal, never permission to enroll a different key.
+use super::super::host_key;
 use super::{ErrorCode, HostKey, Pin, READ_ONLY, check_directory, hashed, options};
 use crate::config::HostVerification;
 use sha2::{Digest, Sha256};
@@ -235,8 +236,13 @@ impl Selection<'_> {
             };
             let kind = fields.next().ok_or(CHANGED)?;
             let key = fields.next().ok_or(CHANGED)?;
-            if kind != "ssh-ed25519" {
+            if ca && kind != host_key::TYPE {
                 return Err(ErrorCode::ConfigUnsupported);
+            }
+            // U23: like OpenSSH, a key type the owner does not accept (DSA,
+            // security-key or unknown) is skipped rather than trusted.
+            if !host_key::accepted_type(kind) {
+                continue;
             }
             let snapshot_host = if hosts.starts_with('|') {
                 hosts
@@ -245,15 +251,16 @@ impl Selection<'_> {
             };
             let record = format!("{snapshot_host} {kind} {key}\n");
             let key = HostKey::from_record(record.as_bytes(), snapshot_host).ok_or(CHANGED)?;
-            if let Some(existing) = &self.pin {
-                existing.check_key(&key)?;
+            let record = if ca {
+                format!("@cert-authority {record}")
             } else {
-                let record = if ca {
-                    format!("@cert-authority {record}")
-                } else {
-                    record
-                };
-                self.pin = Some(Pin { key, record });
+                record
+            };
+            match &mut self.pin {
+                // A certificate authority stays a single exact key.
+                Some(existing) if ca => existing.check_key(&key)?,
+                Some(existing) => existing.add(key, &record)?,
+                None => self.pin = Some(Pin::single(record, key)),
             }
         }
         Ok(())

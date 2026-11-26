@@ -12,8 +12,12 @@ impl Owner {
         let opencode = self.revoke_opencode();
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let opencode = Ok(());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let shell = self.lanes.shell.revoke();
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let shell = Ok(());
         let picker = self.retire_picker_master();
-        terminal.and(agent).and(opencode).and(picker)
+        terminal.and(agent).and(opencode).and(shell).and(picker)
     }
 
     /// A writer handoff or a launcher retirement is owner-wide: every target's

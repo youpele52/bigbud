@@ -14,10 +14,22 @@ const ACP_OUTPUT_LIMIT: usize = 8 * 1024;
 const MAX_COMMAND_BYTES: usize = 64 * 1024;
 const MAX_IDENTITY_BYTES: usize = 256;
 
-const SHELL_RECIPE: &str = r#"
+/// Seconds the remote watchdog allows beyond the owner deadline before it
+/// kills the command's process group on its own.
+const REMOTE_GRACE_SECS: u64 = 2;
+
+/// Shared by the proof verb and the production leases. The accepted text runs
+/// under the shared remote session guard (`session_guard.sh`, also used by
+/// the provider leases): its own process group, killed when the SSH session
+/// process is gone or the remote deadline (`$4` seconds) passes.
+const SHELL_RECIPE: &str = concat!(
+    include_str!("session_guard.sh"),
+    r#"
 [ -d "$target" ] && cd -P "$target" && [ "$PWD" = "$target" ] || exit 3
-exec /bin/sh -lc "$3"
-"#;
+session_guard "$4" /bin/sh -lc "$3" </dev/null
+exit "$?"
+"#
+);
 
 const ACP_RECIPE: &str = r#"
 [ -d "$target" ] && [ -x "$target" ] && cd -P "$target" && [ "$PWD" = "$target" ] || exit 3
@@ -108,8 +120,7 @@ impl Transport {
         command: &str,
         timeout_ms: u32,
     ) -> Result<v1::ProofShellResult, ErrorCode> {
-        let remote = workspace_command_with_arg(SHELL_RECIPE, root, relative, command);
-        let timeout = Duration::from_millis(bounded_timeout(timeout_ms));
+        let (remote, timeout) = shell_command(root, relative, command, timeout_ms);
         let output = run(self, remote, timeout, OUTPUT_LIMIT)?;
         let exit_code = output.status.code().ok_or(ErrorCode::TransportLost)?;
         let mut combined = output.stdout;
@@ -139,6 +150,18 @@ fn run(
     })
 }
 
+/// The recipe for one accepted command and its owner deadline. The remote
+/// watchdog gets the owner deadline plus a grace, in whole seconds.
+fn shell_command(root: &str, relative: &str, command: &str, timeout_ms: u32) -> (String, Duration) {
+    let millis = bounded_timeout(timeout_ms);
+    let remote_secs = millis.div_ceil(1000) + REMOTE_GRACE_SECS;
+    let remote = format!(
+        "{} {remote_secs}",
+        workspace_command_with_arg(SHELL_RECIPE, root, relative, command)
+    );
+    (remote, Duration::from_millis(millis))
+}
+
 fn bounded_timeout(timeout_ms: u32) -> u64 {
     let requested = u64::from(timeout_ms);
     if requested == 0 {
@@ -161,6 +184,12 @@ fn validate_command(command: &str) -> Result<(), ErrorCode> {
     }
     Ok(())
 }
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[path = "shell.lease.rs"]
+mod lease;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(in super::super) use lease::{ShellLaunch, ShellRun};
 
 #[cfg(test)]
 #[path = "shell.tests.rs"]

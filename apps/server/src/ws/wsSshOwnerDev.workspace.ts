@@ -1,7 +1,8 @@
 import * as Effect from "effect/Effect";
 
 import { SshOwnerDevPickerError } from "../ssh/sshOwnerDevPicker.errors.ts";
-import { PickerProofOwnerError, type PickerProofOwner } from "../ssh/sshOwnerPickerProof.client.ts";
+import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.client.ts";
+import type { PickerProofWorkspaceClient } from "../ssh/sshOwnerPickerProof.client.workspace.ts";
 import { MAX_WORKSPACE_STAGED_WRITE_BYTES } from "../ssh/sshOwnerPickerProof.codec.workspace.mutation.ts";
 import { RemoteTargetDisconnectedError } from "../ssh/sshTargetDisconnects.ts";
 import {
@@ -47,7 +48,7 @@ import {
   type SelectedExclusiveWorkspaceCreate,
 } from "./wsSshOwnerDev.workspace.create.ts";
 
-interface SshOwnerWorkspaceBinding {
+export interface SshOwnerWorkspaceBinding {
   readonly targetId: string;
   readonly workspaceRoot: string;
   readonly guardedWrite?: SelectedGuardedWorkspaceWrite;
@@ -55,10 +56,16 @@ interface SshOwnerWorkspaceBinding {
   readonly pendingCreateQualification?: () => Promise<void> | undefined;
   readonly withOwner: <A>(
     targetId: string,
-    use: (owner: PickerProofOwner) => Promise<A>,
+    use: (owner: PickerProofWorkspaceClient) => Promise<A>,
     signal?: AbortSignal,
   ) => Promise<A>;
 }
+
+/** The binding serving one request, or the typed refusal detail. */
+export type SshOwnerWorkspaceBindingFor = (input: {
+  readonly cwd: string;
+  readonly executionTargetId?: string | undefined;
+}) => SshOwnerWorkspaceBinding | string;
 
 type WorkspaceInput = { readonly cwd: string; readonly executionTargetId?: string | undefined };
 type FileInput = WorkspaceInput & { readonly relativePath: string };
@@ -116,9 +123,22 @@ function projectDirectoryEntries(
 }
 
 /** Only installed for the selected normal-dev WebSocket route. Never dispatch SSH to its default runtime. */
-export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace")(function* (
+export const withWsSshOwnerDevWorkspace = (
   runtime: WorkspaceRuntimeShape,
   binding: SshOwnerWorkspaceBinding | undefined,
+) =>
+  withWsSshOwnerWorkspace(runtime, (input) =>
+    !binding ? unsupported : isFixture(input, binding) ? binding : fixtureOnly,
+  );
+
+/**
+ * Routes every `ssh:` workspace request through the binding chosen for that
+ * request (the dev fixture, or the production owner's exact target), never the
+ * default runtime's legacy SSH path.
+ */
+export const withWsSshOwnerWorkspace = Effect.fn("withWsSshOwnerWorkspace")(function* (
+  runtime: WorkspaceRuntimeShape,
+  bindingFor: SshOwnerWorkspaceBindingFor,
 ) {
   const paths = yield* WorkspacePaths;
   const resolvePath = (relativePath: string, binding: SshOwnerWorkspaceBinding) => {
@@ -141,8 +161,8 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
       return yield* runtime.files.listDirectory(input);
     }
     const operation = "workspaceEntries.remoteDirectory";
-    if (!binding) return yield* entriesError(input, operation, unsupported);
-    if (!isFixture(input, binding)) return yield* entriesError(input, operation, fixtureOnly);
+    const binding = bindingFor(input);
+    if (typeof binding === "string") return yield* entriesError(input, operation, binding);
     const requested = input.relativePath ?? "";
     // The root itself is listable but not a valid file path in WorkspacePaths.
     const relativeDir =
@@ -179,8 +199,8 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
     read: (files: WorkspaceFileReadOwnerShape, request: OwnerFileInput) => Promise<A>,
   ) =>
     Effect.gen(function* () {
-      if (!binding) return yield* fileError(input, operation, unsupported);
-      if (!isFixture(input, binding)) return yield* fileError(input, operation, fixtureOnly);
+      const binding = bindingFor(input);
+      if (typeof binding === "string") return yield* fileError(input, operation, binding);
       const { relativePath } = yield* resolvePath(input.relativePath, binding);
       const result = yield* Effect.tryPromise({
         try: () =>
@@ -195,6 +215,11 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
       });
       return { ...result, relativePath };
     });
+  // The guarded-write capability of the binding that served this exact request.
+  const guardedWriteFor = (input: WorkspaceInput) => {
+    const binding = bindingFor(input);
+    return typeof binding === "string" ? undefined : binding.guardedWrite;
+  };
 
   return {
     files: {
@@ -203,7 +228,7 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
         isWsSshOwnerWorkspaceTarget(input.executionTargetId)
           ? readFile(input, "workspaceFileSystem.readFilePreviewRemote", (files, request) =>
               files.readFilePreview(request),
-            ).pipe(Effect.map((preview) => guardedPreview(preview, binding?.guardedWrite)))
+            ).pipe(Effect.map((preview) => guardedPreview(preview, guardedWriteFor(input))))
           : runtime.files.readFilePreview(input),
       readFileRange: (input) =>
         isWsSshOwnerWorkspaceTarget(input.executionTargetId)
@@ -228,20 +253,18 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
                   retryable: false,
                   writeDisposition: "not-dispatched",
                 });
-              if (!binding) return yield* refuse(unsupported);
-              if (!isFixture(input, binding)) return yield* refuse(fixtureOnly);
+              const binding = bindingFor(input);
+              if (typeof binding === "string") return yield* refuse(binding);
               if (input.createOnly) {
                 const create = binding.exclusiveCreate;
                 if (!create)
-                  return yield* refuse(
-                    "The development SSH owner cannot perform create-only writes.",
-                  );
+                  return yield* refuse("This SSH owner cannot perform create-only writes.");
                 const { relativePath } = yield* resolvePath(input.relativePath, binding);
                 return yield* createDevWorkspaceFile(input, relativePath, create);
               }
               if (input.expectedSha256 !== undefined) {
                 if (!binding.guardedWrite)
-                  return yield* refuse("The development SSH owner cannot perform guarded writes.");
+                  return yield* refuse("This SSH owner cannot perform guarded writes.");
                 const { relativePath } = yield* resolvePath(input.relativePath, binding);
                 return yield* writeGuardedDevWorkspaceFile(
                   input,
@@ -253,7 +276,7 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
               // above the single-frame 48 KiB limit up to 512 KiB.
               const contents = new TextEncoder().encode(input.contents);
               if (contents.byteLength > MAX_WORKSPACE_STAGED_WRITE_BYTES)
-                return yield* refuse("The development SSH owner write limit is 512 KiB.");
+                return yield* refuse("The SSH owner write limit is 512 KiB.");
               const { relativePath } = yield* resolvePath(input.relativePath, binding);
               let enteredOwner = false;
               yield* Effect.tryPromise({
@@ -301,10 +324,9 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
       searchEntries: (input) =>
         isWsSshOwnerWorkspaceTarget(input.executionTargetId)
           ? Effect.gen(function* () {
-              if (!binding)
-                return yield* entriesError(input, "workspaceEntries.search", unsupported);
-              if (!isFixture(input, binding))
-                return yield* entriesError(input, "workspaceEntries.search", fixtureOnly);
+              const binding = bindingFor(input);
+              if (typeof binding === "string")
+                return yield* entriesError(input, "workspaceEntries.search", binding);
               const index = yield* buildOwnedRemoteWorkspaceIndex(
                 { cwd: binding.workspaceRoot, executionTargetId: binding.targetId },
                 {
@@ -321,9 +343,8 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
         isWsSshOwnerWorkspaceTarget(input.executionTargetId)
           ? Effect.gen(function* () {
               const operation = "workspaceFileSystem.searchFileContentsRemote";
-              if (!binding) return yield* fileError(input, operation, unsupported);
-              if (!isFixture(input, binding))
-                return yield* fileError(input, operation, fixtureOnly);
+              const binding = bindingFor(input);
+              if (typeof binding === "string") return yield* fileError(input, operation, binding);
               const result = yield* Effect.tryPromise({
                 try: (signal) =>
                   binding.withOwner(
@@ -347,9 +368,8 @@ export const withWsSshOwnerDevWorkspace = Effect.fn("withWsSshOwnerDevWorkspace"
         isWsSshOwnerWorkspaceTarget(input.executionTargetId)
           ? Effect.gen(function* () {
               const operation = "workspaceFileSystem.watchDirectory";
-              if (!binding) return yield* fileError(input, operation, unsupported);
-              if (!isFixture(input, binding))
-                return yield* fileError(input, operation, fixtureOnly);
+              const binding = bindingFor(input);
+              if (typeof binding === "string") return yield* fileError(input, operation, binding);
               const relativePath = input.relativePath
                 ? (yield* resolvePath(input.relativePath, binding)).relativePath
                 : "";

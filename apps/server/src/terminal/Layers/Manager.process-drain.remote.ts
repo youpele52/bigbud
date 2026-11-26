@@ -14,6 +14,8 @@ import {
 import { setTerminalOwnerBusyHint } from "./Manager.hostPolicy.ts";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle.ts";
 import type { TerminalSessionState } from "./Manager.types.ts";
+import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
+import type { AgentProcess } from "./Manager.agentDetection.ts";
 import { toSessionKey } from "./Manager.shell.ts";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp.ts";
 
@@ -24,9 +26,18 @@ export function pollRemoteProcessesWith(
   // Copy evidence before awaiting: session objects are mutable and PIDs can be reused on restart.
   const groups = new Map<string, Array<InspectedSession>>();
   const unavailable: InspectionIdentity[] = [];
+  const native: Array<{ session: InspectionIdentity; inspect: NativeInspect }> = [];
   for (const session of runningSessions) {
     const runtime = ctx.ptyAdapter?.ownedRuntimeForTarget?.(session.executionTargetId);
-    // The selected native owner has no typed process snapshot for this lease. Neither the
+    // The production native owner answers with a typed snapshot of this exact lease.
+    if (runtime?.nativeSshProduction) {
+      native.push({
+        session: inspectionIdentity(session),
+        inspect: runtime.nativeSshProduction.inspect,
+      });
+      continue;
+    }
+    // The selected native dev owner has no typed process snapshot for this lease. Neither the
     // legacy SSH probe nor an in-band PID marker is evidence from that owner.
     if (runtime?.nativeSshWorkspaceRoot !== undefined) {
       unavailable.push(inspectionIdentity(session));
@@ -64,57 +75,80 @@ export function pollRemoteProcessesWith(
           yield* markInspectionUnavailable(ctx, sessions);
           return;
         }
-        const processes = result.value;
-        const pids = new Set(processes.map((process) => process.pid));
-        yield* pushOwnerHints(ctx, sessions, (session) =>
-          remoteOwnerBusyHint(session.remotePid, processes),
-        );
-        for (const session of sessions) {
-          // Missing shell is not proof of idle (e.g. a transient remote process visibility failure).
-          if (!pids.has(session.remotePid)) {
-            yield* invalidateTerminalWorkAssessment(ctx, [session]);
-            continue;
-          }
-          const detection = detectTerminalAgentForShell(session.remotePid, processes, "posix");
-          yield* applyAgentIdentitiesWith(ctx, [session], new Map([[session.pid, detection]]));
-          const active = processes.some((process) => process.parentPid === session.remotePid);
-          const event = yield* ctx.modifyManagerState((state) => {
-            const current = state.sessions.get(toSessionKey(session.threadId, session.terminalId));
-            if (
-              !current ||
-              current.status !== "running" ||
-              current.pid !== session.pid ||
-              current.runtimeEpoch !== session.runtimeEpoch ||
-              current.runtimeGeneration !== session.runtimeGeneration ||
-              current.executionTargetId !== session.executionTargetId
-            )
-              return [null, state] as const;
-            current.subprocessAssessedGeneration = session.runtimeGeneration;
-            current.subprocessAssessedEpoch = session.runtimeEpoch;
-            if (current.hasRunningSubprocess === active) return [null, state] as const;
-            current.hasRunningSubprocess = active;
-            current.updatedAt = nextTerminalTimestamp(current.updatedAt);
-            return [
-              {
-                type: "activity" as const,
-                threadId: current.threadId,
-                terminalId: current.terminalId,
-                createdAt: current.updatedAt,
-                hasRunningSubprocess: active,
-              },
-              state,
-            ] as const;
-          });
-          if (event) yield* ctx.publishEvent(event);
-        }
+        yield* applySnapshot(ctx, sessions, result.value);
       }),
+    { concurrency: 4, discard: true },
+  );
+  // One owner request per pane: the snapshot names that lease's own shell PID.
+  const inspectNative = Effect.forEach(
+    native,
+    ({ session, inspect }) =>
+      Effect.tryPromise(() => inspect(session.threadId, session.terminalId)).pipe(
+        Effect.flatMap((snapshot) =>
+          applySnapshot(ctx, [{ ...session, remotePid: snapshot.shellPid }], snapshot.processes),
+        ),
+        Effect.catch(() => markInspectionUnavailable(ctx, [session])),
+      ),
     { concurrency: 4, discard: true },
   );
   return (
     unavailable.length > 0
       ? markInspectionUnavailable(ctx, unavailable).pipe(Effect.andThen(inspectGroups))
       : inspectGroups
-  ).pipe(Effect.andThen(ctx.refreshIdleWork ?? Effect.void));
+  ).pipe(Effect.andThen(inspectNative), Effect.andThen(ctx.refreshIdleWork ?? Effect.void));
+}
+
+type NativeInspect = NonNullable<OwnedPtyRuntime["nativeSshProduction"]>["inspect"];
+
+function applySnapshot(
+  ctx: ProcessLifecycleContext,
+  sessions: ReadonlyArray<InspectedSession>,
+  processes: ReadonlyArray<AgentProcess>,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const pids = new Set(processes.map((process) => process.pid));
+    yield* pushOwnerHints(ctx, sessions, (session) =>
+      remoteOwnerBusyHint(session.remotePid, processes),
+    );
+    for (const session of sessions) {
+      // Missing shell is not proof of idle (e.g. a transient remote process visibility failure).
+      if (!pids.has(session.remotePid)) {
+        yield* invalidateTerminalWorkAssessment(ctx, [session]);
+        continue;
+      }
+      const detection = detectTerminalAgentForShell(session.remotePid, processes, "posix");
+      yield* applyAgentIdentitiesWith(ctx, [session], new Map([[session.pid, detection]]));
+      const active = processes.some((process) => process.parentPid === session.remotePid);
+      const event = yield* ctx.modifyManagerState((state) => {
+        const current = state.sessions.get(toSessionKey(session.threadId, session.terminalId));
+        if (
+          !current ||
+          current.status !== "running" ||
+          current.pid !== session.pid ||
+          current.runtimeEpoch !== session.runtimeEpoch ||
+          current.runtimeGeneration !== session.runtimeGeneration ||
+          current.executionTargetId !== session.executionTargetId
+        )
+          return [null, state] as const;
+        current.subprocessAssessedGeneration = session.runtimeGeneration;
+        current.subprocessAssessedEpoch = session.runtimeEpoch;
+        if (current.hasRunningSubprocess === active) return [null, state] as const;
+        current.hasRunningSubprocess = active;
+        current.updatedAt = nextTerminalTimestamp(current.updatedAt);
+        return [
+          {
+            type: "activity" as const,
+            threadId: current.threadId,
+            terminalId: current.terminalId,
+            createdAt: current.updatedAt,
+            hasRunningSubprocess: active,
+          },
+          state,
+        ] as const;
+      });
+      if (event) yield* ctx.publishEvent(event);
+    }
+  });
 }
 
 function inspectionIdentity(session: TerminalSessionState & { pid: number }): InspectionIdentity {

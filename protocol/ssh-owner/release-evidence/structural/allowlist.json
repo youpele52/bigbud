@@ -6,32 +6,46 @@
       "rule": 2,
       "symbol": "GIT_SSH_COMMAND",
       "reason": "Keep row 32: this is the environment denial list, not a transport launch.",
-      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md §a row 32"
+      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md \u00a7a row 32"
     },
     {
       "path": "apps/desktop/src/backend/syncShellEnvironment.ts",
       "rule": 2,
       "symbol": "SSH_AUTH_SOCK",
       "reason": "Keep row 52: D/V agent-policy input; N/R never import it (U11).",
-      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md §4 U11"
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a74 U11"
     },
     {
       "path": "apps/server/scripts/providerConformance/client.ts",
       "rule": 1,
       "reason": "Keep row 55: non-product provider conformance harness, not shipped.",
-      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md §a row 55"
+      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md \u00a7a row 55"
     },
     {
       "path": "apps/server/scripts/providerConformance/workspace.ts",
       "rule": 1,
       "reason": "Keep row 55: non-product provider conformance harness, not shipped.",
-      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md §a row 55"
+      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md \u00a7a row 55"
+    },
+    {
+      "path": "apps/server/src/git/Layers/GitCore.fetchRoute.ts",
+      "rule": 1,
+      "symbol": "ssh",
+      "reason": "U14 reviewed path: SSH Git to a host that is NOT a bigbud SSH target runs as fenced local Git with the user's own ~/.ssh (sanitized env, GIT_ALLOW_PROTOCOL=ssh, BatchMode unless the user's Git config names a command, 30 s cap). Bigbud targets and unknown target sets never reach it.",
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a74 U14"
+    },
+    {
+      "path": "apps/server/src/git/Layers/GitCore.fetchRoute.match.ts",
+      "rule": 1,
+      "symbol": "ssh",
+      "reason": "U14 reviewed path: remote classification tags and the user core.sshCommand BatchMode extension for fenced third-party SSH Git; no process is started here.",
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a74 U14"
     },
     {
       "path": "crates/bigbud-ssh-owner/",
       "rule": 5,
       "reason": "The owner crate is the single reviewed Rust SSH owner, not a second owner.",
-      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md §e rule 5"
+      "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md \u00a7e rule 5"
     }
   ]
 }

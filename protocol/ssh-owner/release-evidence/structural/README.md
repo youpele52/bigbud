@@ -23,7 +23,8 @@ The checker is deliberately conservative. A finding is not proof of a launch, an
 - row 32 `remoteAgentGit.ts` (`GIT_SSH_COMMAND` in a denial list),
 - row 52 `syncShellEnvironment.ts` (`SSH_AUTH_SOCK` on D/V only, U11),
 - row 55 `providerConformance` harness paths,
-- the `bigbud-ssh-owner` crate for rule 5.
+- the `bigbud-ssh-owner` crate for rule 5,
+- U14 `GitCore.fetchRoute.ts` and `GitCore.fetchRoute.match.ts` (rule 1 `ssh`): fenced third-party SSH Git with the user's own `~/.ssh`; bigbud targets never reach it.
 
 Every entry carries a reason and a reference. Under U9 there is **no** `ssh-keygen` allowlist entry; the parser rejects one. Adding any entry needs review.
 

@@ -30,7 +30,9 @@ export type FakeOwnerMode =
   /** Echoes a previous round's reconciliation id, so the fresh ack is refused. */
   | "reconcile-stale"
   /** Acknowledges with zero counts even though rows were sent (partial ack). */
-  | "reconcile-partial";
+  | "reconcile-partial"
+  /** Answers the first operation with a truncated reply frame (protocol error). */
+  | "malformed-reply";
 
 export interface FakeOwnerOptions {
   readonly mode: FakeOwnerMode;

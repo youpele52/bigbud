@@ -23,7 +23,7 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 const PIN: &str =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n";
 
-pub(super) struct Fixture {
+pub(in crate::owner) struct Fixture {
     pub(super) root: PathBuf,
     identity: PathBuf,
     known_hosts: PathBuf,
@@ -31,7 +31,7 @@ pub(super) struct Fixture {
 }
 
 impl Fixture {
-    pub(super) fn new() -> Self {
+    pub(in crate::owner) fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
             "bigbud-production-term-{}-{}",
             std::process::id(),
@@ -61,7 +61,7 @@ impl Fixture {
         )
     }
 
-    pub(super) fn owner(&self, workspace_root: Option<&Path>) -> Owner {
+    pub(in crate::owner) fn owner(&self, workspace_root: Option<&Path>) -> Owner {
         let payload = encode_payload(Payload::Hello(Hello {
             major: 1,
             minor: 0,
@@ -126,7 +126,7 @@ impl Fixture {
     }
 
     /// Resolves one target and binds it for the current request.
-    pub(super) fn bind(&self, owner: &mut Owner, target: &str, port: u16) {
+    pub(in crate::owner) fn bind(&self, owner: &mut Owner, target: &str, port: u16) {
         let request = crate::v1::Request {
             request_id: vec![1],
             target_id: target.into(),
@@ -236,5 +236,6 @@ pub(super) fn request(cwd: &str) -> ProofPrepareTerminal {
         terminal_id: "terminal".into(),
         cols: 80,
         rows: 24,
+        shell: None,
     }
 }

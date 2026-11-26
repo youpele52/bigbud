@@ -16,7 +16,9 @@ export interface SshOwnerProductionRegistration {
   readonly handle: Pick<
     SshOwnerProductionHandle,
     "target" | "ownerEpoch" | "opencodeV2Service" | "opencodeV2Refusal" | "state"
-  >;
+  > &
+    // The owner binary, for durable native terminal rows (W2 T-term); fakes may omit it.
+    Partial<Pick<SshOwnerProductionHandle, "artifactPath">>;
   /**
    * Exact descriptor for a runtime target (`resolveProductionTargetDescriptor`
    * in production). Rejects with a typed `SshOwnerTargetRefusal` when the

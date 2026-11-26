@@ -224,9 +224,12 @@ export async function openPickerProofSession(
     // the same single-flight owner session. Wait for the in-flight exchange,
     // bounded by its own deadline, instead of refusing a concurrent poll; the
     // re-check and dispatch run in one synchronous step.
-    const runOpencode = async (operation: PickerProofOperation) => {
+    const runOpencode = async (
+      operation: PickerProofOperation,
+      beforeDispatch?: (id: Uint8Array) => void,
+    ) => {
       for (;;) {
-        if (closed || (!active && !proxyCloseWaiting)) return runBound(operation);
+        if (closed || (!active && !proxyCloseWaiting)) return runBound(operation, beforeDispatch);
         if (active) await active.catch(() => undefined);
         else await new Promise((resolve) => setTimeout(resolve, 5));
       }
@@ -270,8 +273,13 @@ export async function openPickerProofSession(
         (beforeDispatch) => runBound({ kind: "proofSampleHealth" }, beforeDispatch),
         sendPickerCancel,
       ),
-      ...makePickerProofProductionProxyClient((operation) =>
-        operation.kind.startsWith("proofOpencode") ? runOpencode(operation) : runBound(operation),
+      ...makePickerProofProductionProxyClient(runBound, runOpencode),
+      // W2 T-files: workspace file verbs queue behind the in-flight exchange too.
+      // An alias descriptor's id is the bare alias; its runtime id is `ssh:<alias>`.
+      ...makePickerProofWorkspaceClient(
+        (id) => id === state.targetId || id === `ssh:${state.targetId}`,
+        runOpencode,
+        sendPickerCancel,
       ),
     };
   };

@@ -109,6 +109,17 @@ directive_names! {
     RemoteForward => "remoteforward",
     SecurityKeyProvider => "securitykeyprovider",
     SetEnv => "setenv",
+    // U17: inert under the owner's `-F /dev/null` launch (see `is_inert`).
+    UseKeychain => "usekeychain",
+    TCPKeepAlive => "tcpkeepalive",
+    Compression => "compression",
+    LogLevel => "loglevel",
+    VisualHostKey => "visualhostkey",
+    EscapeChar => "escapechar",
+    IPQoS => "ipqos",
+    ConnectionAttempts => "connectionattempts",
+    FingerprintHash => "fingerprinthash",
+    NumberOfPasswordPrompts => "numberofpasswordprompts",
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

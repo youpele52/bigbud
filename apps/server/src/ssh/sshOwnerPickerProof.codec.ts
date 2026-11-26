@@ -30,14 +30,28 @@ import {
   writeProofOpencode,
   type ProofOpencodeOperation,
 } from "./sshOwnerPickerProof.codec.opencode.ts";
+import { writeGitLease, type GitLeaseOperation } from "./sshOwnerPickerProof.codec.gitLease.ts";
+import {
+  writeProviderLease,
+  type ProviderLeaseOperation,
+} from "./sshOwnerPickerProof.codec.providerLease.ts";
+import {
+  writeShellLease,
+  type ShellLeaseOperation,
+} from "./sshOwnerPickerProof.codec.shellLease.ts";
+import {
+  writeBackendLease,
+  type BackendLeaseOperation,
+} from "./sshOwnerPickerProof.codec.backend.ts";
 import {
   writeGuardedWriteOperation,
   type GuardedWriteOperation,
 } from "./sshOwnerPickerProof.codec.guardedWrite.ts";
 import {
-  writeProofTerminalOperation,
-  type ProofTerminalOperation,
-} from "./sshOwnerPickerProof.codec.terminal.ts";
+  isLaneOperation,
+  writeLaneOperation,
+  type LaneOperation,
+} from "./sshOwnerPickerProof.codec.lane.ts";
 export type {
   ProofTargetDescriptorInput,
   TARGET_DESCRIPTOR_LIMITS,
@@ -110,7 +124,7 @@ export type PickerProofOperation =
   | { readonly kind: "approveTrust"; readonly challenge: Uint8Array }
   | { readonly kind: "listFolders"; readonly path?: string | undefined }
   | { readonly kind: "listAliases" }
-  | ProofTerminalOperation
+  | LaneOperation
   | ProofWorkspaceReadOperation
   | ProofWorkspaceListOperation
   | ProofWorkspaceSnapshotOperation
@@ -134,6 +148,10 @@ export type PickerProofOperation =
   | ProofWorkspaceModePublishOperation
   | ProofTrackedPushOperation
   | ProofOpencodeOperation
+  | GitLeaseOperation
+  | ProviderLeaseOperation
+  | ShellLeaseOperation
+  | BackendLeaseOperation
   | { readonly kind: "unlockSyntheticPosixPassword" }
   | ProofShellOperation
   | ProofAgentActionOperation
@@ -185,6 +203,8 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
     if (grant !== undefined) writer.fieldBytes(5, grant);
     if (target !== undefined) writeTargetDescriptor(writer, target);
     const operands = new WireWriter();
+    // Terminal verbs and session-FS entry verbs (W2 T-term / T-files) share one writer.
+    if (isLaneOperation(operation)) return writeLaneOperation(writer, operands, operation);
     switch (operation.kind) {
       case "inspectTrust":
         writer.fieldRepeatedMessage(10, EMPTY);
@@ -205,17 +225,6 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
         break;
       case "listAliases":
         writer.fieldRepeatedMessage(76, EMPTY);
-        break;
-      case "openProofTerminal":
-      case "proofTerminalCwd":
-      case "proofTerminalReplay":
-      case "proofTerminalStatus":
-      case "closeProofTerminal":
-      case "proofTerminalInput":
-      case "proofTerminalResize":
-      case "prepareProofTerminal":
-      case "cancelProofTerminalReservation":
-        writeProofTerminalOperation(writer, operands, operation);
         break;
       case "probeProofPi":
       case "probeProofCodex":
@@ -308,6 +317,28 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
       case "proofOpencodeClose":
         writeProofOpencode(writer, operation);
         break;
+      case "gitUploadOpen":
+      case "gitUploadStatus":
+      case "gitUploadClose":
+      case "gitReceiveOpen":
+      case "gitReceiveStatus":
+      case "gitReceiveClose":
+        writeGitLease(writer, operation);
+        break;
+      case "providerProbe":
+      case "providerLeaseOpen":
+      case "providerLeaseStatus":
+      case "providerLeaseClose":
+        writeProviderLease(writer, operation);
+        break;
+      case "runThreadShell":
+      case "runProviderWorkspaceShell":
+      case "runAcpCommand":
+      case "runAcpShell":
+      case "shellStatus":
+      case "shellClose":
+        writeShellLease(writer, operation);
+        break;
       case "proofGitTrackedPush":
         writeProofTrackedPush(operands, operation);
         writer.fieldRepeatedMessage(49, operands.finish());
@@ -356,5 +387,7 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
       case "proofInspectPeerHostKey":
         writeProofPeerEnrollment(writer, operands, operation);
         break;
+      default: // W2 T-backend deployment step and client relay leases (100-105).
+        writeBackendLease(writer, operation);
     }
   });

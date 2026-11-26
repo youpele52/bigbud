@@ -1,26 +1,28 @@
 use super::{DEADLINE, ErrorCode, Instant, Transport, workspace};
 use crate::owner_terminal::{
-    DEV_PROMPT, DEV_TERM, FIXTURE_COMMAND, LOGIN_READY, TerminalLease, TerminalMode,
+    DEV_PROMPT, DEV_TERM, FIXTURE_COMMAND, TerminalLease, TerminalMode, login_command_witness,
 };
 
 const ENTER_WORKSPACE: &str =
     "[ -d \"$target\" ] && cd -P \"$target\" && [ \"$PWD\" = \"$target\" ] || exit 3";
 
-/// The target's own login shell, entered at the request's remote cwd. The
-/// wrapper is POSIX so a non-POSIX login shell still starts from the target's
-/// own `$SHELL`; the owner never names a fixture shell or command.
-fn login_command(cwd: &str) -> String {
+/// The target's own login shell (or a U16 shell from its `/etc/shells`),
+/// entered at the request's remote cwd. The wrapper is POSIX so a non-POSIX
+/// login shell still starts; the owner never names a fixture shell or command,
+/// and the witness carries the exec'd shell's own PID.
+fn login_command(cwd: &str, shell: Option<&str>) -> String {
     let script = format!(
         "CDPATH=\n\
          case \"$1\" in /*) ;; *) exit 3 ;; esac\n\
          cd \"$1\" || exit 3\n\
-         printf '%s\\n' {LOGIN_READY}\n\
-         exec \"${{SHELL:-/bin/sh}}\" -l\n"
+         {}",
+        login_command_witness()
     );
     format!(
-        "/bin/sh -c {} sh {}",
+        "/bin/sh -c {} sh {} {}",
         workspace::quote(&script),
-        workspace::quote(cwd)
+        workspace::quote(cwd),
+        workspace::quote(shell.unwrap_or_default())
     )
 }
 
@@ -93,9 +95,10 @@ impl Transport {
         cwd: &str,
         cols: u16,
         rows: u16,
+        shell: Option<&str>,
     ) -> Result<TerminalLease, ErrorCode> {
         super::posix_master::validate_production_image(self)?;
-        let remote = login_command(cwd);
+        let remote = login_command(cwd, shell);
         self.launch_terminal(&remote, (cols, rows), TerminalMode::LoginShell)
     }
 

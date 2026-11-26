@@ -15,6 +15,9 @@ use std::time::{Duration, Instant};
 
 #[path = "owner_terminal/expiry.rs"]
 mod expiry;
+#[path = "owner_terminal/witness.rs"]
+mod witness;
+pub(super) use witness::login_command_witness;
 
 const READY: &[u8] = b"BIGBUD_SSH_OWNER_PROOF_PTY_READY";
 // Require a remote TTY even if SSH continues after a rejected allocation.
@@ -72,25 +75,6 @@ pub(super) enum TerminalMode {
     /// A production target's own login shell. Interactive lifetime and ring
     /// retention apply; readiness is the owner's launch witness.
     LoginShell,
-}
-
-impl TerminalMode {
-    fn interactive(self) -> bool {
-        matches!(self, Self::DevInteractive | Self::LoginShell)
-    }
-
-    fn ready(self, sample: &[u8]) -> bool {
-        sample.split(|&byte| byte == b'\n').any(|line| match self {
-            Self::Proof => line
-                .strip_prefix(READY)
-                .is_some_and(|rest| rest.iter().all(|&byte| byte == b'\r')),
-            Self::DevInteractive => {
-                // macOS /bin/sh's Readline may enable xterm meta keys before PS1.
-                line.strip_prefix(b"\x1b[?1034h").unwrap_or(line) == DEV_PROMPT.as_bytes()
-            }
-            Self::LoginShell => line.strip_suffix(b"\r").unwrap_or(line) == LOGIN_READY.as_bytes(),
-        })
-    }
 }
 
 pub(super) struct TerminalLease {
@@ -192,7 +176,7 @@ impl TerminalLease {
                 return Ok(());
             }
             if !status.live && self.reader_finished() {
-                return Err(ssh_failure(&status.sample));
+                return Err(witness::launch_failure(self.mode, &status.sample));
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {

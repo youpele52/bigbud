@@ -7,6 +7,8 @@ export interface NativeDirectSshTerminalOpen {
   readonly cwd: string;
   readonly cols: number;
   readonly rows: number;
+  /** U16: an owner-listed `/etc/shells` path; the owner re-checks it at launch. */
+  readonly shell?: string;
 }
 
 /** Opaque lease within an authenticated owner epoch and target generation. */

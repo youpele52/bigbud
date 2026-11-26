@@ -3,15 +3,22 @@
 
 use super::{
     ApprovedTrackedUpdate, DestinationReceipt, FLUSH, MAX_COMMAND_BYTES, ReceiveGateError,
-    authorize_receive_prefix, check_approval, packet_length, read_receive_report, report,
+    authorize_prefix, check_approval, packet_length, read_receive_report, report,
 };
 use std::io::{self, Read, Write};
+
+#[path = "git_receive_gate.advertised.rs"]
+mod advertised;
+pub use advertised::{AdvertisedReceive, bind_advertised};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TrackedReceiveError {
     Gate(ReceiveGateError),
     AdvertisementIo(io::ErrorKind),
     InvalidAdvertisement,
+    /// The live advertisement does not hold the approved old OID for the
+    /// destination (moved or absent). Nothing was forwarded.
+    StaleRef,
     StaleLease,
     /// I/O attempted after admission; the conductor must not replay it.
     UnconfirmedForward(io::ErrorKind),
@@ -25,6 +32,8 @@ pub struct BoundTrackedReceive<'a, R, W> {
     approval: ApprovedTrackedUpdate<'a>,
     capabilities: Vec<&'static str>,
     advertisement: Vec<u8>,
+    /// A first publish (production only): the old OID is all zeros.
+    creation: bool,
 }
 
 impl<'a, R: Read, W: Write> BoundTrackedReceive<'a, R, W> {
@@ -46,6 +55,7 @@ impl<'a, R: Read, W: Write> BoundTrackedReceive<'a, R, W> {
             approval,
             capabilities,
             advertisement,
+            creation: false,
         })
     }
 
@@ -63,7 +73,7 @@ impl<'a, R: Read, W: Write> BoundTrackedReceive<'a, R, W> {
         revalidate: impl FnOnce() -> bool,
     ) -> Result<ForwardedTrackedReceive<'a, R, W>, TrackedReceiveError> {
         let destination_ref = self.approval.destination_ref;
-        let prefix = authorize_receive_prefix(client_input, self.approval)
+        let prefix = authorize_prefix(client_input, self.approval, self.creation)
             .map_err(TrackedReceiveError::Gate)?;
         let requested = prefix
             .strip_suffix(FLUSH)

@@ -40,13 +40,15 @@ pub(super) fn check_snapshot_anchor(anchor: &Path, globals: &[PathBuf]) -> Resul
 
 impl Transport {
     pub(in super::super) fn inspect(&self) -> Result<ObservedHostKey, ErrorCode> {
-        self.inspect_with(Instant::now() + DEADLINE, |deadline| self.scan(deadline))
+        self.inspect_with(Instant::now() + DEADLINE, |deadline| {
+            self.scan_keys(deadline)
+        })
     }
 
     pub(super) fn inspect_with(
         &self,
         deadline: Instant,
-        observe: impl FnOnce(Instant) -> Result<host_key::HostKey, ErrorCode>,
+        observe: impl FnOnce(Instant) -> Result<Vec<host_key::HostKey>, ErrorCode>,
     ) -> Result<ObservedHostKey, ErrorCode> {
         self.revalidate_policy()?;
         if self.host_verification() == HostVerification::Ed25519Certificate {
@@ -59,21 +61,29 @@ impl Transport {
             .configured_trust()
             .map(|sources| sources.read(&self.host_label, deadline))
             .transpose()?;
-        let raw = observe(deadline)?;
+        let offered = observe(deadline)?;
         let (pin, trust_stamp) = match extended {
             Some(inspection) => (inspection.pin, Some(inspection.stamp)),
             None => (self.pin()?, None),
         };
-        let verified = match pin {
-            Some(pin) if pin.key == raw => true,
-            // A conflicting pin is not a new first-use challenge.
-            Some(_) => return Err(ErrorCode::HostKeyChanged),
-            None => false,
+        // U23: with a pin, the most preferred offered key of a pinned type must
+        // be pinned; a different key, or only unpinned types, has changed. A
+        // conflicting pin is not a new first-use challenge. Without a pin, the
+        // most preferred offered key (ed25519 first) is the challenge.
+        let (raw, verified) = match pin {
+            Some(pin) => match offered.into_iter().find(|key| pin.has_type(key)) {
+                Some(key) if pin.contains(&key) => (key, true),
+                _ => return Err(ErrorCode::HostKeyChanged),
+            },
+            None => (
+                offered.into_iter().next().ok_or(ErrorCode::TransportLost)?,
+                false,
+            ),
         };
         Ok(ObservedHostKey {
             verified,
             fingerprint: raw.fingerprint(),
-            key_type: host_key::TYPE.to_owned(),
+            key_type: raw.key_type().to_owned(),
             raw,
             scope: Arc::clone(&self.config),
             trust_stamp,
@@ -82,7 +92,7 @@ impl Transport {
 
     pub(in super::super) fn approve(&self, expected: &ObservedHostKey) -> Result<(), ErrorCode> {
         self.approve_with(expected, Instant::now() + DEADLINE, |deadline| {
-            self.scan(deadline)
+            self.scan_keys(deadline)
         })
     }
 
@@ -90,11 +100,11 @@ impl Transport {
         &self,
         expected: &ObservedHostKey,
         deadline: Instant,
-        observe: impl FnOnce(Instant) -> Result<host_key::HostKey, ErrorCode>,
+        observe: impl FnOnce(Instant) -> Result<Vec<host_key::HostKey>, ErrorCode>,
     ) -> Result<(), ErrorCode> {
         self.revalidate_policy()?;
         if !Arc::ptr_eq(&self.config, &expected.scope)
-            || expected.key_type != host_key::TYPE
+            || expected.key_type != expected.raw.key_type()
             || expected.fingerprint != expected.raw.fingerprint()
         {
             return Err(ErrorCode::OperationDenied);
@@ -107,10 +117,11 @@ impl Transport {
                 return Err(ErrorCode::HostKeyChanged);
             }
         }
-        let present = observe(deadline)?;
-        if present != expected.raw {
-            return Err(ErrorCode::HostKeyChanged);
-        }
+        // The approved key must still be among the keys the server offers.
+        let present = observe(deadline)?
+            .into_iter()
+            .find(|key| key == &expected.raw)
+            .ok_or(ErrorCode::HostKeyChanged)?;
         self.revalidate_policy()?;
         let hash = self
             .policy

@@ -11,6 +11,8 @@ import "v1.workspace_write.proto";
 import "v1.shell.proto";
 import "v1.peer.proto";
 import "v1.transfer.proto";
+import "v1.provider_lease.proto";
+import "v1.remote_backend.proto";
 
 // Private local owner proof; no caller-supplied SSH argv, env, auth flags or forwarding.
 //
@@ -191,7 +193,8 @@ message Request {
   //   proof_packaged_rsync                 -> packaged_rsync
   //
   // Reserved future production names (no field allocated yet; additive only):
-  //   subscribe_status, terminal_inspect, git_remote_transport, probe_provider.
+  //   subscribe_status, git_remote_transport. (`probe_provider` is allocated
+  //   as field 80, W2 T-prov; `terminal_inspect` as field 120, W2 T-term.)
   //
   // The two transfer names above are frozen but **not enabled for real
   // transfers in S1-S4**: the owner dispatcher denies both verbs and only the
@@ -261,6 +264,15 @@ message Request {
     ProofRunThreadShell proof_run_thread_shell = 67;
     ProofRunProviderWorkspaceShell proof_run_provider_workspace_shell = 68;
     ProofRunAcpCommand proof_run_acp_command = 69;
+    // W2 T-shell production exec leases (see v1.shell.proto). Per target and
+    // generation; each open is its own grant and no role answers another.
+    RunThreadShell run_thread_shell = 90;
+    RunProviderWorkspaceShell run_provider_workspace_shell = 91;
+    RunAcpCommand run_acp_command = 92;
+    ShellStatus shell_status = 93;
+    ShellClose shell_close = 94;
+    // U21: approved ACP terminal/create command (its own grant; see v1.shell.proto).
+    RunAcpShell run_acp_shell = 95;
     // Owner-compiled agent management. Enum-only verbs; the owner selects every
     // program, argument, cwd and environment.
     AgentAction proof_agent_action = 70;
@@ -282,6 +294,40 @@ message Request {
     // scope. Metadata only: no dial, DNS, credential path, raw config value or
     // `Match exec` evaluation. Connection UI only; the monitor never lists.
     ListAliases list_aliases = 76;
+    // U15 production Git upload lease (see v1.workspace_git.proto). Per target
+    // and generation; one live lease per target.
+    GitUploadOpen git_upload_open = 77;
+    GitUploadLease git_upload_status = 78;
+    GitUploadLease git_upload_close = 79;
+    // W2 T-prov production Pi/Codex provider leases (see
+    // v1.provider_lease.proto). Per target and generation; the owner discovers
+    // the executable and compiles the argv.
+    ProviderProbe probe_provider = 80;
+    ProviderLeaseOpen provider_lease_open = 81;
+    ProviderLeaseHandle provider_lease_status = 82;
+    ProviderLeaseHandle provider_lease_close = 83;
+    // W2 T-backend production verbs (see v1.remote_backend.proto). Per target
+    // and generation: one live deployment step lease per target and a bounded
+    // set of client relay channels per target.
+    DeploymentStepOpen deployment_step_open = 100;
+    DeploymentStepLease deployment_step_status = 101;
+    DeploymentStepLease deployment_step_cancel = 102;
+    ClientRelayLeaseOpen client_relay_lease_open = 103;
+    ClientRelayLease client_relay_lease_status = 104;
+    ClientRelayLease client_relay_lease_close = 105;
+    // U15 production Git receive lease (push; see v1.workspace_git.proto).
+    // Per target and generation; one live lease per target.
+    GitReceiveOpen git_receive_open = 110;
+    GitReceiveLease git_receive_status = 111;
+    GitReceiveLease git_receive_close = 112;
+    // W2 T-term production terminal verbs (see v1.terminal.proto): a bounded
+    // process snapshot of the exact lease's shell, and the U16 shell inventory.
+    TerminalInspect terminal_inspect = 120;
+    Empty list_terminal_shells = 121;
+    // W2 T-files session-FS verbs (see v1.workspace_write.proto).
+    WorkspaceEntryInfoRequest workspace_entry_info = 122;
+    WorkspaceRenameRequest workspace_rename = 123;
+    WorkspaceAppendRequest workspace_append = 124;
   }
 }
 
@@ -452,6 +498,7 @@ message Reply {
     ProofShellResult proof_thread_shell = 41;
     ProofShellResult proof_provider_workspace_shell = 42;
     ProofAcpCommandResult proof_acp_command = 43;
+    ShellState shell = 56;
     AgentActionResult proof_agent_action = 44;
     // Peer enrollment metadata only. Never private key material, credentials or
     // a stored pin; a host-key reply carries only the presented key type and
@@ -464,6 +511,19 @@ message Reply {
     ProofTransferChildState proof_transfer_child_state = 48;
     // Read-only alias discovery metadata; never a credential path or raw value.
     ProofAliases proof_aliases = 49;
+    GitUploadState git_upload = 50;
+    // W2 T-prov production provider probe and lease state.
+    ProviderVersion provider_version = 51;
+    ProviderLeaseState provider_lease = 52;
+    // W2 T-backend production lease states (v1.remote_backend.proto).
+    DeploymentStepState deployment_step = 61;
+    ClientRelayLeaseState client_relay_lease = 62;
+    GitReceiveState git_receive = 66;
+    // W2 T-term production terminal replies (v1.terminal.proto).
+    TerminalProcesses terminal_processes = 71;
+    TerminalShells terminal_shells = 72;
+    WorkspaceEntryInfo workspace_entry_info = 73;
+    WorkspaceEntryChange workspace_entry_change = 74;
   }
 }
 
@@ -540,6 +600,9 @@ enum ErrorCode {
   // path or owner discovery), or no candidate passed the owner's executable
   // guard. Refused before any provider process starts; carries no path.
   ERROR_CODE_PROVIDER_EXECUTABLE_UNAVAILABLE = 38;
+  // U16: the requested shell is not listed in the target's `/etc/shells` (or is
+  // not an executable) at launch. Refused before the PTY starts; carries no path.
+  ERROR_CODE_TERMINAL_SHELL_UNAVAILABLE = 55;
 }
 
 message Trust {

@@ -7,6 +7,7 @@ import type { SshConfigAliasHint } from "./sshConfigProfileAliases.ts";
 import { parseSshExecutionTarget } from "./sshExecutionTarget.ts";
 import { isDescriptorHost, validateTargetDescriptor } from "./sshOwnerPickerProof.codec.target.ts";
 import type { SshOwnerTargetDescriptor } from "./sshOwnerProductionClient.launch.ts";
+import { firstDefaultIdentity } from "./sshOwnerProductionTargets.identities.ts";
 
 /**
  * Production per-target descriptor resolution (W3.7).
@@ -103,6 +104,8 @@ async function readHostConfig(home: string, host: string, alias: boolean): Promi
     sourcePath,
     content,
     host,
+    // U17: production mode, so `~/` Includes resolve against this home.
+    home,
   }).catch(() => {
     throw new SshOwnerTargetRefusal("config-unreadable");
   });
@@ -138,7 +141,8 @@ export async function resolveProductionTargetDescriptor(
   const kind = target.executionTargetId.includes("=") ? "structured" : "alias";
   const { hint, auth, scope } = await readHostConfig(home, target.host, kind === "alias");
   if (kind === "alias" && !hint) throw new SshOwnerTargetRefusal("config-refused");
-  const identity = target.keyPath ?? auth.identityFile;
+  // U17: no IdentityFile means OpenSSH's default keys, as the owner resolves them.
+  const identity = target.keyPath ?? auth.identityFile ?? (await firstDefaultIdentity(home));
   if (!identity) {
     const agent = auth.identityAgent;
     throw new SshOwnerTargetRefusal(

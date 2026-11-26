@@ -13,6 +13,8 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
 import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
+import { makeProductionSshTerminal } from "./Manager.sshOwnerProduction.ts";
+import { isProductionDirectSshTarget } from "../../ssh/sshOwnerProductionTerminal.ts";
 import { TerminalActivity } from "../Services/TerminalActivity.ts";
 import { AppQuitIntent } from "../../lifecycle/AppQuitIntent.ts";
 import {
@@ -57,6 +59,10 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   const shellProfiles = yield* ShellProfiles;
   const settings = Option.getOrUndefined(yield* Effect.serviceOption(ServerSettingsService));
   const sql = yield* SqlClient.SqlClient;
+  // W2 T-term: production direct-SSH terminals over the live owner (dev fixture first).
+  const production = devSshOwner ? undefined : yield* makeProductionSshTerminal(sql);
+  const sshTerminal = devSshOwner ? devSshOwner.terminal : production;
+  const ownerShells = production?.shellProfiles;
   const activity = Option.getOrUndefined(yield* Effect.serviceOption(TerminalActivity));
   const quitIntent = Option.getOrUndefined(yield* Effect.serviceOption(AppQuitIntent));
   yield* reconcileWorktreeRuntimeLeases(sql, "terminal");
@@ -167,21 +173,27 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
         ? settings?.currentSnapshot?.()?.settings.terminalShells.hostDefaults.local
         : undefined,
     listLocalShellProfiles: () => shellProfiles.revalidate({ executionTargetId: "local" }),
-    ptyAdapter: devSshOwner?.terminal?.wrapPtyAdapter(ptyAdapter) ?? ptyAdapter,
-    directSshCwdOwner: devSshOwner?.terminal?.cwdOwner,
+    ptyAdapter: sshTerminal?.wrapPtyAdapter(ptyAdapter) ?? ptyAdapter,
+    directSshCwdOwner: sshTerminal?.cwdOwner,
     directShellOwners: yield* makeDirectShellLaunchOwners(),
     listShellProfiles: (target) =>
-      devSshOwner && parseSshExecutionTarget(target.executionTargetId)
-        ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
-        : shellProfiles.list(target),
+      ownerShells && isProductionDirectSshTarget(target.executionTargetId)
+        ? ownerShells.list(target)
+        : devSshOwner && parseSshExecutionTarget(target.executionTargetId)
+          ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+          : shellProfiles.list(target),
     preflightRemoteShellProfile: (executionTargetId) =>
-      devSshOwner && parseSshExecutionTarget(executionTargetId)
-        ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
-        : preflightRemoteTerminalShellProfile(executionTargetId),
+      ownerShells && isProductionDirectSshTarget(executionTargetId)
+        ? Effect.void
+        : devSshOwner && parseSshExecutionTarget(executionTargetId)
+          ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+          : preflightRemoteTerminalShellProfile(executionTargetId),
     resolveShellProfile: (selection, target) =>
-      devSshOwner && parseSshExecutionTarget(target.executionTargetId)
-        ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
-        : shellLaunchPlanner.resolveProfile({ target, selection }),
+      ownerShells && isProductionDirectSshTarget(target.executionTargetId)
+        ? ownerShells.resolve(selection, target)
+        : devSshOwner && parseSshExecutionTarget(target.executionTargetId)
+          ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+          : shellLaunchPlanner.resolveProfile({ target, selection }),
     resolveRuntimePathIdentity: (cwd) =>
       Effect.tryPromise({
         try: () => captureLocalRuntimePathIdentity(cwd),

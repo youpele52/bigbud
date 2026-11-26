@@ -31,6 +31,46 @@ test("cross-role grant vectors are distinct and cannot be substituted", () => {
   }
 });
 
+/**
+ * W2 T-shell production leases: thread, provider and ACP opens are three
+ * distinct grants, never shared with their proof counterparts, a PTY, a read,
+ * a monitor or ordinary trust; lease status and close are separate grants too.
+ */
+test("production exec grants are distinct across roles and from proof and PTY grants", () => {
+  const digests = goldens("v1.golden.grants");
+  const production = [
+    "run_thread_shell",
+    "run_provider_workspace_shell",
+    "run_acp_command",
+    "shell_status",
+    "shell_close",
+    "run_acp_shell",
+  ] as const;
+  const others = [
+    "proof_run_thread_shell",
+    "proof_run_provider_workspace_shell",
+    "proof_run_acp_command",
+    "proof_terminal_open",
+    "proof_terminal_input",
+    "proof_workspace_preview",
+    "proof_write_request",
+    "proof_health_request",
+    "inspect_trust",
+    "git_upload_open",
+  ] as const;
+  const values = production.map((name) => {
+    const digest = digests.get(name);
+    assert.ok(digest, name);
+    return digest;
+  });
+  assert.equal(new Set(values).size, production.length, "production exec grants collide");
+  for (const name of others) {
+    const digest = digests.get(name);
+    assert.ok(digest, name);
+    assert.ok(!values.includes(digest), `${name} shares a production exec grant`);
+  }
+});
+
 test("exec-class grants are pairwise distinct", () => {
   const digests = goldens("v1.golden.grants");
   const exec = [

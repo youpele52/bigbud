@@ -1,6 +1,8 @@
 import { makeRemoteBackendRelayRoute } from "../remote-backend/clientRelay.route.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Scope from "effect/Scope";
 import { randomUUID } from "node:crypto";
 import { WsRpcGroup } from "@bigbud/contracts";
@@ -48,9 +50,31 @@ import { authorizeWebsocketRpcConnection } from "./wsConnectionAuthorization.ts"
 import { makeWsSshOwnerDevHandlers } from "./wsSshOwnerDev.ts";
 import { withWsSshOwnerDevEntryActions } from "./wsSshOwnerDev.workspace.create.ts";
 import { withWsSshOwnerDevWorkspace } from "./wsSshOwnerDev.workspace.ts";
+import { withWsSshOwnerProductionWorkspace } from "./wsSshOwnerProduction.workspace.ts";
+import { initializeProductionSshGuardedWriteJournal } from "../persistence/Layers/SshOwnerGuardedWriteJournal.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
+
+/** W2 T-files: production Files over the live owner; unchanged when activation is off. */
+const withProductionWorkspace = Effect.fn("withProductionWorkspace")(function* <
+  C extends Parameters<typeof withWsSshOwnerProductionWorkspace>[0],
+>(base: C) {
+  // A journal that cannot open leaves guarded saves refused, never unguarded.
+  const sql = Option.getOrUndefined(yield* Effect.serviceOption(SqlClient.SqlClient));
+  const journal = sql
+    ? Option.getOrUndefined(
+        yield* initializeProductionSshGuardedWriteJournal(sql).pipe(Effect.option),
+      )
+    : undefined;
+  const production = withWsSshOwnerProductionWorkspace(base, journal ? { journal } : {});
+  if (!production) return base;
+  return {
+    ...base,
+    workspaceMutations: production.workspaceMutations,
+    workspaceRuntime: yield* production.workspaceRuntime.pipe(Effect.provide(WorkspacePathsLive)),
+  };
+});
 
 const makeWsRpcLayer = (
   withBootstrapCommandLock: BootstrapCommandLock,
@@ -76,7 +100,7 @@ const makeWsRpcLayer = (
               sshOwner.workspace,
             ).pipe(Effect.provide(WorkspacePathsLive)),
           }
-        : base;
+        : yield* withProductionWorkspace(base);
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;

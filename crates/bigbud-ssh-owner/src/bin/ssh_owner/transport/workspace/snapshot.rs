@@ -117,7 +117,7 @@ fn snapshot_command(
     operand: &v1::ProofWorkspaceList,
 ) -> Result<String, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         &operand.relative_dir,
         true,

@@ -5,7 +5,7 @@ use super::paths::{MAX_PATH, literal_parent};
 use super::trust_paths::TrustPaths;
 use super::{ErrorCode, RouteFacts, UNSUPPORTED};
 use sha2::{Digest, Sha256};
-use std::ffi::{CString, OsStr};
+use std::ffi::CString;
 use std::fs::{self, File, Metadata};
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
@@ -20,13 +20,26 @@ pub(super) struct Scope {
     directory: Directory,
     directory_id: FileId,
     uid: u32,
+    /// U17 production: OpenSSH's own permission checks, not the fixture's.
+    openssh: bool,
+    /// The literal (uncanonicalized) root directory.
+    root: PathBuf,
+    /// Where the config lives inside the root; relative operands start here.
+    base: PathBuf,
+    /// The root is the account home, so `~/` is the root itself.
+    home_rooted: bool,
 }
 
 struct RootToken {
     path: PathBuf,
     canonical: PathBuf,
     directory_id: FileId,
+    openssh: bool,
 }
+
+#[path = "source.policy.rs"]
+mod policy;
+pub(super) use policy::Kind;
 
 pub(super) struct SourceToken {
     user: RootToken,
@@ -45,12 +58,36 @@ struct TrustToken {
 }
 
 impl Scope {
+    /// The fixture scope, for tests that open one directly.
+    #[cfg(test)]
     pub(super) fn open(path: &Path) -> Result<Self, ErrorCode> {
-        let parent = literal_parent(path, false)?;
+        Self::open_with(path, false)
+    }
+
+    /// `openssh`: the U17 production scope (see `policy`); otherwise the
+    /// fixture scope, the config's own private directory.
+    pub(super) fn open_with(path: &Path, openssh: bool) -> Result<Self, ErrorCode> {
+        let (parent, base, home_rooted) = if openssh {
+            policy::production_root(path)?
+        } else {
+            (
+                literal_parent(path, false)?.to_owned(),
+                PathBuf::new(),
+                false,
+            )
+        };
+        let parent = parent.as_path();
         // Unix temp locations can themselves be system aliases (e.g. /var).
         // Canonicalize only the explicitly supplied fixture directory, not
         // its files; the token also checks that this mapping has not changed.
-        let original = fs::symlink_metadata(parent).map_err(|_| UNSUPPORTED)?;
+        // A home-rooted production scope may itself be a symlinked home, which
+        // OpenSSH follows; the canonical mapping is still bound and rechecked.
+        let original = if openssh {
+            fs::metadata(parent)
+        } else {
+            fs::symlink_metadata(parent)
+        }
+        .map_err(|_| UNSUPPORTED)?;
         let canonical = fs::canonicalize(parent).map_err(|_| UNSUPPORTED)?;
         let directory = Directory::root(&canonical)?;
         let metadata = directory.metadata()?;
@@ -59,7 +96,12 @@ impl Scope {
         }
         // SAFETY: geteuid takes no arguments and reads the current process only.
         let uid = unsafe { libc::geteuid() };
-        if !metadata.is_dir() || metadata.uid() != uid || metadata.mode() & 0o077 != 0 {
+        let permitted = if openssh {
+            policy::trusted_directory(&metadata, uid) && policy::trusted_ancestors(&canonical, uid)
+        } else {
+            metadata.uid() == uid && metadata.mode() & 0o077 == 0
+        };
+        if !metadata.is_dir() || !permitted {
             return Err(UNSUPPORTED);
         }
         Ok(Self {
@@ -68,7 +110,19 @@ impl Scope {
             directory,
             directory_id: FileId::of(&metadata),
             uid,
+            openssh,
+            root: parent.to_owned(),
+            base,
+            home_rooted,
         })
+    }
+
+    pub(super) fn openssh(&self) -> bool {
+        self.openssh
+    }
+
+    pub(super) fn home_rooted(&self) -> bool {
+        self.home_rooted
     }
 
     pub(super) fn check_length(&self, relative: &Path) -> Result<(), ErrorCode> {
@@ -88,8 +142,9 @@ impl Scope {
         Ok(absolute)
     }
 
-    pub(super) fn config_name(&self) -> Result<&OsStr, ErrorCode> {
-        self.path.file_name().ok_or(UNSUPPORTED)
+    /// The top-level config, relative to the root.
+    pub(super) fn config_name(&self) -> Result<PathBuf, ErrorCode> {
+        Ok(self.base.join(self.path.file_name().ok_or(UNSUPPORTED)?))
     }
 
     pub(super) fn directory(&self) -> &Directory {
@@ -100,14 +155,16 @@ impl Scope {
         self.uid
     }
 
-    pub(super) fn relative_operand<'a>(&self, path: &'a Path) -> Result<&'a Path, ErrorCode> {
+    /// Absolute operands must lie under the root; relative ones start at the
+    /// config's directory (OpenSSH: `~/.ssh` for a user config).
+    pub(super) fn relative_operand(&self, path: &Path) -> Result<PathBuf, ErrorCode> {
         if path.is_absolute() {
-            path.strip_prefix(&self.canonical).or_else(|_| {
-                path.strip_prefix(self.path.parent().ok_or(UNSUPPORTED)?)
-                    .map_err(|_| UNSUPPORTED)
-            })
+            path.strip_prefix(&self.canonical)
+                .or_else(|_| path.strip_prefix(&self.root))
+                .map(Path::to_owned)
+                .map_err(|_| UNSUPPORTED)
         } else {
-            Ok(path)
+            Ok(self.base.join(path))
         }
     }
 
@@ -116,7 +173,8 @@ impl Scope {
         path: &Path,
         private: bool,
     ) -> Result<(FileVersion, Vec<u8>), ErrorCode> {
-        let file = self.open_regular(path, private)?;
+        let kind = Kind::Config { private };
+        let file = self.open_regular(path, kind)?;
         let before = Stamp::of(&file.metadata().map_err(|_| UNSUPPORTED)?);
         if before.len > MAX_CONFIG {
             return Err(UNSUPPORTED);
@@ -129,7 +187,7 @@ impl Scope {
         if bytes.len() as u64 > MAX_CONFIG {
             return Err(UNSUPPORTED);
         }
-        self.check_read(path, &file, private, &before, bytes.len() as u64)?;
+        self.check_read(path, &file, kind, &before, bytes.len() as u64)?;
         let digest = Sha256::digest(&bytes).into();
         Ok((
             FileVersion {
@@ -140,116 +198,31 @@ impl Scope {
         ))
     }
 
-    pub(super) fn bind(
-        self,
-        system: Option<Scope>,
-        config: ConfigSources,
-        alias: &str,
-        facts: &RouteFacts,
-        identities: &[Located<PathBuf>],
-        trust: &TrustPaths,
-    ) -> Result<SourceToken, ConfigFailure> {
-        let mut trust_files = Vec::with_capacity(trust.user.len() + trust.global.len());
-        for path in &trust.user {
-            trust_files.push(self.bind_trust(path, &config, false)?);
-        }
-        for global in &trust.global {
-            let scope = if global.system_scope {
-                system.as_ref().ok_or(UNSUPPORTED)?
-            } else {
-                &self
-            };
-            let token = scope.bind_trust(&global.path, &config, global.system_scope)?;
-            // A persistable user file must never also be a global input.
-            if trust_files
-                .iter()
-                .take(trust.user.len())
-                .any(|user| user.id == token.id)
-            {
-                return Err(global.path.diagnostic.reject(UNSUPPORTED));
-            }
-            trust_files.push(token);
-        }
-        let mut bound_identities = Vec::with_capacity(identities.len());
-        for identity in identities {
-            let reject_identity = |code| identity.diagnostic.reject(code);
-            let relative = identity
-                .value
-                .strip_prefix(&self.canonical)
-                .map_err(|_| reject_identity(UNSUPPORTED))?;
-            let version = self.identity_stamp(relative).map_err(reject_identity)?;
-            if trust_files.iter().any(|trust| trust.id == version.id) || config.contains(version.id)
-            {
-                return Err(reject_identity(UNSUPPORTED));
-            }
-            bound_identities.push((relative.to_owned(), version));
-        }
-        Ok(SourceToken {
-            alias: alias.to_owned(),
-            facts: facts.clone(),
-            config,
-            identities: bound_identities,
-            trust: trust_files,
-            user: self.into_root(),
-            system: system.map(Scope::into_root),
-        })
-    }
-
-    fn into_root(self) -> RootToken {
-        RootToken {
-            path: self.path,
-            canonical: self.canonical,
-            directory_id: self.directory_id,
-        }
-    }
-
-    fn bind_trust(
-        &self,
-        path: &Located<PathBuf>,
-        config: &ConfigSources,
-        system_scope: bool,
-    ) -> Result<TrustToken, ConfigFailure> {
-        let reject = |code| path.diagnostic.reject(code);
-        let relative = path
-            .value
-            .strip_prefix(&self.canonical)
-            .map_err(|_| reject(UNSUPPORTED))?;
-        let id = self.trust_id(relative).map_err(reject)?;
-        if config.contains(id) {
-            return Err(reject(UNSUPPORTED));
-        }
-        Ok(TrustToken {
-            relative: relative.to_owned(),
-            id,
-            system_scope,
-        })
-    }
-
     fn trust_id(&self, path: &Path) -> Result<FileId, ErrorCode> {
-        let file = self.open_scoped_file(path, true, true)?;
+        let file = self.open_scoped_file(path, Kind::Trust, true)?;
         Ok(FileId::of(&file.metadata().map_err(|_| UNSUPPORTED)?))
     }
 
     fn identity_stamp(&self, path: &Path) -> Result<Stamp, ErrorCode> {
         // Recheck inode and timestamps without ever pulling key contents into
         // the config resolver (which can run before host trust is established).
-        let file = self.open_regular(path, true)?;
+        let file = self.open_regular(path, Kind::Key)?;
         let stamp = Stamp::of(&file.metadata().map_err(|_| UNSUPPORTED)?);
         if stamp.len == 0 || stamp.len > MAX_IDENTITY {
             return Err(UNSUPPORTED);
         }
-        self.check_read(path, &file, true, &stamp, stamp.len)?;
+        self.check_read(path, &file, Kind::Key, &stamp, stamp.len)?;
         Ok(stamp)
     }
 
-    fn open_regular(&self, path: &Path, private: bool) -> Result<File, ErrorCode> {
-        self.open_scoped_file(path, private, false)
+    fn open_regular(&self, path: &Path, kind: Kind) -> Result<File, ErrorCode> {
+        self.open_scoped_file(path, kind, false)
     }
 
     fn open_scoped_file(
         &self,
         path: &Path,
-        private: bool,
+        kind: Kind,
         trust_basename: bool,
     ) -> Result<File, ErrorCode> {
         self.check_length(path)?;
@@ -272,9 +245,11 @@ impl Scope {
             let name = CString::new(bytes).map_err(|_| UNSUPPORTED)?;
             let directory = child.as_ref().unwrap_or(&self.directory);
             if last {
-                return directory.regular(&name, self.uid, private);
+                let (private, allow_root) = kind.rule(self.openssh);
+                return directory.regular(&name, self.uid, private, allow_root);
             }
-            let DirectoryChild::Directory(next) = directory.child(&name, self.uid)? else {
+            let DirectoryChild::Directory(next) = directory.child(&name, self.uid, self.openssh)?
+            else {
                 return Err(UNSUPPORTED);
             };
             child = Some(next);
@@ -286,13 +261,13 @@ impl Scope {
         &self,
         path: &Path,
         file: &File,
-        private: bool,
+        kind: Kind,
         before: &Stamp,
         len: u64,
     ) -> Result<(), ErrorCode> {
         let after = file.metadata().map_err(|_| UNSUPPORTED)?;
         let at_path = self
-            .open_regular(path, private)?
+            .open_regular(path, kind)?
             .metadata()
             .map_err(|_| UNSUPPORTED)?;
         if len != before.len || *before != Stamp::of(&after) || *before != Stamp::of(&at_path) {
@@ -302,45 +277,8 @@ impl Scope {
     }
 }
 
-impl RootToken {
-    fn reopen(&self) -> Result<Scope, ErrorCode> {
-        let scope = Scope::open(&self.path)?;
-        if scope.canonical != self.canonical || scope.directory_id != self.directory_id {
-            return Err(UNSUPPORTED);
-        }
-        Ok(scope)
-    }
-}
-
-impl SourceToken {
-    pub(super) fn revalidate(&self) -> Result<(), ErrorCode> {
-        let user = self.user.reopen()?;
-        let system = self.system.as_ref().map(RootToken::reopen).transpose()?;
-        let (_, config) = include::evaluate(&user, system.as_ref(), &self.alias, &self.facts)
-            .map_err(|failure| failure.code)?;
-        if config != self.config {
-            return Err(UNSUPPORTED);
-        }
-        for (path, version) in &self.identities {
-            if user.identity_stamp(path)? != *version {
-                return Err(UNSUPPORTED);
-            }
-        }
-        // Transport compares trust contents at use. Revalidation here binds
-        // the complete ordered source list and rejects replaced/unsafe paths.
-        for token in &self.trust {
-            let scope = if token.system_scope {
-                system.as_ref().ok_or(UNSUPPORTED)?
-            } else {
-                &user
-            };
-            if scope.trust_id(&token.relative)? != token.id {
-                return Err(UNSUPPORTED);
-            }
-        }
-        Ok(())
-    }
-}
+#[path = "source.token.rs"]
+mod token;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) struct FileId(u64, u64);

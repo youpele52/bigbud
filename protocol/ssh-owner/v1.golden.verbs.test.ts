@@ -30,12 +30,8 @@ const mapping = (() => {
   return values;
 })();
 
-const reservedFutures = [
-  "subscribe_status",
-  "terminal_inspect",
-  "git_remote_transport",
-  "probe_provider",
-] as const;
+// `terminal_inspect` was allocated as field 120 (W2 T-term).
+const reservedFutures = ["subscribe_status", "git_remote_transport"] as const;
 
 test("frozen production verbs cover every proof_* operation exactly once", () => {
   // The product verbs keep their existing names and field numbers.
@@ -47,7 +43,42 @@ test("frozen production verbs cover every proof_* operation exactly once", () =>
       { name: "connect", field: 12 },
       { name: "disconnect", field: 13 },
       { name: "list_folders", field: 14 },
+      // W2 T-shell production exec leases (promoted frozen names plus lease control).
+      { name: "run_thread_shell", field: 90 },
+      { name: "run_provider_workspace_shell", field: 91 },
+      { name: "run_acp_command", field: 92 },
+      { name: "shell_status", field: 93 },
+      { name: "shell_close", field: 94 },
+      // U21: approved ACP terminal command (its own grant).
+      { name: "run_acp_shell", field: 95 },
       { name: "list_aliases", field: 76 },
+      // U15 production Git upload lease (read-only).
+      { name: "git_upload_open", field: 77 },
+      { name: "git_upload_status", field: 78 },
+      { name: "git_upload_close", field: 79 },
+      // W2 T-prov production Pi/Codex provider leases.
+      { name: "probe_provider", field: 80 },
+      { name: "provider_lease_open", field: 81 },
+      { name: "provider_lease_status", field: 82 },
+      { name: "provider_lease_close", field: 83 },
+      // W2 T-backend deployment step and client relay leases.
+      { name: "deployment_step_open", field: 100 },
+      { name: "deployment_step_status", field: 101 },
+      { name: "deployment_step_cancel", field: 102 },
+      { name: "client_relay_lease_open", field: 103 },
+      { name: "client_relay_lease_status", field: 104 },
+      { name: "client_relay_lease_close", field: 105 },
+      // U15 production Git receive lease (push), declared after 79.
+      { name: "git_receive_open", field: 110 },
+      { name: "git_receive_status", field: 111 },
+      { name: "git_receive_close", field: 112 },
+      // W2 T-term production terminal process snapshot and U16 shell inventory.
+      { name: "terminal_inspect", field: 120 },
+      { name: "list_terminal_shells", field: 121 },
+      // W2 T-files session-FS entry verbs.
+      { name: "workspace_entry_info", field: 122 },
+      { name: "workspace_rename", field: 123 },
+      { name: "workspace_append", field: 124 },
     ],
   );
 

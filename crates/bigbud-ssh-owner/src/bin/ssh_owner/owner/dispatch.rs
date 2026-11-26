@@ -181,6 +181,48 @@ impl Owner {
             Operation::ProofOpencodeOpen(_)
             | Operation::ProofOpencodeStatus(_)
             | Operation::ProofOpencodeClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Operation::GitUploadOpen(operand) => Ok(self.open_git_upload(operand)),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Operation::GitUploadStatus(operand) => {
+                Ok(self.observe_git_upload(&operand.lease, false))
+            }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Operation::GitUploadClose(operand) => Ok(self.observe_git_upload(&operand.lease, true)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::GitUploadOpen(_)
+            | Operation::GitUploadStatus(_)
+            | Operation::GitUploadClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            // U15 production Git receive lease (owner/git_receive.rs).
+            operation @ (Operation::GitReceiveOpen(_)
+            | Operation::GitReceiveStatus(_)
+            | Operation::GitReceiveClose(_)) => Ok(self.dispatch_git_receive(operation)),
+            // W2 T-backend production leases (owner/backend.rs).
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::DeploymentStepOpen(_)
+            | Operation::DeploymentStepStatus(_)
+            | Operation::DeploymentStepCancel(_)
+            | Operation::ClientRelayLeaseOpen(_)
+            | Operation::ClientRelayLeaseStatus(_)
+            | Operation::ClientRelayLeaseClose(_)) => Ok(self.dispatch_backend(operation)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::DeploymentStepOpen(_)
+            | Operation::DeploymentStepStatus(_)
+            | Operation::DeploymentStepCancel(_)
+            | Operation::ClientRelayLeaseOpen(_)
+            | Operation::ClientRelayLeaseStatus(_)
+            | Operation::ClientRelayLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            // W2 T-prov production provider leases (owner/provider_lease.rs).
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::ProbeProvider(_)
+            | Operation::ProviderLeaseOpen(_)
+            | Operation::ProviderLeaseStatus(_)
+            | Operation::ProviderLeaseClose(_)) => Ok(self.execute_provider_lease(operation)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::ProbeProvider(_)
+            | Operation::ProviderLeaseOpen(_)
+            | Operation::ProviderLeaseStatus(_)
+            | Operation::ProviderLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
             Operation::ProofGitTrackedPush(operand) => Ok(Ok(self.receive_tracked_push(*operand))),
             Operation::ProofWorkspaceGit(operand) => Ok(transport!()
                 .execute_workspace_git(&operand)
@@ -220,6 +262,12 @@ impl Owner {
             Operation::ProofWorkspaceDeleteEntry(operand) => Ok(transport!()
                 .delete_workspace_entry(&operand)
                 .map(Outcome::ProofWorkspaceEntryMutation)),
+            // W2 T-files session-FS verbs (`transport/workspace/entry_ops.rs`).
+            operation @ (Operation::WorkspaceEntryInfo(_)
+            | Operation::WorkspaceRename(_)
+            | Operation::WorkspaceAppend(_)) => Ok(
+                crate::transport::workspace::entry_ops::dispatch(transport!(), operation),
+            ),
             Operation::ProofWorkspaceWriteBegin(operand) => Ok(transport!()
                 .begin_workspace_write(&operand)
                 .map(Outcome::ProofWorkspaceWriteStage)),
@@ -241,40 +289,19 @@ impl Owner {
             Operation::ProofWorkspaceRead(read) => Ok(transport!()
                 .read_workspace(&read)
                 .map(Outcome::ProofWorkspaceFile)),
-            Operation::ProofPrepareTerminal(request) => Ok(self
-                .prepare_terminal(request)
-                .map(Outcome::ProofTerminalReservation)),
-            Operation::ProofCancelTerminalReservation(request) => Ok(self
-                .cancel_terminal_reservation(&request.lease)
-                .map(Outcome::ProofTerminalReservation)),
-            Operation::ProofOpenTerminal(request) => Ok(self
-                .open_terminal(&request.lease)
-                .map(Outcome::ProofTerminal)),
-            Operation::ProofTerminalCwd(request) => Ok(transport!()
-                .probe_terminal_cwd(request)
-                .map(Outcome::ProofTerminalCwd)),
-            Operation::ProofTerminalReplay(request) => Ok(self
-                .replay_terminal(&request.lease, request.after_sequence)
-                .map(Outcome::ProofTerminalReplay)),
-            Operation::ProofTerminalStatus(handle) => Ok(self
-                .terminal_status(&handle.lease)
-                .map(Outcome::ProofTerminal)),
-            Operation::ProofCloseTerminal(handle) => Ok(self
-                .close_terminal(&handle.lease)
-                .map(Outcome::ProofTerminal)),
-            Operation::ProofTerminalInput(input) => Ok(self
-                .write_terminal_input(&input.lease, input.sequence, &input.data)
-                .and_then(|()| self.terminal_status(&input.lease))
-                .map(Outcome::ProofTerminal)),
-            Operation::ProofTerminalResize(input) => Ok(self
-                .leased_terminal(&input.lease)
-                .and_then(|terminal| {
-                    let cols = u16::try_from(input.cols).map_err(|_| ErrorCode::InvalidOperands)?;
-                    let rows = u16::try_from(input.rows).map_err(|_| ErrorCode::InvalidOperands)?;
-                    terminal.resize_proof_terminal(cols, rows)
-                })
-                .and_then(|()| self.terminal_status(&input.lease))
-                .map(Outcome::ProofTerminal)),
+            // W2 T-term: every terminal verb, fixture and production (see
+            // `owner/terminal_dispatch.rs`).
+            operation @ (Operation::ProofPrepareTerminal(_)
+            | Operation::ProofCancelTerminalReservation(_)
+            | Operation::ProofOpenTerminal(_)
+            | Operation::ProofTerminalCwd(_)
+            | Operation::ProofTerminalReplay(_)
+            | Operation::ProofTerminalStatus(_)
+            | Operation::ProofCloseTerminal(_)
+            | Operation::ProofTerminalInput(_)
+            | Operation::ProofTerminalResize(_)
+            | Operation::TerminalInspect(_)
+            | Operation::ListTerminalShells(_)) => Ok(self.dispatch_terminal(operation)),
             Operation::ProofRunThreadShell(operand) => Ok(transport!()
                 .run_thread_shell(&operand)
                 .map(Outcome::ProofThreadShell)),
@@ -284,6 +311,21 @@ impl Owner {
             Operation::ProofRunAcpCommand(operand) => Ok(transport!()
                 .run_acp_command(&operand)
                 .map(Outcome::ProofAcpCommand)),
+            // W2 T-shell production exec leases (see `owner/shell_lease.rs`).
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::RunThreadShell(_)
+            | Operation::RunProviderWorkspaceShell(_)
+            | Operation::RunAcpCommand(_)
+            | Operation::RunAcpShell(_)
+            | Operation::ShellStatus(_)
+            | Operation::ShellClose(_)) => Ok(self.dispatch_shell(operation)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::RunThreadShell(_)
+            | Operation::RunProviderWorkspaceShell(_)
+            | Operation::RunAcpCommand(_)
+            | Operation::RunAcpShell(_)
+            | Operation::ShellStatus(_)
+            | Operation::ShellClose(_) => Ok(Err(ErrorCode::OperationDenied)),
             Operation::ProofAgentAction(operand) => {
                 Ok(self.agent_action(&operand).map(Outcome::ProofAgentAction))
             }
@@ -316,6 +358,18 @@ fn is_agent_control(operation: &Operation) -> bool {
             | Operation::ProofAgentProxyClose(_)
             | Operation::ProofOpencodeStatus(_)
             | Operation::ProofOpencodeClose(_)
+            | Operation::GitUploadStatus(_)
+            | Operation::GitUploadClose(_)
+            | Operation::GitReceiveStatus(_)
+            | Operation::GitReceiveClose(_)
+            | Operation::ShellStatus(_)
+            | Operation::ShellClose(_)
+            | Operation::DeploymentStepStatus(_)
+            | Operation::DeploymentStepCancel(_)
+            | Operation::ClientRelayLeaseStatus(_)
+            | Operation::ClientRelayLeaseClose(_)
+            | Operation::ProviderLeaseStatus(_)
+            | Operation::ProviderLeaseClose(_)
     )
 }
 

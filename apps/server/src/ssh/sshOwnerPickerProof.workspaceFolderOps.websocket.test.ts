@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
 import { SshHostTrustChallenge } from "@bigbud/contracts/server/server.sshHostTrust";
 import { DEV_SSH_OWNER_PROFILE_PREFIX } from "@bigbud/shared/DevLauncher";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Exit, Layer, Schema } from "effect";
 import { expect, it, vi } from "vitest";
 
 import { makeRoutesLayer } from "../server.routes.ts";
@@ -74,7 +74,9 @@ it.skipIf(!supported || !pickerProofOptedIn)(
                 [],
               );
               expect(yield* Effect.flip(create("created"))).toMatchObject({ alreadyExists: true });
-              for (const bad of ["../escape", "escape/child", `bad\0name`, "/absolute"]) {
+              // NUL never reaches the wire: the contract schema refuses it at the client encoder.
+              expect(Exit.isFailure(yield* Effect.exit(create(`bad\0name`)))).toBe(true);
+              for (const bad of ["../escape", "escape/child", "/absolute"]) {
                 expect(yield* Effect.flip(create(bad))).toMatchObject({
                   mutationDisposition: "not-dispatched",
                 });

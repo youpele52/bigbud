@@ -4,7 +4,12 @@
 //!
 //! `--production --profile <binding> --state-dir <dir> --ssh <path>
 //!  --keyscan <path> [--system-config <path>] [--alias-config <path>]
-//!  [--attach-socket <path>] [--workspace-root <path>]`
+//!  [--attach-socket <path>] [--workspace-root <path>] [--launcher-lifetime]`
+//!
+//! `--launcher-lifetime` is required for a non-surviving profile kind
+//! (`desktop-dev`) and refused for every surviving one: the launcher passes a
+//! socket at FD 3 and the owner retires as soon as that socket reports activity
+//! or hang-up, so its life is tied to the launcher's.
 //!
 //! One owner serves many targets: every target-scoped request carries its own
 //! descriptor. The profile and state directory require each other. No target,
@@ -37,6 +42,8 @@ pub(super) struct ProductionBindings {
     pub(super) alias_config: Option<PathBuf>,
     pub(super) attach_path: Option<PathBuf>,
     pub(super) workspace_root: Option<PathBuf>,
+    /// Bind the launcher-lifetime socket at FD 3 (non-surviving profiles only).
+    pub(super) launcher_lifetime: bool,
     /// Owner-selected installed agent for the per-target production proxy.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) agent_service: Option<crate::owner_agent_proxy::ServiceRecipe>,
@@ -71,6 +78,7 @@ struct Parsed {
     agent_binary: Option<PathBuf>,
     agent_sha256: Option<String>,
     agent_state: Option<PathBuf>,
+    launcher_lifetime: bool,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     /// `Some(None)`: discover the remote executable on each target.
     opencode_v2_binary: Option<Option<PathBuf>>,
@@ -89,6 +97,7 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         agent_binary: None,
         agent_sha256: None,
         agent_state: None,
+        launcher_lifetime: false,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2_binary: None,
     };
@@ -152,6 +161,9 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
                         .map_err(|_| ProfileRefusal::MissingFlag)?,
                 );
             }
+            "--launcher-lifetime" if !parsed.launcher_lifetime => {
+                parsed.launcher_lifetime = true;
+            }
             "--workspace-root" if parsed.workspace_root.is_none() => {
                 parsed.workspace_root = Some(
                     take()
@@ -212,6 +224,10 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         return Err(ProfileRefusal::MalformedProfile);
     }
     let profile = ProductionProfile::parse(&profile)?;
+    // A non-surviving owner must be tied to its launcher; a surviving one never is.
+    if parsed.launcher_lifetime == profile.kind.survives_launcher() {
+        return Err(ProfileRefusal::Conflict);
+    }
     let state_directory = profile.verify(&state_directory)?;
     for path in [
         parsed.system_config.as_ref(),
@@ -266,6 +282,7 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         alias_config: parsed.alias_config,
         attach_path: parsed.attach_path,
         workspace_root: parsed.workspace_root,
+        launcher_lifetime: parsed.launcher_lifetime,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         agent_service,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -292,6 +309,12 @@ pub(super) fn run(mut args: impl Iterator<Item = OsString>) -> RunResult<()> {
         report_startup_refusal(refusal);
         invalid_input()
     })?;
+    // Bind FD 3 before any child is spawned, so no child inherits it.
+    let lifetime = if bindings.launcher_lifetime {
+        Some(super::owner_attachment::LauncherLifetime::bind()?)
+    } else {
+        None
+    };
     let directory = ensure_owner_directory(&bindings.state_directory)?;
     let lock_path = directory.join("owner.lock");
     let _profile_lock = lock_profile(&lock_path)?;
@@ -322,7 +345,7 @@ pub(super) fn run(mut args: impl Iterator<Item = OsString>) -> RunResult<()> {
     match attachment {
         Some(attachment) => {
             drop(result);
-            attachment.serve(&mut owner, &bindings.profile.digest, None)
+            attachment.serve(&mut owner, &bindings.profile.digest, lifetime.as_ref())
         }
         None => result,
     }

@@ -94,7 +94,7 @@ pub(in super::super) fn index(
 ) -> Result<ProofWorkspaceIndexResult, ErrorCode> {
     let deadline = Instant::now() + TIMEOUT;
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         "",
         true,

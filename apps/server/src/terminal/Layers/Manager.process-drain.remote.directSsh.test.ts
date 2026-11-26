@@ -166,6 +166,26 @@ describe("Direct SSH PTYs in the local terminal host", () => {
     },
   );
 
+  it("uses the production owner's typed snapshot of the exact lease (terminal_inspect)", async () => {
+    const { session } = hostSession(undefined);
+    const f = fixture(session, "");
+    const snapshot = parsePosixAgentProcesses("900 1 900 950 -zsh\n950 900 950 950 vim notes.md");
+    const inspect = vi.fn(async () => ({ shellPid: 900, processes: snapshot }));
+    f.ctx.ptyAdapter = {
+      ...adapter,
+      ownedRuntimeForTarget: (candidate) =>
+        candidate === target ? { ...hostRuntime, nativeSshProduction: { inspect } } : undefined,
+    };
+    await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+    expect(inspect).toHaveBeenCalledExactlyOnceWith("thread", "ssh");
+    expect(f.remoteProcessInspector).not.toHaveBeenCalled();
+    expect(session.hasRunningSubprocess).toBe(true);
+    expect(session.host?.ownerBusyHint).toBe("busy");
+    inspect.mockRejectedValueOnce(new Error("outcomeUnknown"));
+    await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+    expect(session.host?.ownerBusyHint).toBe("unknown");
+  });
+
   it("never inspects without the shell PID, so the hint stays unknown (busy)", async () => {
     const { session } = hostSession(undefined);
     const f = fixture(session, "100 1 100 100 -zsh");

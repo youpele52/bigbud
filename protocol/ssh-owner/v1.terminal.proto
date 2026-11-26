@@ -30,6 +30,10 @@ message ProofPrepareTerminal {
   string terminal_id = 3;
   uint32 cols = 4;
   uint32 rows = 5;
+  // U16 typed shell profile (production only). An absolute shell path from the
+  // target's own `/etc/shells` (see `TerminalShells`); the owner re-checks it
+  // against `/etc/shells` at launch. Absent: the account's login `$SHELL`.
+  optional string shell = 6;
 }
 
 message ProofTerminalReservation {
@@ -71,4 +75,36 @@ message ProofTerminalResize {
   bytes lease = 1;
   uint32 cols = 2;
   uint32 rows = 3;
+}
+
+// W2 T-term `terminal_inspect` (Request 120). Names the caller's own lease only.
+message TerminalInspect {
+  bytes lease = 1;
+}
+
+// One process in the lease's remote shell tree. Group ids are absent when the
+// target's `ps` reports none (no controlling terminal).
+message TerminalProcess {
+  uint32 pid = 1;
+  uint32 parent_pid = 2;
+  optional uint32 group_id = 3;
+  optional uint32 foreground_group_id = 4;
+  // Bounded command line, as `ps -ww -o command=` printed it.
+  string command = 5;
+}
+
+// Reply 71: the exact lease's login-shell PID and that shell plus its
+// descendants from one fixed, bounded `ps` over the target's verified master.
+message TerminalProcesses {
+  bytes lease = 1;
+  uint32 shell_pid = 2;
+  repeated TerminalProcess processes = 3;
+  // More processes or bytes than the owner bound; the list is a prefix.
+  bool truncated = 4;
+}
+
+// Reply 72 (U16, Request 121 `list_terminal_shells`): absolute shell paths from
+// the target's `/etc/shells`, in file order, each an existing executable.
+message TerminalShells {
+  repeated string paths = 1;
 }

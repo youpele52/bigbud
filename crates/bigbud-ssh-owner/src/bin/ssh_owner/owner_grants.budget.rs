@@ -45,7 +45,9 @@ impl Class {
             | Operation::ProofTerminalReplay(_)
             | Operation::ProofTerminalCwd(_)
             | Operation::ProofUnlockSyntheticPosixPassword(_)
-            | Operation::ProofRunAcpCommand(_) => Self::Interactive,
+            | Operation::ProofRunAcpCommand(_)
+            | Operation::RunAcpCommand(_)
+            | Operation::RunAcpShell(_) => Self::Interactive,
             _ => Self::Background,
         }
     }

@@ -67,13 +67,68 @@ pub(super) fn is_fixed_policy(directive: Directive, value: &str) -> bool {
             return value.eq_ignore_ascii_case("no") || value.eq_ignore_ascii_case("yes");
         }
         CertificateFile | ControlPath | KnownHostsCommand | ProxyCommand | RemoteCommand => "none",
-        PubkeyAcceptedAlgorithms => return value == "ssh-ed25519",
+        PubkeyAcceptedAlgorithms => return accepted_user_algorithms(value),
         PreferredAuthentications => return value == "publickey",
         _ => return false,
     };
     value.eq_ignore_ascii_case(expected)
 }
 
+/// U22: the user-authentication algorithms modern OpenSSH accepts by default
+/// (`ssh_config(5)`, OpenSSH 10), in its order, minus SHA-1 `ssh-rsa`, DSA and
+/// certificate forms (user certificates are not supported: `CertificateFile=none`).
+pub(crate) const PUBKEY_ACCEPTED_ALGORITHMS: &str = concat!(
+    "PubkeyAcceptedAlgorithms=",
+    user_auth_core!(),
+    ",",
+    user_auth_security_keys!(),
+    ",",
+    user_auth_rsa!()
+);
+
+/// A user `PubkeyAcceptedAlgorithms` is admitted when it lists only algorithms
+/// from that set: no `+`/`-`/`^` modifier, no SHA-1 `ssh-rsa`, no DSA, no
+/// certificate form. The launch passes the owner's own list either way.
+fn accepted_user_algorithms(value: &str) -> bool {
+    let allowed = PUBKEY_ACCEPTED_ALGORITHMS
+        .split_once('=')
+        .map_or("", |(_, list)| list);
+    !value.is_empty()
+        && value.split(',').all(|algorithm| {
+            !algorithm.is_empty()
+                && allowed
+                    .split(',')
+                    .any(|known| known.eq_ignore_ascii_case(algorithm))
+        })
+}
+
 /// The private launch forces GSSAPI off after every app-resolved value. Policy
 /// v3 admits `GSSAPIAuthentication` only because of this override.
 pub(crate) const GSSAPI_INERT_OVERRIDE: &str = "GSSAPIAuthentication=no";
+
+/// U17: directives with no effect on destination, identity or trust under the
+/// owner's launch (`ssh -F /dev/null`, every option passed explicitly, user
+/// forwards never passed and `ClearAllForwardings=yes` by default; the launch
+/// forces `IdentitiesOnly=yes` and `AddKeysToAgent=no` whatever the user wrote).
+/// They are accepted and ignored instead of refusing the whole alias.
+pub(super) fn is_inert(directive: Directive) -> bool {
+    use Directive::*;
+    matches!(
+        directive,
+        UseKeychain
+            | AddKeysToAgent
+            | IdentitiesOnly
+            | TCPKeepAlive
+            | Compression
+            | LogLevel
+            | VisualHostKey
+            | EscapeChar
+            | IPQoS
+            | ConnectionAttempts
+            | FingerprintHash
+            | NumberOfPasswordPrompts
+            | LocalForward
+            | RemoteForward
+            | DynamicForward
+    )
+}

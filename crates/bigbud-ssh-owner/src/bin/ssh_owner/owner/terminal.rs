@@ -16,6 +16,8 @@ pub(super) struct TerminalPreparation {
     cwd: String,
     cols: u16,
     rows: u16,
+    /// U16 shell path, re-checked against the target's `/etc/shells` at launch.
+    shell: Option<String>,
     expires: Instant,
 }
 
@@ -27,6 +29,8 @@ pub(super) struct LiveTerminal {
     birth_generation: Option<Token>,
     // Mirrored only from positively settled writes. None fences input after ambiguity.
     next_input_sequence: Option<u64>,
+    /// The production login shell's remote PID from the launch witness.
+    shell_pid: Option<u32>,
     lease: TerminalLease,
 }
 
@@ -72,6 +76,10 @@ impl Owner {
             || !valid_id(&request.terminal_id)
             || !(1..=400).contains(&request.cols)
             || !(1..=200).contains(&request.rows)
+            || request
+                .shell
+                .as_deref()
+                .is_some_and(|shell| !self.production || !inspect::valid_shell_path(shell))
         {
             return Err(ErrorCode::InvalidOperands);
         }
@@ -82,6 +90,7 @@ impl Owner {
             cwd: request.cwd,
             cols: u16::try_from(request.cols).map_err(|_| ErrorCode::InvalidOperands)?,
             rows: u16::try_from(request.rows).map_err(|_| ErrorCode::InvalidOperands)?,
+            shell: request.shell,
             expires: Instant::now() + RESERVATION_TTL,
         });
         Ok(ProofTerminalReservation {
@@ -141,8 +150,12 @@ impl Owner {
                 .take()
                 .ok_or(ErrorCode::OperationDenied)?;
             let launched = if self.production {
-                super::present(&self.transport)?
-                    .open_login_terminal(&prep.cwd, prep.cols, prep.rows)
+                super::present(&self.transport)?.open_login_terminal(
+                    &prep.cwd,
+                    prep.cols,
+                    prep.rows,
+                    prep.shell.as_deref(),
+                )
             } else {
                 super::present(&self.transport)?
                     .open_prepared_terminal(&prep.cwd, prep.cols, prep.rows)
@@ -156,8 +169,16 @@ impl Owner {
                 return Err(error);
             }
         };
+        // A failed witness read leaves the PID unknown; `terminal_inspect` then
+        // reports `outcome_unknown` instead of guessing a shell.
+        let shell_pid = if self.production {
+            terminal.login_shell_pid().ok().flatten()
+        } else {
+            None
+        };
         self.lanes.terminal = Some(LiveTerminal {
             id,
+            shell_pid,
             scope: LeaseScope::new(&self.target, self.generation),
             birth_generation: self.supervised_terminal.then_some(self.generation),
             next_input_sequence: self.supervised_terminal.then_some(1),
@@ -280,9 +301,14 @@ fn valid_remote_cwd(cwd: &str) -> bool {
         && !cwd.chars().any(char::is_control)
 }
 
+#[path = "terminal_dispatch.rs"]
+mod dispatch;
+#[path = "terminal_inspect.rs"]
+mod inspect;
+
 #[cfg(test)]
 #[path = "production_terminal_tests.rs"]
-mod production_tests;
+pub(super) mod production_tests;
 #[cfg(test)]
 #[path = "terminal.tests.rs"]
 mod tests;

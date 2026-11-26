@@ -240,6 +240,8 @@ const handleTerminal = (requestId, target, operation) => {
 };
 ${PROXY_HANDLER_SCRIPT}
 const handleOperation = (requestId, target, operation) => {
+  // A truncated reply frame: the client must fail closed on a protocol error.
+  if (config.mode === "malformed-reply") return fs.writeSync(1, frame(Buffer.from([0x22, 0x05, 0xff])));
   if (!operation) return reply(requestId, target, 10, uintField(1, 2));
   if (operation.field === 10) return reply(requestId, target, 11, trustVerified());
   if (operation.field === 14) return reply(requestId, target, 13, bytesField(1, "/home/fixture"));

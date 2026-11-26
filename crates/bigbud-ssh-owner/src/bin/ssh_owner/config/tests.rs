@@ -19,12 +19,16 @@ mod diagnostic_tests;
 mod include_tests;
 #[path = "jump_resolution_tests.rs"]
 mod jump_resolution_tests;
+#[path = "openssh_scope_tests.rs"]
+mod openssh_scope_tests;
 #[path = "paths_tests.rs"]
 mod paths_tests;
 #[path = "platform_defaults_tests.rs"]
 mod platform_defaults_tests;
 #[path = "quoted_trust_tests.rs"]
 mod quoted_trust_tests;
+#[path = "real_shape_tests.rs"]
+mod real_shape_tests;
 #[path = "route_defaults_tests.rs"]
 mod route_defaults_tests;
 #[path = "route_facts_tests.rs"]
@@ -41,6 +45,8 @@ mod system_tests;
 mod timers_tests;
 #[path = "trust_paths_tests.rs"]
 mod trust_paths_tests;
+#[path = "user_profile_tests.rs"]
+mod user_profile_tests;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 const ROUTE: &str = "Host picker\n HostName 127.0.0.1\n Port 2201\n User remote\n";
@@ -235,12 +241,12 @@ fn rejects_unsupported_routes_directives_and_ambiguous_syntax() -> io::Result<()
         "PasswordAuthentication yes",
         "ControlPath /tmp/outside-master",
         "RemoteCommand echo",
-        "LocalForward 99 localhost:99",
+        // U17: user `LocalForward` and a bare `IgnoreUnknown` are inert under the owner's
+        // `-F /dev/null` launch and admitted (see `real_shape_tests.rs`).
         "LocalCommand echo",
         "PermitLocalCommand yes",
         "KnownHostsCommand key-probe",
         "Include missing",
-        "IgnoreUnknown *",
         "CanonicalizeHostname yes",
         "Match final",
         "Match canonical",

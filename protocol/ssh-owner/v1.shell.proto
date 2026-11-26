@@ -54,3 +54,108 @@ message ProofAcpCommandResult {
   uint32 exit_code = 2;
   bool truncated = 3;
 }
+
+// ---------------------------------------------------------------------------
+// Production exec-class leases (W2 T-shell under W3.7 per-target admission).
+//
+// Promoted names from the frozen map: run_thread_shell, run_provider_workspace_shell
+// and run_acp_command (Request 90-92), plus lease-local shell_status (93) and
+// shell_close (94); Reply shell (56). Each open is a distinct grant-bound
+// authority; status/close name the role, and a lease of one role never answers
+// another role. Leases live in the target's lanes and are scoped to the exact
+// target and generation. The owner selects program, shell, transport and
+// deadline; no stdin, PTY, environment, argv or SSH option crosses this boundary.
+//
+// Workspace authority: `workspace_root` is absolute, normalized, at most 4096
+// bytes and not `/`; `cwd` equals it or lies under it. The remote recipe walks
+// the path refusing symlinks. A fixture owner additionally requires the root to
+// equal its startup root.
+//
+// Bounds: lease 32 bytes. Thread/provider command 1..64 KiB without NUL;
+// identities 1..256 bytes; timeout 0 (30 s default) up to a 120 s ceiling;
+// buffered combined output capped at 8 MiB with `truncated`. ACP is the fixed
+// `pwd` recipe with a 10 s deadline and an 8 KiB cap. Output is read back in
+// chunks of at most 1 MiB from `offset`.
+
+enum ShellRole {
+  SHELL_ROLE_UNSPECIFIED = 0;
+  SHELL_ROLE_THREAD = 1;
+  SHELL_ROLE_PROVIDER_WORKSPACE = 2;
+  SHELL_ROLE_ACP = 3;
+  // U21: an approved ACP `terminal/create` command (not the fixed `pwd` recipe).
+  SHELL_ROLE_ACP_SHELL = 4;
+}
+
+message RunThreadShell {
+  bytes lease = 1;
+  string workspace_root = 2;
+  string cwd = 3;
+  string thread_id = 4;
+  string command = 5;
+  uint32 timeout_ms = 6;
+}
+
+message RunProviderWorkspaceShell {
+  bytes lease = 1;
+  string workspace_root = 2;
+  string cwd = 3;
+  string provider = 4;
+  string session_id = 5;
+  string invocation_id = 6;
+  string command = 7;
+  uint32 timeout_ms = 8;
+}
+
+// U21 ACP shell grant: one `terminal/create` command approved through the ACP
+// approval flow, bound to its ACP session and tool call. Non-interactive, with the
+// provider-shell bounds (30 s default / 120 s ceiling, 8 MiB, own process group,
+// remote session guard). Distinct from `run_acp_command` and from G2.
+message RunAcpShell {
+  bytes lease = 1;
+  string workspace_root = 2;
+  string cwd = 3;
+  string session_id = 4;
+  string tool_call_id = 5;
+  string command = 6;
+  uint32 timeout_ms = 7;
+}
+
+message RunAcpCommand {
+  bytes lease = 1;
+  string workspace_root = 2;
+  string cwd = 3;
+}
+
+message ShellStatus {
+  bytes lease = 1;
+  ShellRole role = 2;
+  // Output byte offset to read from; at most the settled output size.
+  uint64 offset = 3;
+}
+
+message ShellClose {
+  bytes lease = 1;
+  ShellRole role = 2;
+}
+
+// RUNNING carries no output. EXITED carries one output chunk from the requested
+// offset, the settled size and the exit code. CLOSED is the confirmed release of
+// a lease (a running command is killed first and is never replayed). A timed-out,
+// cancelled, lost or unconfirmed command answers its typed error instead
+// (SHELL_TIMED_OUT, SHELL_CANCELLED, TRANSPORT_LOST, OUTCOME_UNKNOWN).
+enum ShellPhase {
+  SHELL_PHASE_UNSPECIFIED = 0;
+  SHELL_PHASE_RUNNING = 1;
+  SHELL_PHASE_EXITED = 2;
+  SHELL_PHASE_CLOSED = 3;
+}
+
+message ShellState {
+  bytes lease = 1;
+  ShellRole role = 2;
+  ShellPhase phase = 3;
+  bytes output = 4;
+  uint64 output_size = 5;
+  optional uint32 exit_code = 6;
+  bool truncated = 7;
+}

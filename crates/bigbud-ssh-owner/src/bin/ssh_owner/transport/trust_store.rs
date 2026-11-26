@@ -11,8 +11,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 const READ_ONLY: ErrorCode = ErrorCode::TrustStoreReadOnly;
-const MAX_PIN_BYTES: u64 = 256;
-const MAX_STORE_BYTES: u64 = 4096;
+/// U23: one record of any accepted type, up to a 16384-bit RSA key.
+const MAX_PIN_BYTES: u64 = 4096;
+const MAX_STORE_BYTES: u64 = 64 * 1024;
 static NEXT_SNAPSHOT: AtomicU64 = AtomicU64::new(0);
 
 pub(super) fn check_directory(path: &Path) -> Result<&Path, ErrorCode> {
@@ -27,7 +28,11 @@ pub(super) fn check_directory(path: &Path) -> Result<&Path, ErrorCode> {
 }
 
 pub(super) struct Pin {
+    /// The most preferred pinned key.
     pub(super) key: HostKey,
+    /// U23: pinned keys of other types for the same host (at most one per
+    /// type), from the same trust sources. The snapshot record holds them all.
+    others: Vec<HostKey>,
     record: String,
 }
 
@@ -137,15 +142,8 @@ fn options() -> OpenOptions {
     options
 }
 
-impl Pin {
-    fn check_key(&self, key: &HostKey) -> Result<(), ErrorCode> {
-        if &self.key == key {
-            Ok(())
-        } else {
-            Err(ErrorCode::HostKeyChanged)
-        }
-    }
-}
+#[path = "trust_store/pin.rs"]
+mod pin;
 
 fn read_private_bytes(mut file: &File, limit: u64) -> Result<Vec<u8>, ErrorCode> {
     let metadata = file.metadata().map_err(|_| READ_ONLY)?;
@@ -235,10 +233,7 @@ fn parse_pin(
         return hashed::read(bytes, label, deadline, directory);
     }
     let key = HostKey::from_record(bytes, label).ok_or(ErrorCode::HostKeyChanged)?;
-    Ok(Pin {
-        record: key.record(label),
-        key,
-    })
+    Ok(Pin::single(key.record(label), key))
 }
 
 pub(super) struct Snapshot(PathBuf);

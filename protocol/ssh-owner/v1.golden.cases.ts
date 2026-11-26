@@ -7,6 +7,7 @@ import { shellWireCases } from "./v1.golden.shell.ts";
 import { agentActionWireCases } from "./v1.golden.agentAction.ts";
 import { terminalWireCases } from "./v1.golden.terminal.ts";
 import { transferWireCases } from "./v1.golden.transfer.ts";
+import { productionLeaseWireCases } from "./v1.golden.production.ts";
 
 export const UNKNOWN_SENTINEL = 127;
 const correlation: Message = [
@@ -53,6 +54,7 @@ export const wireCases: Record<string, Message> = {
   ...agentActionWireCases(request, reply),
   ...terminalWireCases(request, reply),
   ...transferWireCases(request, reply),
+  ...productionLeaseWireCases(request, reply),
   hello: [
     [
       1,

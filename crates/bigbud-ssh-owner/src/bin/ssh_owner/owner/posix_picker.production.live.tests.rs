@@ -93,7 +93,7 @@ fn production_master_is_reused_and_the_login_pty_round_trips() {
     );
 
     let terminal = transport
-        .open_login_terminal(&cwd, 80, 24)
+        .open_login_terminal(&cwd, 80, 24, None)
         .expect("target login shell");
     terminal
         .resize_proof_terminal(100, 40)

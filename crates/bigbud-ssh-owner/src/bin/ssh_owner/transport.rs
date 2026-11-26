@@ -24,6 +24,12 @@ mod listing;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use listing::ListFailure;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+mod backend_step;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) use backend_step::{StepRun, run_backend_step};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod git_upload;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod opencode;
 mod peer;
 mod peer_enrollment;
@@ -40,6 +46,8 @@ pub(crate) use recipe::RecipeOutput;
 #[path = "transport/workspace/guarded_recipe.rs"]
 pub(super) mod guarded_recipe;
 mod shell;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(super) use shell::{ShellLaunch, ShellRun};
 mod terminal;
 mod trust;
 mod trust_store;
@@ -63,7 +71,8 @@ const DEADLINE: Duration = Duration::from_secs(10);
 pub(super) const AUTH_METHOD_OPTIONS: &[&str] = &[
     "BatchMode=yes",
     "PreferredAuthentications=publickey",
-    "PubkeyAcceptedAlgorithms=ssh-ed25519",
+    // U22: OpenSSH's default user-auth algorithms minus SHA-1 and DSA.
+    config::PUBKEY_ACCEPTED_ALGORITHMS,
     "IdentitiesOnly=yes",
     "CertificateFile=none",
     "AddKeysToAgent=no",

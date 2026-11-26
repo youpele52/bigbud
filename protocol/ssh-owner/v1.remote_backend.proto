@@ -1,0 +1,143 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// W2 T-backend production verbs (Request 100-105, Reply 61-62). Remote backend
+// deployment steps and the client relay channel, both per target and
+// generation. The owner compiles every remote program, argument, working
+// directory and environment; a request carries validated data operands only,
+// never shell text, a path to a local file, a socket path or a credential.
+
+// Exact remote deployment step. Every step mirrors one legacy deployment
+// command and keeps its remote layout (`~/.bigbud/backend-graphs`,
+// `~/.bigbud/backend-setup/<request>`) and its deadline, which the owner
+// selects from `kind`.
+enum DeploymentStepKind {
+  DEPLOYMENT_STEP_KIND_UNSPECIFIED = 0;
+  // Read-only: account home, architecture, host key identity, finished setup.
+  DEPLOYMENT_STEP_KIND_PROBE_HOST = 1;
+  // Create (or report present) this request's private staging directory.
+  DEPLOYMENT_STEP_KIND_STAGE_BEGIN = 2;
+  // Store the graph manifest in staging. Bytes arrive on the lease socket.
+  DEPLOYMENT_STEP_KIND_MANIFEST_PUT = 3;
+  // Store one named setup input outside the graph. Bytes on the lease socket.
+  DEPLOYMENT_STEP_KIND_SETUP_INPUT_PUT = 4;
+  // Remote HTTPS download of the pinned archive into staging.
+  DEPLOYMENT_STEP_KIND_ARCHIVE_FETCH = 5;
+  // Laptop upload of the pinned archive into staging. Bytes on the lease socket.
+  DEPLOYMENT_STEP_KIND_ARCHIVE_UPLOAD = 6;
+  // Verify every pin and publish staging by one rename.
+  DEPLOYMENT_STEP_KIND_PUBLISH = 7;
+  // `backend setup` through the published graph's own Node.
+  DEPLOYMENT_STEP_KIND_SETUP = 8;
+  // `backend start`, or `backend enable` only with boot consent.
+  DEPLOYMENT_STEP_KIND_START = 9;
+  // Read this authority's immutable setup completion record.
+  DEPLOYMENT_STEP_KIND_READ_COMPLETION = 10;
+  // Remove exactly this request's staging directory; never a published install.
+  DEPLOYMENT_STEP_KIND_RESET = 11;
+}
+
+enum DeploymentSetupInput {
+  DEPLOYMENT_SETUP_INPUT_UNSPECIFIED = 0;
+  DEPLOYMENT_SETUP_INPUT_RUST_MANIFEST = 1;
+  DEPLOYMENT_SETUP_INPUT_TRUSTED_KEYS = 2;
+}
+
+message DeploymentPin {
+  // Graph-relative member path, validated before any remote operation.
+  string path = 1;
+  string sha256 = 2;
+}
+
+// One step lease. The 32-byte lease token is caller-chosen and is the
+// operation's identity: status on the same token reattaches to the retained
+// outcome and never dispatches work again.
+message DeploymentStepOpen {
+  bytes lease = 1;
+  DeploymentStepKind kind = 2;
+  string request_id = 3;
+  // The account home the caller observed; the remote recipe refuses a mismatch.
+  string home = 4;
+  string install_name = 5;
+  string archive_sha256 = 6;
+  string manifest_sha256 = 7;
+  // Exact HTTPS asset for ARCHIVE_FETCH; no other scheme is admitted.
+  string url = 8;
+  // Byte bound for a fetched or uploaded archive (at most 2 GiB).
+  uint64 max_bytes = 9;
+  DeploymentSetupInput setup_input = 10;
+  // Digest of streamed input for MANIFEST_PUT, SETUP_INPUT_PUT, ARCHIVE_UPLOAD.
+  string input_sha256 = 11;
+  string node_path = 12;
+  string entry_path = 13;
+  repeated DeploymentPin pins = 14;
+  string authority_id = 15;
+  bool enable_boot = 16;
+}
+
+message DeploymentStepLease {
+  bytes lease = 1;
+}
+
+enum DeploymentStepPhase {
+  DEPLOYMENT_STEP_PHASE_UNSPECIFIED = 0;
+  // Waiting for the caller's single input connection on `socket_path`.
+  DEPLOYMENT_STEP_PHASE_LISTENING = 1;
+  DEPLOYMENT_STEP_PHASE_RUNNING = 2;
+  // Confirmed ordinary remote exit with fully drained, bounded output.
+  DEPLOYMENT_STEP_PHASE_EXITED = 3;
+  // Cancelled by this lease's own cancel; the local child was confirmed reaped.
+  // A cancelled mutating step may still have changed the host.
+  DEPLOYMENT_STEP_PHASE_CANCELLED = 4;
+  // Dispatched without a confirmed result (deadline, lost transport, output
+  // limit or unconfirmed reap). Never replayed; the token stays readable.
+  DEPLOYMENT_STEP_PHASE_OUTCOME_UNKNOWN = 5;
+}
+
+message DeploymentStepState {
+  bytes lease = 1;
+  DeploymentStepPhase phase = 2;
+  DeploymentStepKind kind = 3;
+  string request_id = 4;
+  optional string socket_path = 5;
+  optional uint32 exit_code = 6;
+  string stdout = 7;
+  string stderr = 8;
+}
+
+// One relay channel to the approved deployed backend's own client relay
+// helper. The binding is the persisted profile's pinned installation; the
+// remote recipe re-verifies both hashes before it executes anything.
+message ClientRelayLeaseOpen {
+  bytes lease = 1;
+  string node_binary = 2;
+  string node_sha256 = 3;
+  string helper_entry = 4;
+  string helper_sha256 = 5;
+  string authority_id = 6;
+}
+
+message ClientRelayLease {
+  bytes lease = 1;
+}
+
+enum ClientRelayPhase {
+  CLIENT_RELAY_PHASE_UNSPECIFIED = 0;
+  CLIENT_RELAY_PHASE_LISTENING = 1;
+  CLIENT_RELAY_PHASE_STREAMING = 2;
+  // Ordinary exit of the owned transport; `exit_code` is set.
+  CLIENT_RELAY_PHASE_EXITED = 3;
+  // Closed by this lease's own close; the transport was confirmed reaped.
+  CLIENT_RELAY_PHASE_CLOSED = 4;
+  // The channel ended without an exit status (signal, deadline, no dial).
+  CLIENT_RELAY_PHASE_LOST = 5;
+  // Reap could not be confirmed. The lease keeps its slot.
+  CLIENT_RELAY_PHASE_UNCONFIRMED = 6;
+}
+
+message ClientRelayLeaseState {
+  bytes lease = 1;
+  ClientRelayPhase phase = 2;
+  optional string socket_path = 3;
+  optional uint32 exit_code = 4;
+}

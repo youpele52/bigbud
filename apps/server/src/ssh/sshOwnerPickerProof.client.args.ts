@@ -1,4 +1,5 @@
 import { opencodeV2BindingArgs } from "./sshOwnerRemotePath.ts";
+import { sshOwnerBindingTiedToLauncher } from "./sshOwnerProfileLifetime.ts";
 import type { PickerProofOwnerOptions } from "./sshOwnerPickerProof.client.types.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 
@@ -81,6 +82,10 @@ export function pickerProofLaunchArgs(
           ]),
       ...attach,
       ...workspace,
+      // A non-surviving owner retires with its launcher (FD 3 is the lifetime socket).
+      ...(sshOwnerBindingTiedToLauncher(production.profileBindingText)
+        ? ["--launcher-lifetime"]
+        : []),
       // Owner-selected provider bindings. A request never supplies these.
       ...(options.agentService
         ? [

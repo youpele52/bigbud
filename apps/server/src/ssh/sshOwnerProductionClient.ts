@@ -5,7 +5,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { PickerProofOwner } from "./sshOwnerPickerProof.client.session.types.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.ts";
-import type { SshOwnerArtifact, SshOwnerProfile } from "./sshOwnerProductionArtifact.ts";
+import type { SshOwnerArtifact } from "./sshOwnerProductionArtifact.ts";
+import { sshOwnerProfileSurvivesLauncher } from "./sshOwnerProfileLifetime.ts";
 import type { SshOwnerProductionOwner } from "./sshOwnerProductionBoot.ts";
 import type { PickerProofBoundTarget } from "./sshOwnerPickerProof.client.session.types.ts";
 import type { SshOwnerTargetDescriptor } from "./sshOwnerProductionClient.launch.ts";
@@ -73,7 +74,7 @@ export interface StartSshOwnerProductionInput {
 const clientError = (failure: SshOwnerClientError["failure"], message: string, cause?: unknown) =>
   new SshOwnerClientError(failure, message, cause);
 
-const surviving = (profile: SshOwnerProfile) => profile !== "desktop-dev";
+const surviving = sshOwnerProfileSurvivesLauncher;
 
 /** Production is per-target only: a single-target owner cannot serve this client. */
 const requireMultiTarget = (owner: PickerProofOwner) => {

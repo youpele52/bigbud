@@ -2,9 +2,10 @@
  * Read-only alias resolution for the isolated normal-dev SSH owner profile.
  *
  * This is discovery data, not approval. It reads only owner-private files under
- * the profile root, never spawns a process, never dials, and never evaluates a
- * `Match exec` criterion. `Match all` is folded into global settings; any other
- * `Match` form is reported as a located refusal so a caller can fail closed.
+ * the profile root (production target resolution may also read safe `~/` Includes outside it),
+ * never spawns a process, never dials, and never evaluates a `Match exec` criterion.
+ * `Match all|host|originalhost|user|localuser` is evaluated per host; any other criterion is a
+ * located refusal for a host it could reach, so a caller can fail closed (U17).
  *
  * The evaluation mirrors OpenSSH's first-value-wins rule for the route hints the
  * picker displays (destination, login, port, host-key alias and route). The Rust
@@ -16,20 +17,25 @@
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
+import { canonicalSshConfigDirective } from "./sshOwnerPickerProof.startupDiagnostic.ts";
 import {
-  canonicalSshConfigDirective,
-  sshConfigDirectiveRemedy,
-} from "./sshOwnerPickerProof.startupDiagnostic.ts";
+  evaluateHost,
+  parseMatch,
+  profileRefusal as refusal,
+  type ProfileDirective as Directive,
+  type Stanza,
+} from "./sshConfigProfileAliases.eval.ts";
 import { isConcreteSshHostAlias, tokenizeSshConfigLine } from "./sshConfigParse.ts";
 import {
   assertPrivateFile,
+  assertSafeReadableFile,
   expandInclude,
   PROFILE_ALIAS_MAX_FILES,
 } from "./sshConfigProfileAliases.files.ts";
 
 export const PROFILE_ALIAS_MAX_INCLUDE_DEPTH = 16;
 
-type SourceClass = "user_config" | "user_include";
+export type SourceClass = "user_config" | "user_include";
 
 export interface SshConfigAliasHint {
   readonly alias: string;
@@ -72,22 +78,10 @@ export interface SshConfigProfileResolution {
   readonly includes: ReadonlyArray<{ readonly path: string; readonly relative: string }>;
 }
 
-interface Directive {
-  readonly keyword: string;
-  readonly args: ReadonlyArray<string>;
-  readonly line: number;
-  readonly sourcePath: string;
-  readonly source: SourceClass;
-}
-
-interface Stanza {
-  /** `null` is the global scope; an empty list is a refused Match scope. */
-  readonly patterns: ReadonlyArray<string> | null;
-  readonly directives: Directive[];
-}
-
 interface ParseState {
   readonly root: string;
+  /** Production mode: the account home for `~/` Includes, which may then leave the root. */
+  readonly home: string | undefined;
   readonly visited: Set<string>;
   readonly stanzas: Stanza[];
   readonly refusals: SshConfigAliasRefusal[];
@@ -100,35 +94,6 @@ interface ParseState {
 /** Directives the owner always refuses, even with `none`. */
 const ALWAYS_REFUSED = new Set(["LocalCommand"]);
 const clampAlias = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
-
-const refusal = (
-  directive: string,
-  site: Pick<Directive, "sourcePath" | "source" | "line">,
-): SshConfigAliasRefusal => ({
-  sourcePath: site.sourcePath,
-  source: site.source,
-  line: site.line,
-  directive,
-  remedy: sshConfigDirectiveRemedy(directive),
-});
-
-function globMatches(pattern: string, alias: string): boolean {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`^${escaped.replaceAll("*", ".*").replaceAll("?", ".")}$`, "iu").test(alias);
-}
-
-function stanzaApplies(stanza: Stanza, alias: string): boolean {
-  if (stanza.patterns === null) return true;
-  let positive = false;
-  for (const pattern of stanza.patterns) {
-    if (pattern.startsWith("!")) {
-      if (globMatches(pattern.slice(1), alias)) return false;
-    } else if (globMatches(pattern, alias)) {
-      positive = true;
-    }
-  }
-  return positive;
-}
 
 function recordAliases(
   state: ParseState,
@@ -169,21 +134,15 @@ async function parseFile(
       source,
     };
     if (token.keyword === "host") {
-      current = { patterns: token.args, directives: [] };
+      current = { scope: { kind: "host", patterns: token.args }, directives: [] };
       state.stanzas.push(current);
       recordAliases(state, token.args, site);
       continue;
     }
     if (token.keyword === "match") {
-      if (token.args.join(" ").trim().toLowerCase() === "all") {
-        current = { patterns: null, directives: [] };
-        state.stanzas.push(current);
-      } else {
-        // Never evaluate a Match criterion; refuse the whole source explicitly.
-        state.refusals.push(refusal("Match", site));
-        current = { patterns: [], directives: [] };
-        state.stanzas.push(current);
-      }
+      // Evaluated per host (U17); `exec` and other criteria refuse only a host they could reach.
+      current = { scope: parseMatch(token.args, site), directives: [] };
+      state.stanzas.push(current);
       continue;
     }
     if (token.keyword === "include") {
@@ -191,11 +150,12 @@ async function parseFile(
       continue;
     }
     const canonical = canonicalSshConfigDirective(token.keyword);
-    if (!canonical || ALWAYS_REFUSED.has(canonical)) {
-      state.refusals.push(refusal(canonical ?? token.keyword, site));
+    if (canonical && ALWAYS_REFUSED.has(canonical)) {
+      state.refusals.push(refusal(canonical, site));
       continue;
     }
-    current.directives.push({ ...site, keyword: canonical });
+    // An unknown keyword is decided per host (U17: `IgnoreUnknown`, active blocks only).
+    current.directives.push({ ...site, keyword: canonical ?? `?${token.keyword.toLowerCase()}` });
   }
   return current;
 }
@@ -213,15 +173,22 @@ async function followIncludes(
   }
   let current = enclosing;
   for (const pattern of patterns) {
-    if (pattern.includes("%") || pattern.includes("${") || pattern.startsWith("~")) {
+    const home = pattern.startsWith("~/") ? state.home : undefined;
+    if (
+      pattern.includes("%") ||
+      pattern.includes("${") ||
+      (pattern.startsWith("~") && home === undefined)
+    ) {
       state.refusals.push(refusal("Include", site));
       continue;
     }
-    const absolute = path.isAbsolute(pattern)
-      ? pattern
-      : path.join(path.dirname(site.sourcePath), pattern);
+    const absolute = home
+      ? path.join(home, pattern.slice(2))
+      : path.isAbsolute(pattern)
+        ? pattern
+        : path.join(path.dirname(site.sourcePath), pattern);
     const relative = path.relative(state.root, absolute);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    if ((relative.startsWith("..") || path.isAbsolute(relative)) && state.home === undefined) {
       state.refusals.push(refusal("Include", site));
       continue;
     }
@@ -230,7 +197,17 @@ async function followIncludes(
         state.refusals.push(refusal("Include", site));
         return current;
       }
-      const real = await assertPrivateFile(state.root, candidate).catch(() => undefined);
+      // Production mode reads a user/root-owned file that no other account can write, inside
+      // or outside the root (U17); the isolated profile keeps its owner-private rule.
+      const real = await (
+        state.home === undefined
+          ? assertPrivateFile(state.root, candidate)
+          : assertSafeReadableFile(candidate)
+      ).catch(() => undefined);
+      if (!real && state.home !== undefined) {
+        state.refusals.push(refusal("Include", site));
+        continue;
+      }
       if (!real || state.visited.has(real)) continue;
       state.visited.add(real);
       state.files += 1;
@@ -251,23 +228,12 @@ async function followIncludes(
   return current;
 }
 
-/** OpenSSH first-value-wins lookup over every stanza that applies to `host`. */
-function effectiveValue(stanzas: ReadonlyArray<Stanza>, host: string) {
-  const values = new Map<string, Directive>();
-  for (const stanza of stanzas) {
-    if (!stanzaApplies(stanza, host)) continue;
-    for (const directive of stanza.directives)
-      if (!values.has(directive.keyword)) values.set(directive.keyword, directive);
-  }
-  return (keyword: string) => values.get(keyword)?.args[0];
-}
-
 function resolveHints(
   stanzas: ReadonlyArray<Stanza>,
   aliases: ReadonlyArray<Omit<SshConfigAliasHint, "port" | "route">>,
 ): ReadonlyArray<SshConfigAliasHint> {
   return aliases.map((alias) => {
-    const value = effectiveValue(stanzas, alias.alias);
+    const { value } = evaluateHost(stanzas, alias.alias);
     const jump = value("ProxyJump");
     const command = value("ProxyCommand");
     const hops = jump && jump.toLowerCase() !== "none" ? jump.split(",").length : 0;
@@ -300,13 +266,16 @@ export interface ResolveProfileAliasesOptions {
   /** Absolute path of the top-level profile SSH config. */
   readonly sourcePath: string;
   readonly content: string;
+  /** Production target resolution only: the account home for `~/` Includes (U17). */
+  readonly home?: string;
 }
 
-async function parseProfile({ root, sourcePath, content }: ResolveProfileAliasesOptions) {
+async function parseProfile({ root, sourcePath, content, home }: ResolveProfileAliasesOptions) {
   const realRoot = await realpath(root);
   const realSource = await realpath(sourcePath);
   const state: ParseState = {
     root: realRoot,
+    home,
     visited: new Set([realSource]),
     stanzas: [],
     refusals: [],
@@ -315,7 +284,7 @@ async function parseProfile({ root, sourcePath, content }: ResolveProfileAliases
     includes: [],
     files: 1,
   };
-  const global: Stanza = { patterns: null, directives: [] };
+  const global: Stanza = { scope: { kind: "global" }, directives: [] };
   state.stanzas.push(global);
   await parseFile(state, content, realSource, "user_config", global, 0);
   return state;
@@ -326,9 +295,26 @@ export async function resolveProfileAliases(
   options: ResolveProfileAliasesOptions,
 ): Promise<SshConfigProfileResolution> {
   const state = await parseProfile(options);
+  // A per-host refusal is reported once, for the first alias it reaches.
+  const seen = new Set(state.refusals.map((item) => `${item.sourcePath}:${item.line}`));
+  const refusals = [...state.refusals];
+  for (const alias of state.aliases) {
+    for (const item of evaluateHost(state.stanzas, alias.alias).refusals) {
+      const key = `${item.sourcePath}:${item.line}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        refusals.push(item);
+      }
+    }
+  }
+  // Located output stays in source order: files as first seen, lines ascending within each.
+  const files = [...new Set(refusals.map((item) => item.sourcePath))];
+  const ordered = files.flatMap((file) =>
+    refusals.filter((item) => item.sourcePath === file).toSorted((a, b) => a.line - b.line),
+  );
   return {
     hints: resolveHints(state.stanzas, state.aliases),
-    refusals: state.refusals,
+    refusals: ordered,
     includes: state.includes,
   };
 }
@@ -348,7 +334,7 @@ export async function resolveProfileHostAuth(
     source: "user_config" as const,
     line: 0,
   };
-  const value = effectiveValue(state.stanzas, options.host);
+  const { value, refusals } = evaluateHost(state.stanzas, options.host);
   const identityFile = value("IdentityFile");
   const userKnownHostsFile = value("UserKnownHostsFile");
   const identityAgent = value("IdentityAgent");
@@ -361,7 +347,7 @@ export async function resolveProfileHostAuth(
     declared: declared !== undefined,
     hint: resolveHints(state.stanzas, [site])[0],
     auth,
-    refusals: state.refusals,
+    refusals: [...state.refusals, ...refusals],
   };
 }
 

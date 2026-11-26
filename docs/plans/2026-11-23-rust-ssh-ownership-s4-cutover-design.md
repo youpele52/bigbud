@@ -232,7 +232,7 @@ Q2–Q8 were closed by the [finish-line plan's accepted decisions (§4)](2026-11
 
 **Closed:**
 
-- **Q2 — G1 local Git/`gh`.** Closed by **U7**: product Git and `gh` use an owner-controlled transport, and unported verbs stay refused. Row 31 is **convert**.
+- **Q2 — G1 local Git/`gh`.** Closed by **U7**: product Git and `gh` use an owner-controlled transport, and unported verbs stay refused. Row 31 is **convert**. Refined 26 November 2026: HTTP(S)/file remotes run as ordinary local Git under `GIT_ALLOW_PROTOCOL`; SSH remotes to hosts that are not bigbud targets run as fenced local Git with the user's own `~/.ssh` (**U14**, reviewed allowlist entry); SSH remotes to bigbud targets need the production owner Git verbs (**U15**) and stay typed-refused until they ship.
 - **Q3 — coordinator `ssh-keygen`.** Closed by **U9**: `ensurePeerCoordinatorKey` moves into the owner; no `ssh-keygen` allowlist entry. Row 50 is **convert**.
 - **Q4 — `SSH_AUTH_SOCK`.** Closed by **U11**: only D/V import it; N/R use the profile environment.
 - **Q5 — CLI subcommands that open the DB directly.** Closed by **U11**: each holds `backend.lock` or delegates to the running backend (W3.5).

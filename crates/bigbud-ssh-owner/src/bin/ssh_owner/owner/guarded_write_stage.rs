@@ -80,7 +80,9 @@ struct Draft {
 /// One slot per owner. Deadlines are absolute, not renewed by chunks.
 pub(crate) struct Stage {
     generation: Token,
-    fixture_root: String,
+    /// The fixture's one root; `None` for a production target, where each save
+    /// names its own root and the transport admits it under the production rule.
+    fixture_root: Option<String>,
     serial: u64,
     draft: Option<Draft>,
 }
@@ -95,10 +97,24 @@ impl Stage {
         }
         Ok(Self {
             generation,
-            fixture_root: fixture_root.into(),
+            fixture_root: Some(fixture_root.into()),
             serial: 0,
             draft: None,
         })
+    }
+
+    /// W2 T-files: a production target's stage, bound to its generation only.
+    pub(crate) fn new_production(generation: Token) -> Self {
+        Self {
+            generation,
+            fixture_root: None,
+            serial: 0,
+            draft: None,
+        }
+    }
+
+    pub(crate) fn generation(&self) -> Token {
+        self.generation
     }
 
     /// `nonce` comes from the trusted caller, not from the request. An owner
@@ -110,7 +126,14 @@ impl Stage {
         now: Instant,
     ) -> Result<Lease, StageError> {
         self.expire(now);
-        if binding.generation != self.generation || binding.root != self.fixture_root {
+        let root_admitted = match &self.fixture_root {
+            Some(root) => &binding.root == root,
+            None => binding
+                .root
+                .strip_prefix('/')
+                .is_some_and(|rest| !rest.is_empty() && normal_components(rest)),
+        };
+        if binding.generation != self.generation || !root_admitted {
             return Err(StageError::BindingMismatch);
         }
         if binding.body_bytes > MAX_BODY_BYTES

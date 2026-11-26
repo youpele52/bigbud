@@ -28,7 +28,7 @@ pub(in super::super) fn run_picker_cancellable(
     )
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(in super::super) fn run_with_combined_output_limit_cancellable(
     command: Command,
     deadline: Instant,

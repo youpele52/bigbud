@@ -2,6 +2,7 @@ pub(in super::super) mod create;
 pub(super) mod cwd;
 pub(super) mod directory;
 pub(super) mod directory_ops;
+pub(crate) mod entry_ops;
 pub(super) mod git;
 pub(super) mod index;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -185,6 +186,19 @@ fn normal_components(path: &str) -> bool {
         && path.split('/').all(|part| !matches!(part, "" | "." | ".."))
 }
 
+/// Root authority for one workspace file request. A fixture keeps its trusted
+/// startup root. A production target has none, so it admits the request's own
+/// root: `validate_path` still requires it to be absolute and normalized (never
+/// `/`), and the remote `PATH_WALK` refuses a symlink anywhere on it. The
+/// server chooses that root from the project bound to this exact target.
+pub(super) fn root_authority<'a>(transport: &'a Transport, requested: &'a str) -> Option<&'a Path> {
+    match transport.config.workspace_root.as_deref() {
+        Some(root) => Some(root),
+        None if transport.facts.production() => Some(Path::new(requested)),
+        None => None,
+    }
+}
+
 pub(super) fn validate_path<'a>(
     root: Option<&'a Path>,
     requested_root: &str,
@@ -239,7 +253,7 @@ pub(super) fn read(
     operand: &v1::ProofWorkspaceRead,
 ) -> Result<v1::ProofWorkspaceFile, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         &operand.relative_path,
         false,
@@ -289,5 +303,8 @@ pub(super) fn pinned_workspace_command(
     Ok((pinned, deadline))
 }
 
+#[cfg(test)]
+#[path = "workspace/production.tests.rs"]
+mod production_tests;
 #[cfg(test)]
 mod tests;

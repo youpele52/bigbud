@@ -57,7 +57,13 @@ impl Inbox {
             "BatchMode=yes",
             "PreferredAuthentications=publickey",
             // Use the option spellings available before OpenSSH 8.5/8.7.
-            "PubkeyAcceptedKeyTypes=ssh-ed25519",
+            // U22: the shared list, minus security-key forms the 8.1 inbox lacks.
+            concat!(
+                "PubkeyAcceptedKeyTypes=",
+                user_auth_core!(),
+                ",",
+                user_auth_rsa!()
+            ),
             "ChallengeResponseAuthentication=no",
             "IdentitiesOnly=yes",
             "IdentityAgent=none",

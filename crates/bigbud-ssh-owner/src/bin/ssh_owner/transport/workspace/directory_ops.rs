@@ -47,7 +47,7 @@ pub(in super::super) fn create_directory(
     operand: &v1::ProofWorkspaceCreateDirectory,
 ) -> Result<v1::ProofWorkspaceEntryMutation, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         &operand.relative_path,
         false,
@@ -66,7 +66,7 @@ pub(in super::super) fn delete_entry(
     operand: &v1::ProofWorkspaceDeleteEntry,
 ) -> Result<v1::ProofWorkspaceEntryMutation, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         &operand.relative_path,
         false,

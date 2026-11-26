@@ -27,7 +27,7 @@ export interface SelectedExclusiveWorkspaceCreate {
   }) => Promise<"created" | "alreadyExists" | "notQualified">;
 }
 
-interface ScopedCreateBinding {
+export interface ScopedCreateBinding {
   readonly targetId: string;
   readonly workspaceRoot: string;
   readonly exclusiveCreate?: SelectedExclusiveWorkspaceCreate;
@@ -64,6 +64,19 @@ export function withWsSshOwnerDevEntryActions(
   mutations: WorkspaceMutationsShape | undefined,
   binding: ScopedCreateBinding | undefined,
 ): WorkspaceMutationsShape {
+  return withWsSshOwnerEntryActions(mutations, (input) =>
+    binding && isFixture(input, binding) ? binding : undefined,
+  );
+}
+
+/** Entry actions and folder mutations served by the binding chosen for each request. */
+export function withWsSshOwnerEntryActions(
+  mutations: WorkspaceMutationsShape | undefined,
+  bindingFor: (input: {
+    readonly cwd: string;
+    readonly executionTargetId?: string | undefined;
+  }) => ScopedCreateBinding | undefined,
+): WorkspaceMutationsShape {
   const backend = mutations ?? unsupportedWorkspaceMutations;
   const disabled = readOnlyEntryActions("unsupportedTarget");
   const withEntries = withSelectedEntryMutations(
@@ -73,7 +86,7 @@ export function withWsSshOwnerDevEntryActions(
         Effect.gen(function* () {
           const actions = yield* backend.entryActions(input);
           if (!isWsSshOwnerWorkspaceTarget(input.executionTargetId)) return actions;
-          const fixture = binding && isFixture(input, binding) ? binding : undefined;
+          const fixture = bindingFor(input);
           const pending = fixture?.exclusiveCreate
             ? undefined
             : fixture?.pendingCreateQualification?.();
@@ -92,7 +105,7 @@ export function withWsSshOwnerDevEntryActions(
           };
         }),
     },
-    binding,
+    bindingFor,
   );
   return withEntries;
 }

@@ -313,3 +313,45 @@ fn refuses_a_relative_image_path() {
     );
     fs::remove_dir_all(&root).unwrap();
 }
+
+fn dev_binding(root: &Path) -> String {
+    let metadata = fs::symlink_metadata(root).unwrap();
+    let digest = crate::startup_profile::digest(
+        crate::startup_profile::ProfileKind::DesktopDev,
+        root.to_str().unwrap(),
+        &metadata.dev().to_string(),
+        &metadata.ino().to_string(),
+    );
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    format!("bbso1:desktop-dev:{hex}")
+}
+
+#[test]
+fn only_a_non_surviving_profile_is_tied_to_its_launcher() {
+    let root = root();
+    // Surviving (desktop-packaged): the lifetime flag is refused, absent is fine.
+    assert!(
+        !parse(args(&root, &[]).into_iter())
+            .unwrap()
+            .launcher_lifetime
+    );
+    assert_eq!(
+        parse(args(&root, &["--launcher-lifetime"]).into_iter()).unwrap_err(),
+        ProfileRefusal::Conflict
+    );
+    // Non-surviving (desktop-dev): the flag is required, once.
+    let mut dev = args(&root, &[]);
+    dev[1] = dev_binding(&root).into();
+    assert_eq!(
+        parse(dev.clone().into_iter()).unwrap_err(),
+        ProfileRefusal::Conflict
+    );
+    dev.push("--launcher-lifetime".into());
+    assert!(parse(dev.clone().into_iter()).unwrap().launcher_lifetime);
+    dev.push("--launcher-lifetime".into());
+    assert_eq!(
+        parse(dev.into_iter()).unwrap_err(),
+        ProfileRefusal::Conflict
+    );
+    fs::remove_dir_all(&root).unwrap();
+}

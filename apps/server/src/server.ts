@@ -46,6 +46,7 @@ import { CommandGatewayLive } from "./command-gateway/Layers/CommandGateway.ts";
 import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
 import { makeGitLayerLive } from "./git/Layers/GitComposition.ts";
+import { SshTargetIdSourceLive } from "./git/Layers/GitCore.fetchRoute.hosts.ts";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
 import { LocalShellProfilesLive } from "./terminal/Layers/LocalShellProfiles.ts";
 import { ShellProfilesLive } from "./terminal/Layers/ShellProfiles.ts";
@@ -181,7 +182,10 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(Layer.mergeAll(ThreadRetentionLayerLive, ThreadBranchCopyLayerLive)),
-  Layer.provideMerge(ProjectionPersistenceLayerLive),
+  // U14: bigbud SSH target ids for selected-mode fetch routing, including background refresh.
+  Layer.provideMerge(
+    SshTargetIdSourceLive.pipe(Layer.provideMerge(ProjectionPersistenceLayerLive)),
+  ),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ProviderInfrastructureLayerLive),
   Layer.provideMerge(Layer.mergeAll(ThreadToolsActivationLive, TerminalLayerLive)),

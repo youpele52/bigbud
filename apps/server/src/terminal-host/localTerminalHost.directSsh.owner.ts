@@ -27,6 +27,11 @@ import type {
 
 export interface NativeDirectSshTerminalOptions {
   readonly port: NativeDirectSshTerminalOwner;
+  /**
+   * U16 (production): the owner-listed shell path for a selected profile, or
+   * `undefined` to refuse the profile. Absent: every shell profile is refused.
+   */
+  readonly shellFor?: (input: PtySpawnInput) => string | undefined;
   /** The shared terminal owner store, before narrowing it to the legacy local-host target. */
   readonly owners: () => RemoteAgentOwnerStore;
   /** Verified native build metadata in the existing local host's durable runtime format. */
@@ -60,6 +65,7 @@ function openRequest(
   input: PtySpawnInput,
   targetId: string,
   pane: NativeDirectSshTerminalOpen["pane"],
+  shellFor?: (input: PtySpawnInput) => string | undefined,
 ): NativeDirectSshTerminalOpen {
   const cwd = input.remoteCwd;
   if (!cwd?.startsWith("/") || cwd.includes("\0") || Buffer.byteLength(cwd) > 4096)
@@ -77,7 +83,8 @@ function openRequest(
     throw new NativeTerminalPolicyError(
       "The native SSH terminal size is outside the product limits.",
     );
-  if (input.shellLaunch || input.shellProfile || input.hostLifecycle?.evictPtyId)
+  const shell = input.shellProfile ? shellFor?.(input) : undefined;
+  if (input.shellLaunch || (input.shellProfile && !shell) || input.hostLifecycle?.evictPtyId)
     throw new NativeTerminalPolicyError(
       "The native SSH terminal does not support this launch policy.",
     );
@@ -87,6 +94,7 @@ function openRequest(
     cwd,
     cols: input.cols,
     rows: input.rows,
+    ...(shell === undefined ? {} : { shell }),
   });
 }
 
@@ -182,7 +190,7 @@ export function makeNativeDirectSshTerminal(
               "The pane has no retained native SSH binding; no replacement was started.",
             );
 
-          const request = openRequest(input, targetId, pane);
+          const request = openRequest(input, targetId, pane, options.shellFor);
           const binding = await port.prepareOpen(request, signal);
           assertAvailable();
           if (
@@ -253,5 +261,5 @@ export function makeNativeDirectSshTerminal(
       });
     },
   );
-  return { runtimeForTarget, spawn };
+  return { runtimeForTarget, spawn, lifecycle };
 }

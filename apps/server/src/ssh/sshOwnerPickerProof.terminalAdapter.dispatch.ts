@@ -54,6 +54,7 @@ export function makeProofTerminalDispatch(targetId: string, recoverRetained: boo
         prepared.input.cwd !== input.cwd ||
         prepared.input.cols !== input.cols ||
         prepared.input.rows !== input.rows ||
+        prepared.input.shell !== input.shell ||
         binding.leaseId === dispatched?.binding.leaseId
       ) {
         throw new Error("Open does not match the prepared proof reservation.");

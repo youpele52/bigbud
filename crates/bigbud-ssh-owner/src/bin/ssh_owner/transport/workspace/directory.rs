@@ -28,7 +28,7 @@ pub(in super::super) fn list(
     operand: &v1::ProofWorkspaceList,
 ) -> Result<v1::ProofWorkspaceDirectory, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         &operand.relative_dir,
         true,

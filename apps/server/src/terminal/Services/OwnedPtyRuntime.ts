@@ -11,6 +11,18 @@ import type {
 import type { PtyHostCapabilities, PtyScreenSnapshot, PtyScreenSnapshotInput } from "./PTY.ts";
 
 /** Execution/ownership scope independent of the workspace's user-facing target label. */
+/** The owner's process snapshot of one native lease: its login shell plus descendants. */
+export interface NativeSshTerminalSnapshot {
+  readonly shellPid: number;
+  readonly processes: ReadonlyArray<{
+    readonly pid: number;
+    readonly parentPid: number;
+    readonly groupId: number | null;
+    readonly foregroundGroupId: number | null;
+    readonly command: string;
+  }>;
+}
+
 export interface OwnedPtyRuntime {
   readonly targetId: string;
   readonly pool: RemoteAgentConnectionPool;
@@ -31,6 +43,13 @@ export interface OwnedPtyRuntime {
   readonly localSshClient?: OwnedPtyLocalSshClient;
   /** Startup-bound root of the selected native fixture, not a renderer path. */
   readonly nativeSshWorkspaceRoot?: string;
+  /**
+   * W2 T-term production native owner: any exact durable cwd recovers attach-only, and
+   * `inspect` is the owner's typed `terminal_inspect` of one pane's exact lease.
+   */
+  readonly nativeSshProduction?: {
+    readonly inspect: (threadId: string, terminalId: string) => Promise<NativeSshTerminalSnapshot>;
+  };
   /**
    * Liveness and confirmed close (terminate, then a verified exit) of one owner's PTY in the local
    * terminal host, without attaching to it: a thread deletion closes host panes no view reopened.

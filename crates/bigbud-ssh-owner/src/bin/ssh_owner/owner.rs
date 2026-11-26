@@ -1,19 +1,30 @@
 mod activation;
 mod admission;
 mod agent_proxy;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod backend;
 mod bootstrap;
 mod deployment_operation;
 mod dispatch;
+mod git_receive;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod git_upload;
 mod guarded_write;
 mod guarded_write_stage;
 #[cfg(all(target_os = "linux", test))]
 mod jump_picker_tests;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod lease_worker;
 mod lifecycle;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod opencode;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod picker_cancel;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod provider_lease;
 mod session;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod shell_lease;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use picker_cancel::CancelInbox as SnapshotCancelInbox;
 mod picker_dispatch;

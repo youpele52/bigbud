@@ -1,4 +1,5 @@
 import { bytes, type Message } from "./v1.golden.codec.ts";
+import { terminalInspectWireCases } from "./v1.golden.terminalInspect.ts";
 
 /** Fixture terminal lease frames, including the replay and cwd proof. */
 export function terminalWireCases(
@@ -59,5 +60,6 @@ export function terminalWireCases(
       [3, true],
       [4, Buffer.from("proof")],
     ]),
+    ...terminalInspectWireCases(request, reply),
   };
 }

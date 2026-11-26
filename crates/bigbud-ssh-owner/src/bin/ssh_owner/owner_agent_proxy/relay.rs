@@ -128,13 +128,13 @@ BIGBUD_RELAY_HELPER_SHA256=$helper_sha BIGBUD_RELAY_HELPER_MAX_BYTES=$helper_lim
     exec "$node_fd" --preserve-symlinks-main --import "$preload" -- "$helper" "$authority"
 "#;
 
-pub(super) struct Recipe {
+pub(crate) struct Recipe {
     binding: [String; 5],
     command: String,
 }
 
 impl Recipe {
-    pub(super) fn new(
+    pub(crate) fn new(
         node: &Path,
         node_sha256: &str,
         helper: &Path,
@@ -179,7 +179,7 @@ impl Recipe {
         self.binding == [node, node_sha256, helper, helper_sha256, authority_id]
     }
 
-    pub(super) fn command(&self) -> &str {
+    pub(crate) fn command(&self) -> &str {
         &self.command
     }
 }

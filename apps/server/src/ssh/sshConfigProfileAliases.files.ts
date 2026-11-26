@@ -67,3 +67,30 @@ export async function assertPrivateFile(root: string, filePath: string): Promise
     throw invalidProfileFile();
   return real;
 }
+
+/**
+ * U17 production Include: a regular file (after resolving links) owned by this account or root,
+ * bounded, and writable by no other account, in a directory chain no other account can modify
+ * (a root-owned sticky directory such as `/tmp` is allowed). Readability by others is fine: an
+ * SSH config is not a secret, and only a writer could change the route.
+ */
+export async function assertSafeReadableFile(filePath: string): Promise<string> {
+  const real = await realpath(filePath);
+  const uid = process.getuid?.();
+  const trusted = (owner: number) => uid === undefined || owner === uid || owner === 0;
+  const info = await lstat(real);
+  if (
+    !info.isFile() ||
+    !trusted(info.uid) ||
+    (info.mode & 0o022) !== 0 ||
+    info.size > PROFILE_ALIAS_MAX_FILE_BYTES
+  )
+    throw invalidProfileFile();
+  for (let directory = path.dirname(real); ; directory = path.dirname(directory)) {
+    const parent = await lstat(directory);
+    const sticky = parent.uid === 0 && (parent.mode & 0o1000) !== 0;
+    if (!parent.isDirectory() || !trusted(parent.uid) || ((parent.mode & 0o022) !== 0 && !sticky))
+      throw invalidProfileFile();
+    if (path.dirname(directory) === directory) return real;
+  }
+}

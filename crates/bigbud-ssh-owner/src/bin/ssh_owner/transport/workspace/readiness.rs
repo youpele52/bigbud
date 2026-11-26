@@ -18,7 +18,7 @@ impl Transport {
         operand: &ProofWorkspaceReadiness,
     ) -> Result<ProofWorkspaceReadinessResult, ErrorCode> {
         let root = validate_path(
-            self.config.workspace_root.as_deref(),
+            super::root_authority(self, &operand.workspace_root),
             &operand.workspace_root,
             "",
             true,
@@ -32,8 +32,12 @@ impl Transport {
         {
             return Err(ErrorCode::OperationDenied);
         }
+        // The mounted-image fence is the Linux fixture's; production validates
+        // the bound system image when it opens the target's transport.
         #[cfg(target_os = "linux")]
-        self.images.require_mounted_linux_fixture()?;
+        if !self.facts.production() {
+            self.images.require_mounted_linux_fixture()?;
+        }
         let output = run_with_capture(
             self,
             &workspace_command(RECIPE, root, ""),

@@ -6,6 +6,8 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "proofWorkspaceWrite" ||
     operation.kind === "proofWorkspaceCreateDirectory" ||
     operation.kind === "proofWorkspaceDeleteEntry" ||
+    operation.kind === "workspaceRename" ||
+    operation.kind === "workspaceAppend" ||
     operation.kind === "proofWorkspaceWriteBegin" ||
     operation.kind === "proofWorkspaceWriteChunk" ||
     operation.kind === "proofWorkspaceWriteCommit" ||
@@ -19,6 +21,21 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "proofOpencodeOpen" ||
     operation.kind === "unlockSyntheticPosixPassword" ||
     operation.kind === "proofOpencodeClose" ||
+    operation.kind === "gitUploadOpen" ||
+    operation.kind === "gitUploadClose" ||
+    operation.kind === "gitReceiveOpen" ||
+    operation.kind === "gitReceiveClose" ||
+    operation.kind === "providerLeaseOpen" ||
+    operation.kind === "providerLeaseClose" ||
+    operation.kind === "runThreadShell" ||
+    operation.kind === "runProviderWorkspaceShell" ||
+    operation.kind === "runAcpCommand" ||
+    operation.kind === "runAcpShell" ||
+    operation.kind === "shellClose" ||
+    operation.kind === "deploymentStepOpen" ||
+    operation.kind === "deploymentStepCancel" ||
+    operation.kind === "clientRelayLeaseOpen" ||
+    operation.kind === "clientRelayLeaseClose" ||
     operation.kind === "proofWorkspaceModePublish" ||
     operation.kind === "proofGitTrackedPush" ||
     operation.kind === "openProofTerminal" ||

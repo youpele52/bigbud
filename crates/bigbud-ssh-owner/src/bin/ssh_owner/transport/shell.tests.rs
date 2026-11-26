@@ -72,7 +72,7 @@ fn shell_recipe_runs_the_exact_command_text_and_binds_cwd() {
     // The owner-selected shell receives the accepted text as one positional
     // argument, so metacharacters are data, not a caller-supplied program.
     let command = "printf '%s\\n' \"$PWD\"; printf '%s\\n' 'a;b$(c)'";
-    let script = workspace_command_with_arg(SHELL_RECIPE, fixture.root(), relative, command);
+    let (script, _) = shell_command(fixture.root(), relative, command, 30_000);
     let output = local(&script);
     assert!(output.status.success(), "{output:?}");
     let text = String::from_utf8(output.stdout).unwrap();
@@ -83,7 +83,7 @@ fn shell_recipe_runs_the_exact_command_text_and_binds_cwd() {
 #[test]
 fn shell_recipe_refuses_a_cwd_outside_the_workspace() {
     let fixture = Fixture::new("outside");
-    let script = workspace_command_with_arg(SHELL_RECIPE, fixture.root(), "../outside", "true");
+    let (script, _) = shell_command(fixture.root(), "../outside", "true", 30_000);
     let output = local(&script);
     assert_eq!(output.status.code(), Some(3));
 }

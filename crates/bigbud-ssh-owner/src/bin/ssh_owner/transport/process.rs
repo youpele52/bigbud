@@ -7,10 +7,14 @@ use std::time::{Duration, Instant};
 
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod cancellable;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use cancellable::run_with_combined_output_limit_cancellable;
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
 pub(super) use cancellable::{PickerFailure, run_picker_cancellable};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod streamed;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(super) use streamed::run_streamed_cancellable;
 
 const STDERR_LIMIT: usize = 16 * 1024;
 const POLL_INTERVAL: Duration = Duration::from_millis(5);

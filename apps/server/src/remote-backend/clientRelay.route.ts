@@ -16,6 +16,9 @@ import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import { sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
 import { makeWsRpcRemoteBackendRelayHandlers } from "../ws/wsRpcHandlers.remoteBackendRelay.ts";
 import { registerBackendDrainStop } from "../startup/backendDrain.stops.ts";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
+import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
+import { makeProductionClientRelayOwner } from "./clientRelay.ssh.owner.production.ts";
 
 const noProtocolClients = async (): Promise<ReadonlySet<number>> => new Set();
 
@@ -25,7 +28,11 @@ const noProtocolClients = async (): Promise<ReadonlySet<number>> => new Set();
  * product wiring rather than a test-only injection.
  */
 const selectedRelayOwner = Effect.fn("selectedRelayOwner")(function* () {
-  if (!isSshOwnerDevFixtureSelected()) return undefined;
+  // W2 T-backend: under production activation every channel is a live-owner relay lease.
+  if (!isSshOwnerDevFixtureSelected())
+    return SSH_OWNER_PRODUCTION_ACTIVATION
+      ? makeProductionClientRelayOwner({ owner: readSshOwnerProductionOwner })
+      : undefined;
   const runtime = yield* Effect.serviceOption(DevSshOwnerRuntime);
   if (runtime._tag === "None" || !runtime.value.session) return undefined;
   const session = runtime.value.session;

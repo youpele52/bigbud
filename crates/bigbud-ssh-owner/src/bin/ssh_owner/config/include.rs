@@ -48,9 +48,9 @@ pub(super) fn evaluate(
         stack: Vec::new(),
         work: MAX_GLOB_WORK,
     };
-    evaluation.read(user, Path::new(user.config_name()?), true)?;
+    evaluation.read(user, &user.config_name()?, true)?;
     if let Some(system) = system {
-        evaluation.read(system, Path::new(system.config_name()?), false)?;
+        evaluation.read(system, &system.config_name()?, false)?;
     }
     #[cfg(any(test, target_os = "linux"))]
     super::jump::check_proxy_conflict(&evaluation.settings)?;
@@ -143,6 +143,8 @@ impl Evaluation<'_> {
                     self.read_include(scope, args, user_source)
                         .map_err(|failure| failure.at(diagnostic))?;
                 }
+                // U17: a keyword OpenSSH would itself ignore under IgnoreUnknown.
+                Directive::Unknown if active && self.settings.ignore_unknown.ignores(line) => {}
                 _ if active => self
                     .settings
                     .apply_directive(diagnostic, &mut args, self.alias, self.facts)?,
@@ -268,7 +270,7 @@ impl Expansion<'_> {
                 return Err(UNSUPPORTED);
             }
         } else {
-            match directory.child(name, self.scope.uid())? {
+            match directory.child(name, self.scope.uid(), self.scope.openssh())? {
                 DirectoryChild::Directory(child) => self.walk(&child, tail, prefix)?,
                 // A regular file cannot contain a matching suffix. Never open it.
                 DirectoryChild::RegularFile if self.has_glob => {}

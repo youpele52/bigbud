@@ -151,6 +151,7 @@ export function makePickerProofTerminalAdapter(
             cwd: input.cwd,
             cols: input.cols,
             rows: input.rows,
+            ...(input.shell === undefined ? {} : { shell: input.shell }),
           });
           if (signal.aborted) {
             await owner.cancelProofTerminalReservation(reserved.lease);

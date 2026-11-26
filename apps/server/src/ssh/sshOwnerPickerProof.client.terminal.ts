@@ -5,6 +5,7 @@ import type {
   PickerProofTerminalReplay,
   ProofTerminalOperation,
 } from "./sshOwnerPickerProof.codec.terminal.ts";
+import type { TerminalProcessSnapshot } from "./sshOwnerPickerProof.codec.terminalOutcome.ts";
 import {
   invalid,
   PickerProofOwnerError,
@@ -34,6 +35,10 @@ export interface PickerProofTerminalClient {
     data: Uint8Array,
   ): Promise<PickerProofTerminal>;
   resizeProofTerminal(lease: Uint8Array, cols: number, rows: number): Promise<PickerProofTerminal>;
+  /** W2 T-term (production): this lease's remote shell and its descendants. */
+  inspectTerminal(lease: Uint8Array): Promise<TerminalProcessSnapshot>;
+  /** U16 (production): absolute shells from the target's `/etc/shells`. */
+  listTerminalShells(): Promise<ReadonlyArray<string>>;
 }
 
 function copyLease(lease: Uint8Array) {
@@ -97,6 +102,17 @@ export function makePickerProofTerminalClient(
     },
     async resizeProofTerminal(lease, cols, rows) {
       return terminal({ kind: "proofTerminalResize", lease: copyLease(lease), cols, rows });
+    },
+    async inspectTerminal(lease) {
+      const requested = copyLease(lease);
+      const outcome = await execute({ kind: "terminalInspect", lease: requested });
+      if (outcome.kind !== "terminalProcesses") return invalid();
+      // The snapshot must answer for this exact lease.
+      return Buffer.from(outcome.value.lease).equals(requested) ? outcome.value : invalid();
+    },
+    async listTerminalShells() {
+      const outcome = await execute({ kind: "listTerminalShells" });
+      return outcome.kind === "terminalShells" ? outcome.value : invalid();
     },
   };
 }

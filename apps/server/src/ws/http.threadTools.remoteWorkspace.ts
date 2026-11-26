@@ -1,4 +1,5 @@
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
 import { Effect } from "effect";
 import { createHash } from "node:crypto";
 
@@ -13,12 +14,14 @@ import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspace
 import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import {
   isFixedProviderShellCommand,
+  makeProductionProviderWorkspaceShell,
   PROVIDER_SHELL_REFUSAL,
   type SelectedProviderWorkspaceShell,
 } from "./remoteWorkspaceProviderShell.ts";
 import type { RemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import type { ThreadToolWorkspaceBinding } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { ThreadToolRequestError } from "./http.threadTools.schema.ts";
+import { dispatchRemoteWorkspaceTool } from "./http.threadTools.remoteWorkspaceTool.dispatch.ts";
 
 const MAX_REMOTE_TIMEOUT_MS = 120_000;
 const MAX_REMOTE_OUTPUT_BYTES = 8 * 1024 * 1024;
@@ -36,6 +39,8 @@ export interface RemoteWorkspaceProcessRequest {
   readonly remoteTimeoutMs?: number | undefined;
   readonly remoteMaxOutputBytes?: number | undefined;
   readonly remoteOutputMode?: "error" | "truncate" | undefined;
+  /** Typed bridge tool (read/write/list/search); see `http.threadTools.remoteWorkspaceTool.ts`. */
+  readonly remoteTool?: unknown;
 }
 
 function boundedPositiveInteger(
@@ -61,6 +66,8 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
   readonly executionOwner?: RemoteWorkspaceExecutions | undefined;
   readonly executionGeneration?: number | undefined;
   readonly selectedProviderShell?: SelectedProviderWorkspaceShell | undefined;
+  /** Production activation (W7 constant); tests pass it explicitly. */
+  readonly productionActivation?: boolean | undefined;
   readonly request: RemoteWorkspaceProcessRequest;
 }) {
   const owner = input.executionOwner;
@@ -72,7 +79,11 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
       message: "A stable remote tool invocation identity is required.",
     });
   const command = input.request.remoteCommand?.trim() ?? "";
-  if (!command || command.includes("\0") || Buffer.byteLength(command) > MAX_REMOTE_COMMAND_BYTES) {
+  const typedTool = input.request.remoteTool !== undefined;
+  if (
+    !typedTool &&
+    (!command || command.includes("\0") || Buffer.byteLength(command) > MAX_REMOTE_COMMAND_BYTES)
+  ) {
     return yield* new ThreadToolRequestError({
       status: 400,
       message: "Remote workspace command is required.",
@@ -168,24 +179,51 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
 
   const authorizedTarget = binding?.executionTargetId ?? executionTargetId;
   const authorizedCwd = binding?.cwd ?? cwd;
-  if (isSshOwnerDevFixtureSelected()) {
+  const production =
+    !isSshOwnerDevFixtureSelected() &&
+    (input.productionActivation ?? SSH_OWNER_PRODUCTION_ACTIVATION);
+  if (typedTool)
+    return yield* dispatchRemoteWorkspaceTool({
+      mode: production ? "owner" : isSshOwnerDevFixtureSelected() ? "refused" : "legacy",
+      remoteTool: input.request.remoteTool,
+      callerThreadId: input.callerThreadId,
+      invocationId,
+      targetId: authorizedTarget,
+      workspaceRoot: authorizedCwd,
+      timeoutMs,
+      executionOwner: owner,
+      generation,
+    });
+  // Decision A: exactly `sh -lc <text>` (no further argv, no stdin) is the bash
+  // tool's command text; the fixed-tool first-word check does not apply to it.
+  const bashText =
+    command === "sh" &&
+    args.length === 2 &&
+    args[0] === "-lc" &&
+    input.request.remoteStdin === undefined
+      ? args[1]!
+      : undefined;
+  if (isSshOwnerDevFixtureSelected() || production) {
     if (input.request.remoteStdin !== undefined) {
       return yield* new ThreadToolRequestError({
         status: 400,
         message: "The selected provider workspace shell does not accept stdin.",
       });
     }
-    if (args.length > 0) {
+    if (args.length > 0 && bashText === undefined) {
       return yield* new ThreadToolRequestError({
         status: 400,
         message:
           "The selected provider workspace shell accepts one remote command text, not caller-selected argv.",
       });
     }
-    if (isFixedProviderShellCommand(command)) {
+    if (bashText === undefined && isFixedProviderShellCommand(command)) {
       return yield* new ThreadToolRequestError({ status: 400, message: PROVIDER_SHELL_REFUSAL });
     }
-    const selected = input.selectedProviderShell;
+    // W2 T-shell: production runs the provider grant on the authorized snapshot.
+    const selected = production
+      ? makeProductionProviderWorkspaceShell(authorizedTarget, authorizedCwd)
+      : input.selectedProviderShell;
     if (
       !selected ||
       selected.targetId !== authorizedTarget ||
@@ -207,7 +245,7 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
               provider: "thread-tool",
               sessionId: input.callerThreadId,
               invocationId,
-              command,
+              command: bashText ?? command,
               timeoutMs,
             },
             runSignal,

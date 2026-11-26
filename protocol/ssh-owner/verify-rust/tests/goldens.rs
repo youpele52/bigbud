@@ -10,6 +10,8 @@ mod attachment_vectors;
 mod consumer_vectors;
 #[path = "support/control_vectors.rs"]
 mod control_vectors;
+#[path = "support/git_upload_vectors.rs"]
+mod git_upload_vectors;
 #[path = "support/grant_vectors.rs"]
 mod grant_vectors;
 #[path = "support/native_lease_vectors.rs"]
@@ -22,6 +24,8 @@ mod operand_goldens;
 mod operands;
 #[path = "support/peer_enrollment_vectors.rs"]
 mod peer_enrollment_vectors;
+#[path = "support/remote_backend_vectors.rs"]
+mod remote_backend_vectors;
 #[path = "support/shell_vectors.rs"]
 mod shell_vectors;
 #[path = "support/target_vectors.rs"]
@@ -280,6 +284,10 @@ fn s1_wire_goldens() {
         (
             "provider_executable_unavailable",
             ErrorCode::ProviderExecutableUnavailable,
+        ),
+        (
+            "terminal_shell_unavailable",
+            ErrorCode::TerminalShellUnavailable,
         ),
     ] {
         assert_frame(

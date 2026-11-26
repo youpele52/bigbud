@@ -2,6 +2,16 @@ import {
   readProofOpencode,
   type ProofOpencodeState,
 } from "./sshOwnerPickerProof.codec.opencode.ts";
+import { readGitLeaseOutcome, type GitLeaseOutcome } from "./sshOwnerPickerProof.codec.gitLease.ts";
+import {
+  readProviderLeaseOutcome,
+  type ProviderLeaseOutcome,
+} from "./sshOwnerPickerProof.codec.providerLease.ts";
+import { readShellLease, type ShellLeaseState } from "./sshOwnerPickerProof.codec.shellLease.ts";
+import {
+  readBackendLeaseOutcome,
+  type BackendLeaseOutcome,
+} from "./sshOwnerPickerProof.codec.backend.ts";
 import type { ServerListRemoteFoldersResult } from "@bigbud/contracts/server/server.remoteFolders";
 
 import {
@@ -26,15 +36,7 @@ import {
   readWorkspaceGitResult,
   type PickerProofWorkspaceGitResult,
 } from "./sshOwnerPickerProof.codec.git.ts";
-import {
-  readProofTerminal,
-  readProofTerminalCwd,
-  readProofTerminalReplay,
-  readProofTerminalReservation,
-  type PickerProofTerminalReplay,
-  type PickerProofTerminal,
-  type ProofTerminalReservation,
-} from "./sshOwnerPickerProof.codec.terminal.ts";
+import { readLaneOutcome, type LaneOutcome } from "./sshOwnerPickerProof.codec.lane.ts";
 import {
   boolValue,
   bytesValue,
@@ -113,10 +115,7 @@ export type Outcome =
   | { kind: "trust"; value: PickerProofTrust }
   | { kind: "connection"; value: PickerProofConnection }
   | { kind: "folders"; value: ServerListRemoteFoldersResult }
-  | { kind: "proofTerminal"; value: PickerProofTerminal }
-  | { kind: "proofTerminalCwd"; value: string }
-  | { kind: "proofTerminalReplay"; value: PickerProofTerminalReplay }
-  | { kind: "proofTerminalReservation"; value: ProofTerminalReservation }
+  | LaneOutcome
   | { kind: "proofWorkspaceFile"; value: PickerProofWorkspaceFile }
   | { kind: "proofWorkspaceDirectory"; value: PickerProofWorkspaceDirectory }
   | { kind: "proofWorkspaceReadiness"; value: PickerProofWorkspaceReadiness }
@@ -148,6 +147,10 @@ export type Outcome =
     }
   | { kind: "proofGitTrackedPush"; value: ProofTrackedPushStatus }
   | { kind: "proofOpencode"; value: ProofOpencodeState }
+  | GitLeaseOutcome
+  | ProviderLeaseOutcome
+  | BackendLeaseOutcome
+  | { kind: "shell"; value: ShellLeaseState }
   | { kind: "proofThreadShell"; value: ProofShellResult }
   | { kind: "proofProviderShell"; value: ProofShellResult }
   | { kind: "proofAcpCommand"; value: ProofAcpCommandResult }
@@ -280,7 +283,14 @@ export const readOutcome = (field: number, bytes: Uint8Array): Outcome => {
       return { kind: "folders", value: { path, homePath, folders, truncated } };
     }
     case 14:
-      return { kind: "proofTerminal", value: readProofTerminal(bytes) };
+    case 23:
+    case 25:
+    case 26:
+    case 71:
+    case 72:
+    case 73:
+    case 74:
+      return readLaneOutcome(field, bytes);
     case 15:
       return { kind: "proofWorkspaceFile", value: readWorkspaceFile(bytes) };
     case 16:
@@ -305,14 +315,8 @@ export const readOutcome = (field: number, bytes: Uint8Array): Outcome => {
     }
     case 22:
       return { kind: "proofWorkspaceGit", value: readWorkspaceGitResult(bytes) };
-    case 23:
-      return { kind: "proofTerminalReservation", value: readProofTerminalReservation(bytes) };
     case 24:
       return { kind: "proofAgentProxy", value: readProofAgentProxyStatus(bytes) };
-    case 25:
-      return { kind: "proofTerminalReplay", value: readProofTerminalReplay(bytes) };
-    case 26:
-      return { kind: "proofTerminalCwd", value: readProofTerminalCwd(bytes) };
     case 27:
       return { kind: "proofDeploymentHostResult", value: readDeploymentHostProbeResult(bytes) };
     case 29:
@@ -361,6 +365,17 @@ export const readOutcome = (field: number, bytes: Uint8Array): Outcome => {
       return invalid();
     case 33:
       return { kind: "proofOpencode", value: readProofOpencode(bytes) };
+    case 50:
+    case 66:
+      return readGitLeaseOutcome(field, bytes);
+    case 51:
+    case 52:
+      return readProviderLeaseOutcome(field, bytes);
+    case 56:
+      return { kind: "shell", value: readShellLease(bytes) };
+    case 61:
+    case 62:
+      return readBackendLeaseOutcome(field, bytes);
     case 32:
       return { kind: "proofGitTrackedPush", value: readProofTrackedPushStatus(bytes) };
     case 31:

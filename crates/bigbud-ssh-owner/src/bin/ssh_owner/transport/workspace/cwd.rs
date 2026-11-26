@@ -10,7 +10,9 @@ pub(in super::super) fn probe(
     transport: &Transport,
     input: v1::ProofTerminalCwd,
 ) -> Result<v1::ProofTerminalCwd, ErrorCode> {
-    let root_path = transport.config.workspace_root.as_deref();
+    // Fixture: the startup root. Production: the requested directory is its
+    // own root, still absolute, normalized and walked without symlinks.
+    let root_path = super::root_authority(transport, &input.cwd);
     let root = root_path
         .and_then(configured_root)
         .ok_or(ErrorCode::WorkspacePathDenied)?;

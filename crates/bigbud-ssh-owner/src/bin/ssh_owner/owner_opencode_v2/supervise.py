@@ -1,4 +1,4 @@
-# Fixed OpenCode v2 supervisor, invoked with -I and a clean environment.
+# Fixed OpenCode v2 supervisor, invoked with -I in the captured login environment.
 # The owner keeps the outer stdin as its control channel. The credential arrives
 # there after the launch signal, never in argv, and the child's own stdin is the
 # v2 ownership lease. An authenticated receipt proves wait() for the server.
@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-cwd, nonce, host, port = sys.argv[1:5]
+cwd, nonce, host, port, entry = sys.argv[1:6]
 profile = os.path.join(
     os.environ.get('HOME', ''), '.local', 'state', 'bigbud', 'opencode-v2'
 )
@@ -47,9 +47,12 @@ def environment():
         os.chmod(profile, 0o700)
     except OSError:
         return None
+    # U19: the launcher exec'd this supervisor with the account's captured login
+    # environment (never a fixed PATH or locale), like the old path. The
+    # isolated OpenCode profile below still overrides its own locations.
+    carried = {k: v for k, v in os.environ.items() if k != 'LC_ALL'}
     return {
-        'PATH': '/usr/bin:/bin',
-        'LC_ALL': 'C',
+        **carried,
         'HOME': home,
         'XDG_CONFIG_HOME': profile + '/config',
         'XDG_DATA_HOME': profile + '/data',
@@ -81,7 +84,9 @@ def serve():
     env['OPENCODE_PASSWORD'] = secret
     try:
         child = subprocess.Popen(
-            ['/proc/self/fd/9', 'serve', '--stdio', f'--hostname={host}', f'--port={port}'],
+            # An npm launcher runs as `node ENTRY` (fd 9 is the guarded node).
+            ['/proc/self/fd/9', *([entry] if entry else []),
+             'serve', '--stdio', f'--hostname={host}', f'--port={port}'],
             cwd=cwd, stdin=subprocess.PIPE, env=env, pass_fds=(9,), start_new_session=True,
         )
     except OSError:

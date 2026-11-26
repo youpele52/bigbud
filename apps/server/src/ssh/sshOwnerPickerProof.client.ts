@@ -41,6 +41,7 @@ import {
 import { makePickerProofOwnerLifecycle } from "./sshOwnerPickerProof.client.lifecycle.ts";
 import { throwPickerProofStartupError } from "./sshOwnerPickerProof.client.startupError.ts";
 import { spawnPickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
+import { sshOwnerBindingTiedToLauncher } from "./sshOwnerProfileLifetime.ts";
 import {
   validateOpencodeV2ServiceStartup,
   validateProviderServiceStartup,
@@ -248,7 +249,10 @@ export async function startPickerProofOwner(
           scoped.git !== undefined ||
           scoped.gitUpload !== undefined),
       !production && scoped.pickerCancellation,
-      !production && Boolean(attachment && options.devInteractiveTerminal),
+      // FD 3 lifetime socket: supervised dev terminals, and non-surviving production owners.
+      production
+        ? sshOwnerBindingTiedToLauncher(production.profileBindingText)
+        : Boolean(attachment && options.devInteractiveTerminal),
       production === undefined
         ? {}
         : {

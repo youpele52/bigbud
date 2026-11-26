@@ -6,6 +6,9 @@ import { clientRelayHeaders, clientRelayTarget } from "./clientRelay.headers.ts"
 import { openClientRelayOwner } from "./clientRelay.owner.ts";
 import { openClientRelaySocket } from "./clientRelay.owner.channel.ts";
 import { backend, remote, request } from "./clientRelay.test.helpers.ts";
+import { makeOwnedClientRelaySshChannels } from "./clientRelay.ssh.owner.ts";
+import { makeProductionClientRelayOwner } from "./clientRelay.ssh.owner.production.ts";
+import { echoAfterEof, makeFakeRelayOwner } from "./clientRelay.production.test.helpers.ts";
 
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
@@ -189,4 +192,88 @@ it("disposal fences an asynchronous channel that resolves after cancellation", a
   resolve(peer);
   await peerClosed;
   expect(peer.destroyed).toBe(true);
+});
+
+/**
+ * W2 T-backend production relay route: each channel is one owner relay lease on a real
+ * per-lease Unix socket, served by the real remote helper code against a private backend.
+ */
+const deployment = {
+  nodeBinary: "/home/dev/.bigbud/backend-graphs/x/graph/runtime/node",
+  nodeSha256: "a".repeat(64),
+  helperEntry: "/home/dev/.bigbud/backend-graphs/x/graph/server/remote-client-relay/r.mjs",
+  helperSha256: "b".repeat(64),
+  authorityId: "0123456789abcdef0123456789abcdef",
+};
+async function productionRelay(handler: http.RequestListener, echo = false) {
+  const upstream = await backend(handler);
+  cleanup.push(upstream.close);
+  const owner = await makeFakeRelayOwner(
+    upstream.socketPath,
+    "private-backend-token",
+    ...(echo ? [echoAfterEof] : []),
+  );
+  cleanup.push(owner.cleanup);
+  const relayOwner = makeProductionClientRelayOwner({
+    owner: () => owner.registration,
+    pollMs: { first: 2, max: 10, limit: 20 },
+  });
+  const channels = makeOwnedClientRelaySshChannels(
+    { executionTargetId: "ssh:host=vps.example&user=dev", deployment },
+    relayOwner,
+  );
+  return { owner, channels, upstream };
+}
+
+it("production relay: parallel 512 KiB channels under a paused reader, then confirmed reap", async () => {
+  const body = Buffer.alloc(512 * 1024, 7);
+  const { owner, channels } = await productionRelay((_req, res) => res.end(body));
+  const never = new AbortController().signal;
+  // One channel is opened and never read: it must not stall the others.
+  const paused = await channels.openChannel(never);
+  paused.pause();
+  paused.write("GET /paused HTTP/1.1\r\nHost: x\r\nx-bigbud-client-rpc-revision: 1\r\n\r\n");
+  const responses = await Promise.all(
+    Array.from({ length: 4 }, async () =>
+      request(await channels.openChannel(never), "/blob", { connection: "close", ...revision }),
+    ),
+  );
+  for (const response of responses) {
+    expect(response.status).toBe(200);
+    expect(response.body.length).toBe(body.length);
+  }
+  expect(owner.opened).toBe(5);
+  await channels.dispose();
+  expect(owner.live()).toBe(0);
+});
+
+it("production relay: a half-closed channel still delivers its suffix, then is reaped", async () => {
+  const { owner, channels } = await productionRelay((_req, res) => res.end(), true);
+  const channel = await channels.openChannel(new AbortController().signal);
+  const chunks: Buffer[] = [];
+  channel.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const payload = Buffer.alloc(256 * 1024, 3);
+  channel.end(payload);
+  await once(channel, "end");
+  const received = Buffer.concat(chunks);
+  expect(received.length).toBe(payload.length + 4);
+  expect(received.subarray(-4).toString()).toBe(":eof");
+  await channels.dispose();
+  expect(owner.live()).toBe(0);
+});
+
+it("production relay: no owner refuses, and an unconfirmed close fails disposal", async () => {
+  const absent = makeProductionClientRelayOwner({ owner: () => undefined });
+  await expect(
+    absent.openClientRelay(
+      { executionTargetId: "ssh:host=vps.example&user=dev", deployment },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow("not running");
+  const { owner, channels } = await productionRelay((_req, res) => res.end("x"));
+  const channel = await channels.openChannel(new AbortController().signal);
+  owner.unconfirmed = true;
+  channel.destroy();
+  await expect(channels.dispose()).rejects.toThrow("exit confirmation");
+  expect(owner.closed).toBeGreaterThan(0);
 });

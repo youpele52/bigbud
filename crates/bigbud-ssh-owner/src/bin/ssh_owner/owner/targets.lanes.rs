@@ -11,10 +11,10 @@
 use super::ErrorCode;
 use crate::Token;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-use crate::owner::opencode;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::owner::posix_picker;
 use crate::owner::terminal;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::owner::{git_upload, opencode, shell_lease};
 use crate::owner_agent_proxy::AgentProxy;
 
 /// The exact target and generation a live lease belongs to. A stale generation
@@ -52,6 +52,23 @@ pub(crate) struct Lanes {
     pub(crate) agent_close_uncertain: bool,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) opencode: Option<opencode::Lease>,
+    /// U15 production Git upload lease (one per target).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) git_upload: Option<git_upload::Lease>,
+    /// W2 T-shell production exec leases (bounded per target).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) shell: shell_lease::Leases,
+    /// W2 T-backend deployment step and client relay leases.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) backend: crate::owner::backend::BackendLanes,
+    /// W2 T-prov production Pi/Codex provider leases (bounded per target).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) providers: crate::owner::provider_lease::Leases,
+    /// U15 production Git receive (push) lease (one per target).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) git_receive: Option<crate::owner::git_receive::Lease>,
+    /// W2 T-files production guarded-write lane (in-memory draft, no process).
+    pub(crate) guarded_write: Option<crate::owner::guarded_write::GuardedWrite>,
 }
 
 impl Lanes {
@@ -70,8 +87,42 @@ impl Lanes {
         let opencode = self.revoke_opencode();
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let opencode = Ok(());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let git_upload = self
+            .git_upload
+            .as_mut()
+            .map_or(Ok(()), git_upload::Lease::retire);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let git_upload = Ok(());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let shell = self.shell.revoke();
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let shell = Ok(());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let backend = self.backend.revoke();
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let backend = Ok(());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let providers = self.providers.revoke();
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let providers = Ok(());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let git_receive = self
+            .git_receive
+            .as_mut()
+            .map_or(Ok(()), crate::owner::git_receive::Lease::retire);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let git_receive = Ok(());
         let master = self.revoke_master();
-        terminal.and(agent).and(opencode).and(master)
+        terminal
+            .and(agent)
+            .and(opencode)
+            .and(git_upload)
+            .and(shell)
+            .and(backend)
+            .and(providers)
+            .and(git_receive)
+            .and(master)
     }
 
     pub(crate) fn revoke_terminal(&mut self) -> Result<(), ErrorCode> {

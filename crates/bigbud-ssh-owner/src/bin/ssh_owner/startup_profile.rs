@@ -26,6 +26,13 @@ pub(super) enum ProfileKind {
 }
 
 impl ProfileKind {
+    /// Whether an owner of this kind may outlive its launcher. A non-surviving
+    /// owner is bound to the launcher-lifetime descriptor (FD 3) and retires
+    /// when the launcher is gone, even if it never shut its handle down.
+    pub(super) fn survives_launcher(self) -> bool {
+        !matches!(self, Self::DesktopDev)
+    }
+
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::DesktopPackaged => "desktop-packaged",

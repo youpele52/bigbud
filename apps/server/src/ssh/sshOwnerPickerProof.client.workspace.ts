@@ -38,6 +38,10 @@ import {
 
 import type { ProofWorkspaceModeInspection } from "./sshOwnerPickerProof.codec.workspaceMode.ts";
 import {
+  makeWorkspaceEntryClient,
+  type PickerProofWorkspaceEntryClient,
+} from "./sshOwnerPickerProof.client.workspaceEntry.ts";
+import {
   prepareGuardedWriteForProof,
   validateGuardedWriteForProof,
 } from "./sshOwnerPickerProof.guardedWriteStage.ts";
@@ -57,7 +61,7 @@ type PickerProofWorkspaceEntryInput = {
   readonly relativePath: string;
 };
 
-export interface PickerProofWorkspaceClient {
+export interface PickerProofWorkspaceClient extends PickerProofWorkspaceEntryClient {
   inspectProofWorkspaceMode(input: {
     readonly executionTargetId: string;
     readonly root: string;
@@ -110,15 +114,17 @@ export interface PickerProofWorkspaceClient {
 }
 
 export function makePickerProofWorkspaceClient(
-  targetId: string,
+  /** The exact runtime target, or a predicate for a production bound target. */
+  target: string | ((executionTargetId: string) => boolean),
   execute: (
     operation: PickerProofOperation,
     beforeDispatch?: (id: Uint8Array) => void,
   ) => Promise<Exclude<Outcome, { kind: "error" }>>,
   sendCancel?: SendPickerCancel,
 ): PickerProofWorkspaceClient {
+  const serves = typeof target === "string" ? (id: string) => id === target : target;
   function requireTarget(input: { readonly executionTargetId: string }) {
-    if (typeof input !== "object" || input === null || input.executionTargetId !== targetId)
+    if (typeof input !== "object" || input === null || !serves(input.executionTargetId))
       throw new PickerProofOwnerError("invalidOperands");
   }
 
@@ -233,6 +239,7 @@ export function makePickerProofWorkspaceClient(
           : await executeAtSignal(signal, request);
       return outcome.kind === "proofWorkspaceContentMatches" ? outcome.value : invalid();
     },
+    ...makeWorkspaceEntryClient(requireTarget, (operation) => execute(operation)),
     async validateProofGuardedWrite(input, signal) {
       requireTarget(input);
       return validateGuardedWriteForProof(executeStage, input, signal);

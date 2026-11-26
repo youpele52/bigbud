@@ -15,6 +15,11 @@ export interface WorkspaceMutationWatchOwnerShape {
   readonly writeFile: (
     input: WorkspaceMutationWatchOwnerInput & { readonly contents: string },
   ) => Promise<void>;
+  /**
+   * The owner's largest UTF-8 write. A larger body is refused before dispatch
+   * (`not-dispatched`), so it is never reported as an uncertain write.
+   */
+  readonly maxWriteBytes?: number;
 }
 
 export class WorkspaceMutationWatchOwner extends ServiceMap.Service<

@@ -93,6 +93,18 @@ export function makeWorkspaceWriteFile(input: {
         });
       }
       const owner = toolTransportTarget.transport === "ssh" ? input.mutationWatchOwner : undefined;
+      if (
+        owner?.maxWriteBytes !== undefined &&
+        Buffer.byteLength(value.contents, "utf8") > owner.maxWriteBytes
+      ) {
+        return yield* new WorkspaceFileSystemError({
+          cwd: value.cwd,
+          relativePath: value.relativePath,
+          operation: "workspaceFileSystem.writeFileRemote",
+          detail: `Remote SSH writes are limited to ${owner.maxWriteBytes} bytes.`,
+          writeDisposition: "not-dispatched",
+        });
+      }
       yield* Effect.tryPromise({
         try: async () => {
           if (owner) {

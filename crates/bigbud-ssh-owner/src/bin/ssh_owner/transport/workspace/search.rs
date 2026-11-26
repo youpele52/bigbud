@@ -38,7 +38,7 @@ pub(in super::super) fn search(
     operand: &ProofWorkspaceContentSearch,
 ) -> Result<ProofWorkspaceContentMatches, ErrorCode> {
     let root = validate_path(
-        transport.config.workspace_root.as_deref(),
+        super::root_authority(transport, &operand.workspace_root),
         &operand.workspace_root,
         "",
         true,

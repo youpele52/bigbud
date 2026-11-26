@@ -89,8 +89,12 @@ fn scoped_user_file(
 ) -> Result<PathBuf, ErrorCode> {
     let expanded = substitute(operand, route)?;
     let relative = scoped_path(scope, &expanded, true)?;
-    // Retain the original sibling boundary outside the synthetic home.
-    if !relative.starts_with(SYNTHETIC_HOME) && relative.components().nth(1).is_some() {
+    // Retain the original sibling boundary outside the synthetic home. A
+    // home-rooted production scope admits any path under the home instead.
+    if !scope.home_rooted()
+        && !relative.starts_with(SYNTHETIC_HOME)
+        && relative.components().nth(1).is_some()
+    {
         return Err(UNSUPPORTED);
     }
     scope.absolute(&relative, trust_basename)
@@ -124,10 +128,13 @@ pub(super) fn include_path(
 
 fn scoped_path(scope: &Scope, expanded: &str, allow_home: bool) -> Result<PathBuf, ErrorCode> {
     let (home, body) = checked_body(expanded, allow_home)?;
-    let relative = if home {
+    // U17 production: a home-rooted scope makes `~/` the real home itself.
+    let relative = if home && scope.home_rooted() {
+        PathBuf::from(body)
+    } else if home {
         Path::new(SYNTHETIC_HOME).join(body)
     } else {
-        scope.relative_operand(Path::new(expanded))?.to_owned()
+        scope.relative_operand(Path::new(expanded))?
     };
     if relative.as_os_str().is_empty()
         || relative.components().count() > MAX_COMPONENTS

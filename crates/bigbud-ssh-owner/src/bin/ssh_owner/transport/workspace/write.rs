@@ -83,7 +83,10 @@ pub(in super::super) fn write(
     transport: &Transport,
     operand: &v1::ProofWorkspaceWrite,
 ) -> Result<(), ErrorCode> {
-    let remote = command(transport.config.workspace_root.as_deref(), operand)?;
+    let remote = command(
+        super::root_authority(transport, &operand.workspace_root),
+        operand,
+    )?;
     run(transport, &remote, &operand.contents)
 }
 

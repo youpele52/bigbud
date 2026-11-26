@@ -52,7 +52,8 @@ export interface PickerProofBoundTarget
     PickerProofListClient,
     PickerProofHealthClient,
     PickerProofTerminalClient,
-    PickerProofProductionProxyClient {
+    PickerProofProductionProxyClient,
+    PickerProofWorkspaceClient {
   readonly targetId: string;
   /** Current generation; rotates on Connect/Disconnect. */
   readonly generation: Uint8Array;

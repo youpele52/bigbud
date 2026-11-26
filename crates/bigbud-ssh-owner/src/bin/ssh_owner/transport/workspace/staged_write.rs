@@ -207,7 +207,7 @@ impl Transport {
         use v1::proof_workspace_write_stage::Outcome;
         let binding = operand.binding.as_ref().ok_or(ErrorCode::InvalidOperands)?;
         super::validate_path(
-            self.config.workspace_root.as_deref(),
+            super::root_authority(self, &binding.workspace_root),
             &binding.workspace_root,
             &binding.relative_path,
             false,
@@ -223,7 +223,7 @@ impl Transport {
         use v1::proof_workspace_write_stage::Outcome;
         let binding = operand.binding.as_ref().ok_or(ErrorCode::InvalidOperands)?;
         super::validate_path(
-            self.config.workspace_root.as_deref(),
+            super::root_authority(self, &binding.workspace_root),
             &binding.workspace_root,
             &binding.relative_path,
             false,
@@ -242,7 +242,7 @@ impl Transport {
         use v1::proof_workspace_write_stage::Outcome;
         let binding = operand.binding.as_ref().ok_or(ErrorCode::InvalidOperands)?;
         let root = super::validate_path(
-            self.config.workspace_root.as_deref(),
+            super::root_authority(self, &binding.workspace_root),
             &binding.workspace_root,
             &binding.relative_path,
             false,
@@ -259,7 +259,7 @@ impl Transport {
         use v1::proof_workspace_write_stage::Outcome;
         let binding = operand.binding.as_ref().ok_or(ErrorCode::InvalidOperands)?;
         super::validate_path(
-            self.config.workspace_root.as_deref(),
+            super::root_authority(self, &binding.workspace_root),
             &binding.workspace_root,
             &binding.relative_path,
             false,

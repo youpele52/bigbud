@@ -82,6 +82,17 @@ const remedies = {
   RemoteForward: DEFAULT_REMEDY,
   SecurityKeyProvider: DEFAULT_REMEDY,
   SetEnv: DEFAULT_REMEDY,
+  // U17: inert under the owner's `-F /dev/null` launch (owner `config::is_inert`).
+  UseKeychain: DEFAULT_REMEDY,
+  TCPKeepAlive: DEFAULT_REMEDY,
+  Compression: DEFAULT_REMEDY,
+  LogLevel: DEFAULT_REMEDY,
+  VisualHostKey: DEFAULT_REMEDY,
+  EscapeChar: DEFAULT_REMEDY,
+  IPQoS: DEFAULT_REMEDY,
+  ConnectionAttempts: DEFAULT_REMEDY,
+  FingerprintHash: DEFAULT_REMEDY,
+  NumberOfPasswordPrompts: DEFAULT_REMEDY,
 } as const;
 const sources = ["user_config", "user_include", "system_config", "system_include"] as const;
 type Directive = keyof typeof remedies;

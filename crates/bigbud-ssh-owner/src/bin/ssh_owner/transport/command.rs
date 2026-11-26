@@ -38,10 +38,15 @@ impl Transport {
             "CheckHostIP=no",
             "VerifyHostKeyDNS=no",
             "UpdateHostKeys=no",
-            verification.option(),
         ] {
             ssh.args(["-o", option]);
         }
+        // U23: exactly the pinned key types (ed25519 first, RSA only SHA-2);
+        // a certificate keeps its fixed algorithm.
+        match verification {
+            HostVerification::Ed25519Key => ssh.args(["-o", &pin.host_key_algorithms()]),
+            HostVerification::Ed25519Certificate => ssh.args(["-o", verification.option()]),
+        };
         auth_methods::admit(AUTH_METHOD_OPTIONS)?;
         for option in AUTH_METHOD_OPTIONS {
             ssh.args(["-o", option]);

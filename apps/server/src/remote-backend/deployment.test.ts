@@ -18,6 +18,11 @@ import {
   type DeploymentFixture,
 } from "./deployment.test.helpers.ts";
 import type { DeploymentGraphSource } from "./deployment.types.ts";
+import {
+  makeProductionDeploymentHostTrust,
+  makeProductionDeploymentRunner,
+} from "./deployment.ssh.owner.production.ts";
+import { makeFakeProductionOwner } from "./deployment.ssh.owner.production.test.helpers.ts";
 
 const fixtures: DeploymentFixture[] = [];
 afterEach(async () => {
@@ -201,4 +206,121 @@ it("refuses a host whose identity changed since its profile", async () => {
       never,
     ),
   ).rejects.toMatchObject({ code: "host-changed" });
+});
+
+/**
+ * W2 T-backend: the same deployment core under production activation. Every remote command
+ * becomes one typed owner step lease; the fake owner runs the owner's bundled step script on
+ * the fixture's private local account, so the remote layout and results are the real ones.
+ */
+async function production(url: "unreachable" | "none" = "unreachable") {
+  const fixture = await makeDeploymentFixture();
+  fixtures.push(fixture);
+  const owner = await makeFakeProductionOwner(fixture);
+  const store = memoryProfileStore();
+  const graph = await fixture.graph("1.0.0", { url });
+  const live = { owner: () => owner.registration, pollMs: { first: 5, max: 20 } };
+  const deployment = makeRemoteBackendDeployment({
+    approval: async () => ({ approved: true }),
+    assertHostTrusted: makeProductionDeploymentHostTrust(live),
+    run: makeProductionDeploymentRunner(live),
+    resolveSource: async () => graph,
+    store,
+    now: () => "2026-11-17T00:00:00.000Z",
+  });
+  return { fixture, owner, store, graph, deployment, live };
+}
+
+it("production owner: every step is one typed lease with the legacy remote result", async () => {
+  const { fixture, owner, store, graph, deployment } = await production();
+  expect((await deployment.setupRemoteBackend(input(true), never)).status).toBe("enabled");
+  expect(owner.steps.map((step) => step.kind)).toEqual([
+    "probeHost",
+    "stageBegin",
+    "manifestPut",
+    "archiveFetch",
+    "archiveUpload",
+    "publish",
+    "setupInputPut",
+    "setupInputPut",
+    "setup",
+    "start",
+    "readCompletion",
+  ]);
+  // The legacy runner was never called, and every lease token is distinct.
+  expect(fixture.calls).toEqual([]);
+  expect(new Set(owner.opens.map((lease) => Buffer.from(lease).toString("hex"))).size).toBe(11);
+  expect(owner.steps.find((step) => step.kind === "archiveUpload")).toMatchObject({
+    inputSha256: graph.archiveSha256,
+    maxBytes: (await fs.stat(join(fixture.root, "graph-1.0.0.tar.gz"))).size,
+  });
+  const [record] = store.rows;
+  expect(record).toMatchObject({ authorityId: AUTHORITY, installationFingerprint: INSTALLATION });
+  expect(await fs.readFile(record!.helperEntry, "utf8")).toBe("// relay 1.0.0\n");
+  expect(await fixture.backendLog()).toEqual([
+    `setup ${REQUEST}`,
+    `enable --authority ${AUTHORITY} --confirm-startup`,
+  ]);
+  const setupInputs = join(fixture.home, ".bigbud/backend-setup", REQUEST);
+  expect((await fs.readdir(setupInputs)).toSorted()).toEqual([
+    "rust-manifest.json",
+    "trusted-keys.json",
+  ]);
+});
+
+it("production owner: a repeat request reuses the published install", async () => {
+  const { owner, store, deployment } = await production("none");
+  await deployment.setupRemoteBackend(input(), never);
+  store.rows.splice(0);
+  const again = { ...input(), requestId: "44444444-2222-4333-8444-555555555555" };
+  expect((await deployment.setupRemoteBackend(again, never)).profileId).toBe(`rb-${AUTHORITY}`);
+  // begin reported `present`, so no second upload or publish was dispatched.
+  expect(owner.steps.filter((step) => step.kind === "stageBegin")).toHaveLength(2);
+  expect(owner.steps.filter((step) => step.kind === "archiveUpload")).toHaveLength(1);
+  expect(owner.steps.filter((step) => step.kind === "publish")).toHaveLength(1);
+});
+
+it("production owner: an unconfirmed setup is reported and never retried", async () => {
+  const { owner, store, deployment } = await production("none");
+  owner.unknownFor = "setup";
+  await expect(deployment.setupRemoteBackend(input(), never)).rejects.toMatchObject({
+    code: "unavailable",
+    message: expect.stringContaining("It was not replayed"),
+  });
+  expect(owner.steps.filter((step) => step.kind === "setup")).toHaveLength(1);
+  expect(owner.steps.filter((step) => step.kind === "start")).toEqual([]);
+  expect(store.rows).toEqual([]);
+});
+
+it("production owner: no owner, an unmatched command or untrusted host dispatch nothing", async () => {
+  const { owner, live, fixture } = await production();
+  const absent = makeProductionDeploymentRunner({ owner: () => undefined });
+  const probe = { command: "/bin/sh", args: ["-c", "true", "sh"], timeoutMs: 30_000 };
+  await expect(absent(TARGET, probe, never)).rejects.toMatchObject({ code: "unavailable" });
+  await expect(makeProductionDeploymentRunner(live)(TARGET, probe, never)).rejects.toMatchObject({
+    code: "unavailable",
+  });
+  owner.trust = "approvalRequired";
+  await expect(makeProductionDeploymentHostTrust(live)(TARGET)).rejects.toMatchObject({
+    code: "unavailable",
+  });
+  expect(owner.steps).toEqual([]);
+  expect(fixture.calls).toEqual([]);
+});
+
+it("production owner: abort cancels exactly the running step lease", async () => {
+  const { owner, live } = await production();
+  owner.holdFor = "readCompletion";
+  const controller = new AbortController();
+  const run = makeProductionDeploymentRunner(live);
+  const pending = run.readCompletion!(
+    { executionTargetId: TARGET, authorityId: AUTHORITY, requestId: REQUEST },
+    controller.signal,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  controller.abort(new Error("caller stopped"));
+  await expect(pending).rejects.toThrow("caller stopped");
+  expect(owner.cancels.map((lease) => Buffer.from(lease).toString("hex"))).toEqual(
+    owner.opens.map((lease) => Buffer.from(lease).toString("hex")),
+  );
 });

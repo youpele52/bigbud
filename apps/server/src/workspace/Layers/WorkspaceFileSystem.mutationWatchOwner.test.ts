@@ -26,6 +26,7 @@ vi.mock("../../tool-transport/toolTransport.ts", async (importOriginal) => ({
 const owner = {
   snapshotDirectory: vi.fn<WorkspaceMutationWatchOwnerShape["snapshotDirectory"]>(),
   writeFile: vi.fn<WorkspaceMutationWatchOwnerShape["writeFile"]>(),
+  maxWriteBytes: 16,
 } satisfies WorkspaceMutationWatchOwnerShape;
 const invalidate = vi.fn((_: string) => Effect.void);
 const dependencies = Layer.mergeAll(
@@ -94,6 +95,24 @@ it.layer(OwnerTestLayer)("WorkspaceFileSystem direct SSH mutation and watch owne
       expect(owner.writeFile).toHaveBeenCalledTimes(1);
       expect(runToolCommand).not.toHaveBeenCalled();
       expect(invalidate).not.toHaveBeenCalled();
+    }),
+  );
+
+  it.effect("refuses a body above the owner limit before dispatch", () =>
+    Effect.gen(function* () {
+      const workspace = yield* WorkspaceFileSystem;
+      // 16 bytes is the owner bound; "é" is two UTF-8 bytes, so 9 of them exceed it.
+      const failure = yield* workspace
+        .writeFile({ ...writeInput, contents: "é".repeat(9) })
+        .pipe(Effect.flip);
+      expect(failure).toMatchObject({
+        operation: "workspaceFileSystem.writeFileRemote",
+        writeDisposition: "not-dispatched",
+      });
+      expect(owner.writeFile).not.toHaveBeenCalled();
+      expect(yield* workspace.writeFile({ ...writeInput, contents: "é".repeat(8) })).toEqual({
+        relativePath: "-file\t ",
+      });
     }),
   );
 

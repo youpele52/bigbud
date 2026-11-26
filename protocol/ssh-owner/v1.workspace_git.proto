@@ -82,3 +82,112 @@ enum ProofGitTrackedPushStatus {
   PROOF_GIT_TRACKED_PUSH_STATUS_REJECTED = 4;
   PROOF_GIT_TRACKED_PUSH_STATUS_UNCONFIRMED = 5;
 }
+
+// U15 production Git upload lease (fetch, pull and PR fetch for remotes on a
+// bigbud SSH target). The owner validates `repository_path` as absolute,
+// normalized and inside `workspace_root` (itself absolute, normalized and not
+// `/`), re-checks the containment on the target after resolving symlinks, and
+// runs only `git-upload-pack` under a fixed environment. The byte channel is a
+// private owner-created Unix socket that admits exactly one connection; no
+// request names a command, argument or environment. Push uses the separate
+// GitReceive lease below.
+//
+// Bounds: lease 32 bytes; each path 1..1024 bytes, no NUL or control bytes.
+message GitUploadOpen {
+  bytes lease = 1;
+  string workspace_root = 2;
+  string repository_path = 3;
+}
+
+message GitUploadLease {
+  bytes lease = 1;
+}
+
+message GitUploadState {
+  bytes lease = 1;
+  GitUploadPhase phase = 2;
+  // Present only while LISTENING: the owner socket for this lease.
+  optional string socket_path = 3;
+  optional uint32 exit_code = 4;
+}
+
+enum GitUploadPhase {
+  GIT_UPLOAD_PHASE_UNSPECIFIED = 0;
+  GIT_UPLOAD_PHASE_LISTENING = 1;
+  GIT_UPLOAD_PHASE_STREAMING = 2;
+  GIT_UPLOAD_PHASE_EXITED = 3;
+  GIT_UPLOAD_PHASE_CLOSED = 4;
+  GIT_UPLOAD_PHASE_LOST = 5;
+  GIT_UPLOAD_PHASE_REJECTED = 6;
+  GIT_UPLOAD_PHASE_UNCONFIRMED = 7;
+}
+
+// U15 production Git receive lease (push to a remote on a bigbud SSH target).
+// Same path authority, guard, pinned channel and socket as GitUpload. The owner
+// sits between the socket and `git-receive-pack`: it reads the live
+// advertisement, settles STALE unless `destination_ref` is advertised at
+// `expected_old_oid`, gives local Git a single-ref advertisement with narrowed
+// capabilities, and forwards exactly one command
+// `<expected_old_oid> <source_oid> <destination_ref>` and its pack. The remote
+// runs with receive.denyNonFastForwards and receive.denyDeletes forced on.
+// An all-zero `expected_old_oid` is a first publish (U15): the ref must be
+// absent from the live advertisement (present settles STALE), local Git sees
+// only `capabilities^{}` plus live tips as `.have`, and only
+// `<zero> <source_oid> <destination_ref>` is forwarded. Deletion, other refs
+// and extra commands are never forwarded.
+//
+// Bounds: lease 32 bytes; each path 1..1024 bytes, no NUL or control bytes;
+// destination_ref `refs/heads/...` at most 255 bytes; both OIDs 40 or 64
+// lowercase hex of one width; source nonzero; old nonzero or all zeros.
+message GitReceiveOpen {
+  bytes lease = 1;
+  string workspace_root = 2;
+  string repository_path = 3;
+  string destination_ref = 4;
+  string expected_old_oid = 5;
+  string source_oid = 6;
+}
+
+message GitReceiveLease {
+  bytes lease = 1;
+}
+
+message GitReceiveState {
+  bytes lease = 1;
+  GitReceivePhase phase = 2;
+  // Present only while LISTENING: the owner socket for this lease.
+  optional string socket_path = 3;
+  // Set only when FINISHED.
+  GitReceiveReceipt receipt = 4;
+}
+
+enum GitReceivePhase {
+  GIT_RECEIVE_PHASE_UNSPECIFIED = 0;
+  GIT_RECEIVE_PHASE_LISTENING = 1;
+  GIT_RECEIVE_PHASE_STREAMING = 2;
+  // Settled with a receipt; ACCEPTED or REJECTED come from a complete report.
+  GIT_RECEIVE_PHASE_FINISHED = 3;
+  // Closed or cancelled before any update was forwarded.
+  GIT_RECEIVE_PHASE_CLOSED = 4;
+  // The transport failed before any update was forwarded.
+  GIT_RECEIVE_PHASE_LOST = 5;
+  // The target guard refused the repository before receive-pack ran.
+  GIT_RECEIVE_PHASE_REJECTED = 6;
+  // An update may have been forwarded; never replay.
+  GIT_RECEIVE_PHASE_UNCONFIRMED = 7;
+}
+
+enum GitReceiveReceipt {
+  GIT_RECEIVE_RECEIPT_UNSPECIFIED = 0;
+  GIT_RECEIVE_RECEIPT_ACCEPTED = 1;
+  // expected_old_oid == source_oid and the live ref matched; nothing written.
+  GIT_RECEIVE_RECEIPT_UNCHANGED = 2;
+  // receive-pack reported `ng` for the ref (for example non-fast-forward).
+  GIT_RECEIVE_RECEIPT_REJECTED = 3;
+  // The live ref differs from expected_old_oid (absent for an update, present
+  // for a first publish); nothing forwarded.
+  GIT_RECEIVE_RECEIPT_STALE = 4;
+  // Local Git's command or capabilities deviated from the approval; nothing
+  // forwarded.
+  GIT_RECEIVE_RECEIPT_REFUSED = 5;
+}

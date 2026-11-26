@@ -30,7 +30,9 @@ mod fixed_policy;
 mod fixture_fs;
 pub(crate) mod host_name;
 mod host_verification;
+mod identities;
 mod identity_agent;
+mod ignore_unknown;
 mod include;
 pub(super) mod jump;
 mod paths;
@@ -48,8 +50,8 @@ mod tests;
 use super::v1::ErrorCode;
 use connector::ConnectorProgram;
 use diagnostic::{ConfigDiagnostic, ConfigFailure, Directive, Located};
-pub(crate) use fixed_policy::GSSAPI_INERT_OVERRIDE;
-use fixed_policy::{RouteFamily, is_fixed_policy};
+pub(crate) use fixed_policy::{GSSAPI_INERT_OVERRIDE, PUBKEY_ACCEPTED_ALGORITHMS};
+use fixed_policy::{RouteFamily, is_fixed_policy, is_inert};
 pub(crate) use host_name::Host;
 pub(super) use host_verification::HostVerification;
 use identity_agent::AgentSetting;
@@ -165,8 +167,12 @@ pub(super) fn resolve_with_facts(
     if !safe_host(alias) {
         return Err(UNSUPPORTED.into());
     }
-    let scope = Scope::open(path)?;
-    let system = system_path.map(Scope::open).transpose()?;
+    // U17: production admission follows OpenSSH's own permission checks.
+    let openssh = facts.production();
+    let scope = Scope::open_with(path, openssh)?;
+    let system = system_path
+        .map(|path| Scope::open_with(path, openssh))
+        .transpose()?;
     let (settings, config) = include::evaluate(&scope, system.as_ref(), alias, facts)?;
     let route = settings.route(alias, facts);
     let host = host_name::admit(
@@ -176,14 +182,7 @@ pub(super) fn resolve_with_facts(
         allow_non_loopback,
     )?;
     let user = route.user.ok_or(UNSUPPORTED)?;
-    if settings.identities.is_empty() {
-        return Err(UNSUPPORTED.into());
-    }
-    let identities = settings
-        .identities
-        .iter()
-        .map(|identity| identity.try_map(|value| paths::auth_file(&scope, value, &route)))
-        .collect::<Result<Vec<_>, _>>()?;
+    let identities = identities::resolve(&settings.identities, &scope, &route)?;
     let identity_agent = AgentSetting::resolve(settings.identity_agent.as_ref(), &scope, &route)?;
     let trust = settings.trust.resolve(&scope, system.as_ref(), &route)?;
     let host_verification = settings.host_verification.as_ref();
@@ -242,6 +241,7 @@ struct Settings {
     jump: Option<Located<Vec<jump::Hop>>>,
     #[cfg(any(test, target_os = "linux"))]
     proxy_command: Option<ConfigDiagnostic>,
+    ignore_unknown: ignore_unknown::IgnoreUnknown,
 }
 
 impl Settings {
@@ -277,6 +277,11 @@ impl Settings {
                 self.trust.set(diagnostic, *args).map_err(reject)
             }
             ProxyCommand => self.apply(diagnostic, args.raw(), alias).map_err(reject),
+            IgnoreUnknown => {
+                self.ignore_unknown.set(args.raw());
+                Ok(())
+            }
+            directive if is_inert(directive) => Ok(()),
             Host | Match | Include => Err(diagnostic.reject(UNSUPPORTED)),
             _ => self
                 .apply(diagnostic, args.one().map_err(reject)?, alias)

@@ -109,7 +109,9 @@ impl TrustTransport for PendingRoute<'_> {
             .position(|(key, _)| key.is_none())
             .unwrap_or_else(|| pins.len().saturating_sub(1));
         let leg = self.legs.get(index).ok_or(ErrorCode::OperationDenied)?;
-        let observation = leg.inspect_with(deadline, |deadline| self.probe(index, deadline))?;
+        let observation = leg.inspect_with(deadline, |deadline| {
+            self.probe(index, deadline).map(|key| vec![key])
+        })?;
         if self.pins(deadline)? != pins {
             return Err(ErrorCode::HostKeyChanged);
         }
@@ -141,7 +143,7 @@ impl TrustTransport for PendingRoute<'_> {
             if self.pins(deadline)? != key.pins {
                 return Err(ErrorCode::HostKeyChanged);
             }
-            Ok(observed)
+            Ok(vec![observed])
         })
     }
 }

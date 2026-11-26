@@ -34,7 +34,14 @@ impl Directory {
         self.0.metadata().map_err(|_| UNSUPPORTED)
     }
 
-    pub(super) fn child(&self, name: &CStr, uid: u32) -> Result<DirectoryChild, ErrorCode> {
+    /// `openssh`: U17 production policy (owner or root, not group/world-writable),
+    /// as OpenSSH checks; otherwise the fixture's owner-only, private directory.
+    pub(super) fn child(
+        &self,
+        name: &CStr,
+        uid: u32,
+        openssh: bool,
+    ) -> Result<DirectoryChild, ErrorCode> {
         // Inspect the entry itself first: a dangling symlink is not an empty glob.
         let Some(entry) = self.stat(name)? else {
             return Ok(DirectoryChild::Missing);
@@ -46,24 +53,33 @@ impl Directory {
         }
         let child = Self(self.open_at(name, DIR_FLAGS)?);
         let metadata = child.metadata()?;
-        if !metadata.is_dir()
-            || metadata.uid() != uid
-            || metadata.mode() & 0o577 != 0o500
-            || !same_entry(&entry, &metadata)
-        {
+        let permitted = if openssh {
+            (metadata.uid() == uid || metadata.uid() == 0) && metadata.mode() & 0o022 == 0
+        } else {
+            metadata.uid() == uid && metadata.mode() & 0o577 == 0o500
+        };
+        if !metadata.is_dir() || !permitted || !same_entry(&entry, &metadata) {
             return Err(UNSUPPORTED);
         }
         Ok(DirectoryChild::Directory(child))
     }
 
-    pub(super) fn regular(&self, name: &CStr, uid: u32, private: bool) -> Result<File, ErrorCode> {
+    /// `allow_root`: a root-owned file is admitted too (U17 production config
+    /// and trust files); private keys never set it.
+    pub(super) fn regular(
+        &self,
+        name: &CStr,
+        uid: u32,
+        private: bool,
+        allow_root: bool,
+    ) -> Result<File, ErrorCode> {
         let entry = self.stat(name)?.ok_or(UNSUPPORTED)?;
         if entry.st_mode & libc::S_IFMT != libc::S_IFREG {
             return Err(UNSUPPORTED);
         }
         let file = self.open_at(name, libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC)?;
         let metadata = file.metadata().map_err(|_| UNSUPPORTED)?;
-        check_regular(&metadata, uid, private)?;
+        check_regular(&metadata, uid, private, allow_root)?;
         if !same_entry(&entry, &metadata) {
             return Err(UNSUPPORTED);
         }
@@ -129,10 +145,15 @@ fn same_entry(entry: &libc::stat, metadata: &Metadata) -> bool {
     (entry.st_dev as u64, entry.st_ino as u64) == (metadata.dev(), metadata.ino())
 }
 
-fn check_regular(metadata: &Metadata, uid: u32, private: bool) -> Result<(), ErrorCode> {
+fn check_regular(
+    metadata: &Metadata,
+    uid: u32,
+    private: bool,
+    allow_root: bool,
+) -> Result<(), ErrorCode> {
     let mode_mask = if private { 0o077 } else { 0o022 };
     if !metadata.is_file()
-        || metadata.uid() != uid
+        || !(metadata.uid() == uid || (allow_root && metadata.uid() == 0))
         || metadata.nlink() != 1
         || metadata.mode() & mode_mask != 0
         || (private && metadata.mode() & 0o400 == 0)

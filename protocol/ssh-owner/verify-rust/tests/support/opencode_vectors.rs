@@ -3,7 +3,12 @@ use std::collections::BTreeMap;
 use super::{assert_frame, reply, request, v1};
 use v1::{reply::Outcome, request::Operation};
 
+// W2 T-prov production provider leases share the provider vector domain.
+#[path = "provider_lease_vectors.rs"]
+mod provider_lease_vectors;
+
 pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
+    provider_lease_vectors::verify(values);
     let lease = vec![92; 32];
     assert_frame(
         values,

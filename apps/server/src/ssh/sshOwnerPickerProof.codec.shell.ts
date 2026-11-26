@@ -66,15 +66,15 @@ function validPath(value: string): boolean {
   );
 }
 
-function validIdentity(value: string): boolean {
+export function validIdentity(value: string): boolean {
   return value.length > 0 && value.length <= MAX_IDENTITY_BYTES && !value.includes("\0");
 }
 
-function validCommand(value: string): boolean {
+export function validCommand(value: string): boolean {
   return value.length > 0 && !value.includes("\0") && Buffer.byteLength(value) <= MAX_COMMAND_BYTES;
 }
 
-function validTimeout(value: number): boolean {
+export function validTimeout(value: number): boolean {
   return Number.isInteger(value) && value > 0 && value <= MAX_TIMEOUT_MS;
 }
 

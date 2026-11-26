@@ -25,6 +25,8 @@ export interface PickerProofPrepareTerminalInput {
   readonly terminalId: string;
   readonly cols: number;
   readonly rows: number;
+  /** U16 production shell from the target's `/etc/shells`; absent: the login `$SHELL`. */
+  readonly shell?: string;
 }
 
 export type ProofTerminalOperation =
@@ -54,7 +56,30 @@ export type ProofTerminalOperation =
       readonly lease: Uint8Array;
       readonly cols: number;
       readonly rows: number;
-    };
+    }
+  // W2 T-term production verbs: Request 120 (this lease's shell tree) and 121 (U16).
+  | { readonly kind: "terminalInspect"; readonly lease: Uint8Array }
+  | { readonly kind: "listTerminalShells" };
+
+const TERMINAL_KINDS: ReadonlySet<string> = new Set<ProofTerminalOperation["kind"]>([
+  "proofTerminalCwd",
+  "prepareProofTerminal",
+  "openProofTerminal",
+  "proofTerminalStatus",
+  "closeProofTerminal",
+  "cancelProofTerminalReservation",
+  "proofTerminalReplay",
+  "proofTerminalInput",
+  "proofTerminalResize",
+  "terminalInspect",
+  "listTerminalShells",
+]);
+
+export function isProofTerminalOperation<O extends { readonly kind: string }>(
+  operation: O,
+): operation is Extract<O, ProofTerminalOperation> {
+  return TERMINAL_KINDS.has(operation.kind);
+}
 
 function validateDimensions(cols: number, rows: number) {
   if (
@@ -87,7 +112,15 @@ export function writeProofTerminalOperation(
     operands.fieldString(3, operation.terminalId);
     operands.fieldUint(4, operation.cols);
     operands.fieldUint(5, operation.rows);
+    if (operation.shell !== undefined) {
+      if (!isTerminalShellPath(operation.shell)) throw new PickerProofOwnerError("invalidOperands");
+      operands.fieldString(6, operation.shell);
+    }
     writer.fieldRepeatedMessage(28, operands.finish());
+    return;
+  }
+  if (operation.kind === "listTerminalShells") {
+    writer.fieldRepeatedMessage(121, EMPTY);
     return;
   }
   if (operation.kind === "openProofTerminal" && operation.lease === undefined) {
@@ -134,7 +167,23 @@ export function writeProofTerminalOperation(
       operands.fieldUint(2, operation.cols);
       operands.fieldUint(3, operation.rows);
       writer.fieldRepeatedMessage(27, operands.finish());
+      return;
+    case "terminalInspect":
+      writer.fieldRepeatedMessage(120, operands.finish());
   }
+}
+
+/** Mirrors the owner's U16 operand rule: absolute, normalized, plain path bytes. */
+export function isTerminalShellPath(path: string): boolean {
+  return (
+    path.length > 1 &&
+    path.length <= 256 &&
+    /^\/[A-Za-z0-9/._+-]+$/.test(path) &&
+    path
+      .slice(1)
+      .split("/")
+      .every((part) => part !== "" && part !== "." && part !== "..")
+  );
 }
 
 function validCwd(cwd: string) {

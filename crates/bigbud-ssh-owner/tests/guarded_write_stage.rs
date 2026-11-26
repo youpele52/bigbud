@@ -297,3 +297,19 @@ fn generation_change_and_same_generation_reattach_clear_staged_bytes() {
         Some(StageError::SizeMismatch)
     );
 }
+
+#[test]
+fn production_stage_takes_each_save_root_and_keeps_its_generation() {
+    let mut stage = Stage::new_production(GENERATION);
+    assert_eq!(stage.generation(), GENERATION);
+    let mut other = binding(b"new\n");
+    other.root = "/home/dev/project".into();
+    assert!(stage.begin(&other, NONCE, Instant::now()).is_ok());
+    let mut refused = binding(b"new\n");
+    refused.root = "/".into();
+    stage.reset_attachment(GENERATION);
+    assert_eq!(
+        stage.begin(&refused, NONCE, Instant::now()).err(),
+        Some(StageError::BindingMismatch)
+    );
+}

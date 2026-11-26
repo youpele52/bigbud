@@ -4,10 +4,12 @@ import type { WorkspaceFileReadOwnerShape } from "../workspace/Services/Workspac
 import type { WorkspaceIndexReadOwnerShape } from "../workspace/Services/WorkspaceIndexReadOwner.ts";
 import type { WorkspaceMutationWatchOwnerShape } from "../workspace/Services/WorkspaceMutationWatchOwner.ts";
 import { decodeWorkspaceFilePreview } from "../workspace/WorkspaceFilePreview.ts";
-import { PickerProofOwnerError, type PickerProofOwner } from "./sshOwnerPickerProof.client.ts";
+import { PickerProofOwnerError } from "./sshOwnerPickerProof.client.ts";
+import type { PickerProofWorkspaceClient } from "./sshOwnerPickerProof.client.workspace.ts";
+import { MAX_WORKSPACE_STAGED_WRITE_BYTES } from "./sshOwnerPickerProof.codec.workspace.mutation.ts";
 
 export function workspaceContentSearchForPickerProof(
-  owner: PickerProofOwner,
+  owner: PickerProofWorkspaceClient,
 ): WorkspaceContentSearchOwnerShape {
   return {
     async searchFileContents({ executionTargetId, cwd, query, limit }) {
@@ -32,7 +34,7 @@ export function workspaceContentSearchForPickerProof(
 }
 
 export function workspaceDirectoryForPickerProof(
-  owner: PickerProofOwner,
+  owner: PickerProofWorkspaceClient,
 ): WorkspaceDirectoryReadOwnerShape {
   return {
     listDirectory: ({ executionTargetId, cwd, relativeDir }) =>
@@ -41,7 +43,7 @@ export function workspaceDirectoryForPickerProof(
 }
 
 export function workspaceIndexForPickerProof(
-  owner: PickerProofOwner,
+  owner: PickerProofWorkspaceClient,
 ): WorkspaceIndexReadOwnerShape {
   return {
     indexWorkspace: ({ executionTargetId, cwd }) =>
@@ -50,7 +52,7 @@ export function workspaceIndexForPickerProof(
 }
 
 export function workspaceMutationWatchForPickerProof(
-  owner: PickerProofOwner,
+  owner: PickerProofWorkspaceClient,
 ): WorkspaceMutationWatchOwnerShape {
   return {
     snapshotDirectory: ({ executionTargetId, cwd, relativePath }, signal) =>
@@ -69,11 +71,14 @@ export function workspaceMutationWatchForPickerProof(
         relativePath,
         contents: new TextEncoder().encode(contents),
       }),
+    maxWriteBytes: MAX_WORKSPACE_STAGED_WRITE_BYTES,
   };
 }
 
 /** The isolated workflow's typed owner port. This is not a server composition layer. */
-export function workspaceReadsForPickerProof(owner: PickerProofOwner): WorkspaceFileReadOwnerShape {
+export function workspaceReadsForPickerProof(
+  owner: PickerProofWorkspaceClient,
+): WorkspaceFileReadOwnerShape {
   return {
     async readFilePreview({ executionTargetId, cwd, relativePath }) {
       const result = await owner.readProofWorkspaceFile({

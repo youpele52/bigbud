@@ -11,6 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../v1.shell.proto");
     println!("cargo:rerun-if-changed=../v1.peer.proto");
     println!("cargo:rerun-if-changed=../v1.transfer.proto");
+    println!("cargo:rerun-if-changed=../v1.provider_lease.proto");
+    println!("cargo:rerun-if-changed=../v1.remote_backend.proto");
     prost_build::Config::new()
         .boxed(".bigbud.ssh_owner.v1.Request.operation.proof_git_tracked_push")
         .message_attribute(

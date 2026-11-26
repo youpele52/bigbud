@@ -182,7 +182,7 @@ impl Recipe {
     }
 }
 
-fn recognized_version(kind: ProviderKind, stdout: &str) -> bool {
+pub(in super::super) fn recognized_version(kind: ProviderKind, stdout: &str) -> bool {
     let text = stdout.trim_end();
     let version = match kind {
         ProviderKind::Codex => match text.strip_prefix("codex-cli ") {

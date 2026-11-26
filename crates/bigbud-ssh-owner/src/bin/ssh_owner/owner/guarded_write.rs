@@ -169,17 +169,15 @@ impl Owner {
         &mut self,
         operation: Operation,
     ) -> Result<Outcome, ErrorCode> {
-        let guarded = self
-            .guarded_write
-            .as_mut()
-            .ok_or(ErrorCode::OperationDenied)?;
+        let guarded = self.guarded_lane()?;
         if !guarded.allows(&operation) {
             return Err(ErrorCode::OperationDenied);
         }
         if let Operation::ProofWorkspaceGuardedWriteApply(apply) = operation {
             return self.apply_guarded_write(apply);
         }
-        let outcome = guarded.execute(self.generation, operation)?;
+        let generation = self.generation;
+        let outcome = self.guarded_lane()?.execute(generation, operation)?;
         Ok(Outcome::ProofWorkspaceGuardedWriteStage(
             ProofWorkspaceGuardedWriteStage {
                 outcome: Some(outcome),
@@ -193,12 +191,11 @@ impl Owner {
     ) -> Result<Outcome, ErrorCode> {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
-            let guarded = self
-                .guarded_write
-                .as_mut()
+            let generation = self.generation;
+            let guarded = Some(self.guarded_lane()?)
                 .filter(|guarded| guarded.apply_proof)
                 .ok_or(ErrorCode::OperationDenied)?;
-            let binding = binding(self.generation, apply.binding)?;
+            let binding = binding(generation, apply.binding)?;
             let lease = lease(&apply.lease)?;
             let verified = guarded.take_verified(&binding, lease, Instant::now())?;
             Ok(apply_proof::dispatch(
@@ -260,6 +257,9 @@ fn stage_error(error: StageError) -> ErrorCode {
 #[cfg(all(test, any(target_os = "macos", target_os = "linux")))]
 #[path = "guarded_write.tests.rs"]
 mod tests;
+
+#[path = "guarded_write.production.rs"]
+mod production;
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[path = "guarded_write.apply.rs"]

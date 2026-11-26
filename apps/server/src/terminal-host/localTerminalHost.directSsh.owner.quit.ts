@@ -49,7 +49,8 @@ const possiblyLive = (route: RemoteAgentOwner) =>
   (route.state === "may-have-been-sent" || route.state === "outcome-unknown");
 
 export function makeNativeDirectSshQuitCloser(input: {
-  readonly targets: ReadonlyArray<string>;
+  /** Fixed targets (dev), or the live target set read at quit time (production). */
+  readonly targets: ReadonlyArray<string> | (() => Promise<ReadonlyArray<string>>);
   readonly owners: () => RemoteAgentOwnerStore;
   readonly lifecycle: OwnedPtyLocalSshClient;
 }): NativeDirectSshQuitCloser {
@@ -58,7 +59,8 @@ export function makeNativeDirectSshQuitCloser(input: {
     const list = store.listTerminalOwners;
     if (!list) throw new Error("The owner store cannot list terminal leases.");
     const found: Candidate[] = [];
-    for (const target of input.targets) {
+    const targets = typeof input.targets === "function" ? await input.targets() : input.targets;
+    for (const target of targets) {
       let after = "";
       for (let page = 0; ; page += 1) {
         signal?.throwIfAborted();
@@ -89,7 +91,7 @@ export function makeNativeDirectSshQuitCloser(input: {
   };
 
   return {
-    hasHosts: () => input.targets.length > 0,
+    hasHosts: () => typeof input.targets === "function" || input.targets.length > 0,
     closeAll: async (_request, signal) => {
       let candidates: Candidate[];
       try {

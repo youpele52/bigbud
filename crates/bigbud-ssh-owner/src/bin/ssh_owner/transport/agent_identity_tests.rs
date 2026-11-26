@@ -115,7 +115,7 @@ fn record(transport: &Transport, identity_agent: &str) -> Vec<String> {
     for option in [
         "StrictHostKeyChecking=yes",
         "HostKeyAlgorithms=ssh-ed25519",
-        "PubkeyAcceptedAlgorithms=ssh-ed25519",
+        crate::config::PUBKEY_ACCEPTED_ALGORITHMS,
         "BatchMode=yes",
         "PreferredAuthentications=publickey",
         "IdentitiesOnly=yes",

@@ -314,9 +314,10 @@ fn hashed_pin_never_masks_other_records_or_malformed_data() {
         format!("# comments cannot enable markers\n@revoked {record}"),
         format!("# comments cannot enable CA trust\n@cert-authority {record}"),
         format!("{record}\n# do not mask duplicates\n{record}"),
-        format!("{record}{}", " ".repeat(256)),
+        // Over the per-record cap (4 KiB since U23) and the store cap (64 KiB).
+        format!("{record}{}", " ".repeat(4096)),
         format!("{record}# invalid control byte\0\n"),
-        format!("{record}{}", "# note\n".repeat(600)),
+        format!("{record}{}", "# note\n".repeat(10_000)),
         record.replace("|1|", "|2|"),
         record.replace("AAECA", "AAEC!"),
         record.replace("0ODxAREhM=", "0ODxAREhN="),

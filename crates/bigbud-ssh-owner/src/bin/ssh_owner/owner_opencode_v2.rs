@@ -44,14 +44,18 @@ fd=/proc/self/fd/9
 fields='%d:%i:%f:%u:%h:%s:%y:%z'
 "#,
     include_str!("owner_agent_proxy/provider_service_guard.sh"),
+    include_str!("owner_agent_proxy/provider_discovery.sh"),
     include_str!("owner_opencode_v2/discover.sh"),
     r#"
 [[ $(/usr/bin/uname -s) == Linux ]] || exit 126
 { trusted_path "$cwd" && cd -P -- "$cwd" && [[ $PWD == "$cwd" ]]; } 2>/dev/null || exit 126
-select_binary || missing
+select_binary opencode || missing
 [[ -x /usr/bin/python3 ]] || exit 126
 unset PWD OLDPWD
-exec /usr/bin/python3 -I -c "$supervisor" "$cwd" "$nonce" "$host" "$port"
+# U19: the supervisor and OpenCode run in the captured login environment.
+capture_login_env || exit 126
+exec /usr/bin/env -i -- "${login_env[@]}" \
+    /usr/bin/python3 -I -c "$supervisor" "$cwd" "$nonce" "$host" "$port" "$entry"
 "#,
 );
 
@@ -144,7 +148,7 @@ impl ProductRecipe {
 
     fn remote_command(&self, cwd: &str, nonce: &str, remote: SocketAddrV4) -> String {
         format!(
-            "exec /usr/bin/env -i LC_ALL=C HOME=\"$HOME\" SHELL=\"$SHELL\" PATH=/usr/bin:/bin /bin/bash -o pipefail -c {} bigbud-opencode-v2 {} {} {} {} {} {} {LIMIT}",
+            "exec /usr/bin/env -i LC_ALL=C HOME=\"$HOME\" SHELL=\"$SHELL\" USER=\"$USER\" LOGNAME=\"$LOGNAME\" LANG=\"$LANG\" PATH=/usr/bin:/bin /bin/bash -o pipefail -c {} bigbud-opencode-v2 {} {} {} {} {} {} {LIMIT}",
             quote(LAUNCH),
             // An empty operand asks the remote guard to discover the binary.
             quote(self.binary.as_deref().unwrap_or("")),

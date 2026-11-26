@@ -32,9 +32,11 @@ impl Class {
             Verb::ListFolders => self == Self::Picker,
             // Exec-class authority is dispatcher-only and never shared with a
             // picker, monitor, read or PTY grant. Each verb keeps its own grant.
-            Verb::RunThreadShell | Verb::RunProviderWorkspaceShell | Verb::RunAcpCommand => {
-                self == Self::Dispatcher
-            }
+            Verb::RunThreadShell
+            | Verb::RunProviderWorkspaceShell
+            | Verb::RunAcpCommand
+            | Verb::ShellLeaseControl
+            | Verb::RunAcpShell => self == Self::Dispatcher,
             // Peer enrollment is coordinator-dispatcher authority. Ordinary
             // host trust (control) and monitor/read classes can never satisfy it.
             Verb::EnsurePeerCoordinatorKey | Verb::InspectPeerHostKey => self == Self::Dispatcher,
@@ -58,6 +60,8 @@ enum Verb {
     RunThreadShell,
     RunProviderWorkspaceShell,
     RunAcpCommand,
+    ShellLeaseControl,
+    RunAcpShell,
     EnsurePeerCoordinatorKey,
     InspectPeerHostKey,
     TransferStream,
@@ -76,6 +80,14 @@ fn normalized_operand(operation: &Operation) -> (Verb, [u8; 32]) {
         Operation::ProofRunThreadShell(_) => Verb::RunThreadShell,
         Operation::ProofRunProviderWorkspaceShell(_) => Verb::RunProviderWorkspaceShell,
         Operation::ProofRunAcpCommand(_) => Verb::RunAcpCommand,
+        // W2 T-shell production leases keep the exec verbs; the digest of the
+        // exact operation still separates them from their proof counterparts.
+        Operation::RunThreadShell(_) => Verb::RunThreadShell,
+        Operation::RunProviderWorkspaceShell(_) => Verb::RunProviderWorkspaceShell,
+        Operation::RunAcpCommand(_) => Verb::RunAcpCommand,
+        // U21: an approved ACP terminal command is its own exec verb.
+        Operation::RunAcpShell(_) => Verb::RunAcpShell,
+        Operation::ShellStatus(_) | Operation::ShellClose(_) => Verb::ShellLeaseControl,
         Operation::ProofEnsurePeerCoordinatorKey(_) => Verb::EnsurePeerCoordinatorKey,
         Operation::ProofInspectPeerHostKey(_) => Verb::InspectPeerHostKey,
         Operation::ProofTransferStream(_) => Verb::TransferStream,
@@ -133,7 +145,28 @@ fn normalized_operand(operation: &Operation) -> (Verb, [u8; 32]) {
         | Operation::ProofWorkspaceWriteCommit(_)
         | Operation::ProofWorkspaceWriteAbort(_)
         | Operation::ProofAgentAction(_)
-        | Operation::ProofDeploymentAction(_) => Verb::OtherFixtureOperation,
+        | Operation::ProofDeploymentAction(_)
+        | Operation::GitUploadOpen(_)
+        | Operation::GitUploadStatus(_)
+        | Operation::GitReceiveOpen(_)
+        | Operation::GitReceiveStatus(_)
+        | Operation::GitReceiveClose(_)
+        | Operation::GitUploadClose(_)
+        | Operation::DeploymentStepOpen(_)
+        | Operation::DeploymentStepStatus(_)
+        | Operation::DeploymentStepCancel(_)
+        | Operation::ClientRelayLeaseOpen(_)
+        | Operation::ClientRelayLeaseStatus(_)
+        | Operation::ClientRelayLeaseClose(_)
+        | Operation::ProbeProvider(_)
+        | Operation::ProviderLeaseOpen(_)
+        | Operation::ProviderLeaseStatus(_)
+        | Operation::ProviderLeaseClose(_)
+        | Operation::TerminalInspect(_)
+        | Operation::ListTerminalShells(_)
+        | Operation::WorkspaceEntryInfo(_)
+        | Operation::WorkspaceRename(_)
+        | Operation::WorkspaceAppend(_) => Verb::OtherFixtureOperation,
     };
     let digest = Sha256::digest(operand_preimage(operation.clone()));
     (verb, digest.into())

@@ -6,6 +6,8 @@ mod pi;
 mod provider_binding;
 mod provider_service;
 pub(super) use provider_binding::ProviderKind;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(super) use provider_binding::recognized_version;
 #[cfg_attr(not(target_os = "linux"), allow(unused_imports))]
 pub(super) use provider_service::Kind as ProviderServiceKind;
 pub(crate) mod agent_action;
@@ -24,7 +26,7 @@ pub(crate) use production::test_support;
 pub(crate) use production::{ProductionProxy, ServiceRecipe};
 mod scoped_duplex;
 pub(super) use scoped_duplex::ScopedDuplex;
-mod relay;
+pub(crate) mod relay;
 mod relay_binding;
 
 use super::random_token;

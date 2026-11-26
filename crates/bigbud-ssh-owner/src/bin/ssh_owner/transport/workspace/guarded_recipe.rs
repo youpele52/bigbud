@@ -67,15 +67,19 @@ pub(crate) fn execute(
     transport: &Transport,
     write: &StagedWrite<'_>,
 ) -> Result<Outcome, ErrorCode> {
-    if transport.config.host != Ipv4Addr::LOCALHOST
-        || transport.config.port < 1024
-        || transport.config.alias_config.is_some()
-        || transport.config.system_config.is_some()
-        || transport.proof_agent.is_some()
+    // The fixture stays a loopback-only proof. A production target keeps its
+    // own trust/identity policy and admits the save's own root (W2 T-files).
+    let production = transport.facts.production();
+    if transport.proof_agent.is_some()
+        || (!production
+            && (transport.config.host != Ipv4Addr::LOCALHOST
+                || transport.config.port < 1024
+                || transport.config.alias_config.is_some()
+                || transport.config.system_config.is_some()))
     {
         return Err(ErrorCode::OperationDenied);
     }
-    let command = write.command(transport.config.workspace_root.as_deref())?;
+    let command = write.command(super::workspace::root_authority(transport, write.root))?;
     transport.revalidate_policy()?;
     let mut pinned = transport.pinned_ssh("-T")?;
     pinned.command.args(["--", &transport.host, &command]);

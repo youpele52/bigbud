@@ -154,9 +154,11 @@ fn a_changed_key_under_the_name_still_refuses() {
     let fixture = Fixture::new();
     let transport = fixture.transport(named(None), &[("[build.example.internal]:2200", KEY)]);
     let deadline = Instant::now() + Duration::from_secs(5);
-    let observed = transport.inspect_with(deadline, |_| Ok(key(OTHER)));
+    let observed = transport.inspect_with(deadline, |_| Ok(vec![key(OTHER)]));
     assert!(matches!(observed, Err(ErrorCode::HostKeyChanged)));
-    let matching = transport.inspect_with(deadline, |_| Ok(key(KEY))).unwrap();
+    let matching = transport
+        .inspect_with(deadline, |_| Ok(vec![key(KEY)]))
+        .unwrap();
     assert!(matching.verified);
 }
 
@@ -178,4 +180,46 @@ fn label_precedence_and_policy_matching() {
     assert!(!identity.matches(&crate::config::Host::Ip(address), address));
     assert!(HostIdentity::default().matches(&crate::config::Host::Ip(address), address));
     assert!(!HostIdentity::default().matches(&name, address));
+}
+
+/// U23: OpenSSH-default host-key types. A pin is matched by any offered key of
+/// a pinned type; a key of an unpinned type alone has changed; first use
+/// challenges the most preferred offered key; the launch allows only the
+/// pinned type (RSA with SHA-2 signatures only).
+#[test]
+fn multi_type_host_keys_follow_openssh_pinning() {
+    use crate::transport::host_key::fixtures::{ECDSAB256, RSAB2048};
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let fixture = Fixture::new();
+    let pinned = fixture.transport(HostIdentity::default(), &[("[127.0.0.1]:2200", KEY)]);
+    let only_rsa = pinned.inspect_with(deadline, |_| Ok(vec![key(RSAB2048.0)]));
+    assert!(matches!(only_rsa, Err(ErrorCode::HostKeyChanged)));
+    let both = pinned
+        .inspect_with(deadline, |_| Ok(vec![key(KEY), key(ECDSAB256.0)]))
+        .unwrap();
+    assert!(both.verified && both.key_type == "ssh-ed25519");
+
+    let fixture = Fixture::new();
+    let rsa = fixture.transport(HostIdentity::default(), &[("[127.0.0.1]:2200", RSAB2048.0)]);
+    let observed = rsa
+        .inspect_with(deadline, |_| Ok(vec![key(KEY), key(RSAB2048.0)]))
+        .unwrap();
+    assert!(observed.verified && observed.key_type == "ssh-rsa");
+    assert_eq!(observed.fingerprint, RSAB2048.1);
+    let args: Vec<_> = rsa
+        .pinned_ssh("-T")
+        .unwrap()
+        .command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.contains(&"HostKeyAlgorithms=rsa-sha2-512,rsa-sha2-256".to_owned()));
+
+    let fixture = Fixture::new();
+    let first_use = fixture.transport(HostIdentity::default(), &[]);
+    let challenge = first_use
+        .inspect_with(deadline, |_| Ok(vec![key(ECDSAB256.0), key(RSAB2048.0)]))
+        .unwrap();
+    assert!(!challenge.verified && challenge.key_type == "ecdsa-sha2-nistp256");
+    assert_eq!(challenge.fingerprint, ECDSAB256.1);
 }

@@ -118,7 +118,7 @@ fn authenticated_launch_requires_pin_and_rechecks_the_bound_identity() {
             .any(|pair| pair == ["-i".as_ref(), identity.as_os_str()])
     );
     assert!(argv.contains(&"StrictHostKeyChecking=yes".as_ref()));
-    assert!(argv.contains(&"PubkeyAcceptedAlgorithms=ssh-ed25519".as_ref()));
+    assert!(argv.contains(&crate::config::PUBKEY_ACCEPTED_ALGORITHMS.as_ref()));
     assert!(argv.contains(&"IdentityAgent=none".as_ref()));
     assert!(argv.contains(&"BatchMode=yes".as_ref()));
     drop(pinned);

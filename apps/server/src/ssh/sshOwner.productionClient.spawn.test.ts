@@ -84,7 +84,9 @@ describe("production owner client spawn", () => {
           "/usr/bin/ssh-keyscan",
         ]);
         expect(observation.argv[11]).toBe("--attach-socket");
-        expect(observation.argv).toHaveLength(13);
+        // desktop-dev does not survive its launcher: the owner is bound to FD 3.
+        expect(observation.argv[13]).toBe("--launcher-lifetime");
+        expect(observation.argv).toHaveLength(14);
         for (const positional of [
           facts.target?.targetId,
           "127.0.0.1",

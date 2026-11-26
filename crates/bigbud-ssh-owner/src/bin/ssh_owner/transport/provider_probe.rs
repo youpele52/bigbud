@@ -3,6 +3,12 @@ use std::time::{Duration, Instant};
 use super::{ErrorCode, Transport, process, ssh_failure};
 use crate::v1::ProofProviderVersion;
 
+// W2 T-prov production probe and lease constructor (kept beside the proof
+// probe so `transport.rs` does not grow).
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[path = "provider_lease.rs"]
+mod provider_lease;
+
 impl Transport {
     /// Caller must supply only the command from the startup-bound provider recipe.
     pub(in super::super) fn probe_bound_provider(

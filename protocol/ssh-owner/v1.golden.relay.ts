@@ -1,4 +1,5 @@
 import type { Message } from "./v1.golden.codec.ts";
+import { providerLeaseWireCases } from "./v1.golden.providerLease.ts";
 
 export function relayOpenCase(request: (tag: number, body: Message) => Message) {
   return request(37, [
@@ -28,6 +29,7 @@ export function providerCases(
   ];
   const opencodeLease = new Uint8Array(32).fill(92);
   return {
+    ...providerLeaseWireCases(request, reply),
     proof_unlock_synthetic_posix_password: request(53, []),
     proof_synthetic_posix_password_unlocked: reply(34, []),
     proof_opencode_open: request(50, [

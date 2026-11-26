@@ -1,5 +1,7 @@
 // Proof-gated bootstrap on inherited stdio, with opt-in Unix reattachment.
 
+#[macro_use]
+mod ssh_algorithms;
 #[cfg(unix)]
 mod config;
 #[cfg(unix)]
@@ -13,6 +15,12 @@ mod owner;
 mod owner_agent_proxy;
 #[cfg(unix)]
 mod owner_attachment;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod owner_backend;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod owner_git_receive;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod owner_git_upload;
 #[cfg(any(unix, windows))]
 mod owner_grants;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -21,6 +29,8 @@ mod owner_opencode;
 mod owner_opencode_v2;
 #[cfg(any(unix, windows))]
 mod owner_pipe;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod owner_provider_lease;
 #[cfg(any(unix, windows))]
 mod owner_storage;
 #[cfg(unix)]

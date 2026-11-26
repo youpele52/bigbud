@@ -1,4 +1,4 @@
-use super::diagnostic::{ConfigDiagnostic, ConfigFailure, Directive, Located};
+use super::diagnostic::{ConfigDiagnostic, ConfigFailure, Directive, Located, SourceClass};
 use super::paths::{self, Route};
 use super::source::Scope;
 use super::syntax::Tokens;
@@ -73,7 +73,24 @@ impl TrustSettings {
     ) -> Result<TrustPaths, ConfigFailure> {
         // An omitted setting would mean OpenSSH's ambient defaults; the
         // fixture only admits explicitly configured user paths or `none`.
-        let user_setting = self.user.as_ref().ok_or(UNSUPPORTED)?;
+        let default;
+        let user_setting = match self.user.as_ref() {
+            Some(setting) => setting,
+            // U17: OpenSSH's default user trust file, only in the home-rooted
+            // production scope. It must exist and pass the trust-file rule.
+            None if user_scope.home_rooted() => {
+                default = Located {
+                    value: vec!["~/.ssh/known_hosts".to_owned()],
+                    diagnostic: ConfigDiagnostic {
+                        directive: Directive::UserKnownHostsFile,
+                        source: SourceClass::UserConfig,
+                        line: 0,
+                    },
+                };
+                &default
+            }
+            None => return Err(UNSUPPORTED.into()),
+        };
         let user = user_setting
             .value
             .iter()
