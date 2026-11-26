@@ -1,4 +1,7 @@
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Layer } from "effect";
@@ -8,10 +11,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeSqlitePersistenceLive } from "../persistence/Layers/Sqlite.ts";
 import type { SshOwnerProductionProfile } from "./sshOwnerProductionClient.launch.ts";
 import { resolveSshOwnerLaunchFacts } from "./sshOwnerProductionClient.launch.ts";
+import { pickerProofLaunchArgs } from "./sshOwnerPickerProof.client.args.ts";
 import { startOrAttachSshOwnerProduction } from "./sshOwnerProductionClient.ts";
 import {
   killIfAlive,
   makeProductionFixture,
+  waitFor,
   waitForDeath,
   type ProductionFixture,
 } from "./sshOwnerProductionClient.fixture.ts";
@@ -81,6 +86,12 @@ afterEach(async () => {
   for (const fn of cleanup.splice(0)) await fn();
 });
 
+/** Whether any live process was started from exactly this fixture binary. */
+async function processRunning(binary: string): Promise<boolean> {
+  const { stdout } = await promisify(execFile)("ps", ["-Ao", "stat=,command="]);
+  return stdout.split("\n").some((row) => !row.trimStart().startsWith("Z") && row.includes(binary));
+}
+
 describe("production SSH owner launch mode", () => {
   it("passes only the profile, state dir and fixed facts, with no proof flags", async () => {
     const fixture = await makeProductionFixture();
@@ -142,6 +153,63 @@ describe("production SSH owner launch mode", () => {
     );
   });
 
+  it("forwards the owner-selected v2 service binding beside the v1 one", async () => {
+    const fixture = await makeProductionFixture();
+    cleanup.push(fixture.dispose);
+    const profile = {
+      ...profileOf(fixture),
+      workspaceRoot: fixture.root,
+      opencodeService: { binaryPath: "/opt/opencode-v1" },
+      opencodeV2Service: { binaryPath: "/opt/opencode-v2" },
+    };
+    const facts = resolveSshOwnerLaunchFacts(profile);
+    expect(facts.opencodeV2Service).toEqual({ binaryPath: "/opt/opencode-v2" });
+    const argv = pickerProofLaunchArgs(
+      {
+        binary: "/opt/bigbud-ssh-owner",
+        lockFile: facts.lockFile,
+        sshBinary: "/usr/bin/ssh",
+        keyscanBinary: "/usr/bin/ssh-keyscan",
+        profileBinding: facts.profileBinding,
+        sql: undefined as never,
+        workspaceRoot: fixture.root,
+        opencodeService: { binaryPath: "/opt/opencode-v1" },
+        opencodeV2Service: { binaryPath: "/opt/opencode-v2" },
+        productionLaunch: {
+          startupDeadlineMs: 1_000,
+          profileBindingText: facts.profileBindingText,
+          stateDirectory: facts.stateDirectory,
+        },
+      },
+      { profileBindingHex: facts.profileBinding.toString("hex"), aliasArgs: [], scopedArgs: [] },
+    );
+    expect(argv[argv.indexOf("--opencode-service") + 1]).toBe("/opt/opencode-v1");
+    expect(argv[argv.indexOf("--opencode-v2-service") + 1]).toBe("/opt/opencode-v2");
+    // No target, host, port, user, identity or known-hosts argument is accepted.
+    expect(argv).not.toContain(facts.target?.targetId);
+    expect(argv).not.toContain("127.0.0.1");
+  });
+
+  it("refuses a relative v2 binding and a v2 binding without a workspace", () => {
+    const fixtureProfile = {
+      stateDirectory: "/tmp/bigbud-oc-profile",
+      kind: "desktop-packaged" as const,
+    };
+    expect(() =>
+      resolveSshOwnerLaunchFacts({
+        ...fixtureProfile,
+        workspaceRoot: "/srv/work",
+        opencodeV2Service: { binaryPath: "opencode-v2" },
+      }),
+    ).toThrow(/absolute executable/);
+    expect(() =>
+      resolveSshOwnerLaunchFacts({
+        ...fixtureProfile,
+        opencodeV2Service: { binaryPath: "/opt/opencode-v2" },
+      }),
+    ).toThrow(/absolute executable/);
+  });
+
   it("preserves the bounded startup deadline in production mode", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
@@ -152,8 +220,17 @@ describe("production SSH owner launch mode", () => {
         const failure = yield* start(fixture, sql, path, 250).pipe(Effect.flip);
         expect(failure).toMatchObject({ failure: "startup-timeout" });
         expect(Date.now() - started).toBeLessThan(5_000);
-        const observation = yield* Effect.promise(() => fixture.observation());
-        yield* Effect.promise(() => waitForDeath(observation.pid));
+        // Under load the 250 ms deadline can reap the fake owner before its
+        // first statement writes the observation file, so liveness is checked
+        // by the unique fixture binary path in the process table as well.
+        yield* Effect.promise(() => waitFor(async () => !(await processRunning(path))));
+        const observation = yield* Effect.promise(() =>
+          readFile(fixture.observationFile, "utf8").then(
+            (text) => JSON.parse(text) as { readonly pid: number },
+            () => undefined,
+          ),
+        );
+        if (observation) yield* Effect.promise(() => waitForDeath(observation.pid));
       }),
     );
   });

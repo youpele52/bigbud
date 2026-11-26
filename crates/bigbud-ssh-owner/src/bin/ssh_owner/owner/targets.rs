@@ -20,7 +20,7 @@ mod lanes;
 #[path = "targets.registry.rs"]
 mod registry;
 
-pub(crate) use descriptor::{Descriptor, MAX_TARGETS};
+pub(crate) use descriptor::{Descriptor, Host, MAX_TARGETS};
 pub(crate) use lanes::{Lanes, LeaseScope};
 pub(crate) use registry::{Registry, Slot};
 
@@ -30,7 +30,11 @@ use crate::{
     transport::TransportConfig,
     v1::{self, ErrorCode},
 };
-use std::path::PathBuf;
+use std::{net::IpAddr, path::PathBuf, sync::Arc};
+
+#[path = "targets.dns.rs"]
+mod dns;
+pub(crate) use dns::HostResolver;
 
 /// How the owner is started (W3.7). Fixture modes pin exactly one target;
 /// production starts with no target and resolves one per request descriptor.
@@ -44,7 +48,7 @@ pub(crate) enum TargetStartup {
 
 /// Owner-started image and configuration roots. Target descriptors select a
 /// target; they never select an executable, argv or transport option.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct TargetAuthority {
     ssh: PathBuf,
     keyscan: PathBuf,
@@ -52,6 +56,22 @@ pub(crate) struct TargetAuthority {
     /// Absolute alias config scope. The alias name comes from the descriptor.
     alias_config: Option<PathBuf>,
     workspace_root: Option<PathBuf>,
+    /// Owner-side DNS for descriptor host names; the system resolver in
+    /// production, replaceable in tests.
+    resolver: Arc<dyn HostResolver>,
+}
+
+impl std::fmt::Debug for TargetAuthority {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TargetAuthority")
+            .field("ssh", &self.ssh)
+            .field("keyscan", &self.keyscan)
+            .field("system_config", &self.system_config)
+            .field("alias_config", &self.alias_config)
+            .field("workspace_root", &self.workspace_root)
+            .finish_non_exhaustive()
+    }
 }
 
 impl TargetAuthority {
@@ -68,6 +88,26 @@ impl TargetAuthority {
             system_config,
             alias_config,
             workspace_root,
+            resolver: Arc::new(dns::SystemResolver),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_resolver(mut self, resolver: Arc<dyn HostResolver>) -> Self {
+        self.resolver = resolver;
+        self
+    }
+
+    /// Resolves the descriptor host now. The address lands only in the
+    /// returned transport config, which the registry entry owns, so it never
+    /// outlives that entry; every re-verification resolves again.
+    fn resolve_host(&self, descriptor: &Descriptor) -> Result<IpAddr, ErrorCode> {
+        match &descriptor.host {
+            Host::Ip(ip) => Ok(*ip),
+            Host::Name(name) => self
+                .resolver
+                .resolve(name, descriptor.port)
+                .ok_or(ErrorCode::TargetHostUnresolved),
         }
     }
 }
@@ -105,7 +145,15 @@ impl TargetAuthority {
                     true,
                 )
                 .map_err(|_| ErrorCode::ConfigUnsupported)?;
+                // Compare like with like before any lookup: the policy's
+                // `HostName` and the descriptor host are both unresolved (a name
+                // against a name, an address against an address). An explicit
+                // descriptor alias must agree with the policy's `HostKeyAlias`.
                 if resolved.host != descriptor.host
+                    || descriptor
+                        .host_key_alias
+                        .as_ref()
+                        .is_some_and(|alias| resolved.host_key_alias.as_ref() != Some(alias))
                     || resolved.port != descriptor.port
                     || resolved.user != descriptor.user
                     || resolved.identity != descriptor.identity
@@ -122,10 +170,13 @@ impl TargetAuthority {
             // system config alone cannot define a target.
             Kind::Structured => (None, None),
         };
+        // Resolve only after the policy agreed; the address is dialled while
+        // host keys stay checked under the name (or explicit alias).
+        let host = self.resolve_host(descriptor)?;
         Ok(TransportConfig {
             ssh: self.ssh.clone(),
             keyscan: self.keyscan.clone(),
-            host: descriptor.host,
+            host,
             port: descriptor.port,
             user: descriptor.user.clone(),
             identity: descriptor.identity.clone(),
@@ -134,10 +185,17 @@ impl TargetAuthority {
             system_config,
             workspace_root: self.workspace_root.clone(),
             dev_interactive_terminal: false,
+            host_identity: crate::transport::HostIdentity {
+                dns_name: descriptor.host.name().map(str::to_owned),
+                key_alias: descriptor.host_key_alias.clone(),
+            },
         })
     }
 }
 
+#[cfg(test)]
+#[path = "targets.dns.tests.rs"]
+mod dns_tests;
 #[cfg(test)]
 #[path = "targets.lanes.tests.rs"]
 mod lane_tests;

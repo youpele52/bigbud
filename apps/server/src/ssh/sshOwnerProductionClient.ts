@@ -44,6 +44,8 @@ export interface SshOwnerProductionHandle extends SshOwnerProductionOwner {
   readonly mode: "spawned" | "attached";
   readonly ownerEpoch: Uint8Array;
   readonly targetGeneration: Uint8Array;
+  /** Trusted OpenCode v2 executable this owner was launched with, if any. */
+  readonly opencodeV2Service?: { readonly binaryPath: string };
   readonly state: () => SshOwnerOwnerState;
   /**
    * Binds one target on the shared owner (W3.7). Every request carries the
@@ -123,6 +125,9 @@ function makeHandle(input: {
     mode: input.mode,
     ownerEpoch: input.owner.ownerEpoch,
     targetGeneration: input.owner.targetGeneration,
+    ...(input.facts.opencodeV2Service === undefined
+      ? {}
+      : { opencodeV2Service: input.facts.opencodeV2Service }),
     state: () => state,
     target: (descriptor) => input.owner.bindTarget(descriptor),
     onDeath(listener) {

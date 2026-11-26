@@ -51,6 +51,7 @@ impl Fixture {
             system_config: None,
             workspace_root: None,
             dev_interactive_terminal: false,
+            host_identity: Default::default(),
         })
         .unwrap()
     }

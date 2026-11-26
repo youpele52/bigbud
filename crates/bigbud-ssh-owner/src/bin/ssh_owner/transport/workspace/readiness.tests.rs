@@ -91,6 +91,7 @@ fn readiness_refuses_connector_routes_without_trying_direct_ssh() {
         system_config: None,
         workspace_root: Some(fixture.0.clone()),
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .unwrap();
     transport.connector = Some(Err(ErrorCode::RouteUnavailable));

@@ -276,6 +276,7 @@ fn s1_wire_goldens() {
             ErrorCode::OwnerRetirementUnverified,
         ),
         ("pane_unrecoverable", ErrorCode::PaneUnrecoverable),
+        ("target_host_unresolved", ErrorCode::TargetHostUnresolved),
     ] {
         assert_frame(
             &mut values,

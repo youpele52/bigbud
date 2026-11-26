@@ -258,6 +258,7 @@ fn live_private_openssh_guarded_recipe() {
         system_config: None,
         workspace_root: Some(root.clone()),
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .expect("private transport");
 

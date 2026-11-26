@@ -79,7 +79,7 @@ fn trim_space(value: &str) -> &str {
 
 // The same restricted alphabet is safe for the structured user and OpenSSH
 // HostKeyAlias option and cannot be confused with patterned known-hosts names.
-pub(super) fn safe_token(value: &str, max: usize) -> bool {
+pub(crate) fn safe_token(value: &str, max: usize) -> bool {
     !value.is_empty()
         && value.len() <= max
         && value.bytes().all(token_byte)

@@ -17,6 +17,11 @@ import {
   type SshOwnerBootStep,
 } from "./sshOwnerProductionBoot.ts";
 import { readSshOwnerHydrationSnapshot } from "./sshOwnerProductionHydration.ts";
+import { resolveProductionTargetDescriptor } from "./sshOwnerProductionTargets.ts";
+import {
+  registerSshOwnerProductionOwner,
+  resetSshOwnerProductionOwnerForTest,
+} from "./sshOwnerProductionRegistry.ts";
 import {
   startProductionOwnerForBoot,
   type SshOwnerProductionHandle,
@@ -115,6 +120,7 @@ export function resetSshOwnerProductionStateForTest(): void {
   configuration = { kind: "inactive" };
   admission = { kind: "inactive" };
   launchProfile = undefined;
+  resetSshOwnerProductionOwnerForTest();
 }
 
 /**
@@ -310,8 +316,19 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
     recordOutcome(outcome);
     if (outcome.kind === "open") {
       const owner = outcome.owner as SshOwnerProductionHandle;
-      owner.onDeath?.(closeSshOwnerAdmissionOnOwnerDeath);
-      yield* Effect.addFinalizer(() => owner.shutdown?.() ?? Effect.void);
+      // Every target resolves from the user's SSH config on each acquisition;
+      // host names stay names for the owner to resolve.
+      const unregister = registerSshOwnerProductionOwner({
+        handle: owner,
+        descriptorFor: (targetId) => resolveProductionTargetDescriptor(targetId),
+      });
+      owner.onDeath?.(() => {
+        unregister();
+        closeSshOwnerAdmissionOnOwnerDeath();
+      });
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(unregister).pipe(Effect.andThen(owner.shutdown?.() ?? Effect.void)),
+      );
     }
     if (outcome.kind === "unavailable")
       yield* Effect.logWarning("SSH admission stayed closed", {

@@ -68,6 +68,7 @@ fn production_master_is_reused_and_the_login_pty_round_trips() {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .expect("production-shaped transport");
 
@@ -192,6 +193,7 @@ fn production_agent_proxy_reuses_the_verified_master_and_confirms_exit() {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .expect("production-shaped transport");
 

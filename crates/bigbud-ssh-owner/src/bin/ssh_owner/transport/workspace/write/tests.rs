@@ -258,6 +258,7 @@ exit "$status"
         system_config: None,
         workspace_root: Some(fixture.0.clone()),
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .unwrap();
     let mut contents = "é".repeat(MAX_CONTENT_BYTES / 2).into_bytes();

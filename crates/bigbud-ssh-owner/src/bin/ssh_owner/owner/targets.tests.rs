@@ -379,6 +379,7 @@ fn registry_for_pinned(fixture: &Fixture) -> super::Registry {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     };
     let transport =
         crate::transport::Transport::new_with_facts(config, &crate::config::RouteFacts::default())

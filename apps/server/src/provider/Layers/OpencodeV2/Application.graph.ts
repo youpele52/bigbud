@@ -16,6 +16,7 @@ import { makeSharedOpencodeV2Adapter } from "./Adapter.shared.ts";
 import { makeV2SharedTargetPreparation } from "./Application.targets.shared.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
 import { detachV2BorrowedRuntime } from "./Runtime.transport.ts";
+import { resolveSelectedV2OwnerSource } from "./ServerManager.ownerV2.source.ts";
 import type { readV2SharedApplicationConfig } from "./Application.shared.ts";
 import type { V2BackendInstance } from "./Orchestration.instances.ts";
 import { V2OwnerRecovery } from "./Application.recovery.ts";
@@ -44,6 +45,9 @@ export const makeV2ApplicationGraph = Effect.fn("makeV2ApplicationGraph")(functi
   const families = makeV2NativeFamilyPreparation(server.stateDir);
   yield* Effect.addFinalizer(() => Effect.promise(() => families.close()));
   yield* Effect.addFinalizer(() => Effect.promise(() => orchestration.close()));
+  // Selected dev/production owner session, if this composition provides one.
+  // Its absence is a typed refusal, never a shared-local borrow.
+  const ownerSource = yield* resolveSelectedV2OwnerSource();
   const manager = new OpencodeV2ServerManager({
     maxProcesses: 26,
     maxOwners: 32,
@@ -51,11 +55,14 @@ export const makeV2ApplicationGraph = Effect.fn("makeV2ApplicationGraph")(functi
     maxEventBytes: 2000000,
     consumerTimeoutMs: 10000,
     consent,
-    start: (next) => {
-      if (!next.sharedService)
-        throw new Error("V2 production rejects private process acquisition.");
-      return borrowV2SharedService(next.sharedService);
-    },
+    start: (next) =>
+      next.sharedService
+        ? borrowV2SharedService(next.sharedService)
+        : // Loaded only for a remote acquisition; the shared path never retains
+          // the private launcher or the SSH factory.
+          import("./ServerManager.ownerV2.selected.ts").then(({ startSelectedV2OwnerProcess }) =>
+            startSelectedV2OwnerProcess(next, ownerSource),
+          ),
   });
   const execution = {
     manager,

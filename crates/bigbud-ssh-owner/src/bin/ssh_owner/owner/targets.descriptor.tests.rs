@@ -116,12 +116,22 @@ fn refuses_descriptor_bounds_and_unsupported_auth_modes() {
         Descriptor::parse(&password).err(),
         Some(ErrorCode::ConfigUnsupported)
     );
-    let mut hostname = base.clone();
-    hostname.host = "example.internal".into();
-    assert_eq!(
-        Descriptor::parse(&hostname).err(),
-        Some(ErrorCode::InvalidOperands)
-    );
+    for malformed in [
+        "-bad.example",
+        "bad-.example",
+        "a..b",
+        "10.0.0",
+        "has space",
+        "x_y.z",
+    ] {
+        let mut hostname = base.clone();
+        hostname.host = malformed.into();
+        assert_eq!(
+            Descriptor::parse(&hostname).err(),
+            Some(ErrorCode::InvalidOperands),
+            "{malformed}"
+        );
+    }
     let mut oversized = base.clone();
     oversized.target_id = "a".repeat(4 * 1024);
     assert_eq!(

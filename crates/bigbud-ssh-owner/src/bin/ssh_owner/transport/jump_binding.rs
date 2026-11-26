@@ -68,7 +68,8 @@ impl JumpPicker {
             let hop_config = TransportConfig {
                 ssh: config.ssh.clone(),
                 keyscan: config.keyscan.clone(),
-                host: hop.host,
+                // Jump legs are fixture-only numeric loopback routes.
+                host: hop.host.ip().ok_or(denied)?,
                 port: hop.port,
                 user: hop.user.clone(),
                 identity: hop.identity.clone(),
@@ -77,6 +78,7 @@ impl JumpPicker {
                 system_config: config.system_config.clone(),
                 workspace_root: None,
                 dev_interactive_terminal: false,
+                host_identity: Default::default(),
             };
             let transport = Transport::new_with_policy(hop_config, false, |_| Ok(Some(hop)))?;
             transport.images.require_mounted_linux_fixture()?;

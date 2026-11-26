@@ -20,7 +20,7 @@ import {
   exchangePickerProofAttachmentHello,
 } from "./sshOwnerPickerProof.attachment.ts";
 import { makeProofAgentProxyClient } from "./sshOwnerPickerProof.client.agentProxy.ts";
-import { makeProofOpencodeOwner } from "./sshOwnerPickerProof.client.opencode.ts";
+import { makeProviderServicePorts } from "./sshOwnerPickerProof.client.providerPorts.ts";
 import { proofAliasStartupArgs } from "./sshOwnerPickerProof.client.alias.ts";
 import { pickerProofLaunchArgs } from "./sshOwnerPickerProof.client.args.ts";
 import { copyPickerProofSessionOptions } from "./sshOwnerPickerProof.client.options.ts";
@@ -138,7 +138,10 @@ export async function startPickerProofOwner(
   const codex = options.codexFixture && validateProofProviderFixture(options.codexFixture);
   const pi = options.piFixture && validateProofProviderFixture(options.piFixture);
   const provider = codex ?? pi;
-  validateProviderServiceStartup([options.providerService, options.opencodeService], workspaceRoot);
+  validateProviderServiceStartup(
+    [options.providerService, options.opencodeService, options.opencodeV2Service],
+    workspaceRoot,
+  );
   const productionAgent = options.agentService;
   if (
     productionAgent !== undefined &&
@@ -182,6 +185,7 @@ export async function startPickerProofOwner(
   const aliasArgs = proofAliasStartupArgs(options.aliasConfig);
   const opencode = options.opencodeFixture && validateProofProviderFixture(options.opencodeFixture);
   if (options.opencodeService && opencode) throw new PickerProofOwnerError("invalidOperands");
+  if (options.opencodeV2Service && opencode) throw new PickerProofOwnerError("invalidOperands");
   if (
     opencode &&
     (process.platform !== "linux" ||
@@ -196,6 +200,15 @@ export async function startPickerProofOwner(
       scoped.args.length)
   )
     throw new PickerProofOwnerError("invalidOperands");
+  if (
+    options.opencodeV2Service !== undefined &&
+    production === undefined &&
+    targetId === undefined
+  ) {
+    // A pinned fixture target owns exactly one v2 listener; a multi-target
+    // production owner binds its own per-target client from the handle.
+    throw new PickerProofOwnerError("invalidOperands");
+  }
   if (
     scoped.args.length &&
     (provider ||
@@ -267,6 +280,7 @@ export async function startPickerProofOwner(
     executeProofAgentProxy,
     probeProofProvider,
     executeProofOpencode,
+    executeProofOperation,
     opencodeBinding,
     executeAgentAction,
   } = await openPickerProofSession(
@@ -285,6 +299,14 @@ export async function startPickerProofOwner(
       throwPickerProofStartupError(error, pipe, options.productionLaunch?.startupDeadlineMs);
     });
   pipe.sealStartupConfigDiagnostic();
+  const providerPorts = makeProviderServicePorts({
+    targetId,
+    fixture: opencode,
+    options,
+    binding: opencodeBinding,
+    executeOpencode: executeProofOpencode,
+    executeOperation: executeProofOperation,
+  });
   return Object.assign(
     owner,
     makeProofCodexClient(
@@ -295,17 +317,7 @@ export async function startPickerProofOwner(
       (runtime) => probeProofProvider("codex", runtime),
     ),
     {
-      ...(opencode || options.opencodeService
-        ? {
-            opencodeOwner: makeProofOpencodeOwner(
-              targetId ?? "",
-              opencode,
-              options.opencodeService?.binaryPath,
-              opencodeBinding,
-              executeProofOpencode,
-            ),
-          }
-        : {}),
+      ...providerPorts,
       openPeerRelay: makeProofPeerRelay(
         targetId ?? "",
         scoped.peer,

@@ -92,6 +92,7 @@ impl Directory {
             system_config: None,
             workspace_root,
             dev_interactive_terminal,
+            host_identity: Default::default(),
         })
         .expect("loopback-only transport")
     }

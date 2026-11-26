@@ -35,6 +35,7 @@ fn live_fixture() -> (PathBuf, Transport) {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .expect("fixture transport");
     let public = fs::read_to_string(root.join("host-key.pub")).expect("generated host public key");

@@ -57,6 +57,8 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
         #[cfg(target_os = "linux")]
         opencode_service,
         #[cfg(target_os = "linux")]
+        opencode_v2_service,
+        #[cfg(target_os = "linux")]
         tracked_push,
         #[cfg(target_os = "linux")]
         opencode,
@@ -90,6 +92,20 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
     }
     #[cfg(target_os = "linux")]
     if opencode_service.is_some()
+        && (agent_fixture.is_some()
+            || provider.is_some()
+            || installed_agent_state.is_some()
+            || client_relay.is_some()
+            || scoped_duplex.is_some()
+            || stage.is_some()
+            || tracked_push.is_some()
+            || opencode.is_some()
+            || workspace_root.is_none())
+    {
+        return Err(invalid_input().into());
+    }
+    #[cfg(target_os = "linux")]
+    if opencode_v2_service.is_some()
         && (agent_fixture.is_some()
             || provider.is_some()
             || installed_agent_state.is_some()
@@ -249,6 +265,13 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
         }
         Some(_) => return Err(invalid_input().into()),
     };
+    #[cfg(target_os = "linux")]
+    // The startup guard above already refused a v2 service without a
+    // workspace root, so the pair is always present together here.
+    let opencode_v2 = opencode_v2_service
+        .zip(workspace_root.as_deref())
+        .map(|(binary, root)| owner_opencode_v2::ProductRecipe::new(&binary, root))
+        .transpose()?;
     let _profile_lock = startup_bindings::lock_profile(std::path::Path::new(&lock))?;
     let transport = TransportConfig {
         ssh: ssh.into(),
@@ -262,6 +285,7 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
         system_config,
         workspace_root,
         dev_interactive_terminal,
+        host_identity: Default::default(),
     };
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     if posix_picker.is_some_and(|mode| {
@@ -310,7 +334,7 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
             #[cfg(target_os = "linux")]
             opencode_service,
             #[cfg(target_os = "linux")]
-            opencode_v2: None,
+            opencode_v2,
         },
     )?;
     owner.supervised_terminal = lifetime.is_some();

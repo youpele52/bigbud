@@ -10,6 +10,10 @@ pub(super) enum RouteFamily {
 }
 
 impl RouteFamily {
+    pub(super) fn is_any(&self) -> bool {
+        matches!(self, Self::Any)
+    }
+
     pub(super) fn parse(value: &str) -> Result<Self, ErrorCode> {
         if value.eq_ignore_ascii_case("any") {
             Ok(Self::Any)

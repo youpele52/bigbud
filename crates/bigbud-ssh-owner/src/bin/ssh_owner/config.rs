@@ -28,6 +28,7 @@ mod descriptor;
 pub(super) mod diagnostic;
 mod fixed_policy;
 mod fixture_fs;
+pub(crate) mod host_name;
 mod host_verification;
 mod identity_agent;
 mod include;
@@ -49,16 +50,19 @@ use connector::ConnectorProgram;
 use diagnostic::{ConfigDiagnostic, ConfigFailure, Directive, Located};
 pub(crate) use fixed_policy::GSSAPI_INERT_OVERRIDE;
 use fixed_policy::{RouteFamily, is_fixed_policy};
+pub(crate) use host_name::Host;
 pub(super) use host_verification::HostVerification;
 use identity_agent::AgentSetting;
 pub(super) use identity_agent::IdentityAgent;
 pub(super) use route_facts::{LocalAccountFact, RouteFacts, RouteOverrides};
 use send_env::SendEnv;
 use source::{Scope, SourceToken};
+#[cfg(test)]
 use std::net::IpAddr;
 use std::num::NonZeroU16;
 use std::path::{Path, PathBuf};
-use syntax::{safe_host, safe_token};
+use syntax::safe_host;
+pub(crate) use syntax::safe_token;
 pub(super) use timers::SshTimers;
 use trust_paths::TrustSettings;
 
@@ -70,7 +74,9 @@ pub(super) fn valid_configured_trust_path(path: &Path) -> bool {
 }
 
 pub(super) struct ResolvedConfig {
-    pub host: IpAddr,
+    /// `HostName` as configured: an IP literal or a DNS name the owner
+    /// resolves at binding time (production only).
+    pub host: Host,
     pub port: u16,
     pub user: String,
     pub identity: PathBuf,
@@ -163,20 +169,12 @@ pub(super) fn resolve_with_facts(
     let system = system_path.map(Scope::open).transpose()?;
     let (settings, config) = include::evaluate(&scope, system.as_ref(), alias, facts)?;
     let route = settings.route(alias, facts);
-    let host = route
-        .host
-        .parse::<IpAddr>()
-        .ok()
-        .filter(|host| allow_non_loopback || host.is_loopback())
-        .ok_or_else(|| match &settings.host {
-            Some(host) => host.diagnostic.reject(UNSUPPORTED),
-            None => UNSUPPORTED.into(),
-        })?;
-    if let Some(family) = &settings.address_family
-        && !family.value.accepts(host)
-    {
-        return Err(family.diagnostic.reject(UNSUPPORTED));
-    }
+    let host = host_name::admit(
+        route.host,
+        settings.host.as_ref().map(|host| &host.diagnostic),
+        settings.address_family.as_ref(),
+        allow_non_loopback,
+    )?;
     let user = route.user.ok_or(UNSUPPORTED)?;
     if settings.identities.is_empty() {
         return Err(UNSUPPORTED.into());

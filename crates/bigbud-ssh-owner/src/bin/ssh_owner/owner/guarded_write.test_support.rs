@@ -52,6 +52,7 @@ impl Fixture {
             system_config: None,
             workspace_root: Some(self.workspace()),
             dev_interactive_terminal: cfg!(target_os = "macos"),
+            host_identity: Default::default(),
         }
     }
 

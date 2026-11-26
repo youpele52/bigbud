@@ -53,6 +53,18 @@ export interface PickerProofOwnerOptions
   /** Product OpenCode v1 service: the only owner-selected forwarding authority. */
   readonly opencodeService?: { readonly binaryPath: string };
   /**
+   * Product OpenCode v2 service: the owner selects the executable, `serve` argv,
+   * remote port, listener, forward and per-lease credential. The configured
+   * path is a trusted profile setting, never a request operand.
+   */
+  readonly opencodeV2Service?: { readonly binaryPath: string };
+  /**
+   * Composition-only fact from the profile settings: a configured-but-unusable
+   * v2 binding. It never reaches argv; it lets the provider report the exact
+   * typed refusal instead of a generic "owner unavailable".
+   */
+  readonly opencodeV2Refusal?: import("./sshOwnerDevRuntime.providerServices.ts").DevOpencodeV2ServiceRefusal;
+  /**
    * Production only: owner-selected installed agent used by per-target proxy
    * leases. The owner validates the digest and state directory itself.
    */
@@ -84,6 +96,12 @@ export interface LaunchedPickerProofOwner
   extends PickerProofOwner, ClientRelaySshOwner, CodexSshOwner {
   readonly piRpcOwner: PiRpcOwner;
   readonly opencodeOwner?: OpencodeSshOwner;
+  /** Owner-selected OpenCode v2 lane for a pinned, single-target owner. */
+  readonly opencodeV2Lane?: import("./sshOwnerPickerProof.client.providerPorts.ts").PickerProofOpencodeV2Lane;
+  /** The trusted v2 binding this owner was launched with, if any. */
+  readonly opencodeV2Service?: { readonly binaryPath: string };
+  /** A configured-but-unusable v2 binding from the profile settings. */
+  readonly opencodeV2Refusal?: import("./sshOwnerDevRuntime.providerServices.ts").DevOpencodeV2ServiceRefusal;
   readonly openPeerRelay: PeerRelaySshOwner["openPeerRelay"];
   readonly openGitAdvertisement: ReturnType<typeof makeProofGitAdvertisement>;
   readonly openGitUpload: ReturnType<typeof makeProofGitUpload>;

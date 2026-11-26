@@ -66,7 +66,7 @@ fn send_env_reaches_the_picker_child_but_not_the_health_probe() -> io::Result<()
     let transport = Transport::new(TransportConfig {
         ssh,
         keyscan: root.join("unused-keyscan"),
-        host: config.host,
+        host: config.host.ip().expect("fixture routes are numeric"),
         port: config.port,
         user: config.user,
         identity: config.identity,
@@ -75,6 +75,7 @@ fn send_env_reaches_the_picker_child_but_not_the_health_probe() -> io::Result<()
         system_config: Some(system.0.join("config")),
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .map_err(|error| io::Error::other(format!("{error:?}")))?;
     let folders = transport

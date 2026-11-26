@@ -86,6 +86,9 @@ export function pickerProofLaunchArgs(
       ...(options.opencodeService
         ? ["--opencode-service", options.opencodeService.binaryPath]
         : []),
+      ...(options.opencodeV2Service
+        ? ["--opencode-v2-service", options.opencodeV2Service.binaryPath]
+        : []),
     ];
   }
   const target = facts.target;
@@ -123,6 +126,9 @@ export function pickerProofLaunchArgs(
       ? ["--provider-service", options.providerService.kind, options.providerService.binaryPath]
       : []),
     ...(options.opencodeService ? ["--opencode-service", options.opencodeService.binaryPath] : []),
+    ...(options.opencodeV2Service
+      ? ["--opencode-v2-service", options.opencodeV2Service.binaryPath]
+      : []),
     ...(provider
       ? [
           provider.codex ? "--codex-fixture" : "--pi-fixture",

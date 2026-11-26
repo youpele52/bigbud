@@ -91,6 +91,7 @@ fn route_defaults_native_transport_checks_port_binding_and_refuses_unknown_local
             system_config: None,
             workspace_root: None,
             dev_interactive_terminal: false,
+            host_identity: Default::default(),
         })
         .map(drop)
     };

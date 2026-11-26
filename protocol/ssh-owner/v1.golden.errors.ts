@@ -43,4 +43,5 @@ export const errorCases = {
   error_target_unknown: error(34),
   error_target_mismatch: error(35),
   error_pane_unrecoverable: error(36),
+  error_target_host_unresolved: error(37),
 } satisfies Record<string, Message>;

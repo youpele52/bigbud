@@ -35,6 +35,7 @@ fn production_bootstrap_refuses_a_hello_for_another_profile() {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     };
     let input = hello_frame(b"another-profile");
     let mut pipe = Pipe::new(input.as_slice(), Vec::new());

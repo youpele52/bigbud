@@ -52,6 +52,7 @@ const wireErrorCodes = [
   "targetUnknown",
   "targetMismatch",
   "paneUnrecoverable",
+  "targetHostUnresolved",
 ] as const;
 
 export type PickerProofOwnerErrorCode =

@@ -18,6 +18,7 @@ fn picker_attachment_scope_is_exact_root_and_key_only() {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     };
     let socket = root.join("owner.sock");
     assert!(is_disposable_picker(

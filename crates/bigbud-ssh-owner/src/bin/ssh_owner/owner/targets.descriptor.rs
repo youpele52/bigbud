@@ -4,10 +4,12 @@
 //! bytes, raw config text or caller-chosen transport options cross this
 //! boundary.
 
+pub(crate) use crate::config::Host;
+use crate::config::{host_name::MAX_HOST, safe_token};
 use crate::v1::{self, ErrorCode, TargetAuthMode, TargetKind};
 use prost::Message;
 use sha2::{Digest, Sha256};
-use std::{net::IpAddr, path::PathBuf};
+use std::path::PathBuf;
 
 const DESCRIPTOR_MAGIC: &[u8] = b"bigbud.ssh_owner.target_descriptor.v1\0";
 pub(crate) const MAX_DESCRIPTOR_BYTES: usize = 4 * 1024;
@@ -29,11 +31,13 @@ pub(crate) enum Kind {
 pub(crate) struct Descriptor {
     pub(crate) target_id: String,
     pub(crate) kind: Kind,
-    pub(crate) host: IpAddr,
+    pub(crate) host: Host,
     pub(crate) port: u16,
     pub(crate) user: String,
     pub(crate) identity: PathBuf,
     pub(crate) trust: PathBuf,
+    /// Explicit known-hosts name; `None` uses the host's own label.
+    pub(crate) host_key_alias: Option<String>,
     generation: Vec<u8>,
     digest: [u8; 32],
 }
@@ -60,19 +64,21 @@ impl Descriptor {
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
             || wire.host.is_empty()
-            || wire.host.len() > 45
+            || wire.host.len() > MAX_HOST
             || wire.host_key_alias.len() > MAX_HOST_KEY_ALIAS
             || wire.host_key_alias.chars().any(char::is_control)
             || !matches!(wire.generation.len(), 0 | 32)
         {
             return Err(ErrorCode::InvalidOperands);
         }
-        let host = wire
-            .host
-            .parse::<IpAddr>()
-            .map_err(|_| ErrorCode::InvalidOperands)?;
+        let host = Host::parse(&wire.host).ok_or(ErrorCode::InvalidOperands)?;
+        let host_key_alias = match wire.host_key_alias.as_str() {
+            "" => None,
+            alias if safe_token(alias, MAX_HOST_KEY_ALIAS) => Some(alias.to_owned()),
+            _ => return Err(ErrorCode::InvalidOperands),
+        };
         let port = u16::try_from(wire.port).map_err(|_| ErrorCode::InvalidOperands)?;
-        if port == 0 || host.is_unspecified() {
+        if port == 0 {
             return Err(ErrorCode::InvalidOperands);
         }
         let identity = literal_path(&wire.identity_reference)?;
@@ -98,6 +104,7 @@ impl Descriptor {
             user: wire.user.clone(),
             identity,
             trust,
+            host_key_alias,
             generation: wire.generation.clone(),
             digest,
         })

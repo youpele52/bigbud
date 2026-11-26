@@ -63,6 +63,7 @@ fn transport_refuses_root_mismatch_and_missing_pin_before_ssh_launch() {
         system_config: None,
         workspace_root: Some(PathBuf::from(ROOT)),
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .expect("valid fixture transport");
     assert!(matches!(

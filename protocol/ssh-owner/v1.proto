@@ -344,6 +344,9 @@ enum TargetAuthMode {
 message TargetDescriptor {
   string target_id = 1;
   TargetKind kind = 2;
+  // An IP literal or an RFC 1123 DNS name (at most 253 bytes). The owner
+  // resolves a name itself on every resolution of this target and keeps the
+  // address only as long as the registry entry; the server never resolves it.
   string host = 3;
   uint32 port = 4;
   string user = 5;
@@ -529,6 +532,10 @@ enum ErrorCode {
   // identity is malformed or names an unknown state. Distinct from a retirement
   // refusal; an uncertain but well-formed reservation is retained, not refused.
   ERROR_CODE_PANE_UNRECOVERABLE = 36;
+  // A descriptor named its host by DNS name and the owner could not resolve it
+  // (no address, lookup failure or lookup deadline) at resolution time.
+  // Refused before any dial; distinct from a policy refusal.
+  ERROR_CODE_TARGET_HOST_UNRESOLVED = 37;
 }
 
 message Trust {

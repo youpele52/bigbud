@@ -59,6 +59,7 @@ fn live_picker_master_retires_before_storage_rebind_acknowledgement() {
                     system_config: None,
                     workspace_root: None,
                     dev_interactive_terminal: false,
+                    host_identity: Default::default(),
                 },
             },
             route_facts: Default::default(),

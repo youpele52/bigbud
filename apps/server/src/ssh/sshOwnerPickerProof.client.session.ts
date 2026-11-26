@@ -41,9 +41,9 @@ import {
   EMPTY,
   type TargetState,
 } from "./sshOwnerPickerProof.client.session.exchange.ts";
+import { EMPTY_SNAPSHOT, hydrated } from "./sshOwnerPickerProof.client.session.storage.ts";
 import {
   type PickerProofBoundTarget,
-  type PickerProofHydratedStorage,
   type PickerProofOwner,
   type PickerProofSessionOptions,
 } from "./sshOwnerPickerProof.client.session.types.ts";
@@ -54,12 +54,6 @@ export type {
   PickerProofSessionOptions,
 } from "./sshOwnerPickerProof.client.session.types.ts";
 
-const EMPTY_SNAPSHOT: SshOwnerHydrationSnapshot = {
-  durableDisconnects: [],
-  aliasDescriptorBindings: [],
-  retirementMirror: [],
-  paneBindings: [],
-};
 export async function openPickerProofSession(
   pipe: PickerProofPipe,
   {
@@ -379,22 +373,13 @@ export async function openPickerProofSession(
     stopAdmission,
     executeProofAgentProxy,
     executeProofOpencode,
+    /** Generic owner exchange for compositions that need a production-proxy client. */
+    executeProofOperation: execute,
     opencodeBinding: () => ({
       ownerEpoch: Uint8Array.from(ownerEpoch),
       targetGeneration: Uint8Array.from(generation()),
     }),
     probeProofProvider: makeProofProviderProbe(targetId ?? "", execute),
     executeAgentAction: makePickerProofAgentActionClient(targetId ?? "", execute),
-  };
-}
-
-function hydrated(
-  snapshot: Awaited<ReturnType<typeof hydratePickerProofTarget>> | undefined,
-): PickerProofHydratedStorage | undefined {
-  if (snapshot === undefined) return undefined;
-  return {
-    writerEpoch: snapshot.writerEpoch,
-    seq: snapshot.seq,
-    disconnected: snapshot.disconnected,
   };
 }

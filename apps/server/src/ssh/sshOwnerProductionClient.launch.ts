@@ -25,6 +25,7 @@ import {
   type SshOwnerAttachmentDescriptor,
 } from "./sshOwnerProductionClient.attachment.ts";
 import { SshOwnerClientError } from "./sshOwnerProductionClient.errors.ts";
+import { isTrustedRemoteExecutablePath } from "./sshOwnerRemotePath.ts";
 import {
   deriveSshOwnerProfileBinding,
   type SshOwnerProfileBinding,
@@ -74,6 +75,12 @@ export interface SshOwnerProductionProfile {
   };
   /** Owner-selected OpenCode executable; its listener is bound per target. */
   readonly opencodeService?: { readonly binaryPath: string };
+  /**
+   * Owner-selected OpenCode v2 executable. The owner selects the argv, remote
+   * port, listener, forward and per-lease credential; this is only the trusted
+   * remote program path from the resolved artifact/config.
+   */
+  readonly opencodeV2Service?: { readonly binaryPath: string };
 }
 
 export interface SshOwnerLaunchFacts {
@@ -92,6 +99,7 @@ export interface SshOwnerLaunchFacts {
     readonly stateDir: string;
   };
   readonly opencodeService?: { readonly binaryPath: string };
+  readonly opencodeV2Service?: { readonly binaryPath: string };
 }
 
 const invalid = (message: string, cause?: unknown) =>
@@ -113,6 +121,15 @@ export function resolveSshOwnerLaunchFacts(
     (profile.workspaceRoot !== undefined && !absolutePath(profile.workspaceRoot))
   ) {
     throw invalid("The SSH owner production profile is not a valid launch binding.");
+  }
+  if (
+    profile.opencodeV2Service !== undefined &&
+    (profile.workspaceRoot === undefined ||
+      !isTrustedRemoteExecutablePath(profile.opencodeV2Service.binaryPath))
+  ) {
+    throw invalid(
+      "The OpenCode v2 service binding requires an authorized workspace and an absolute executable.",
+    );
   }
   if (profile.target !== undefined) {
     try {
@@ -147,6 +164,9 @@ export function resolveSshOwnerLaunchFacts(
     ...(profile.target === undefined ? {} : { target: profile.target }),
     ...(profile.agentService === undefined ? {} : { agentService: profile.agentService }),
     ...(profile.opencodeService === undefined ? {} : { opencodeService: profile.opencodeService }),
+    ...(profile.opencodeV2Service === undefined
+      ? {}
+      : { opencodeV2Service: profile.opencodeV2Service }),
   };
 }
 
@@ -184,6 +204,9 @@ export async function spawnSshOwnerProduction(
     attachment: { socketPath: facts.socketPath, capability: input.capability },
     ...(facts.agentService === undefined ? {} : { agentService: facts.agentService }),
     ...(facts.opencodeService === undefined ? {} : { opencodeService: facts.opencodeService }),
+    ...(facts.opencodeV2Service === undefined
+      ? {}
+      : { opencodeV2Service: facts.opencodeV2Service }),
     ...productionLaunchOptions(input),
   });
 }

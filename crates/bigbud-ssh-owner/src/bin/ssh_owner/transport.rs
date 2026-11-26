@@ -13,6 +13,8 @@ pub(super) mod deployment_manifest;
 pub(super) mod deployment_stage;
 mod folders;
 mod health;
+mod host_identity;
+pub(crate) use host_identity::HostIdentity;
 mod host_key;
 mod identity;
 pub(crate) use identity::literal_path as identity_is_literal;
@@ -84,6 +86,8 @@ pub(super) struct TransportConfig {
     // Trusted proof startup authority, never sourced from a wire request.
     pub workspace_root: Option<PathBuf>,
     pub dev_interactive_terminal: bool,
+    /// Known-hosts naming for a DNS-named target; default for an address.
+    pub host_identity: host_identity::HostIdentity,
 }
 
 #[derive(Clone)]
@@ -196,7 +200,7 @@ impl Transport {
         trust_store::check_directory(&config.known_hosts)?;
         let policy = resolve(&config)?;
         if let Some(resolved) = &policy {
-            if resolved.host != config.host
+            if !config.host_identity.matches(&resolved.host, config.host)
                 || resolved.port != config.port
                 || resolved.user != config.user
                 || resolved.identity != config.identity
@@ -227,10 +231,13 @@ impl Transport {
         } else {
             format!("[{host}]:{}", config.port)
         };
-        let host_label = policy
-            .as_ref()
-            .and_then(|policy| policy.host_key_alias.clone())
-            .unwrap_or_else(|| scan_label.clone());
+        let host_label = config.host_identity.label(
+            policy
+                .as_ref()
+                .and_then(|policy| policy.host_key_alias.as_deref()),
+            config.port,
+            &scan_label,
+        );
         let family = if config.host.is_ipv4() { "-4" } else { "-6" };
         Ok(Self {
             config: Arc::new(config),

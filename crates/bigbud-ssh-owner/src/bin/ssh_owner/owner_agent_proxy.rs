@@ -145,22 +145,6 @@ fn valid_sha256(sha256: &str) -> bool {
             .all(|b| b.is_ascii_digit() || matches!(b, b'a'..=b'f'))
 }
 
-// Product provider launch over the transferred pipes. The caller must already
-// have validated the owner-compiled recipe; this only builds the pinned,
-// forward-free SSH invocation.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub(super) fn launch_provider_pipes(
-    transport: &Transport,
-    remote: &str,
-    pipes: [File; 3],
-) -> Result<AgentProxyLease, ErrorCode> {
-    transport.revalidate_policy()?;
-    let pinned = transport.pinned_ssh("-T")?;
-    let token = random_token().map_err(|_| ErrorCode::OwnerUnavailable)?;
-    let reap = deferred_reaper().map_err(|_| ErrorCode::OwnerUnavailable)?;
-    AgentProxyLease::launch(pinned, transport.host(), remote, pipes, token, reap)
-}
-
 /// The caller transfers three distinct, live, unowned descriptors in stdio order.
 unsafe fn adopt_pipes(fds: [RawFd; 3]) -> io::Result<[File; 3]> {
     for fd in fds {

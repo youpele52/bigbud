@@ -9,6 +9,12 @@ import type {
 import type { PickerProofProductionProxyClient } from "../../../ssh/sshOwnerPickerProof.client.productionProxy.ts";
 import { V2SshOwnerUnavailable, makeV2SshOwner } from "./ServerManager.sshOwner.ts";
 import { startOwnedV2Process } from "./ServerManager.child.ts";
+import { OpencodeV2ServerManager } from "./ServerManager.ts";
+import {
+  startSelectedV2OwnerProcess,
+  type V2OwnerSessionSource,
+} from "./ServerManager.ownerV2.selected.ts";
+import { FixtureEvents } from "./Test.fixtures.ts";
 import type { OwnedV2Process, V2IsolatedProcessConfig } from "./ServerManager.types.ts";
 
 const spawnSpy = vi.hoisted(() => vi.fn());
@@ -70,7 +76,12 @@ async function v2Server(password: string, requests: string[]) {
   return (server.address() as AddressInfo).port;
 }
 
-function ownerClient(port: number, password: string, calls: string[]) {
+function ownerClient(
+  port: number,
+  password: string,
+  calls: string[],
+  closePhase: "closed" | "lost" | "rejected" = "closed",
+) {
   let lease: Uint8Array | undefined;
   const client: Pick<
     PickerProofProductionProxyClient,
@@ -89,7 +100,7 @@ function ownerClient(port: number, password: string, calls: string[]) {
     },
     async closeOpencodeV2(ticket) {
       calls.push("close");
-      const state: ProofOpencodeState = { lease: ticket, phase: "closed" };
+      const state: ProofOpencodeState = { lease: ticket, phase: closePhase };
       lease = undefined;
       return state;
     },
@@ -123,6 +134,31 @@ describe("OpenCode v2 SSH owner acquisition", () => {
     expect(process.isRunning()).toBe(false);
   });
 
+  it.each([
+    ["closed", true],
+    ["lost", false],
+    ["rejected", false],
+  ] as const)(
+    "frees the native slot only on confirmed owner teardown (%s)",
+    async (closePhase, confirmed) => {
+      const requests: string[] = [];
+      const password = "d".repeat(64);
+      const port = await v2Server(password, requests);
+      const calls: string[] = [];
+      const owner = makeV2SshOwner(
+        ownerClient(port, password, calls, closePhase),
+        config.runtimeTargetId,
+        binding,
+        config.binaryPath,
+      );
+      const process = track(await startOwnedV2Process(config, undefined, owner));
+      expect(process.hasExited?.()).toBe(false);
+      await process.close();
+      expect(calls).toContain("close");
+      expect(process.hasExited?.()).toBe(confirmed);
+    },
+  );
+
   it("keeps the typed refusal when no owner can provide v2", async () => {
     await expect(startOwnedV2Process(config)).rejects.toBeInstanceOf(V2SshOwnerUnavailable);
     const { workspaceRoot: _localRoot, ...withoutWorkspace } = config;
@@ -153,5 +189,102 @@ describe("OpenCode v2 SSH owner acquisition", () => {
       code: "protocolError",
     });
     expect(calls).toContain("close");
+  });
+});
+
+describe("selected OpenCode v2 owner composition through the server manager", () => {
+  const bounds = {
+    maxProcesses: 2,
+    maxOwners: 2,
+    maxQueuedEvents: 4,
+    maxEventBytes: 1024,
+    consumerTimeoutMs: 100,
+  };
+
+  function compositionSource(fixture?: { port: number; password: string; calls: string[] }) {
+    return {
+      async target(targetId: string) {
+        if (!fixture || targetId !== config.runtimeTargetId) return undefined;
+        return {
+          targetId,
+          owner: makeV2SshOwner(
+            ownerClient(fixture.port, fixture.password, fixture.calls),
+            targetId,
+            binding,
+            config.binaryPath,
+          ),
+          serviceBinding: config.binaryPath,
+        };
+      },
+    } satisfies V2OwnerSessionSource;
+  }
+
+  it("reaches the owner endpoint instead of a borrowed shared service", async () => {
+    const requests: string[] = [];
+    const password = "c".repeat(64);
+    const port = await v2Server(password, requests);
+    const calls: string[] = [];
+    const owners: OwnedV2Process[] = [];
+    const events = new FixtureEvents();
+    const manager = new OpencodeV2ServerManager({
+      ...bounds,
+      start: async (next) => {
+        const owned = await startSelectedV2OwnerProcess(
+          next,
+          compositionSource({ port, password, calls }),
+          {
+            platform: "linux",
+          },
+        );
+        owners.push(owned);
+        return {
+          ...owned,
+          client: {
+            ...owned.client,
+            event: {
+              subscribe: (options) =>
+                events.subscribe(options?.signal ?? new AbortController().signal),
+            },
+          },
+        };
+      },
+    });
+    try {
+      const lease = await manager.acquire(config);
+      expect(calls[0]).toBe("open v2 /srv/work");
+      expect(requests[0]).toBe(
+        `/api/info Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`,
+      );
+      expect(spawnSpy).not.toHaveBeenCalled();
+      await lease.release();
+      expect(calls).toContain("close");
+    } finally {
+      await manager.close();
+    }
+  });
+
+  it("keeps a remote target typed-refused instead of borrowing the shared service", async () => {
+    const calls: string[] = [];
+    // A live owner fixture whose source carries no v2 binding: the refusal must
+    // happen before the owner is ever opened, which `calls` now observes.
+    const source: V2OwnerSessionSource = {
+      async target(targetId) {
+        const ready = await compositionSource({ port: 1, password: "e".repeat(64), calls }).target(
+          targetId,
+        );
+        return ready && { ...ready, serviceBinding: undefined };
+      },
+    };
+    const manager = new OpencodeV2ServerManager({
+      ...bounds,
+      start: (next) => startSelectedV2OwnerProcess(next, source, { platform: "linux" }),
+    });
+    try {
+      await expect(manager.acquire(config)).rejects.toThrow("acquisition-unverified");
+      expect(calls).toEqual([]);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally {
+      await manager.close();
+    }
   });
 });

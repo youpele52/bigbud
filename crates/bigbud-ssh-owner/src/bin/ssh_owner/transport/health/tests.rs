@@ -101,6 +101,7 @@ fn cancellable_health_prechecks_before_pin_preparation() {
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .expect("valid test transport");
     assert_eq!(

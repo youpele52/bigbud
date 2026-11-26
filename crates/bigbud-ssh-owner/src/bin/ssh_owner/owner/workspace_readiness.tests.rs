@@ -31,6 +31,7 @@ fn config(root: &Path) -> TransportConfig {
         system_config: None,
         workspace_root: Some(root.join("home/picker's folders; literal")),
         dev_interactive_terminal: cfg!(target_os = "macos"),
+        host_identity: Default::default(),
     }
 }
 

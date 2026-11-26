@@ -33,6 +33,7 @@ fn construct_with_system(defaults: &str) -> io::Result<Result<(), ErrorCode>> {
         system_config: Some(system.0.join("config")),
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .map(drop))
 }

@@ -182,6 +182,7 @@ fn only_the_pinned_picker_launch_gets_tighter_timing_options() -> io::Result<()>
         system_config: None,
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .map_err(|error| io::Error::other(format!("{error:?}")))?;
     let list = || transport.list_folders_with_locale(None, std::iter::empty);

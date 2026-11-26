@@ -13,7 +13,7 @@
  *
  * @module sshConfigProfileAliases
  */
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -21,10 +21,13 @@ import {
   sshConfigDirectiveRemedy,
 } from "./sshOwnerPickerProof.startupDiagnostic.ts";
 import { isConcreteSshHostAlias, tokenizeSshConfigLine } from "./sshConfigParse.ts";
+import {
+  assertPrivateFile,
+  expandInclude,
+  PROFILE_ALIAS_MAX_FILES,
+} from "./sshConfigProfileAliases.files.ts";
 
 export const PROFILE_ALIAS_MAX_INCLUDE_DEPTH = 16;
-export const PROFILE_ALIAS_MAX_FILES = 64;
-export const PROFILE_ALIAS_MAX_FILE_BYTES = 256 * 1024;
 
 type SourceClass = "user_config" | "user_include";
 
@@ -40,6 +43,17 @@ export interface SshConfigAliasHint {
   readonly hostKeyAlias?: string;
   /** Human-readable route kind, never a credential path or raw config value. */
   readonly route: string;
+}
+
+/**
+ * Credential facts for one host, kept apart from picker hints so a credential
+ * path never reaches discovery output. Values are first-effective and unexpanded.
+ */
+export interface SshConfigHostAuth {
+  readonly identityFile?: string;
+  readonly userKnownHostsFile?: string;
+  /** `none` disables the agent. */
+  readonly identityAgent?: string;
 }
 
 export interface SshConfigAliasRefusal {
@@ -87,9 +101,6 @@ interface ParseState {
 const ALWAYS_REFUSED = new Set(["LocalCommand"]);
 const clampAlias = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/u;
 
-const invalidProfileFile = () =>
-  new Error("Expected an owner-private SSH config inside the disposable profile.");
-
 const refusal = (
   directive: string,
   site: Pick<Directive, "sourcePath" | "source" | "line">,
@@ -117,60 +128,6 @@ function stanzaApplies(stanza: Stanza, alias: string): boolean {
     }
   }
   return positive;
-}
-
-function hasGlob(pattern: string): boolean {
-  return /[*?]/u.test(pattern);
-}
-
-function globToRegExp(segment: string): RegExp {
-  const escaped = segment.replace(/[.+^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`^${escaped.replaceAll("*", ".*").replaceAll("?", ".")}$`, "u");
-}
-
-/** Expands `*`/`?` in trailing path segments, sorted like glob(3). */
-async function expandInclude(pattern: string): Promise<ReadonlyArray<string>> {
-  if (!hasGlob(pattern)) return [pattern];
-  const { root } = path.parse(pattern);
-  const segments = pattern
-    .slice(root.length)
-    .split(/[\\/]+/u)
-    .filter((segment) => segment.length > 0);
-  let candidates = [root];
-  for (const segment of segments) {
-    const next: string[] = [];
-    for (const directory of candidates) {
-      if (!hasGlob(segment)) {
-        next.push(path.join(directory, segment));
-        continue;
-      }
-      const entries = await readdir(directory).catch(() => [] as string[]);
-      const matcher = globToRegExp(segment);
-      for (const name of entries.toSorted()) {
-        if (name.startsWith(".") && !segment.startsWith(".")) continue;
-        if (matcher.test(name)) next.push(path.join(directory, name));
-      }
-    }
-    candidates = next.slice(0, PROFILE_ALIAS_MAX_FILES);
-  }
-  return candidates;
-}
-
-async function assertPrivateFile(root: string, filePath: string): Promise<string> {
-  const info = await lstat(filePath);
-  const uid = process.getuid?.();
-  if (
-    !info.isFile() ||
-    (uid !== undefined && info.uid !== uid) ||
-    (info.mode & 0o077) !== 0 ||
-    info.size > PROFILE_ALIAS_MAX_FILE_BYTES
-  )
-    throw invalidProfileFile();
-  const real = await realpath(filePath);
-  const relative = path.relative(root, real);
-  if (relative.length === 0 || relative.startsWith("..") || path.isAbsolute(relative))
-    throw invalidProfileFile();
-  return real;
 }
 
 function recordAliases(
@@ -294,19 +251,23 @@ async function followIncludes(
   return current;
 }
 
+/** OpenSSH first-value-wins lookup over every stanza that applies to `host`. */
+function effectiveValue(stanzas: ReadonlyArray<Stanza>, host: string) {
+  const values = new Map<string, Directive>();
+  for (const stanza of stanzas) {
+    if (!stanzaApplies(stanza, host)) continue;
+    for (const directive of stanza.directives)
+      if (!values.has(directive.keyword)) values.set(directive.keyword, directive);
+  }
+  return (keyword: string) => values.get(keyword)?.args[0];
+}
+
 function resolveHints(
   stanzas: ReadonlyArray<Stanza>,
   aliases: ReadonlyArray<Omit<SshConfigAliasHint, "port" | "route">>,
 ): ReadonlyArray<SshConfigAliasHint> {
   return aliases.map((alias) => {
-    const values = new Map<string, Directive>();
-    for (const stanza of stanzas) {
-      if (!stanzaApplies(stanza, alias.alias)) continue;
-      for (const directive of stanza.directives) {
-        if (!values.has(directive.keyword)) values.set(directive.keyword, directive);
-      }
-    }
-    const value = (keyword: string) => values.get(keyword)?.args[0];
+    const value = effectiveValue(stanzas, alias.alias);
     const jump = value("ProxyJump");
     const command = value("ProxyCommand");
     const hops = jump && jump.toLowerCase() !== "none" ? jump.split(",").length : 0;
@@ -341,12 +302,7 @@ export interface ResolveProfileAliasesOptions {
   readonly content: string;
 }
 
-/** Resolve route hints for every concrete alias in an isolated profile config. */
-export async function resolveProfileAliases({
-  root,
-  sourcePath,
-  content,
-}: ResolveProfileAliasesOptions): Promise<SshConfigProfileResolution> {
+async function parseProfile({ root, sourcePath, content }: ResolveProfileAliasesOptions) {
   const realRoot = await realpath(root);
   const realSource = await realpath(sourcePath);
   const state: ParseState = {
@@ -362,10 +318,50 @@ export async function resolveProfileAliases({
   const global: Stanza = { patterns: null, directives: [] };
   state.stanzas.push(global);
   await parseFile(state, content, realSource, "user_config", global, 0);
+  return state;
+}
+
+/** Resolve route hints for every concrete alias in an isolated profile config. */
+export async function resolveProfileAliases(
+  options: ResolveProfileAliasesOptions,
+): Promise<SshConfigProfileResolution> {
+  const state = await parseProfile(options);
   return {
     hints: resolveHints(state.stanzas, state.aliases),
     refusals: state.refusals,
     includes: state.includes,
+  };
+}
+
+/**
+ * Credential facts plus the route hint for one host. `declared` reports
+ * whether a `Host` line names it; an undeclared host still sees `Host *`.
+ */
+export async function resolveProfileHostAuth(
+  options: ResolveProfileAliasesOptions & { readonly host: string },
+) {
+  const state = await parseProfile(options);
+  const declared = state.aliases.find((alias) => alias.alias === options.host);
+  const site = declared ?? {
+    alias: options.host,
+    sourcePath: options.sourcePath,
+    source: "user_config" as const,
+    line: 0,
+  };
+  const value = effectiveValue(state.stanzas, options.host);
+  const identityFile = value("IdentityFile");
+  const userKnownHostsFile = value("UserKnownHostsFile");
+  const identityAgent = value("IdentityAgent");
+  const auth: SshConfigHostAuth = {
+    ...(identityFile ? { identityFile } : {}),
+    ...(userKnownHostsFile ? { userKnownHostsFile } : {}),
+    ...(identityAgent ? { identityAgent } : {}),
+  };
+  return {
+    declared: declared !== undefined,
+    hint: resolveHints(state.stanzas, [site])[0],
+    auth,
+    refusals: state.refusals,
   };
 }
 

@@ -29,6 +29,7 @@ fn stock_system_defaults_admission() -> io::Result<()> {
         system_config: Some(system.join("config")),
         workspace_root: None,
         dev_interactive_terminal: false,
+        host_identity: Default::default(),
     })
     .map(drop);
     println!("stock system defaults admission: {result:?}");

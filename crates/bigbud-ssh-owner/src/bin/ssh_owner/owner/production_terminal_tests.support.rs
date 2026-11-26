@@ -185,6 +185,7 @@ impl Fixture {
                         system_config: None,
                         workspace_root: Some(workspace_root.to_path_buf()),
                         dev_interactive_terminal: false,
+                        host_identity: Default::default(),
                     },
                 },
                 route_facts: crate::config::RouteFacts::default(),

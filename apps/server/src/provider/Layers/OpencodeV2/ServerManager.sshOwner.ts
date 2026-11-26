@@ -48,13 +48,19 @@ export type V2SshOwnerExit =
   | { readonly kind: "exited"; readonly code: number }
   | { readonly kind: "signaled"; readonly signal: string };
 
+export type V2SshOwnerCloseOutcome = "confirmed" | "unconfirmed";
+
 export interface V2SshOwnerStart {
   readonly lease: V2SshOwnerLease;
   /** Ready only after the owner verified its remote server and local listener. */
   readonly ready: Promise<{ readonly localPort: number; readonly password: string }>;
   readonly exit: Promise<V2SshOwnerExit>;
-  /** Cancel only this reservation; resolves after the owner confirms teardown. */
-  readonly cancel: () => Promise<void>;
+  /**
+   * Cancel only this reservation. Resolves `confirmed` only when the owner
+   * reported `closed` or `exited` for this lease; `unconfirmed` when the lane
+   * was lost or rejected, so the remote child may still be alive.
+   */
+  readonly cancel: () => Promise<V2SshOwnerCloseOutcome>;
 }
 
 /** The exact owner operations this transport needs; a bound production target. */
@@ -110,7 +116,7 @@ export function makeV2SshOwner(
       };
       const ready = Promise.withResolvers<{ localPort: number; password: string }>();
       const exit = Promise.withResolvers<V2SshOwnerExit>();
-      const closed = Promise.withResolvers<void>();
+      const closed = Promise.withResolvers<V2SshOwnerCloseOutcome>();
       for (const promise of [ready.promise, exit.promise, closed.promise])
         void promise.catch(() => undefined);
       let cancelled = false;
@@ -150,14 +156,14 @@ export function makeV2SshOwner(
             case "closing":
               break;
             case "exited":
-              closed.resolve();
+              closed.resolve("confirmed");
               exit.resolve({ kind: "exited", code: state.exitCode });
               ready.reject(new PickerProofOwnerError("transportLost"));
               return;
             case "closed":
             case "lost":
             case "rejected":
-              closed.resolve();
+              closed.resolve(state.phase === "closed" ? "confirmed" : "unconfirmed");
               throw (
                 refusal ??
                 new PickerProofOwnerError(
@@ -220,6 +226,10 @@ export async function startOwnedV2SshProcess(
   let closing: Promise<void> | undefined;
   let lost = false;
   let exited = false;
+  // A confirmed owner teardown is physical-exit evidence for the native lane:
+  // the owner only acknowledges `closeOpencodeV2` after its supervised child is
+  // gone. Without this the manager retains the generation forever.
+  let closedConfirmed = false;
   const notify = () => {
     if (lost || closing) return;
     lost = true;
@@ -233,6 +243,10 @@ export async function startOwnedV2SshProcess(
       operation: "OpenCode v2 SSH owner teardown confirmation",
       timeoutMs: CLOSE_TIMEOUT_MS,
       run: () => start.cancel(),
+    }).then((outcome) => {
+      // Only an explicit owner confirmation frees the native slot; a lost or
+      // rejected lane leaves `hasExited()` false because the child may live.
+      if (outcome === "confirmed") closedConfirmed = true;
     });
     lifetime.abort();
     return closing;
@@ -272,7 +286,7 @@ export async function startOwnedV2SshProcess(
     return {
       client,
       isRunning: () => !lifetime.signal.aborted && !exited,
-      hasExited: () => exited,
+      hasExited: () => closedConfirmed || exited,
       onDeath: (listener) => {
         if (closing) return () => undefined;
         if (lost) {

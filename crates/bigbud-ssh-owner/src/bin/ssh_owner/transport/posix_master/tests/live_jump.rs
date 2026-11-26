@@ -68,6 +68,7 @@ fn stock_openssh_forwards_only_after_authenticating_the_pinned_bastion() {
             system_config: None,
             workspace_root: None,
             dev_interactive_terminal: false,
+            host_identity: Default::default(),
         })
         .unwrap()
     };

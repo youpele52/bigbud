@@ -122,7 +122,7 @@ pub(crate) fn resolve_chain(
     if route.value.is_empty() {
         return Err(route.diagnostic.reject(UNSUPPORTED));
     }
-    let mut endpoints = HashSet::from([(destination.host, destination.port)]);
+    let mut endpoints = HashSet::from([(destination.host.clone(), destination.port)]);
     let mut aliases = HashSet::from([alias.to_ascii_lowercase()]);
     let mut legs = Vec::with_capacity(route.value.len() + 1);
     for (index, hop) in route.value.iter().enumerate() {
@@ -133,7 +133,7 @@ pub(crate) fn resolve_chain(
         let overrides = RouteOverrides::new(None, hop.user.as_deref(), hop.port).map_err(reject)?;
         let leg = resolve_with_facts(path, system, &hop.host, &facts.for_hop(overrides), false)
             .map_err(|failure| failure.at_jump_hop(index + 1))?;
-        if !endpoints.insert((leg.host, leg.port)) || !key_only(&leg) {
+        if !endpoints.insert((leg.host.clone(), leg.port)) || !key_only(&leg) {
             return Err(reject(UNSUPPORTED));
         }
         legs.push(leg);

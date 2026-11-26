@@ -16,7 +16,11 @@ import { WireWriter } from "../remote-agent/remoteAgentProtocol.codec.wire.ts";
 export interface ProofTargetDescriptorInput {
   readonly targetId: string;
   readonly kind: "alias" | "structured";
-  /** IP literal; the owner rejects a name, a CIDR or an unspecified address. */
+  /**
+   * IP literal or RFC 1123 DNS name. The owner resolves a name itself at
+   * resolution time; this process never resolves it. A CIDR or unspecified
+   * address is refused.
+   */
   readonly host: string;
   readonly port: number;
   readonly user: string;
@@ -37,7 +41,24 @@ export const TARGET_DESCRIPTOR_LIMITS = {
   maxUserBytes: 64,
   maxPathBytes: 1_024,
   maxHostKeyAliasBytes: 255,
+  maxHostBytes: 253,
 } as const;
+
+/** Mirrors the owner's `safe_token(_, 255)` for an explicit known-hosts name. */
+const HOST_KEY_ALIAS = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,254}$/;
+
+const HOST_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+
+/** Mirrors the owner's `parse_host`: a non-unspecified IP literal or a host name. */
+export function isDescriptorHost(host: unknown): host is string {
+  if (typeof host !== "string" || host.length === 0) return false;
+  if (host.length > TARGET_DESCRIPTOR_LIMITS.maxHostBytes) return false;
+  if (isIP(host) !== 0) return host !== "0.0.0.0" && host !== "::" && !/^[0:]+$/.test(host);
+  const labels = host.split(".");
+  // An all-numeric final label would read as a malformed IPv4 literal.
+  if (/^[0-9]+$/.test(labels.at(-1) ?? "")) return false;
+  return labels.every((label) => HOST_LABEL.test(label));
+}
 
 const USER_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
@@ -65,10 +86,7 @@ export function validateTargetDescriptor(input: ProofTargetDescriptorInput): voi
     Buffer.byteLength(input.targetId) > TARGET_DESCRIPTOR_LIMITS.maxTargetIdBytes ||
     hasControl(input.targetId) ||
     (input.kind !== "alias" && input.kind !== "structured") ||
-    typeof input.host !== "string" ||
-    input.host.length === 0 ||
-    input.host.length > 45 ||
-    isIP(input.host) === 0 ||
+    !isDescriptorHost(input.host) ||
     !Number.isInteger(input.port) ||
     input.port < 1 ||
     input.port > 65_535 ||
@@ -76,9 +94,7 @@ export function validateTargetDescriptor(input: ProofTargetDescriptorInput): voi
     !literalPath(input.identityFile) ||
     !literalPath(input.knownHostsFile) ||
     input.identityFile === input.knownHostsFile ||
-    (input.hostKeyAlias !== undefined &&
-      (Buffer.byteLength(input.hostKeyAlias) > TARGET_DESCRIPTOR_LIMITS.maxHostKeyAliasBytes ||
-        hasControl(input.hostKeyAlias))) ||
+    (input.hostKeyAlias !== undefined && !HOST_KEY_ALIAS.test(input.hostKeyAlias)) ||
     (input.authMode !== undefined &&
       input.authMode !== "key" &&
       input.authMode !== "agent" &&
