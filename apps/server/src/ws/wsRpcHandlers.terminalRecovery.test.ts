@@ -18,10 +18,12 @@ it.skipIf(process.platform === "win32")(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const dir = yield* fs.makeTempDirectoryScoped({ prefix: "bigbud-terminal-handoff-" });
+          // The overflow burst has no trailing newline: with one, retention may find a safe line
+          // cut (trimmed, not truncated) depending on how the PTY chunks the burst (Linux does).
           const shell = path.join(dir, "synthetic-tui");
           yield* fs.writeFileString(
             shell,
-            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>console.log(d.toString()==='overflow'?'x'.repeat(1048577):d.toString()==='modes'?'\\x1b[?1049h\\x1b[?2004h':'INPUT:'+d));\n`,
+            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>d.toString()==='overflow'?process.stdout.write('x'.repeat(1048577)):console.log(d.toString()==='modes'?'\\x1b[?1049h\\x1b[?2004h':'INPUT:'+d));\n`,
           );
           yield* fs.chmod(shell, 0o755);
           const adapter = yield* PtyAdapter;
