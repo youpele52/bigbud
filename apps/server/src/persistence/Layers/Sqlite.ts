@@ -104,11 +104,15 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
   if (yield* fs.exists(dbPath)) {
     // Even a writable connection that only reads can checkpoint WAL on close. Refuse a newer
     // schema with a read-only probe before building either the writer or the usage reader.
+    // A cleanly closed WAL database has no -wal/-shm files, and SQLite cannot open it read-only
+    // then (it cannot create -shm). With no WAL there is nothing to checkpoint, so a writable
+    // connection that only reads leaves the database unchanged.
+    const hasWal = yield* fs.exists(`${dbPath}-wal`);
     yield* Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`PRAGMA busy_timeout = 5000;`;
       yield* assertDatabaseSchemaNotNewer(latestMigrationId);
-    }).pipe(Effect.provide(makeRuntimeSqliteLayer({ filename: dbPath, readonly: true })));
+    }).pipe(Effect.provide(makeRuntimeSqliteLayer({ filename: dbPath, readonly: hasWal })));
   }
 
   const operational = Layer.provideMerge(

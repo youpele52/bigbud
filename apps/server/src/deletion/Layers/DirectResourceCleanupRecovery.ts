@@ -20,6 +20,10 @@ import { OrchestrationEngineService } from "../../orchestration/Services/Orchest
 import { recoverPreparedCleanupFinalizes } from "./DirectResourceCleanupRecovery.finalize.ts";
 import { recoverDirectCleanupWorktrees } from "./DirectResourceCleanupRecovery.worktrees.ts";
 import { reconcileStagedManagedAttachments } from "../../attachments/managedAttachmentOwnership.ts";
+import {
+  type CoverageBackoff,
+  makeCoverageBackoff,
+} from "./DirectResourceCleanupRecovery.backoff.ts";
 
 export function recoverCanonicalPruningCandidates<
   Candidate,
@@ -33,27 +37,41 @@ export function recoverCanonicalPruningCandidates<
   readonly finalizeCandidate: (
     candidate: Candidate,
   ) => Effect.Effect<void, FinalizeError, Requirements>;
+  /** Shared across recovery ticks so unprogressable coverage is not retried every tick. */
+  readonly coverageBackoff?: CoverageBackoff;
 }): Effect.Effect<void, never, Requirements> {
   if (input.candidates.length === 0) return Effect.void;
   const highestSequence = Math.max(...input.candidates.map(input.requiredSequence));
-  return input.ensureCoverage(highestSequence).pipe(
-    Effect.andThen(
-      Effect.forEach(
-        input.candidates,
-        (candidate) =>
-          input.finalizeCandidate(candidate).pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("canonical cleanup recovery deferred", {
-                detail: String(error),
-              }),
-            ),
+  const coverage = input.ensureCoverage(highestSequence);
+  const gated = input.coverageBackoff
+    ? input.coverageBackoff.gate(coverage)
+    : Effect.as(coverage, true);
+  return gated.pipe(
+    Effect.flatMap((attempted) =>
+      !attempted
+        ? Effect.void
+        : Effect.forEach(
+            input.candidates,
+            (candidate) =>
+              input.finalizeCandidate(candidate).pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning("canonical cleanup recovery deferred", {
+                    detail: String(error),
+                  }),
+                ),
+              ),
+            { concurrency: 1, discard: true },
           ),
-        { concurrency: 1, discard: true },
-      ),
     ),
     Effect.catch((error) =>
       Effect.logWarning("canonical cleanup baseline coverage deferred", {
         detail: String(error),
+        ...(input.coverageBackoff
+          ? {
+              retryInMs: input.coverageBackoff.retryDelayMs(),
+              consecutiveFailures: input.coverageBackoff.consecutiveFailures(),
+            }
+          : {}),
       }),
     ),
   );
@@ -61,7 +79,7 @@ export function recoverCanonicalPruningCandidates<
 
 export const recoverDirectResourceCleanupOnce = Effect.fn(
   "DirectResourceCleanupRecovery.recoverOnce",
-)(function* () {
+)(function* (coverageBackoff?: CoverageBackoff) {
   const repository = yield* DirectResourceCleanupRepository;
   const executorService = yield* DirectResourceCleanupExecutor;
   const config = yield* ServerConfig;
@@ -85,6 +103,7 @@ export const recoverDirectResourceCleanupOnce = Effect.fn(
   yield* recoverCanonicalPruningCandidates({
     candidates: pruning,
     requiredSequence: (candidate) => candidate.deletionSequence,
+    ...(coverageBackoff ? { coverageBackoff } : {}),
     ensureCoverage: (highestSequence) => {
       const verifyReplacement = projectionPipeline.ensureVerifiedBaselineThroughWithoutCompaction;
       return verifyReplacement === undefined
@@ -203,13 +222,17 @@ export const repeatDirectResourceCleanupRecovery = <A, E, R>(recoverOnce: Effect
   Effect.repeat(recoverOnce, Schedule.spaced("5 seconds"));
 
 export const DirectResourceCleanupRecoveryLive = Layer.effectDiscard(
-  repeatDirectResourceCleanupRecovery(
-    recoverDirectResourceCleanupOnce().pipe(
-      Effect.catch(() =>
-        Effect.logWarning("direct resource cleanup recovery deferred", {
-          code: "recovery_failure",
-        }),
+  Effect.suspend(() => {
+    // One backoff per layer instance, shared by every recovery tick.
+    const coverageBackoff = makeCoverageBackoff();
+    return repeatDirectResourceCleanupRecovery(
+      recoverDirectResourceCleanupOnce(coverageBackoff).pipe(
+        Effect.catch(() =>
+          Effect.logWarning("direct resource cleanup recovery deferred", {
+            code: "recovery_failure",
+          }),
+        ),
       ),
-    ),
-  ).pipe(Effect.forkScoped),
+    ).pipe(Effect.forkScoped);
+  }),
 );

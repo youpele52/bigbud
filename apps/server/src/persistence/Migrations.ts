@@ -100,6 +100,8 @@ import Migration0182 from "./Migrations/182_RecoveredQueueDrafts.ts";
 import Migration0183 from "./Migrations/183_SshAliasDescriptorBindings.ts";
 import Migration0184 from "./Migrations/184_SshOwnerRetirement.ts";
 import Migration0185 from "./Migrations/185_SshLegacyRetirement.ts";
+import Migration0186 from "./Migrations/186_OrganizationAgeBackfillRepair.ts";
+import Migration0187 from "./Migrations/187_SshOwnerGuardedWriteJournal.ts";
 
 export const migrationEntries = [
   ...baseMigrationEntries,
@@ -188,6 +190,8 @@ export const migrationEntries = [
   [183, "SshAliasDescriptorBindings", Migration0183],
   [184, "SshOwnerRetirement", Migration0184],
   [185, "SshLegacyRetirement", Migration0185],
+  [186, "OrganizationAgeBackfillRepair", Migration0186],
+  [187, "SshOwnerGuardedWriteJournal", Migration0187],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
