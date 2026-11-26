@@ -45,11 +45,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         stage,
         #[cfg(target_os = "linux")]
         tracked_push,
-        #[cfg(target_os = "linux")]
-        opencode_recipe,
-        #[cfg(target_os = "linux")]
-        opencode_service,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2,
     } = startup;
     let (target, config, authority) = match startup {
@@ -66,7 +62,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
                 return Err(protocol_error().into());
             }
             #[cfg(target_os = "linux")]
-            if tracked_push.is_some() || opencode_recipe.is_some() {
+            if tracked_push.is_some() {
                 return Err(protocol_error().into());
             }
             (String::new(), None, Some(authority))
@@ -135,11 +131,10 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
                 connector: route_facts.connector().is_some(),
                 snapshot_cancel: workspace_snapshot_cancel.is_some(),
                 #[cfg(target_os = "linux")]
-                tracked_push_or_opencode: tracked_push.is_some()
-                    || opencode_recipe.is_some()
-                    || opencode_service.is_some()
-                    || opencode_v2.is_some(),
-                #[cfg(not(target_os = "linux"))]
+                tracked_push_or_opencode: tracked_push.is_some() || opencode_v2.is_some(),
+                #[cfg(target_os = "macos")]
+                tracked_push_or_opencode: opencode_v2.is_some(),
+                #[cfg(not(any(target_os = "macos", target_os = "linux")))]
                 tracked_push_or_opencode: false,
                 production: route_facts.production(),
             },
@@ -182,8 +177,6 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
                     || identity_agent_path.is_some()
                     || stage.is_some()
                     || tracked_push.is_some()
-                    || opencode_recipe.is_some()
-                    || opencode_service.is_some()
                     || opencode_v2.is_some()
                     || guarded_write.is_some()
                 {
@@ -324,11 +317,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         workspace_snapshot_cancel,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         snapshot_only_fixture,
-        #[cfg(target_os = "linux")]
-        opencode_recipe: opencode_recipe.map(std::sync::Arc::new),
-        #[cfg(target_os = "linux")]
-        opencode_service: opencode_service.map(std::sync::Arc::new),
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2: opencode_v2.map(std::sync::Arc::new),
         #[cfg(target_os = "linux")]
         tracked_push,

@@ -1,5 +1,6 @@
 import { TerminalCloseConfirmation } from "../components/terminal/TerminalCloseConfirmation";
 import { SshLegacyDrainConsentHost } from "../components/terminal/SshLegacyDrainConsentHost";
+import { SshOwnerFenceNotice } from "../components/terminal/SshOwnerFenceNotice";
 import { QueryClient } from "@tanstack/react-query";
 import { ResourceAwarenessToastCoordinator } from "../components/resource-monitor/ResourceAwarenessToastCoordinator";
 import {
@@ -134,6 +135,7 @@ export function RootRouteView() {
         <TerminalFinishedNotifications />
         <TerminalCloseConfirmation />
         <SshLegacyDrainConsentHost />
+        <SshOwnerFenceNotice />
         <WebSocketConnectionSurface>
           <>
             <div className="relative h-screen overflow-hidden">

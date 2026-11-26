@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import type { OpencodeV2ServiceBinding } from "./sshOwnerRemotePath.ts";
+import type { DevOpencodeV2ServiceRefusal } from "./sshOwnerDevRuntime.providerServices.ts";
 
 import {
   attachPickerProofOwner,
@@ -73,14 +75,18 @@ export interface SshOwnerProductionProfile {
     readonly sha256: string;
     readonly stateDir: string;
   };
-  /** Owner-selected OpenCode executable; its listener is bound per target. */
-  readonly opencodeService?: { readonly binaryPath: string };
   /**
    * Owner-selected OpenCode v2 executable. The owner selects the argv, remote
    * port, listener, forward and per-lease credential; this is only the trusted
    * remote program path from the resolved artifact/config.
    */
-  readonly opencodeV2Service?: { readonly binaryPath: string };
+  readonly opencodeV2Service?: OpencodeV2ServiceBinding;
+  /** Typed settings refusal when the configured v2 binding is unusable. */
+  readonly opencodeV2Refusal?: DevOpencodeV2ServiceRefusal;
+  /** The user's `~/.ssh/config`, so alias targets resolve in the owner. */
+  readonly aliasConfig?: string;
+  /** The system SSH config read beside it; only with `aliasConfig`. */
+  readonly systemConfig?: string;
 }
 
 export interface SshOwnerLaunchFacts {
@@ -98,8 +104,10 @@ export interface SshOwnerLaunchFacts {
     readonly sha256: string;
     readonly stateDir: string;
   };
-  readonly opencodeService?: { readonly binaryPath: string };
-  readonly opencodeV2Service?: { readonly binaryPath: string };
+  readonly opencodeV2Service?: OpencodeV2ServiceBinding;
+  readonly opencodeV2Refusal?: DevOpencodeV2ServiceRefusal;
+  readonly aliasConfig?: string;
+  readonly systemConfig?: string;
 }
 
 const invalid = (message: string, cause?: unknown) =>
@@ -118,18 +126,20 @@ export function resolveSshOwnerLaunchFacts(
   }
   if (
     !absolutePath(profile.stateDirectory) ||
-    (profile.workspaceRoot !== undefined && !absolutePath(profile.workspaceRoot))
+    (profile.workspaceRoot !== undefined && !absolutePath(profile.workspaceRoot)) ||
+    (profile.aliasConfig !== undefined && !absolutePath(profile.aliasConfig)) ||
+    (profile.systemConfig !== undefined &&
+      (profile.aliasConfig === undefined || !absolutePath(profile.systemConfig)))
   ) {
     throw invalid("The SSH owner production profile is not a valid launch binding.");
   }
+  // A production owner serves many targets, so the v2 lane takes each
+  // request's own absolute remote cwd; only the executable is bound here.
   if (
-    profile.opencodeV2Service !== undefined &&
-    (profile.workspaceRoot === undefined ||
-      !isTrustedRemoteExecutablePath(profile.opencodeV2Service.binaryPath))
+    profile.opencodeV2Service?.binaryPath !== undefined &&
+    !isTrustedRemoteExecutablePath(profile.opencodeV2Service.binaryPath)
   ) {
-    throw invalid(
-      "The OpenCode v2 service binding requires an authorized workspace and an absolute executable.",
-    );
+    throw invalid("The OpenCode v2 service binding requires an absolute executable.");
   }
   if (profile.target !== undefined) {
     try {
@@ -163,10 +173,14 @@ export function resolveSshOwnerLaunchFacts(
     ...(profile.workspaceRoot === undefined ? {} : { workspaceRoot: profile.workspaceRoot }),
     ...(profile.target === undefined ? {} : { target: profile.target }),
     ...(profile.agentService === undefined ? {} : { agentService: profile.agentService }),
-    ...(profile.opencodeService === undefined ? {} : { opencodeService: profile.opencodeService }),
     ...(profile.opencodeV2Service === undefined
       ? {}
       : { opencodeV2Service: profile.opencodeV2Service }),
+    ...(profile.opencodeV2Refusal === undefined
+      ? {}
+      : { opencodeV2Refusal: profile.opencodeV2Refusal }),
+    ...(profile.aliasConfig === undefined ? {} : { aliasConfig: profile.aliasConfig }),
+    ...(profile.systemConfig === undefined ? {} : { systemConfig: profile.systemConfig }),
   };
 }
 
@@ -182,6 +196,8 @@ const productionLaunchOptions = (input: SshOwnerLaunchInput) => ({
     startupDeadlineMs: input.deadlineMs ?? SSH_OWNER_WIRE_LIMITS.startupDeadlineMs,
     profileBindingText: input.facts.profileBindingText,
     stateDirectory: input.facts.stateDirectory,
+    ...(input.facts.aliasConfig === undefined ? {} : { aliasConfig: input.facts.aliasConfig }),
+    ...(input.facts.systemConfig === undefined ? {} : { systemConfig: input.facts.systemConfig }),
   },
 });
 
@@ -203,7 +219,6 @@ export async function spawnSshOwnerProduction(
     ...(facts.workspaceRoot === undefined ? {} : { workspaceRoot: facts.workspaceRoot }),
     attachment: { socketPath: facts.socketPath, capability: input.capability },
     ...(facts.agentService === undefined ? {} : { agentService: facts.agentService }),
-    ...(facts.opencodeService === undefined ? {} : { opencodeService: facts.opencodeService }),
     ...(facts.opencodeV2Service === undefined
       ? {}
       : { opencodeV2Service: facts.opencodeV2Service }),
@@ -269,4 +284,19 @@ export function classifyStartupError(error: unknown): SshOwnerClientError {
     error instanceof Error ? error.message : "The SSH owner could not start.",
     error,
   );
+}
+
+/**
+ * The user's SSH config paths for alias targets, when they exist. The owner
+ * parses them itself (bounded, no spawn) and refuses an unsupported alias per
+ * target, so a config the owner cannot admit never blocks owner startup.
+ */
+export async function resolveProductionSshConfigPaths(
+  home: string,
+  exists: (path: string) => Promise<boolean>,
+): Promise<{ readonly aliasConfig?: string; readonly systemConfig?: string }> {
+  const aliasConfig = join(home, ".ssh", "config");
+  if (!(await exists(aliasConfig))) return {};
+  const systemConfig = "/etc/ssh/ssh_config";
+  return (await exists(systemConfig)) ? { aliasConfig, systemConfig } : { aliasConfig };
 }

@@ -536,6 +536,10 @@ enum ErrorCode {
   // (no address, lookup failure or lookup deadline) at resolution time.
   // Refused before any dial; distinct from a policy refusal.
   ERROR_CODE_TARGET_HOST_UNRESOLVED = 37;
+  // The provider service's executable was not found on the target (configured
+  // path or owner discovery), or no candidate passed the owner's executable
+  // guard. Refused before any provider process starts; carries no path.
+  ERROR_CODE_PROVIDER_EXECUTABLE_UNAVAILABLE = 38;
 }
 
 message Trust {

@@ -205,6 +205,7 @@ export const ServerSettingsPatch = Schema.Struct({
           serviceFile: Schema.optionalKey(Schema.String),
           nativeServiceTrust: Schema.optionalKey(OpencodeV2NativeServiceTrust),
           nativePluginConfigRoot: Schema.optionalKey(OpencodeV2PluginConfigRoot),
+          remoteBinaryPath: Schema.optionalKey(Schema.String),
         }),
       ),
       pi: Schema.optionalKey(ProviderSettingsPatch),

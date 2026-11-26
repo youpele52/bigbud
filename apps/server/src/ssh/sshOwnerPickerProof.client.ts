@@ -41,7 +41,10 @@ import {
 import { makePickerProofOwnerLifecycle } from "./sshOwnerPickerProof.client.lifecycle.ts";
 import { throwPickerProofStartupError } from "./sshOwnerPickerProof.client.startupError.ts";
 import { spawnPickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
-import { validateProviderServiceStartup } from "./sshOwnerPickerProof.client.services.ts";
+import {
+  validateOpencodeV2ServiceStartup,
+  validateProviderServiceStartup,
+} from "./sshOwnerPickerProof.client.services.ts";
 
 export type { PickerProofOwner } from "./sshOwnerPickerProof.client.session.ts";
 export type {
@@ -138,9 +141,11 @@ export async function startPickerProofOwner(
   const codex = options.codexFixture && validateProofProviderFixture(options.codexFixture);
   const pi = options.piFixture && validateProofProviderFixture(options.piFixture);
   const provider = codex ?? pi;
-  validateProviderServiceStartup(
-    [options.providerService, options.opencodeService, options.opencodeV2Service],
+  validateProviderServiceStartup([options.providerService], workspaceRoot);
+  validateOpencodeV2ServiceStartup(
+    options.opencodeV2Service,
     workspaceRoot,
+    production !== undefined,
   );
   const productionAgent = options.agentService;
   if (
@@ -183,23 +188,6 @@ export async function startPickerProofOwner(
   }
   const scoped = scopedProofStartup(options);
   const aliasArgs = proofAliasStartupArgs(options.aliasConfig);
-  const opencode = options.opencodeFixture && validateProofProviderFixture(options.opencodeFixture);
-  if (options.opencodeService && opencode) throw new PickerProofOwnerError("invalidOperands");
-  if (options.opencodeV2Service && opencode) throw new PickerProofOwnerError("invalidOperands");
-  if (
-    opencode &&
-    (process.platform !== "linux" ||
-      opencode.cwd !== workspaceRoot ||
-      options.aliasConfig ||
-      options.attachment ||
-      provider ||
-      relay ||
-      agentFixture ||
-      agentPath !== undefined ||
-      options.devInteractiveTerminal ||
-      scoped.args.length)
-  )
-    throw new PickerProofOwnerError("invalidOperands");
   if (
     options.opencodeV2Service !== undefined &&
     production === undefined &&
@@ -242,7 +230,6 @@ export async function startPickerProofOwner(
     ...(installed === undefined ? {} : { installedAgentState: installed }),
     ...(agentPath === undefined ? {} : { identityAgentPath: agentPath }),
     ...(provider ? { provider: { ...provider, codex: codex !== undefined } } : {}),
-    ...(opencode ? { opencode } : {}),
     ...(relay ? { relay } : {}),
     scopedArgs: scoped.args,
   });
@@ -279,7 +266,6 @@ export async function startPickerProofOwner(
     stopAdmission,
     executeProofAgentProxy,
     probeProofProvider,
-    executeProofOpencode,
     executeProofOperation,
     opencodeBinding,
     executeAgentAction,
@@ -301,10 +287,8 @@ export async function startPickerProofOwner(
   pipe.sealStartupConfigDiagnostic();
   const providerPorts = makeProviderServicePorts({
     targetId,
-    fixture: opencode,
     options,
     binding: opencodeBinding,
-    executeOpencode: executeProofOpencode,
     executeOperation: executeProofOperation,
   });
   return Object.assign(

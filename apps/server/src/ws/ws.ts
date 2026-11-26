@@ -28,6 +28,7 @@ import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.
 import { makeWsRpcPeerPairingHandlers } from "./wsRpcHandlers.peerPairing.ts";
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
 import { makeWsRpcBackendDrainHandlers } from "./wsRpcHandlers.backendDrain.ts";
+import { makeWsRpcSshOwnerAdmissionHandlers } from "./wsRpcHandlers.sshOwnerAdmission.ts";
 import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
 import { makeWsRpcSearchHandlers } from "./wsRpcHandlers.search.ts";
 import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
@@ -107,6 +108,7 @@ const makeWsRpcLayer = (
         ...computerUseHandlers,
         ...databaseCompactionHandlers,
         ...makeWsRpcBackendDrainHandlers(),
+        ...makeWsRpcSshOwnerAdmissionHandlers(),
         ...metadataWarningHandlers,
         ...searchHandlers,
         ...sshOwner?.handlers,

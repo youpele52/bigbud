@@ -36,6 +36,7 @@ import type * as BranchCopy from "../orchestration/orchestration.branchCopy";
 import type { DatabaseCompactionNativeApi } from "./databaseCompaction";
 import type { MetadataWarningsNativeApi } from "./metadataWarnings";
 import type { BackendDrainNativeApi } from "./backendDrain";
+import type { SshOwnerAdmissionNativeApi } from "./sshOwnerAdmission";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as ProjectEntryMutation from "../workspace/projectEntryMutation";
@@ -189,7 +190,8 @@ export interface NativeApi {
   server: RemoteBackendRelayNativeApi &
     DatabaseCompactionNativeApi &
     MetadataWarningsNativeApi &
-    BackendDrainNativeApi & {
+    BackendDrainNativeApi &
+    SshOwnerAdmissionNativeApi & {
       getConfig: () => Promise<Server.ServerConfig>;
       refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
       refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;

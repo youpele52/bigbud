@@ -22,7 +22,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 target_id: target(),
                 grant: Vec::new(),
                 target_descriptor: None,
-        operation: Some(Operation::ListFolders(ListFolders::default())),
+                operation: Some(Operation::ListFolders(ListFolders::default())),
             }),
         ),
         (
@@ -160,7 +160,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 target_id: "fixture-target".into(),
                 grant: b"\x80\x00".to_vec(),
                 target_descriptor: None,
-        operation: Some(Operation::ListAliases(ListAliases {})),
+                operation: Some(Operation::ListAliases(ListAliases {})),
             }),
         ),
         (

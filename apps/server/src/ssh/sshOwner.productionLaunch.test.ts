@@ -153,13 +153,12 @@ describe("production SSH owner launch mode", () => {
     );
   });
 
-  it("forwards the owner-selected v2 service binding beside the v1 one", async () => {
+  it("forwards only the owner-selected v2 service binding", async () => {
     const fixture = await makeProductionFixture();
     cleanup.push(fixture.dispose);
     const profile = {
       ...profileOf(fixture),
       workspaceRoot: fixture.root,
-      opencodeService: { binaryPath: "/opt/opencode-v1" },
       opencodeV2Service: { binaryPath: "/opt/opencode-v2" },
     };
     const facts = resolveSshOwnerLaunchFacts(profile);
@@ -173,7 +172,6 @@ describe("production SSH owner launch mode", () => {
         profileBinding: facts.profileBinding,
         sql: undefined as never,
         workspaceRoot: fixture.root,
-        opencodeService: { binaryPath: "/opt/opencode-v1" },
         opencodeV2Service: { binaryPath: "/opt/opencode-v2" },
         productionLaunch: {
           startupDeadlineMs: 1_000,
@@ -183,14 +181,15 @@ describe("production SSH owner launch mode", () => {
       },
       { profileBindingHex: facts.profileBinding.toString("hex"), aliasArgs: [], scopedArgs: [] },
     );
-    expect(argv[argv.indexOf("--opencode-service") + 1]).toBe("/opt/opencode-v1");
+    // The retired OpenCode v1 SSH transport has no owner argument.
+    expect(argv).not.toContain("--opencode-service");
     expect(argv[argv.indexOf("--opencode-v2-service") + 1]).toBe("/opt/opencode-v2");
     // No target, host, port, user, identity or known-hosts argument is accepted.
     expect(argv).not.toContain(facts.target?.targetId);
     expect(argv).not.toContain("127.0.0.1");
   });
 
-  it("refuses a relative v2 binding and a v2 binding without a workspace", () => {
+  it("refuses a relative v2 binding; a target-free owner needs no workspace root", async () => {
     const fixtureProfile = {
       stateDirectory: "/tmp/bigbud-oc-profile",
       kind: "desktop-packaged" as const,
@@ -202,12 +201,15 @@ describe("production SSH owner launch mode", () => {
         opencodeV2Service: { binaryPath: "opencode-v2" },
       }),
     ).toThrow(/absolute executable/);
-    expect(() =>
+    // Each request carries its own absolute remote cwd; the owner validates it.
+    const fixture = await makeProductionFixture();
+    cleanup.push(fixture.dispose);
+    expect(
       resolveSshOwnerLaunchFacts({
-        ...fixtureProfile,
+        ...profileOf(fixture),
         opencodeV2Service: { binaryPath: "/opt/opencode-v2" },
-      }),
-    ).toThrow(/absolute executable/);
+      }).opencodeV2Service,
+    ).toEqual({ binaryPath: "/opt/opencode-v2" });
   });
 
   it("preserves the bounded startup deadline in production mode", async () => {

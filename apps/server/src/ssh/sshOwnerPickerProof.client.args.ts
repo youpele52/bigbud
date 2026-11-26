@@ -1,3 +1,4 @@
+import { opencodeV2BindingArgs } from "./sshOwnerRemotePath.ts";
 import type { PickerProofOwnerOptions } from "./sshOwnerPickerProof.client.types.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 
@@ -44,7 +45,6 @@ export interface PickerProofArgFacts {
   readonly installedAgentState?: string;
   readonly identityAgentPath?: string;
   readonly provider?: PickerProofProviderFixtureFacts & { readonly codex: boolean };
-  readonly opencode?: PickerProofProviderFixtureFacts;
   readonly relay?: PickerProofRelayFixtureFacts;
   readonly scopedArgs: ReadonlyArray<string>;
 }
@@ -70,6 +70,15 @@ export function pickerProofLaunchArgs(
       options.sshBinary,
       "--keyscan",
       options.keyscanBinary,
+      ...(production.aliasConfig === undefined
+        ? []
+        : [
+            ...(production.systemConfig === undefined
+              ? []
+              : ["--system-config", production.systemConfig]),
+            "--alias-config",
+            production.aliasConfig,
+          ]),
       ...attach,
       ...workspace,
       // Owner-selected provider bindings. A request never supplies these.
@@ -83,18 +92,12 @@ export function pickerProofLaunchArgs(
             options.agentService.stateDir,
           ]
         : []),
-      ...(options.opencodeService
-        ? ["--opencode-service", options.opencodeService.binaryPath]
-        : []),
-      ...(options.opencodeV2Service
-        ? ["--opencode-v2-service", options.opencodeV2Service.binaryPath]
-        : []),
+      ...(options.opencodeV2Service ? opencodeV2BindingArgs(options.opencodeV2Service) : []),
     ];
   }
   const target = facts.target;
   if (!target) throw new PickerProofOwnerError("invalidOperands");
   const provider = facts.provider;
-  const opencode = facts.opencode;
   const relay = facts.relay;
   return [
     facts.profileBindingHex,
@@ -125,10 +128,7 @@ export function pickerProofLaunchArgs(
     ...(options.providerService
       ? ["--provider-service", options.providerService.kind, options.providerService.binaryPath]
       : []),
-    ...(options.opencodeService ? ["--opencode-service", options.opencodeService.binaryPath] : []),
-    ...(options.opencodeV2Service
-      ? ["--opencode-v2-service", options.opencodeV2Service.binaryPath]
-      : []),
+    ...(options.opencodeV2Service ? opencodeV2BindingArgs(options.opencodeV2Service) : []),
     ...(provider
       ? [
           provider.codex ? "--codex-fixture" : "--pi-fixture",
@@ -141,16 +141,6 @@ export function pickerProofLaunchArgs(
       : []),
     ...(facts.identityAgentPath ? ["--identity-agent-path", facts.identityAgentPath] : []),
     ...facts.scopedArgs,
-    ...(opencode
-      ? [
-          "--opencode-v1-fixture",
-          opencode.binaryPath,
-          opencode.sha256,
-          opencode.cwd,
-          opencode.threadId,
-          String(opencode.sessionEpoch),
-        ]
-      : []),
     ...(relay
       ? [
           "--client-relay-fixture",

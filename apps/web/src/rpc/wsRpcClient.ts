@@ -26,6 +26,7 @@ import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import { createMetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import { createBackendDrainRpcMethods } from "./wsRpcClient.backendDrain";
+import { createSshOwnerAdmissionRpcMethods } from "./wsRpcClient.sshOwnerAdmission";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 import { resolveBoundWsRpcClient } from "./backendScope.state";
 
@@ -226,6 +227,7 @@ export function createWsRpcClient(
       ...createDatabaseCompactionRpcMethods(transport),
       ...createMetadataWarningRpcMethods(transport),
       ...createBackendDrainRpcMethods(transport),
+      ...createSshOwnerAdmissionRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>

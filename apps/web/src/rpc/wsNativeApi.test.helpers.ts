@@ -202,6 +202,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     retryTextGeneration: vi.fn(),
     getBackendDrainConsent: vi.fn(),
     decideBackendDrainConsent: vi.fn(),
+    getSshOwnerAdmission: vi.fn(),
+    drainSshOwnerIdentifiedPanes: vi.fn(),
     claimMetadataWarnings: vi.fn(),
     acknowledgeMetadataWarning: vi.fn(),
     startHandoffJob: vi.fn(),

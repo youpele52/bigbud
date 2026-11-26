@@ -185,7 +185,15 @@ export function makeV2SshOwner(
       void run().catch((cause: unknown) => {
         ready.reject(cause);
         exit.reject(cause);
-        closed.reject(cause);
+        // A typed owner refusal of the remote executable settles the lease on
+        // the owner before any server starts: teardown is confirmed, so the
+        // caller sees the typed reason rather than a cleanup failure.
+        if (
+          cause instanceof PickerProofOwnerError &&
+          cause.code === "providerExecutableUnavailable"
+        )
+          closed.resolve("confirmed");
+        else closed.reject(cause);
       });
       return {
         lease,

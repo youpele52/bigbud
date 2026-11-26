@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
 use super::{assert_frame, opencode_vectors, reply, request, v1};
+use v1::proof_workspace_mode_inspection::Result;
 use v1::{
     ProofAgentProxyClose, ProofAgentProxyOpen, ProofAgentProxyStatus, ProofPrepareTerminal,
     ProofTerminalCwd, ProofTerminalInput, ProofTerminalLease, ProofTerminalOpen,
     ProofTerminalReplay, ProofTerminalReplayChunk, ProofTerminalReplayRequest,
     ProofTerminalReservation, ProofTerminalResize, reply::Outcome, request::Operation,
 };
-use v1::proof_workspace_mode_inspection::Result;
 
 pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(

@@ -200,6 +200,8 @@ export function createWsNativeApiContext({
       retryTextGeneration: rpcClient.server.retryTextGeneration,
       getBackendDrainConsent: rpcClient.server.getBackendDrainConsent,
       decideBackendDrainConsent: rpcClient.server.decideBackendDrainConsent,
+      getSshOwnerAdmission: rpcClient.server.getSshOwnerAdmission,
+      drainSshOwnerIdentifiedPanes: rpcClient.server.drainSshOwnerIdentifiedPanes,
       claimMetadataWarnings: rpcClient.server.claimMetadataWarnings,
       acknowledgeMetadataWarning: rpcClient.server.acknowledgeMetadataWarning,
       startHandoffJob: rpcClient.server.startHandoffJob,

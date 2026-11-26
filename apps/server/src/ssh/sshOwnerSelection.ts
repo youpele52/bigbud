@@ -20,8 +20,7 @@
  * - `terminal/Layers/Manager.remote-inspection.ts`,
  *   `terminal/Layers/PtyShellExecutable.ts`,
  *   `terminal-host/localTerminalHost.directSsh.ts`
- * - `codex/codexAppServerManager.process.remote.ts`,
- *   `provider/Layers/Opencode/ServerManager.child.ts`
+ * - `codex/codexAppServerManager.process.remote.ts`
  * - `remote-backend/clientRelay.ssh.ts`, `remote-backend/peerRelay.ssh.ts`
  * - `git/Layers/GitCore.initiatingFence.ts`, `git/Layers/GitCoreExecutor.ts`,
  *   `git/Layers/GitHubCli.ts`, `tool-transport/toolTransport.ssh.errors.ts`

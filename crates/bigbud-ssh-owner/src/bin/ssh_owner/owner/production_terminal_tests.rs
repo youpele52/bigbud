@@ -69,7 +69,7 @@ fn production_admits_terminal_verbs_and_keeps_fixture_only_verbs_refused() {
             .is_ok()
     );
     // OpenCode is Linux-only in v1; every other POSIX host keeps the refusal.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     for refused in [
         Operation::ProofOpencodeOpen(crate::v1::ProofOpencodeOpen::default()),
         Operation::ProofOpencodeClose(crate::v1::ProofOpencodeLease::default()),

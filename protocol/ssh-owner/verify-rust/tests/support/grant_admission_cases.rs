@@ -53,7 +53,7 @@ impl Fixture {
             target_id: owner.target.into(),
             grant: vec![grant.token],
             target_descriptor: None,
-        operation: Some(operation),
+            operation: Some(operation),
         };
         Self {
             owner,

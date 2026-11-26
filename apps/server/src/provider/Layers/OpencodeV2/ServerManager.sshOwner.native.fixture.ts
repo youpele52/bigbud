@@ -1,7 +1,5 @@
-import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { Effect } from "effect";
-import { createHash, randomBytes } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
@@ -19,10 +17,25 @@ import {
   renderLinuxPickerSshdConfig,
 } from "../../../ssh/sshPicker.loopback.fixture.linux.sandbox.ts";
 import { makeLinuxLoopbackPickerFixture } from "../../../ssh/sshPicker.loopback.fixture.linux.ts";
-import { compileSyntheticOpencode } from "./ServerManager.owner.native.service.ts";
-import type { OwnedOpencodeServerInput } from "./ServerManager.owner.ts";
+import type { V2OwnerSessionSource } from "./ServerManager.ownerV2.selected.ts";
+import type { V2IsolatedProcessConfig } from "./ServerManager.types.ts";
+
+/**
+ * Live Linux fixture for the owner-selected OpenCode v2 SSH lane: a real
+ * `bigbud-ssh-owner` in fixture mode with `--opencode-v2-service`, a disposable
+ * loopback sshd, and a real OpenCode v2 executable launched on the "remote".
+ *
+ * @module ServerManager.sshOwner.native.fixture
+ */
 
 type LinuxFixture = Awaited<ReturnType<typeof makeLinuxLoopbackPickerFixture>>;
+
+export interface NativeV2Owner {
+  readonly owner: LaunchedPickerProofOwner;
+  readonly config: V2IsolatedProcessConfig;
+  readonly source: V2OwnerSessionSource;
+  readonly readCommandStarts: () => Promise<number>;
+}
 
 function assertLoopbackOnly() {
   const interfaces = Object.entries(networkInterfaces());
@@ -32,7 +45,7 @@ function assertLoopbackOnly() {
     !interfaces[0][1]?.every(({ internal }) => internal) ||
     !interfaces[0][1]?.some(({ address }) => address === "127.0.0.1")
   ) {
-    throw new Error("Run the OpenCode native proof in a fresh loopback-only network namespace.");
+    throw new Error("Run the OpenCode v2 native proof in a fresh loopback-only network namespace.");
   }
 }
 
@@ -43,9 +56,9 @@ async function installSharedNamespaceOwner(fixture: LinuxFixture, proofRoot: str
   await fixture.installOwner(
     fileURLToPath(new URL("../../../../../../target/debug/bigbud-ssh-owner", import.meta.url)),
   );
-  // The client must reach the actual native listener, with no relay on the test side.
-  // Share only the outer test's isolated network; keep the inner PID and filesystem sandbox.
-  const launcher = path.join(root, "start-opencode-owner");
+  // The client reaches the owner's native listener directly; only the outer
+  // isolated network is shared, the inner PID and filesystem sandbox stay.
+  const launcher = path.join(root, "start-opencode-v2-owner");
   await writeFile(
     launcher,
     renderLinuxPickerOwnerLauncher(
@@ -59,18 +72,20 @@ async function installSharedNamespaceOwner(fixture: LinuxFixture, proofRoot: str
     ),
     { flag: "wx", mode: 0o700 },
   );
+  // The v2 owner selects a remote loopback port in 49152-65535; sshd permits
+  // only loopback forwards on that host.
   const sshdConfig = renderLinuxPickerSshdConfig(root).replace(
     "DisableForwarding yes",
-    "AllowTcpForwarding local\nPermitOpen 127.0.0.1:4096\nAllowStreamLocalForwarding no",
+    "AllowTcpForwarding local\nPermitOpen 127.0.0.1:*\nAllowStreamLocalForwarding no",
   );
   await writeFile(path.join(root, "sshd_config"), sshdConfig);
   const keyPath = path.join(root, "authorized_keys");
   const key = await readFile(keyPath, "utf8");
   await writeFile(
     keyPath,
-    key.replace(/^restrict /, 'restrict,port-forwarding,permitopen="127.0.0.1:4096" '),
+    key.replace(/^restrict /, 'restrict,port-forwarding,permitopen="127.0.0.1:*" '),
   );
-  const sshdLog = path.join(root, "opencode-sshd.log");
+  const sshdLog = path.join(root, "opencode-v2-sshd.log");
   await writeFile(
     path.join(root, "start-daemon"),
     renderLinuxPickerDaemonEntrypoint(root, uid, gid).replaceAll("/tmp/picker-sshd.log", sshdLog),
@@ -78,49 +93,27 @@ async function installSharedNamespaceOwner(fixture: LinuxFixture, proofRoot: str
   return { launcher, sshdLog };
 }
 
-export async function withNativeOpencodeOwner<A>(
+export async function withNativeOpencodeV2Owner<A>(
   executable: string,
-  run: (
-    owner: LaunchedPickerProofOwner,
-    input: Omit<OwnedOpencodeServerInput, "owner" | "signal">,
-    readCommandStarts: () => Promise<number>,
-  ) => Promise<A>,
+  run: (native: NativeV2Owner) => Promise<A>,
 ): Promise<A> {
   assertLoopbackOnly();
-  const synthetic = executable === "synthetic" || executable === "synthetic-stalled";
-  if (!synthetic && !path.isAbsolute(executable)) {
-    throw new Error("Expected an absolute OpenCode v1 binary path.");
-  }
+  if (!path.isAbsolute(executable)) throw new Error("Expected an absolute OpenCode v2 binary.");
   const fixture = await makeLinuxLoopbackPickerFixture();
   let proofRoot: string | undefined;
   try {
-    proofRoot = await mkdtemp("/tmp/bigbud-opencode-v1-");
+    proofRoot = await mkdtemp("/tmp/bigbud-opencode-v2-");
     const { root, loopback, port, user, identity, knownHosts, ssh, keyscan } = fixture;
     const { launcher, sshdLog } = await installSharedNamespaceOwner(fixture, proofRoot);
     const cwd = path.join(proofRoot, "work");
     const binaryPath = path.join(proofRoot, "opencode");
     await mkdir(cwd, { mode: 0o700 });
-    if (synthetic)
-      await compileSyntheticOpencode(root, binaryPath, executable === "synthetic-stalled");
-    else await copyFile(executable, binaryPath);
+    await copyFile(executable, binaryPath);
     await chmod(binaryPath, 0o500);
-    const digest = createHash("sha256");
-    for await (const chunk of createReadStream(binaryPath)) digest.update(chunk);
-    const sha256 = digest.digest("hex");
-    const threadId = ThreadId.makeUnsafe("thread-opencode-native");
-    const sessionEpoch = 9;
     const targetId = `ssh:${new URLSearchParams({ host: loopback, port: String(port), user, transport: "direct-ssh" })}`;
-    const target = { location: "remote", executionTargetId: targetId } as const;
-    const input = {
-      threadId,
-      sessionEpoch,
-      binaryPath,
-      providerRuntimeTarget: target,
-      workspaceTarget: { ...target, cwd },
-    };
     const readCommandStarts = async () =>
       [...(await readFile(sshdLog, "utf8")).matchAll(/Starting session: command\b/g)].length;
-    return await storageScope(path.join(root, "opencode-proof.sqlite"), (sql) =>
+    return await storageScope(path.join(root, "opencode-v2-proof.sqlite"), (sql) =>
       Effect.promise(async () => {
         const owner = await startPickerProofOwner({
           binary: launcher,
@@ -136,13 +129,28 @@ export async function withNativeOpencodeOwner<A>(
           identityFile: identity,
           knownHostsFile: knownHosts,
           workspaceRoot: cwd,
-          opencodeFixture: { binaryPath, sha256, cwd, threadId, sessionEpoch },
+          opencodeV2Service: { binaryPath },
         });
         try {
           const trust = await owner.inspectTrust();
           if (trust.state !== "approvalRequired") throw new Error("Expected first-use approval");
           await owner.approveTrust(trust.challenge);
-          return await run(owner, input, readCommandStarts);
+          const lane = owner.opencodeV2Lane;
+          if (!lane) throw new Error("The native owner did not expose the OpenCode v2 lane.");
+          const source: V2OwnerSessionSource = {
+            target: async (id) =>
+              id === targetId
+                ? { targetId, owner: undefined, lane, serviceBinding: binaryPath }
+                : undefined,
+          };
+          const config: V2IsolatedProcessConfig = {
+            runtimeTargetId: targetId,
+            // Host-side setting; the composition replaces it with the owner binding.
+            binaryPath: "/host/opencode",
+            profileRoot: path.join(proofRoot!, "host-profile-unused"),
+            workspaceRoot: cwd,
+          };
+          return await run({ owner, config, source, readCommandStarts });
         } finally {
           await owner.close();
         }

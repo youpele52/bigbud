@@ -1,4 +1,6 @@
 import * as Effect from "effect/Effect";
+import type { OpencodeV2ServiceBinding } from "./sshOwnerRemotePath.ts";
+import type { DevOpencodeV2ServiceRefusal } from "./sshOwnerDevRuntime.providerServices.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { PickerProofOwner } from "./sshOwnerPickerProof.client.session.types.ts";
@@ -45,7 +47,9 @@ export interface SshOwnerProductionHandle extends SshOwnerProductionOwner {
   readonly ownerEpoch: Uint8Array;
   readonly targetGeneration: Uint8Array;
   /** Trusted OpenCode v2 executable this owner was launched with, if any. */
-  readonly opencodeV2Service?: { readonly binaryPath: string };
+  readonly opencodeV2Service?: OpencodeV2ServiceBinding;
+  /** Typed settings refusal when the configured v2 binding is unusable. */
+  readonly opencodeV2Refusal?: DevOpencodeV2ServiceRefusal;
   readonly state: () => SshOwnerOwnerState;
   /**
    * Binds one target on the shared owner (W3.7). Every request carries the
@@ -124,10 +128,17 @@ function makeHandle(input: {
     artifactPath: input.artifact.path,
     mode: input.mode,
     ownerEpoch: input.owner.ownerEpoch,
-    targetGeneration: input.owner.targetGeneration,
+    // A target-free production owner has no startup target: read lazily, so a
+    // handle exists before any target is bound (and never throws on creation).
+    get targetGeneration() {
+      return input.owner.targetGeneration;
+    },
     ...(input.facts.opencodeV2Service === undefined
       ? {}
       : { opencodeV2Service: input.facts.opencodeV2Service }),
+    ...(input.facts.opencodeV2Refusal === undefined
+      ? {}
+      : { opencodeV2Refusal: input.facts.opencodeV2Refusal }),
     state: () => state,
     target: (descriptor) => input.owner.bindTarget(descriptor),
     onDeath(listener) {
@@ -283,7 +294,9 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
       Effect.tapError(() => Effect.promise(() => releaseGate())),
       Effect.mapError((cause) => fromPickerProofError(cause)),
     );
-    yield* Effect.tryPromise({
+    // Every failure after the spawn reaps the exact child (bounded) before the
+    // typed error surfaces, so a failed start never leaves an owner running.
+    return yield* Effect.tryPromise({
       try: async () => {
         try {
           negotiate(spawned, input);
@@ -294,25 +307,39 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
             capability,
             profileBinding: facts.profileBindingText,
           });
+          return makeHandle({
+            artifact: input.artifact,
+            facts,
+            owner: spawned,
+            mode: "spawned",
+            releaseGate,
+            detachOwner: () => spawned.detach(),
+            reap: () => spawned.retireSpawned(),
+          });
         } catch (cause) {
-          await spawned.retireSpawned().catch(() => undefined);
+          await reapBounded(() => spawned.retireSpawned());
           await releaseGate();
           throw fromPickerProofError(cause);
         }
       },
       catch: (cause) => fromPickerProofError(cause),
     });
-    return makeHandle({
-      artifact: input.artifact,
-      facts,
-      owner: spawned,
-      mode: "spawned",
-      releaseGate,
-      detachOwner: () => spawned.detach(),
-      reap: () => spawned.retireSpawned(),
-    });
   },
 );
+
+/** Upper bound on a post-spawn reap: SIGKILL plus the child's close. */
+export const SSH_OWNER_STARTUP_REAP_MS = 3_000;
+
+async function reapBounded(reap: () => Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    reap().catch(() => undefined),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SSH_OWNER_STARTUP_REAP_MS);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
+}
 
 /** Builds the boot-sequence owner for a resolved artifact and profile. */
 export const startProductionOwnerForBoot = (input: {

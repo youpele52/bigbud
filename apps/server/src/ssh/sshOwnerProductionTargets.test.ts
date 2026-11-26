@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -61,6 +61,28 @@ describe("production SSH owner target descriptors", () => {
     // The owner re-resolves alias policy by the bare alias.
     expect(descriptorServesTarget(descriptor, "ssh:build")).toBe(true);
     expect(descriptorServesTarget(descriptor, "build")).toBe(false);
+  });
+
+  it("sends an alias's files under a symlinked home in the owner's canonical form", async () => {
+    const root = await home(
+      [
+        "Host build",
+        "  HostName 10.0.0.5",
+        "  User dev",
+        "  IdentityFile ~/.ssh/id_build",
+        `  UserKnownHostsFile ${path.join(path.sep, "unused-home", ".ssh", "known_hosts")}`,
+      ].join("\n"),
+    );
+    // The home is reached through a link (as macOS `/tmp` and `/var` are); the
+    // owner opens `~/.ssh` canonically and requires the same paths back.
+    const link = `${root}-link`;
+    homes.push(link);
+    await symlink(root, link);
+    // Out-of-scope paths are left alone; the owner refuses them itself.
+    expect(await resolveProductionTargetDescriptor("ssh:build", { home: link })).toMatchObject({
+      identityFile: path.join(root, ".ssh", "id_build"),
+      knownHostsFile: path.join(path.sep, "unused-home", ".ssh", "known_hosts"),
+    });
   });
 
   it("passes a DNS host name through for the owner to resolve", async () => {

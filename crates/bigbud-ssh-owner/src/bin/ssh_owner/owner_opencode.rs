@@ -1,9 +1,9 @@
 //! Shared OpenCode lease plumbing for the owner.
 //!
-//! Both provider transports use one verified pattern: a private forward socket,
+//! The OpenCode v2 recipe uses one verified pattern: a private forward socket,
 //! a pinned SSH child that may add exactly one `-L` to a loopback endpoint, a
-//! nonce-framed receipt channel, and confirmed teardown. Only the owner-selected
-//! recipe differs (remote command, fixed endpoint and readiness evidence).
+//! nonce-framed receipt channel, and confirmed teardown. The recipe supplies the
+//! remote command, the owner-selected endpoint and the readiness evidence.
 
 #[path = "owner_opencode/control.rs"]
 mod control;
@@ -11,12 +11,15 @@ mod control;
 mod local;
 #[path = "owner_opencode/session.rs"]
 mod session;
+#[cfg(test)]
+#[path = "owner_opencode/tests.rs"]
+mod tests;
 
 pub(super) use control::{Control, Receipt};
 pub(super) use local::{ForwardSocket, SshChild};
 pub(super) use session::{Ready, ReadyFailure, ReadyPort, run};
 
-use bigbud_ssh_owner::opencode_v1::{Bridge, Startup, StartupError};
+use bigbud_ssh_owner::opencode_v1::Bridge;
 use std::time::Duration;
 
 pub(super) const POLL: Duration = Duration::from_millis(5);
@@ -67,30 +70,6 @@ pub(super) fn settle(
             .and_then(Receipt::exit_code)
             .map_or(Outcome::Lost, Outcome::Exited),
         (outcome, _, _) => outcome,
-    }
-}
-
-/// The existing v1 startup gate already owns the reservation, the bounded
-/// output cap and the exact readiness line; it plugs into the shared loop.
-impl Ready for Startup {
-    fn listener(&self) -> &std::net::TcpListener {
-        Startup::listener(self)
-    }
-
-    fn stdout(&mut self, bytes: &[u8]) -> Result<(), ()> {
-        Startup::stdout(self, bytes).map_err(|_| ())
-    }
-
-    fn stderr(&mut self, bytes: &[u8]) -> Result<(), ()> {
-        Startup::stderr(self, bytes).map_err(|_| ())
-    }
-
-    fn poll(&mut self, cancelled: &dyn Fn() -> bool) -> Result<Option<ReadyPort>, ReadyFailure> {
-        match Startup::poll_ready(self, cancelled) {
-            Ok(port) => Ok(port.map(|port| ReadyPort { port, secret: None })),
-            Err(StartupError::Cancelled) => Err(ReadyFailure::Cancelled),
-            Err(_) => Err(ReadyFailure::Rejected),
-        }
     }
 }
 

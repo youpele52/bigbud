@@ -41,11 +41,9 @@ pub(super) struct ProductionBindings {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) agent_service: Option<crate::owner_agent_proxy::ServiceRecipe>,
     /// Owner-selected OpenCode executable; its listener is per target.
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_service: Option<crate::owner_opencode_v1::ProductRecipe>,
     /// Owner-selected OpenCode v2 executable; listener, argv and credential are
     /// per target and per lease.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) opencode_v2: Option<crate::owner_opencode_v2::ProductRecipe>,
 }
 
@@ -73,10 +71,9 @@ struct Parsed {
     agent_binary: Option<PathBuf>,
     agent_sha256: Option<String>,
     agent_state: Option<PathBuf>,
-    #[cfg(target_os = "linux")]
-    opencode_binary: Option<PathBuf>,
-    #[cfg(target_os = "linux")]
-    opencode_v2_binary: Option<PathBuf>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    /// `Some(None)`: discover the remote executable on each target.
+    opencode_v2_binary: Option<Option<PathBuf>>,
 }
 
 fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings, ProfileRefusal> {
@@ -92,9 +89,7 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         agent_binary: None,
         agent_sha256: None,
         agent_state: None,
-        #[cfg(target_os = "linux")]
-        opencode_binary: None,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2_binary: None,
     };
     while let Some(argument) = args.next() {
@@ -185,21 +180,17 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
                         .map_err(|_| ProfileRefusal::MissingFlag)?,
                 );
             }
-            #[cfg(target_os = "linux")]
-            "--opencode-service" if parsed.opencode_binary.is_none() => {
-                parsed.opencode_binary = Some(
-                    take()
-                        .map(PathBuf::from)
-                        .map_err(|_| ProfileRefusal::MissingFlag)?,
-                );
-            }
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             "--opencode-v2-service" if parsed.opencode_v2_binary.is_none() => {
-                parsed.opencode_v2_binary = Some(
+                parsed.opencode_v2_binary = Some(Some(
                     take()
                         .map(PathBuf::from)
                         .map_err(|_| ProfileRefusal::MissingFlag)?,
-                );
+                ));
+            }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            "--opencode-v2-discover" if parsed.opencode_v2_binary.is_none() => {
+                parsed.opencode_v2_binary = Some(None);
             }
             // Every fixture flag and every unknown flag is a conflict.
             _ => return Err(ProfileRefusal::Conflict),
@@ -229,10 +220,8 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         parsed.workspace_root.as_ref(),
         parsed.agent_binary.as_ref(),
         parsed.agent_state.as_ref(),
-        #[cfg(target_os = "linux")]
-        parsed.opencode_binary.as_ref(),
-        #[cfg(target_os = "linux")]
-        parsed.opencode_v2_binary.as_ref(),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        parsed.opencode_v2_binary.as_ref().and_then(Option::as_ref),
     ]
     .into_iter()
     .flatten()
@@ -254,33 +243,19 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         ),
         _ => return Err(ProfileRefusal::Conflict),
     };
-    #[cfg(target_os = "linux")]
-    let opencode_service = match parsed.opencode_binary.clone() {
-        None => None,
-        Some(binary) => {
-            let root = parsed
-                .workspace_root
-                .as_deref()
-                .ok_or(ProfileRefusal::Conflict)?;
-            Some(
-                crate::owner_opencode_v1::ProductRecipe::new(&binary, root)
-                    .map_err(|_| ProfileRefusal::MalformedProfile)?,
-            )
-        }
-    };
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let opencode_v2 = match parsed.opencode_v2_binary.clone() {
         None => None,
-        Some(binary) => {
-            let root = parsed
-                .workspace_root
-                .as_deref()
-                .ok_or(ProfileRefusal::Conflict)?;
-            Some(
-                crate::owner_opencode_v2::ProductRecipe::new(&binary, root)
-                    .map_err(|_| ProfileRefusal::MalformedProfile)?,
+        // A production owner serves many targets, each with its own remote
+        // workspace, so the recipe takes the request's absolute cwd. An explicit
+        // workspace root still pins it, as in fixture mode.
+        Some(binary) => Some(
+            crate::owner_opencode_v2::ProductRecipe::new(
+                binary.as_deref(),
+                parsed.workspace_root.as_deref(),
             )
-        }
+            .map_err(|_| ProfileRefusal::MalformedProfile)?,
+        ),
     };
     Ok(ProductionBindings {
         profile,
@@ -293,9 +268,7 @@ fn parse(mut args: impl Iterator<Item = OsString>) -> Result<ProductionBindings,
         workspace_root: parsed.workspace_root,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         agent_service,
-        #[cfg(target_os = "linux")]
-        opencode_service,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2,
     })
 }
@@ -339,11 +312,7 @@ pub(super) fn run(mut args: impl Iterator<Item = OsString>) -> RunResult<()> {
         stage: None,
         #[cfg(target_os = "linux")]
         tracked_push: None,
-        #[cfg(target_os = "linux")]
-        opencode_recipe: None,
-        #[cfg(target_os = "linux")]
-        opencode_service: bindings.opencode_service,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2: bindings.opencode_v2,
     };
     let (mut owner, attachment) = super::owner::bootstrap(&mut pipe, startup)?;

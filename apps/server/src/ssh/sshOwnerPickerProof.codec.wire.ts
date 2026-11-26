@@ -53,6 +53,7 @@ const wireErrorCodes = [
   "targetMismatch",
   "paneUnrecoverable",
   "targetHostUnresolved",
+  "providerExecutableUnavailable",
 ] as const;
 
 export type PickerProofOwnerErrorCode =

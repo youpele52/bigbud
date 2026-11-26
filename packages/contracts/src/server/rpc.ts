@@ -195,6 +195,10 @@ import {
   WsServerDecideBackendDrainConsentRpc,
   WsServerGetBackendDrainConsentRpc,
 } from "./rpc.backendDrain";
+import {
+  WsServerDrainSshOwnerIdentifiedPanesRpc,
+  WsServerGetSshOwnerAdmissionRpc,
+} from "./rpc.sshOwnerAdmission";
 import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 import { WsCopilotRuntimeRpc } from "./rpc.copilotRuntime";
 import { WsServerPeerPairingRpc } from "./rpc.remotePeer";
@@ -223,6 +227,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRetryTextGenerationRpc,
   WsServerGetBackendDrainConsentRpc,
   WsServerDecideBackendDrainConsentRpc,
+  WsServerGetSshOwnerAdmissionRpc,
+  WsServerDrainSshOwnerIdentifiedPanesRpc,
   WsServerClaimMetadataWarningsRpc,
   WsServerAcknowledgeMetadataWarningRpc,
   WsWorktreeOperationsRpc,

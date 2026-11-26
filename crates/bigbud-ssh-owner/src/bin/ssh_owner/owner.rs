@@ -9,7 +9,7 @@ mod guarded_write_stage;
 #[cfg(all(target_os = "linux", test))]
 mod jump_picker_tests;
 mod lifecycle;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod opencode;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod picker_cancel;
@@ -87,13 +87,9 @@ pub(super) struct OwnerStartup<'a> {
     pub(super) identity_agent_path: Option<&'a Path>,
     pub(super) stage: Option<StageBinding>,
     /// OpenCode v1 fixture recipe (dev-selected only).
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_recipe: Option<crate::owner_opencode_v1::Recipe>,
     /// Owner-selected OpenCode v1 service recipe.
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_service: Option<crate::owner_opencode_v1::ProductRecipe>,
     /// Owner-selected OpenCode v2 service recipe.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) opencode_v2: Option<crate::owner_opencode_v2::ProductRecipe>,
     #[cfg(target_os = "linux")]
     pub(super) tracked_push: Option<TrackedPushStartup>,

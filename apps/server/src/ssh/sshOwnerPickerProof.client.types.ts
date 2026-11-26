@@ -1,6 +1,6 @@
 import type { CodexSshOwner } from "../codex/codexAppServerManager.process.remote.owner.ts";
+import type { OpencodeV2ServiceBinding } from "./sshOwnerRemotePath.ts";
 import type { PiRpcOwner } from "../provider/Layers/Pi/RpcProcess.owner.ts";
-import type { OpencodeSshOwner } from "../provider/Layers/Opencode/ServerManager.owner.ts";
 import type { RemoteAgentProxyLease } from "../remote-agent/remoteAgentConnection.owner.ts";
 import type { ClientRelaySshOwner } from "../remote-backend/clientRelay.ssh.owner.ts";
 import type { PeerRelaySshOwner } from "../remote-backend/peerRelay.ssh.owner.ts";
@@ -50,14 +50,12 @@ export interface PickerProofOwnerOptions
     readonly kind: "pi" | "codex";
     readonly binaryPath: string;
   };
-  /** Product OpenCode v1 service: the only owner-selected forwarding authority. */
-  readonly opencodeService?: { readonly binaryPath: string };
   /**
    * Product OpenCode v2 service: the owner selects the executable, `serve` argv,
    * remote port, listener, forward and per-lease credential. The configured
    * path is a trusted profile setting, never a request operand.
    */
-  readonly opencodeV2Service?: { readonly binaryPath: string };
+  readonly opencodeV2Service?: OpencodeV2ServiceBinding;
   /**
    * Composition-only fact from the profile settings: a configured-but-unusable
    * v2 binding. It never reaches argv; it lets the provider report the exact
@@ -74,7 +72,6 @@ export interface PickerProofOwnerOptions
     readonly stateDir: string;
   };
   readonly piFixture?: PickerProofProviderFixture;
-  readonly opencodeFixture?: PickerProofProviderFixture;
   readonly identityAgentPath?: string;
   /** Startup-bound Linux proof, never derived from an operation or renderer input. */
   readonly installedAgentStateDir?: string;
@@ -87,6 +84,12 @@ export interface PickerProofOwnerOptions
     /** `bbso1:<kind>:<hex>`; the owner validates it against `stateDirectory`. */
     readonly profileBindingText: string;
     readonly stateDirectory: string;
+    /**
+     * The user's SSH config files. The owner re-reads an alias target's policy
+     * from them on every resolution; only paths cross, never config text.
+     */
+    readonly aliasConfig?: string;
+    readonly systemConfig?: string;
   };
 }
 
@@ -95,11 +98,10 @@ export type PickerProofAttachOptions = PickerProofSessionOptions & PickerProofAt
 export interface LaunchedPickerProofOwner
   extends PickerProofOwner, ClientRelaySshOwner, CodexSshOwner {
   readonly piRpcOwner: PiRpcOwner;
-  readonly opencodeOwner?: OpencodeSshOwner;
   /** Owner-selected OpenCode v2 lane for a pinned, single-target owner. */
   readonly opencodeV2Lane?: import("./sshOwnerPickerProof.client.providerPorts.ts").PickerProofOpencodeV2Lane;
   /** The trusted v2 binding this owner was launched with, if any. */
-  readonly opencodeV2Service?: { readonly binaryPath: string };
+  readonly opencodeV2Service?: OpencodeV2ServiceBinding;
   /** A configured-but-unusable v2 binding from the profile settings. */
   readonly opencodeV2Refusal?: import("./sshOwnerDevRuntime.providerServices.ts").DevOpencodeV2ServiceRefusal;
   readonly openPeerRelay: PeerRelaySshOwner["openPeerRelay"];

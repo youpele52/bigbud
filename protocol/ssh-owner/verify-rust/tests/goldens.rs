@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use prost::Message;
-use sha2::{Digest, Sha256};
 
 #[path = "support/agent_action_vectors.rs"]
 mod agent_action_vectors;
@@ -17,6 +16,8 @@ mod grant_vectors;
 mod native_lease_vectors;
 #[path = "support/opencode_vectors.rs"]
 mod opencode_vectors;
+#[path = "support/operand_goldens.rs"]
+mod operand_goldens;
 #[path = "support/operands.rs"]
 mod operands;
 #[path = "support/peer_enrollment_vectors.rs"]
@@ -40,9 +41,8 @@ mod v1 {
 }
 
 use v1::{
-    ApproveTrust, ConnectionState, Empty, Error, ErrorCode, Folder, Folders, Frame,
-    ListFolders, Reply, Request, Trust, TrustState, frame::Payload, reply::Outcome,
-    request::Operation,
+    ApproveTrust, ConnectionState, Empty, Error, ErrorCode, Folder, Folders, Frame, ListFolders,
+    Reply, Request, Trust, TrustState, frame::Payload, reply::Outcome, request::Operation,
 };
 use wire_helpers::{connection, hello};
 
@@ -277,6 +277,10 @@ fn s1_wire_goldens() {
         ),
         ("pane_unrecoverable", ErrorCode::PaneUnrecoverable),
         ("target_host_unresolved", ErrorCode::TargetHostUnresolved),
+        (
+            "provider_executable_unavailable",
+            ErrorCode::ProviderExecutableUnavailable,
+        ),
     ] {
         assert_frame(
             &mut values,
@@ -363,36 +367,5 @@ fn s1_wire_goldens() {
         })))
     );
     assert!(ErrorCode::try_from(127).is_err());
-    assert!(values.is_empty(), "unused goldens: {values:?}");
-}
-
-#[test]
-fn normalized_operand_goldens() {
-    let mut values = goldens(include_str!("../../v1.golden.operands"));
-    for (name, operation) in [
-        ("inspect", Operation::InspectTrust(Empty {})),
-        ("connect", Operation::Connect(Empty {})),
-        ("disconnect", Operation::Disconnect(Empty {})),
-        ("approve", approve([0, 0xfe, 0xff])),
-        ("approve_changed", approve([0, 0xfe, 0])),
-        ("list_home_omitted", list(None)),
-        ("list_home_empty", list(Some(""))),
-        ("list_path", list(Some(PICKER_PATH))),
-        ("list_changed", list(Some("~/café/資料/other"))),
-        ("list_utf8_decomposed", list(Some("~/cafe\u{301}/資料"))),
-        ("list_whitespace", list(Some("~/café/資料 "))),
-    ] {
-        let preimage = operand_preimage(operation);
-        assert_eq!(
-            preimage,
-            take(&mut values, &format!("{name}.canonical")),
-            "{name}"
-        );
-        assert_eq!(
-            Sha256::digest(preimage).as_slice(),
-            take(&mut values, &format!("{name}.sha256")),
-            "{name}"
-        );
-    }
     assert!(values.is_empty(), "unused goldens: {values:?}");
 }

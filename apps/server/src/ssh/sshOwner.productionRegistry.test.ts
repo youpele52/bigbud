@@ -22,7 +22,10 @@ import type { SshOwnerTargetDescriptor } from "./sshOwnerProductionClient.launch
 
 // The activation switch is a build-time constant; the module mock is the only
 // way to observe the activated boot without changing production code.
-vi.mock("@bigbud/shared/SshOwnerActivation", () => ({ SSH_OWNER_PRODUCTION_ACTIVATION: true }));
+vi.mock("@bigbud/shared/SshOwnerActivation", () => ({
+  SSH_OWNER_PRODUCTION_ACTIVATION: true,
+  resolveSshOwnerDrainIdentifiedRequest: () => false,
+}));
 
 const fake = vi.hoisted(() => ({
   deaths: new Set<() => void>(),

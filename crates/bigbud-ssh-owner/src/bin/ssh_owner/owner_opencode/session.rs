@@ -204,12 +204,17 @@ fn supervise(
             break;
         }
     }
-    super::settle(
+    let outcome = super::settle(
         trigger,
         control.launched(),
         on_ready.is_none(),
         control.terminal(),
-    )
+    );
+    // A pre-launch `missing` receipt names the typed reason for a refusal.
+    if control.missing() && !control.launched() && matches!(outcome, Outcome::Rejected(_)) {
+        return Outcome::Rejected(ErrorCode::ProviderExecutableUnavailable);
+    }
+    outcome
 }
 
 /// The launch signal plus any transport credential, written as one payload so

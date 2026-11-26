@@ -30,6 +30,7 @@ import {
   planLocalTerminalHostLaunch,
   type LocalTerminalHostLaunchSpec,
 } from "./localTerminalHost.launchSpec.ts";
+import { registerLocalTerminalHostRetirementSource } from "./localTerminalHost.retirementSource.ts";
 import {
   makeLocalTerminalHostTransportFactory,
   type LocalTerminalHostConnect,
@@ -65,6 +66,11 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
     }),
   );
   let closed = false;
+  // The W3.6 explicit drain lists and retires managed SSH panes on these generations.
+  const unregisterRetirement = registerLocalTerminalHostRetirementSource({
+    pool,
+    attachedBindings: () => controller.attachedBindings(),
+  });
   // Quit close-all, policy and inventory reach draining generations too.
   const hostGenerations = makeLocalTerminalHostGenerations({
     controller,
@@ -198,6 +204,7 @@ export function makeLocalTerminalHostPtyAdapter(options: LocalTerminalHostAdapte
     runtime,
     close: () => {
       closed = true;
+      unregisterRetirement();
       pool.closeAll();
     },
   };

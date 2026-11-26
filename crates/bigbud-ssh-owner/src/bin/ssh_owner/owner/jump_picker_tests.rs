@@ -72,10 +72,7 @@ fn bound_alias_browses_through_selected_owner_dispatch() {
             agent_service: None,
             identity_agent_path: None,
             stage: None,
-            opencode_recipe: None,
-            #[cfg(target_os = "linux")]
-            opencode_service: None,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             opencode_v2: None,
             tracked_push: None,
         },

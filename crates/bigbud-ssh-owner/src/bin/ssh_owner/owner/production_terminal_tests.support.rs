@@ -102,11 +102,7 @@ impl Fixture {
                 stage: None,
                 #[cfg(target_os = "linux")]
                 tracked_push: None,
-                #[cfg(target_os = "linux")]
-                opencode_recipe: None,
-                #[cfg(target_os = "linux")]
-                opencode_service: None,
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 opencode_v2: None,
             },
         )
@@ -200,11 +196,7 @@ impl Fixture {
                 stage: None,
                 #[cfg(target_os = "linux")]
                 tracked_push: None,
-                #[cfg(target_os = "linux")]
-                opencode_recipe: None,
-                #[cfg(target_os = "linux")]
-                opencode_service: None,
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 opencode_v2: None,
             },
         )

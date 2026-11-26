@@ -10,7 +10,7 @@
 
 use super::ErrorCode;
 use crate::Token;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::owner::opencode;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::owner::posix_picker;
@@ -50,7 +50,7 @@ pub(crate) struct Lanes {
     pub(crate) terminal_uncertain: bool,
     pub(crate) agent_proxy: Option<AgentProxy>,
     pub(crate) agent_close_uncertain: bool,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) opencode: Option<opencode::Lease>,
 }
 
@@ -66,9 +66,9 @@ impl Lanes {
     pub(crate) fn revoke(&mut self) -> Result<(), ErrorCode> {
         let terminal = self.revoke_terminal();
         let agent = self.revoke_agent_proxy();
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let opencode = self.revoke_opencode();
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let opencode = Ok(());
         let master = self.revoke_master();
         terminal.and(agent).and(opencode).and(master)
@@ -120,7 +120,7 @@ impl Lanes {
         result
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn revoke_opencode(&mut self) -> Result<(), ErrorCode> {
         self.opencode
             .as_mut()

@@ -23,7 +23,7 @@ pub(super) mod jump_binding;
 mod listing;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use listing::ListFailure;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod opencode;
 mod peer;
 mod peer_enrollment;

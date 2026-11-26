@@ -23,3 +23,25 @@ export function validateProviderServiceStartup(
     }
   }
 }
+
+/**
+ * The OpenCode v2 lane runs on macOS and Linux initiating hosts (the remote
+ * must be Linux; the owner's remote guard checks it). A fixture owner pins its
+ * workspace root; a production owner takes each request's absolute cwd.
+ */
+export function validateOpencodeV2ServiceStartup(
+  service: { readonly binaryPath?: string } | undefined,
+  workspaceRoot: string | undefined,
+  production: boolean,
+): void {
+  // An absent `binaryPath` asks the owner to discover the executable remotely.
+  const binary = service?.binaryPath;
+  if (
+    service !== undefined &&
+    ((process.platform !== "linux" && process.platform !== "darwin") ||
+      (!production && workspaceRoot === undefined) ||
+      (binary !== undefined && (!isAbsolute(binary) || binary.includes("\0"))))
+  ) {
+    throw new PickerProofOwnerError("invalidOperands");
+  }
+}

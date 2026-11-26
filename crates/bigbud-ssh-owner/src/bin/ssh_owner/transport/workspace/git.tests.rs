@@ -6,6 +6,10 @@ use std::path::Path;
 use std::process::{Command, ExitStatus, Output};
 
 pub(super) fn git(root: &Path, args: &[&str]) -> Output {
+    git_with(root, args, &[])
+}
+
+fn git_with(root: &Path, args: &[&str], extra: &[(&str, &Path)]) -> Output {
     Command::new("/usr/bin/git")
         .current_dir(root)
         .env_clear()
@@ -17,6 +21,7 @@ pub(super) fn git(root: &Path, args: &[&str]) -> Output {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_ATTR_NOSYSTEM", "1")
         .env("GIT_OPTIONAL_LOCKS", "0")
+        .envs(extra.iter().copied())
         .args(args)
         .output()
         .expect("run fixture Git command")
@@ -110,7 +115,10 @@ fn ordinary_nonzero_exits_without_discovering_parent() {
             &["rev-parse", "--is-inside-work-tree"],
         ),
     ] {
-        let expected = git(&outside.0, args);
+        // Bound the baseline like the recipe: an unbounded walk can stop at a
+        // mount point (a tmpfs /tmp) and print a different, boundary message.
+        let ceiling = outside.0.parent().unwrap();
+        let expected = git_with(&outside.0, args, &[("GIT_CEILING_DIRECTORIES", ceiling)]);
         let result = local(&root, recipe).unwrap();
         assert_eq!(result.code, Some(128));
         assert_eq!(result.code, expected.status.code());

@@ -7,6 +7,7 @@ import type { DatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompact
 import type { RemoteRuntimeUpdateRpcMethods } from "./wsRpcClient.remoteBackendUpdate";
 import type { MetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import type { BackendDrainRpcMethods } from "./wsRpcClient.backendDrain";
+import type { SshOwnerAdmissionRpcMethods } from "./wsRpcClient.sshOwnerAdmission";
 import {
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
@@ -340,7 +341,8 @@ export interface WsRpcClient {
     } & WsRpcMonitorMethods &
     WsRpcRemoteAgentMethods &
     MetadataWarningRpcMethods &
-    BackendDrainRpcMethods;
+    BackendDrainRpcMethods &
+    SshOwnerAdmissionRpcMethods;
   readonly orchestration: DetailPagingRpcMethods &
     BranchCopyRpcMethods & {
       readonly getSidebarThreadCatalog: RpcUnaryMethod<

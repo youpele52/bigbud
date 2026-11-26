@@ -84,9 +84,7 @@ impl Owner {
         }
         #[cfg(target_os = "linux")]
         if !self.production
-            && (self.opencode_recipe.is_some()
-                || self.opencode_service.is_some()
-                || self.opencode_v2.is_some())
+            && self.opencode_v2.is_some()
             && !matches!(
                 operation,
                 Operation::ProofOpencodeOpen(_)
@@ -185,14 +183,14 @@ fn production_verb(operation: &Operation) -> bool {
             | Operation::ProofAgentProxyClose(_)
     );
     // OpenCode remains platform-gated: only Linux has the product recipe.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let opencode = matches!(
         operation,
         Operation::ProofOpencodeOpen(_)
             | Operation::ProofOpencodeStatus(_)
             | Operation::ProofOpencodeClose(_)
     );
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let opencode = false;
     agent
         || opencode

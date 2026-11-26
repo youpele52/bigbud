@@ -74,9 +74,11 @@ export function SshLegacyDrainDialog({ flow }: { readonly flow: SshLegacyDrainFl
           >
             Cancel
           </Button>
-          <Button size="sm" variant="secondary" disabled={busy} onClick={flow.saveAndClose}>
-            Save and close
-          </Button>
+          {refusal ? null : (
+            <Button size="sm" variant="secondary" disabled={busy} onClick={flow.saveAndClose}>
+              Save and close
+            </Button>
+          )}
           <Button size="sm" variant="destructive" disabled={busy} onClick={flow.drainNow}>
             {refusal ? "Drain identified panes" : "Drain now"}
           </Button>

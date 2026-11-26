@@ -180,8 +180,8 @@ fn parses_owner_selected_provider_bindings() {
     )
     .expect("owner-selected agent binding");
     assert!(parsed.agent_service.is_some());
-    #[cfg(target_os = "linux")]
-    assert!(parsed.opencode_service.is_none());
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    assert!(parsed.opencode_v2.is_none());
     #[cfg(target_os = "linux")]
     {
         let workspace = root.join("workspace");
@@ -189,23 +189,24 @@ fn parses_owner_selected_provider_bindings() {
             .mode(0o700)
             .create(&workspace)
             .unwrap();
-        let parsed = parse(
-            args(
-                &root,
-                &[
-                    "--workspace-root",
-                    workspace.to_str().unwrap(),
-                    "--opencode-service",
-                    "/opt/opencode",
-                ],
+        // The retired OpenCode v1 service flag is refused, never ignored.
+        assert_eq!(
+            parse(
+                args(
+                    &root,
+                    &[
+                        "--workspace-root",
+                        workspace.to_str().unwrap(),
+                        "--opencode-service",
+                        "/opt/opencode",
+                    ],
+                )
+                .into_iter(),
             )
-            .into_iter(),
-        )
-        .expect("owner-selected OpenCode binding");
-        assert!(parsed.opencode_service.is_some());
-        assert!(parsed.opencode_v2.is_none());
-        // The v2 recipe is independent: one target may bind either or both,
-        // and each still requires the authorized workspace root.
+            .unwrap_err(),
+            ProfileRefusal::Conflict
+        );
+        // OpenCode v2 still requires the authorized workspace root.
         let parsed = parse(
             args(
                 &root,
@@ -219,11 +220,36 @@ fn parses_owner_selected_provider_bindings() {
             .into_iter(),
         )
         .expect("owner-selected OpenCode v2 binding");
-        assert!(parsed.opencode_service.is_none());
         assert!(parsed.opencode_v2.is_some());
-        assert_eq!(
+        // Without a workspace root the production recipe serves each
+        // request's own absolute remote cwd (many targets, many workspaces).
+        assert!(
             parse(args(&root, &["--opencode-v2-service", "/opt/opencode-v2"]).into_iter())
-                .unwrap_err(),
+                .expect("target-free v2 binding")
+                .opencode_v2
+                .is_some()
+        );
+        // Without a configured path the owner discovers the executable on each
+        // target; a configured path and discovery together are a conflict.
+        assert!(
+            parse(args(&root, &["--opencode-v2-discover"]).into_iter())
+                .expect("discovering v2 binding")
+                .opencode_v2
+                .is_some()
+        );
+        assert_eq!(
+            parse(
+                args(
+                    &root,
+                    &[
+                        "--opencode-v2-discover",
+                        "--opencode-v2-service",
+                        "/opt/opencode-v2"
+                    ],
+                )
+                .into_iter(),
+            )
+            .unwrap_err(),
             ProfileRefusal::Conflict
         );
     }

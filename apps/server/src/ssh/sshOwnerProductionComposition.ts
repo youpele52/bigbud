@@ -2,7 +2,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
+import {
+  resolveSshOwnerDrainIdentifiedRequest,
+  SSH_OWNER_PRODUCTION_ACTIVATION,
+} from "@bigbud/shared/SshOwnerActivation";
 
 import { BackendInstance } from "../startup/backendInstance.ts";
 import { ServerConfig, type ServerConfigShape } from "../startup/config.ts";
@@ -11,12 +14,15 @@ import {
   type SshOwnerArtifact,
   type SshOwnerProfile,
 } from "./sshOwnerProductionArtifact.ts";
-import {
-  runSshOwnerBootSequence,
-  type SshOwnerBootOutcome,
-  type SshOwnerBootStep,
+import type {
+  SshOwnerBootOutcome,
+  SshOwnerBootStep,
+  SshOwnerProductionOwner,
 } from "./sshOwnerProductionBoot.ts";
-import { readSshOwnerHydrationSnapshot } from "./sshOwnerProductionHydration.ts";
+import {
+  resetSshOwnerStartupGateForTest,
+  runSshOwnerProductionStartup,
+} from "./sshOwnerProductionStartup.ts";
 import { resolveProductionTargetDescriptor } from "./sshOwnerProductionTargets.ts";
 import {
   registerSshOwnerProductionOwner,
@@ -34,22 +40,19 @@ import {
   type SshOwnerProfileBinding,
 } from "./sshOwnerProductionProfile.ts";
 import { isSshOwnerDevFixtureSelected } from "./sshOwnerSelection.ts";
-import {
-  readSshOwnerStartupState,
-  SshOwnerUnavailableError,
-  type LegacyEntryFencedError,
-} from "./sshOwnerStartupRefusal.ts";
+import { SshOwnerUnavailableError, type LegacyEntryFencedError } from "./sshOwnerStartupRefusal.ts";
 import type { TrustedStandaloneSshOwnerManifestEntry } from "./sshOwnerExecutable.ts";
 
 /**
- * Production SSH-owner composition (W3.7), reviewable but **not activated on
- * this branch**. `SSH_OWNER_PRODUCTION_ACTIVATION` is off, so this module is
- * inert and today's dev/legacy behaviour is unchanged.
+ * Production SSH-owner composition (W3.7). Inert unless the single activation
+ * resolver in `@bigbud/shared/SshOwnerActivation` is on: release builds always
+ * resolve off; a local build may opt in with `BIGBUD_SSH_OWNER_ACTIVATION=1`.
  *
  * ## What W7 changes
  *
- * 1. Flip `SSH_OWNER_PRODUCTION_ACTIVATION` in
- *    `packages/shared/src/SshOwnerActivation.ts` to `true`.
+ * 1. Make `resolveSshOwnerActivation` in
+ *    `packages/shared/src/SshOwnerActivation.ts` return `true` and remove the
+ *    temporary local override.
  * 2. Supply the trusted endpoint facts (`ownerProfile`) for the active profile
  *    when calling `configureSshOwner`; the profile **binding** itself is always
  *    derived from `config.stateDir` and the resolved artifact profile and can
@@ -121,6 +124,7 @@ export function resetSshOwnerProductionStateForTest(): void {
   admission = { kind: "inactive" };
   launchProfile = undefined;
   resetSshOwnerProductionOwnerForTest();
+  resetSshOwnerStartupGateForTest();
 }
 
 /**
@@ -274,8 +278,8 @@ function recordOutcome(outcome: SshOwnerBootOutcome): void {
 }
 
 /**
- * Runs the designed boot order after the state lock and persistence exist.
- * Inert while the activation constant is off.
+ * Runs the designed boot order after the state lock and persistence exist, through
+ * the W3.6 startup gate. Inert unless `resolveSshOwnerActivation` is on.
  */
 export const SshOwnerProductionBootLive = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -292,8 +296,14 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
       admission = { kind: "closed", step: "configuration", error: configured.error };
       return;
     }
-    const outcome = yield* runSshOwnerBootSequence({
-      acquireStateLock: Effect.tryPromise({
+    let release: (() => Effect.Effect<void>) | undefined;
+    yield* Effect.addFinalizer(() => release?.() ?? Effect.void);
+    yield* runSshOwnerProductionStartup({
+      sql,
+      profileScope: config.stateDir,
+      artifactPath: configured.artifact.path,
+      drainRequested: resolveSshOwnerDrainIdentifiedRequest(),
+      assertLockHeld: Effect.tryPromise({
         try: () => instance.assertHeld(),
         catch: () =>
           new SshOwnerUnavailableError({
@@ -302,38 +312,36 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
             message: "The backend state lock is no longer held; SSH admission stayed closed.",
           }),
       }),
-      readState: readSshOwnerStartupState(sql, {
-        profileScope: config.stateDir,
-        ownerPresent: Effect.succeed(true),
-      }),
-      startOrAttachOwner: startProductionOwner(configured.artifact, sql, launchProfile),
-      hydrate: (owner) =>
-        readSshOwnerHydrationSnapshot(sql, config.stateDir).pipe(
-          Effect.flatMap((snapshot) => owner.hydrate(snapshot)),
-        ),
-      openAdmission: () => Effect.void,
+      startOwner: startProductionOwner(configured.artifact, sql, launchProfile),
+      onOutcome: (outcome) =>
+        Effect.gen(function* () {
+          recordOutcome(outcome);
+          if (outcome.kind === "open") release = registerOpenOwner(outcome.owner);
+          else if (outcome.kind === "unavailable")
+            yield* Effect.logWarning("SSH admission stayed closed", {
+              step: outcome.step,
+              reason: outcome.error.reason,
+            });
+          else
+            yield* Effect.logWarning("SSH admission fenced until the legacy drain is recorded", {
+              reason: outcome.error.reason,
+            });
+        }),
     });
-    recordOutcome(outcome);
-    if (outcome.kind === "open") {
-      const owner = outcome.owner as SshOwnerProductionHandle;
-      // Every target resolves from the user's SSH config on each acquisition;
-      // host names stay names for the owner to resolve.
-      const unregister = registerSshOwnerProductionOwner({
-        handle: owner,
-        descriptorFor: (targetId) => resolveProductionTargetDescriptor(targetId),
-      });
-      owner.onDeath?.(() => {
-        unregister();
-        closeSshOwnerAdmissionOnOwnerDeath();
-      });
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(unregister).pipe(Effect.andThen(owner.shutdown?.() ?? Effect.void)),
-      );
-    }
-    if (outcome.kind === "unavailable")
-      yield* Effect.logWarning("SSH admission stayed closed", {
-        step: outcome.step,
-        reason: outcome.error.reason,
-      });
   }),
 );
+
+function registerOpenOwner(owner: SshOwnerProductionOwner): () => Effect.Effect<void> {
+  const handle = owner as SshOwnerProductionHandle;
+  // Every target resolves from the user's SSH config on each acquisition;
+  // host names stay names for the owner to resolve.
+  const unregister = registerSshOwnerProductionOwner({
+    handle,
+    descriptorFor: (targetId) => resolveProductionTargetDescriptor(targetId),
+  });
+  handle.onDeath?.(() => {
+    unregister();
+    closeSshOwnerAdmissionOnOwnerDeath();
+  });
+  return () => Effect.sync(unregister).pipe(Effect.andThen(handle.shutdown?.() ?? Effect.void));
+}

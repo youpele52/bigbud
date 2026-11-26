@@ -15,7 +15,7 @@ import type { SshOwnerTargetDescriptor } from "./sshOwnerProductionClient.launch
 export interface SshOwnerProductionRegistration {
   readonly handle: Pick<
     SshOwnerProductionHandle,
-    "target" | "ownerEpoch" | "opencodeV2Service" | "state"
+    "target" | "ownerEpoch" | "opencodeV2Service" | "opencodeV2Refusal" | "state"
   >;
   /**
    * Exact descriptor for a runtime target (`resolveProductionTargetDescriptor`

@@ -1,3 +1,4 @@
+import { opencodeV2BindingIdentity } from "../../../ssh/sshOwnerRemotePath.ts";
 import type { SshOwnerProductionHandle } from "../../../ssh/sshOwnerProductionClient.ts";
 import type { SshOwnerTargetDescriptor } from "../../../ssh/sshOwnerProductionClient.launch.ts";
 import { descriptorServesTarget } from "../../../ssh/sshOwnerProductionTargets.ts";
@@ -60,7 +61,7 @@ export async function startSelectedV2OwnerProcess(
       "the selected composition never borrows the shared local service for a v2 owner target.",
     );
   const platform = options.platform ?? process.platform;
-  if (platform !== "linux")
+  if (platform !== "linux" && platform !== "darwin")
     throw refusal(
       "platform",
       `the native owner has no OpenCode v2 lane on ${platform}; the remote target was not borrowed locally.`,
@@ -131,17 +132,32 @@ export async function startSelectedV2OwnerProcess(
  * caller supplies the exact resolved descriptor; no request can name a program.
  */
 export function makeProductionV2OwnerSource(
-  handle: Pick<SshOwnerProductionHandle, "target" | "ownerEpoch" | "opencodeV2Service">,
+  handle: Pick<
+    SshOwnerProductionHandle,
+    "target" | "ownerEpoch" | "opencodeV2Service" | "opencodeV2Refusal"
+  >,
   descriptorFor: (targetId: string) => Promise<SshOwnerTargetDescriptor>,
 ): V2OwnerSessionSource {
-  const binding = handle.opencodeV2Service?.binaryPath;
+  const binding =
+    handle.opencodeV2Service === undefined
+      ? undefined
+      : opencodeV2BindingIdentity(handle.opencodeV2Service);
   return {
     async target(targetId) {
       // A resolver refusal propagates as the typed cause of `owner-unavailable`.
       const descriptor = await descriptorFor(targetId);
       if (!descriptorServesTarget(descriptor, targetId)) return undefined;
       // The owner is live but launched without a v2 binding: typed `no-binding`.
-      if (binding === undefined) return { targetId, owner: undefined, serviceBinding: undefined };
+      // A configured-but-unusable setting keeps its own typed reason.
+      if (binding === undefined)
+        return {
+          targetId,
+          owner: undefined,
+          serviceBinding: undefined,
+          ...(handle.opencodeV2Refusal === undefined
+            ? {}
+            : { bindingRefusal: handle.opencodeV2Refusal }),
+        };
       const bound = handle.target(descriptor);
       return {
         targetId,

@@ -3,7 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { readDevProviderServices } from "./sshOwnerDevRuntime.providerServices.ts";
+import {
+  readDevProviderServices,
+  readProductionOpencodeV2Service,
+} from "./sshOwnerDevRuntime.providerServices.ts";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -18,45 +21,52 @@ async function profileWith(providers: unknown) {
   return root;
 }
 
-describe("dev SSH owner provider service bindings", () => {
-  it("reads the configured absolute v1 and v2 executables", async () => {
+describe("SSH owner OpenCode v2 remote binding", () => {
+  it("keeps the local binaryPath local and discovers remotely by default", async () => {
     const profile = await profileWith({
       opencode: { binaryPath: "/opt/opencode/bin/opencode" },
-      opencodeV2: { binaryPath: "/opt/opencode-v2/bin/opencode" },
+      opencodeV2: { binaryPath: "/Applications/OpenCode/bin/opencode" },
     });
     await expect(readDevProviderServices(profile, "linux")).resolves.toEqual({
-      opencodeService: { binaryPath: "/opt/opencode/bin/opencode" },
-      opencodeV2Service: { binaryPath: "/opt/opencode-v2/bin/opencode" },
+      opencodeV2Service: {},
+    });
+    const empty = await profileWith({ opencodeV2: { remoteBinaryPath: "" } });
+    await expect(readDevProviderServices(empty, "linux")).resolves.toEqual({
+      opencodeV2Service: {},
     });
   });
 
-  it("types a missing v2 binding and never admits a relative one", async () => {
-    const missing = await profileWith({});
-    await expect(readDevProviderServices(missing, "linux")).resolves.toEqual({
-      opencodeV2Refusal: "no-binding",
+  it("uses an explicit remoteBinaryPath override when set", async () => {
+    const profile = await profileWith({
+      opencodeV2: { binaryPath: "/local/opencode", remoteBinaryPath: "/opt/opencode-v2/opencode" },
     });
-    const relative = await profileWith({ opencodeV2: { binaryPath: "opencode" } });
-    await expect(readDevProviderServices(relative, "linux")).resolves.toEqual({
-      opencodeV2Refusal: "non-absolute-path",
+    await expect(readDevProviderServices(profile, "linux")).resolves.toEqual({
+      opencodeV2Service: { binaryPath: "/opt/opencode-v2/opencode" },
     });
   });
 
-  it("binds nothing on a platform without the owner lane", async () => {
-    const profile = await profileWith({ opencodeV2: { binaryPath: "/opt/opencode-v2" } });
+  it("binds nothing on a platform without the dev owner lane", async () => {
+    const profile = await profileWith({ opencodeV2: { remoteBinaryPath: "/opt/opencode-v2" } });
     await expect(readDevProviderServices(profile, "darwin")).resolves.toEqual({});
     await expect(readDevProviderServices(undefined, "linux")).resolves.toEqual({});
   });
 
-  it("refuses padded, NUL-bearing or non-normalized paths under the shared rule", async () => {
-    for (const binaryPath of [" /opt/opencode", "/opt/opencode\0", "/opt/../opencode", "/opt//x"]) {
-      const profile = await profileWith({ opencodeV2: { binaryPath } });
+  it("refuses a relative, padded, NUL-bearing or non-normalized override", async () => {
+    for (const remoteBinaryPath of [
+      "opencode",
+      " /opt/opencode",
+      "/opt/opencode\0",
+      "/opt/../opencode",
+      "/opt//x",
+    ]) {
+      const profile = await profileWith({ opencodeV2: { remoteBinaryPath } });
       await expect(readDevProviderServices(profile, "linux")).resolves.toEqual({
         opencodeV2Refusal: "non-absolute-path",
       });
     }
   });
 
-  it("types corrupt or unreadable settings distinctly from a missing binding", async () => {
+  it("types corrupt or unreadable settings distinctly", async () => {
     const corrupt = await profileWith({});
     await writeFile(path.join(corrupt, "dev", "settings.json"), "{not json", "utf8");
     await expect(readDevProviderServices(corrupt, "linux")).resolves.toEqual({
@@ -70,11 +80,29 @@ describe("dev SSH owner provider service bindings", () => {
     });
   });
 
-  it("treats a missing settings file as no binding", async () => {
+  it("discovers when no settings file exists", async () => {
     const profile = await mkdtemp(path.join(os.tmpdir(), "bigbud-provider-services-"));
     roots.push(profile);
     await expect(readDevProviderServices(profile, "linux")).resolves.toEqual({
-      opencodeV2Refusal: "no-binding",
+      opencodeV2Service: {},
+    });
+  });
+
+  it("production reads the same rule from the server settings file on macOS and Linux", async () => {
+    const profile = await profileWith({ opencodeV2: { binaryPath: "/local/opencode" } });
+    const settings = path.join(profile, "dev", "settings.json");
+    for (const platform of ["darwin", "linux"] as const)
+      await expect(readProductionOpencodeV2Service(settings, platform)).resolves.toEqual({
+        opencodeV2Service: {},
+      });
+    await expect(readProductionOpencodeV2Service(settings, "win32")).resolves.toEqual({});
+  });
+
+  it("production keeps an invalid remoteBinaryPath as its typed refusal", async () => {
+    const profile = await profileWith({ opencodeV2: { remoteBinaryPath: "opencode" } });
+    const settings = path.join(profile, "dev", "settings.json");
+    await expect(readProductionOpencodeV2Service(settings, "linux")).resolves.toEqual({
+      opencodeV2Refusal: "non-absolute-path",
     });
   });
 });

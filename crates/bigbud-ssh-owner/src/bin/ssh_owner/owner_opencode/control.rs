@@ -24,6 +24,8 @@ pub(crate) struct Control {
     line: Vec<u8>,
     truncated: bool,
     prepared: bool,
+    /// Pre-launch receipt: the remote guard found no usable executable.
+    missing: bool,
     launched: bool,
     terminal: Option<Receipt>,
 }
@@ -37,6 +39,7 @@ impl Control {
             line: Vec::with_capacity(CONTROL_LIMIT),
             truncated: false,
             prepared: false,
+            missing: false,
             launched: false,
             terminal: None,
         }
@@ -77,6 +80,7 @@ impl Control {
                 {
                     if !self.launched {
                         self.prepared |= message == b"prepared";
+                        self.missing |= message == b"missing";
                     } else {
                         self.terminal = match message {
                             b"rejected" => Some(Receipt::Rejected),
@@ -100,6 +104,9 @@ impl Control {
 
     pub(crate) fn prepared(&self) -> bool {
         self.prepared
+    }
+    pub(crate) fn missing(&self) -> bool {
+        self.missing
     }
     pub(crate) fn launched(&self) -> bool {
         self.launched

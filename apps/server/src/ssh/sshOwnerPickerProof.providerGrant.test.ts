@@ -11,7 +11,6 @@ vi.mock("node:child_process", async (importOriginal) => {
 
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { makeProofPiClient } from "./sshOwnerPickerProof.client.pi.ts";
-import { makeProofOpencodeOwner } from "./sshOwnerPickerProof.client.opencode.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 
 const targetId = "ssh:host=fixture&auth=ssh-key&transport=direct-ssh";
@@ -19,10 +18,6 @@ const binary = "/opt/bigbud/pi";
 const workspace = "/tmp/bigbud-provider-workspace";
 const threadId = ThreadId.makeUnsafe("thread-provider-service");
 const lease = new Uint8Array(32).fill(7);
-const binding = () => ({
-  ownerEpoch: new Uint8Array(32).fill(1),
-  targetGeneration: new Uint8Array(32).fill(2),
-});
 
 function duplexRecorder() {
   const operations: unknown[] = [];
@@ -126,55 +121,5 @@ describe("selected provider service grants", () => {
         sessionFile: `${workspace}/.pi/session.jsonl`,
       }),
     ).toThrow(PickerProofOwnerError);
-  });
-
-  it("starts OpenCode with an owner-selected listener and no caller forward spec", () => {
-    const recorder = duplexRecorder();
-    const owner = makeProofOpencodeOwner(
-      targetId,
-      undefined,
-      "/opt/bigbud/opencode",
-      binding,
-      recorder.execute,
-    );
-    const start = owner.startProvider({
-      provider: "opencode",
-      threadId,
-      sessionEpoch: 2,
-      executionTargetId: targetId,
-      cwd: workspace,
-      binaryPath: "/opt/bigbud/opencode",
-    });
-    expect(start.lease.leaseId).toMatch(/^[a-f0-9]{64}$/);
-    const open = recorder.operations[0] as Record<string, unknown>;
-    expect(open).toMatchObject({
-      kind: "proofOpencodeOpen",
-      serviceScope: { threadId, sessionEpoch: 2, cwd: workspace },
-    });
-    expect(open).not.toHaveProperty("binaryPath");
-    expect(open).not.toHaveProperty("forward");
-    expect(spawnMock).not.toHaveBeenCalled();
-  });
-
-  it("refuses an OpenCode target mismatch", () => {
-    const recorder = duplexRecorder();
-    const owner = makeProofOpencodeOwner(
-      targetId,
-      undefined,
-      "/opt/bigbud/opencode",
-      binding,
-      recorder.execute,
-    );
-    expect(() =>
-      owner.startProvider({
-        provider: "opencode",
-        threadId,
-        sessionEpoch: 2,
-        executionTargetId: "ssh:host=other&transport=direct-ssh",
-        cwd: workspace,
-        binaryPath: "/opt/bigbud/opencode",
-      }),
-    ).toThrow(PickerProofOwnerError);
-    expect(spawnMock).not.toHaveBeenCalled();
   });
 });

@@ -167,17 +167,17 @@ impl Owner {
             Operation::ProofWorkspaceModePublish(operand) => {
                 Ok(self.publish_workspace_mode(operand))
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Operation::ProofOpencodeOpen(operand) => Ok(self.open_opencode(operand)),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Operation::ProofOpencodeStatus(operand) => {
                 Ok(self.observe_opencode(&operand.lease, false))
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Operation::ProofOpencodeClose(operand) => {
                 Ok(self.observe_opencode(&operand.lease, true))
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             Operation::ProofOpencodeOpen(_)
             | Operation::ProofOpencodeStatus(_)
             | Operation::ProofOpencodeClose(_) => Ok(Err(ErrorCode::OperationDenied)),

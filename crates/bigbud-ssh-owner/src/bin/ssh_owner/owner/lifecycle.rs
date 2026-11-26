@@ -8,9 +8,9 @@ impl Owner {
         // One failed local reap cannot skip the other owned transport's cleanup.
         let terminal = self.revoke_terminal();
         let agent = self.revoke_agent_proxy();
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let opencode = self.revoke_opencode();
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let opencode = Ok(());
         let picker = self.retire_picker_master();
         terminal.and(agent).and(opencode).and(picker)
@@ -36,7 +36,7 @@ impl Owner {
             picker.revoke_challenge();
         }
         if !disconnected {
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             if self.opencode_prevents_connect() {
                 return Ok(Err(ErrorCode::OperationDenied));
             }

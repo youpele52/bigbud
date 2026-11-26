@@ -34,6 +34,7 @@ import {
   SshOwnerProductionBootLive,
 } from "./ssh/sshOwnerProductionComposition.ts";
 import { DevSshOwnerRuntimeLive } from "./ssh/sshOwnerDevRuntime.ts";
+import { readProductionOwnerProfileFacts } from "./ssh/sshOwnerProductionProfileFacts.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
@@ -293,7 +294,15 @@ export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
     if (SSH_OWNER_PRODUCTION_ACTIVATION) {
-      yield* configureSshOwner(config, import.meta.url);
+      // Trusted endpoint facts derive from the server's own state directory only.
+      // Owner profile facts from the server's own settings and the user's SSH
+      // config paths; a request never names a program or a config file.
+      const profileFacts = yield* Effect.promise(() =>
+        readProductionOwnerProfileFacts(config.settingsPath),
+      );
+      yield* configureSshOwner(config, import.meta.url, {
+        ownerProfile: { stateDirectory: config.stateDir, ...profileFacts },
+      });
     } else {
       yield* Effect.sync(() => configureDevSshOwner(config, import.meta.url));
     }

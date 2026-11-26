@@ -63,11 +63,7 @@ pub(crate) struct Owner {
     pub(super) workspace_snapshot_cancel: Option<SnapshotCancelInbox>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) snapshot_only_fixture: bool,
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_recipe: Option<std::sync::Arc<crate::owner_opencode_v1::Recipe>>,
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_service: Option<std::sync::Arc<crate::owner_opencode_v1::ProductRecipe>>,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) opencode_v2: Option<std::sync::Arc<crate::owner_opencode_v2::ProductRecipe>>,
     #[cfg(target_os = "linux")]
     pub(super) tracked_push: Option<tracked_push::TrackedPushState>,

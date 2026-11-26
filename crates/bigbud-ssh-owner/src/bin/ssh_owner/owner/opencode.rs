@@ -1,13 +1,13 @@
 //! One approved, one-shot OpenCode lease per owner target and generation.
 //!
-//! Both transports share this lane: the worker publishes exactly one ready
-//! result, and only that result may carry a credential. A v2 credential is
-//! cleared as soon as the lease settles, is revoked, or is lost.
+//! Only the owner-selected OpenCode v2 recipe uses this lane (the v1 SSH
+//! transport is retired). The worker publishes exactly one ready result, and
+//! only that result may carry a credential. The credential is cleared as soon
+//! as the lease settles, is revoked, or is lost.
 use super::{ErrorCode, Outcome, Owner};
 use crate::{
     Token,
     owner_opencode::{Outcome as WorkerOutcome, ReadyPort},
-    owner_opencode_v1::{ProductRecipe as V1Recipe, Recipe},
     owner_opencode_v2::ProductRecipe as V2Recipe,
     v1::{ProofOpencodeOpen, ProofOpencodePhase as Phase, ProofOpencodeState},
 };
@@ -136,68 +136,18 @@ impl Drop for Lease {
 }
 
 impl Owner {
+    /// A request without a v2 service scope (the retired v1 fixture and
+    /// product transports) is refused before any lane or SSH child exists.
     pub(super) fn open_opencode(
         &mut self,
         request: ProofOpencodeOpen,
     ) -> Result<Outcome, ErrorCode> {
-        if let Some(scope) = request.service_scope.clone() {
-            return match scope.transport() {
-                crate::v1::ProviderServiceTransport::V2 => self.open_opencode_v2(&request, &scope),
-                _ => self.open_opencode_service(&request, &scope),
-            };
+        match request.service_scope.clone() {
+            Some(scope) if scope.transport() == crate::v1::ProviderServiceTransport::V2 => {
+                self.open_opencode_v2(&request, &scope)
+            }
+            _ => Err(ErrorCode::OperationDenied),
         }
-        let token: Token = request
-            .lease
-            .try_into()
-            .map_err(|_| ErrorCode::InvalidOperands)?;
-        let scope = request.scope.ok_or(ErrorCode::InvalidOperands)?;
-        let recipe: Arc<Recipe> = self
-            .opencode_recipe
-            .as_ref()
-            .cloned()
-            .ok_or(ErrorCode::OperationDenied)?;
-        if self.lanes.opencode.is_some() || !recipe.matches(&scope) {
-            return Err(ErrorCode::OperationDenied);
-        }
-        let host = super::present(&self.transport)?.host().to_owned();
-        let pinned = super::present(&self.transport)?.pinned_opencode_ssh()?;
-        self.spawn_opencode(token, move |cancelled, published| {
-            recipe.run(
-                pinned,
-                &host,
-                |ready| publish(&cancelled, &published, ready),
-                || cancelled.load(Ordering::Acquire),
-            )
-        })
-    }
-
-    /// Product OpenCode v1: the configured executable, the fixed remote endpoint
-    /// and the only `-L` forward are owner-selected.
-    fn open_opencode_service(
-        &mut self,
-        request: &ProofOpencodeOpen,
-        scope: &crate::v1::ProviderServiceScope,
-    ) -> Result<Outcome, ErrorCode> {
-        let token: Token = *<&Token>::try_from(request.lease.as_slice())
-            .map_err(|_| ErrorCode::InvalidOperands)?;
-        let recipe: Arc<V1Recipe> = self
-            .opencode_service
-            .as_ref()
-            .cloned()
-            .ok_or(ErrorCode::OperationDenied)?;
-        if self.lanes.opencode.is_some() || !recipe.matches(scope) {
-            return Err(ErrorCode::OperationDenied);
-        }
-        let host = super::present(&self.transport)?.host().to_owned();
-        let pinned = super::present(&self.transport)?.pinned_opencode_ssh()?;
-        self.spawn_opencode(token, move |cancelled, published| {
-            recipe.run(
-                pinned,
-                &host,
-                |ready| publish(&cancelled, &published, ready),
-                || cancelled.load(Ordering::Acquire),
-            )
-        })
     }
 
     /// Product OpenCode v2: the configured executable, `serve --stdio` argv,
@@ -215,19 +165,39 @@ impl Owner {
             .as_ref()
             .cloned()
             .ok_or(ErrorCode::OperationDenied)?;
+        self.reclaim_settled_opencode();
         if self.lanes.opencode.is_some() || !recipe.matches(scope) {
             return Err(ErrorCode::OperationDenied);
         }
         let host = super::present(&self.transport)?.host().to_owned();
         let pinned = super::present(&self.transport)?.pinned_opencode_ssh()?;
+        // `matches` admitted this exact cwd; the remote guard re-checks it.
+        let cwd = scope.cwd.clone();
         self.spawn_opencode(token, move |cancelled, published| {
             recipe.run(
+                &cwd,
                 pinned,
                 &host,
                 |ready| publish(&cancelled, &published, ready),
                 || cancelled.load(Ordering::Acquire),
             )
         })
+    }
+
+    /// A lease whose teardown was confirmed (closed, exited, lost, rejected)
+    /// frees this target's lane, so the same target can start a new server.
+    /// An unconfirmed or still-running lease keeps the lane occupied.
+    fn reclaim_settled_opencode(&mut self) {
+        let settled = self.lanes.opencode.as_mut().is_some_and(|lease| {
+            lease.observe();
+            lease
+                .settled
+                .as_ref()
+                .is_some_and(|outcome| !matches!(outcome, WorkerOutcome::Unconfirmed))
+        });
+        if settled {
+            self.lanes.opencode = None;
+        }
     }
 
     fn spawn_opencode(
@@ -270,7 +240,15 @@ impl Owner {
             lease.cancelled.store(true, Ordering::Release);
             lease.published.forget();
         }
-        Ok(lease.reply())
+        let reply = lease.reply();
+        // A missing or untrusted remote executable is reported as its typed
+        // reason, not as a generic rejected phase.
+        if let Some(WorkerOutcome::Rejected(ErrorCode::ProviderExecutableUnavailable)) =
+            lease.settled
+        {
+            return Err(ErrorCode::ProviderExecutableUnavailable);
+        }
+        Ok(reply)
     }
 
     pub(super) fn revoke_opencode(&mut self) -> Result<(), ErrorCode> {

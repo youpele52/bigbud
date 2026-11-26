@@ -103,11 +103,15 @@ fixture_layout() {
     esac
     # Match complete bytes, not parsed config; Git never sees an unchecked
     # include, extension or other setting. These are empty git-init fixtures.
+    # Git 2.52 writes `[extensions]` before `[core]`; Git 2.47 (Debian 13)
+    # writes it after, so both exact layouts are accepted.
     for mode in true false; do
         for case_line in '' $'\tignorecase = true\n'; do
             for precompose_line in '' $'\tprecomposeunicode = true\n'; do
                 if printf '%s%s\tfilemode = %s\n\tbare = true\n%s%s' \
-                    "$prefix" "$core" "$mode" "$case_line" "$precompose_line" | /usr/bin/cmp -s ./config -; then
+                    "$prefix" "$core" "$mode" "$case_line" "$precompose_line" | /usr/bin/cmp -s ./config - ||
+                    printf '%s\tfilemode = %s\n\tbare = true\n%s%s%s' \
+                    "$core" "$mode" "$case_line" "$precompose_line" "$prefix" | /usr/bin/cmp -s ./config -; then
                     return 0
                 fi
             done

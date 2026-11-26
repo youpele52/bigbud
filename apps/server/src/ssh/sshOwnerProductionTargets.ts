@@ -59,6 +59,24 @@ async function exists(file: string): Promise<boolean> {
 interface HostConfig {
   readonly hint: SshConfigAliasHint | undefined;
   readonly auth: SshConfigHostAuth;
+  /** `~/.ssh` and its canonical path, when a config was read. */
+  readonly scope?: { readonly root: string; readonly canonical: string };
+}
+
+/**
+ * The owner opens an alias's config directory by its canonical path and
+ * rebases every in-scope `IdentityFile` and `UserKnownHostsFile` onto it, then
+ * requires the descriptor to match exactly. A symlinked `~/.ssh` (or home, or
+ * macOS `/tmp`) must therefore be sent in the same canonical form.
+ */
+function ownerScopedPath(file: string, scope: HostConfig["scope"]): string {
+  if (!scope) return file;
+  for (const base of [scope.root, scope.canonical]) {
+    const relative = path.relative(base, file);
+    if (relative !== "" && !path.isAbsolute(relative) && relative.split(path.sep)[0] !== "..")
+      return path.join(scope.canonical, relative);
+  }
+  return file;
 }
 
 /**
@@ -77,8 +95,11 @@ async function readHostConfig(home: string, host: string, alias: boolean): Promi
       return { hint: undefined, auth: {} };
     throw new SshOwnerTargetRefusal("config-unreadable");
   }
+  const canonical = await realpath(root).catch(() => {
+    throw new SshOwnerTargetRefusal("config-unreadable");
+  });
   const resolved = await resolveProfileHostAuth({
-    root: await realpath(root),
+    root: canonical,
     sourcePath,
     content,
     host,
@@ -88,7 +109,7 @@ async function readHostConfig(home: string, host: string, alias: boolean): Promi
   // A refused source (for example an unevaluated `Match`) fails closed.
   if (resolved.refusals.length > 0) throw new SshOwnerTargetRefusal("config-refused");
   if (alias && !resolved.declared) return { hint: undefined, auth: {} };
-  return { hint: resolved.hint, auth: resolved.auth };
+  return { hint: resolved.hint, auth: resolved.auth, scope: { root, canonical } };
 }
 
 /** Whether `descriptor` is the one this resolver produces for `targetId`. */
@@ -115,7 +136,7 @@ export async function resolveProductionTargetDescriptor(
   const home = options.home ?? OS.homedir();
   // A bare `ssh:<alias>` names a config alias; parameters name a structured target.
   const kind = target.executionTargetId.includes("=") ? "structured" : "alias";
-  const { hint, auth } = await readHostConfig(home, target.host, kind === "alias");
+  const { hint, auth, scope } = await readHostConfig(home, target.host, kind === "alias");
   if (kind === "alias" && !hint) throw new SshOwnerTargetRefusal("config-refused");
   const identity = target.keyPath ?? auth.identityFile;
   if (!identity) {
@@ -133,6 +154,7 @@ export async function resolveProductionTargetDescriptor(
   if (!isDescriptorHost(host)) throw new SshOwnerTargetRefusal("host-invalid");
   const user = target.user ?? hint?.user;
   if (!user) throw new SshOwnerTargetRefusal("no-user");
+  const ownerPath = (file: string) => (kind === "alias" ? ownerScopedPath(file, scope) : file);
   const descriptor: SshOwnerTargetDescriptor = {
     // The owner re-resolves an alias descriptor's policy by its target id, so
     // an alias descriptor carries the bare alias; a structured one keeps the id.
@@ -142,8 +164,8 @@ export async function resolveProductionTargetDescriptor(
     port: Number(target.port ?? hint?.port ?? "22"),
     user,
     authMode: "key",
-    identityFile: expandHome(identity, home),
-    knownHostsFile,
+    identityFile: ownerPath(expandHome(identity, home)),
+    knownHostsFile: ownerPath(knownHostsFile),
     ...(hint?.hostKeyAlias ? { hostKeyAlias: hint.hostKeyAlias } : {}),
   };
   try {

@@ -76,7 +76,24 @@ fn an_authenticated_v2_info_response_is_the_only_healthy_evidence() {
     let secret = ready.launch_secret().expect("credential").to_owned();
     let expected_secret = secret.clone();
     let server = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("probe connection");
+        // The reserved listener is non-blocking (shared with the clone), so
+        // wait for the probe instead of failing on an early `WouldBlock`.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::WouldBlock
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(error) => panic!("probe connection: {error}"),
+            }
+        };
+        stream
+            .set_nonblocking(false)
+            .expect("blocking probe stream");
         let expected = format!(
             "Basic {}",
             super::super::probe::auth_for_test(&expected_secret)

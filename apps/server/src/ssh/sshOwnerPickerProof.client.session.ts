@@ -25,7 +25,6 @@ import { invalid as invalidProtocol } from "./sshOwnerPickerProof.codec.wire.ts"
 import type { PickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
 import { makePickerProofDeploymentClient } from "./sshOwnerPickerProof.deployment.ts";
 import { makeProofTrackedGitClient } from "./sshOwnerPickerProof.client.trackedPush.ts";
-import type { ProofOpencodeOperation } from "./sshOwnerPickerProof.codec.opencode.ts";
 import { hydratePickerProofTarget } from "./sshOwnerPickerProof.storage.ts";
 import {
   acceptPickerProofHello,
@@ -221,6 +220,17 @@ export async function openPickerProofSession(
         activeKind = undefined;
       }
     };
+    // OpenCode leases poll their status while other targets (or this one) use
+    // the same single-flight owner session. Wait for the in-flight exchange,
+    // bounded by its own deadline, instead of refusing a concurrent poll; the
+    // re-check and dispatch run in one synchronous step.
+    const runOpencode = async (operation: PickerProofOperation) => {
+      for (;;) {
+        if (closed || (!active && !proxyCloseWaiting)) return runBound(operation);
+        if (active) await active.catch(() => undefined);
+        else await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+    };
     const trust = async (operation: PickerProofOperation) => {
       const outcome = await runBound(operation);
       return outcome.kind === "trust" ? outcome.value : invalidProtocol();
@@ -260,7 +270,9 @@ export async function openPickerProofSession(
         (beforeDispatch) => runBound({ kind: "proofSampleHealth" }, beforeDispatch),
         sendPickerCancel,
       ),
-      ...makePickerProofProductionProxyClient((operation) => runBound(operation)),
+      ...makePickerProofProductionProxyClient((operation) =>
+        operation.kind.startsWith("proofOpencode") ? runOpencode(operation) : runBound(operation),
+      ),
     };
   };
 
@@ -285,16 +297,6 @@ export async function openPickerProofSession(
   const trust = async (operation: PickerProofOperation) => {
     const outcome = await execute(operation);
     return outcome.kind === "trust" ? outcome.value : invalidProtocol();
-  };
-  const executeProofOpencode = async (
-    operation: ProofOpencodeOperation,
-    beforeDispatch?: () => void,
-  ) => {
-    const inFlight = () => (closed ? undefined : active);
-    for (let pending = inFlight(); pending; pending = inFlight())
-      await pending.catch(() => undefined);
-    const outcome = await execute(operation, beforeDispatch);
-    return outcome.kind === "proofOpencode" ? outcome.value : invalidProtocol();
   };
   const transition = async (kind: "connect" | "disconnect") => {
     if (active && activeKind?.startsWith("proofOpencode")) await active.catch(() => undefined);
@@ -372,7 +374,6 @@ export async function openPickerProofSession(
     bindTarget,
     stopAdmission,
     executeProofAgentProxy,
-    executeProofOpencode,
     /** Generic owner exchange for compositions that need a production-proxy client. */
     executeProofOperation: execute,
     opencodeBinding: () => ({

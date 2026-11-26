@@ -54,14 +54,10 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
         stage,
         #[cfg(target_os = "linux")]
         provider_service,
-        #[cfg(target_os = "linux")]
-        opencode_service,
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         opencode_v2_service,
         #[cfg(target_os = "linux")]
         tracked_push,
-        #[cfg(target_os = "linux")]
-        opencode,
     } = trailing_args(args)?;
     let profile = profile_binding(profile.to_str().ok_or_else(invalid_input)?)?;
     let target = target.into_string().map_err(|_| invalid_input())?;
@@ -85,26 +81,15 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
             || scoped_duplex.is_some()
             || stage.is_some()
             || tracked_push.is_some()
-            || opencode.is_some()
             || workspace_root.is_none())
     {
         return Err(invalid_input().into());
     }
     #[cfg(target_os = "linux")]
-    if opencode_service.is_some()
-        && (agent_fixture.is_some()
-            || provider.is_some()
-            || installed_agent_state.is_some()
-            || client_relay.is_some()
-            || scoped_duplex.is_some()
-            || stage.is_some()
-            || tracked_push.is_some()
-            || opencode.is_some()
-            || workspace_root.is_none())
-    {
-        return Err(invalid_input().into());
-    }
-    #[cfg(target_os = "linux")]
+    let tracked_push_bound = tracked_push.is_some();
+    #[cfg(target_os = "macos")]
+    let tracked_push_bound = false;
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if opencode_v2_service.is_some()
         && (agent_fixture.is_some()
             || provider.is_some()
@@ -112,8 +97,7 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
             || client_relay.is_some()
             || scoped_duplex.is_some()
             || stage.is_some()
-            || tracked_push.is_some()
-            || opencode.is_some()
+            || tracked_push_bound
             || workspace_root.is_none())
     {
         return Err(invalid_input().into());
@@ -237,40 +221,12 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
     {
         return Err(invalid_input().into());
     }
-    #[cfg(target_os = "linux")]
-    let opencode_recipe = match opencode {
-        None => None,
-        Some((scope, sha256))
-            if stage.is_none()
-                && agent_fixture.is_none()
-                && attach_path.is_none()
-                && identity_agent_path.is_none()
-                && tracked_push.is_none()
-                && alias_config.is_none()
-                && system_config.is_none()
-                && !dev_interactive_terminal
-                && workspace_root.as_deref().and_then(std::path::Path::to_str)
-                    == Some(scope.cwd.as_str()) =>
-        {
-            Some(owner_opencode_v1::Recipe::new(scope, sha256)?)
-        }
-        _ => return Err(invalid_input().into()),
-    };
-    #[cfg(target_os = "linux")]
-    let opencode_service = match opencode_service {
-        None => None,
-        Some(binary) if workspace_root.is_some() => {
-            let root = workspace_root.as_deref().ok_or_else(invalid_input)?;
-            Some(owner_opencode_v1::ProductRecipe::new(&binary, root)?)
-        }
-        Some(_) => return Err(invalid_input().into()),
-    };
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     // The startup guard above already refused a v2 service without a
-    // workspace root, so the pair is always present together here.
+    // workspace root, so a fixture recipe is always bound to that root.
     let opencode_v2 = opencode_v2_service
         .zip(workspace_root.as_deref())
-        .map(|(binary, root)| owner_opencode_v2::ProductRecipe::new(&binary, root))
+        .map(|(binary, root)| owner_opencode_v2::ProductRecipe::new(binary.as_deref(), Some(root)))
         .transpose()?;
     let _profile_lock = startup_bindings::lock_profile(std::path::Path::new(&lock))?;
     let transport = TransportConfig {
@@ -297,9 +253,7 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
         return Err(invalid_input().into());
     }
     #[cfg(target_os = "linux")]
-    if (posix_picker.is_some() || workspace_snapshot_cancel.is_some())
-        && (tracked_push.is_some() || opencode_recipe.is_some())
-    {
+    if (posix_picker.is_some() || workspace_snapshot_cancel.is_some()) && tracked_push.is_some() {
         return Err(invalid_input().into());
     }
     let lifetime = (dev_interactive_terminal && attach_path.is_some())
@@ -329,11 +283,7 @@ pub(super) fn run(args: impl Iterator<Item = OsString>) -> RunResult<()> {
             stage,
             #[cfg(target_os = "linux")]
             tracked_push,
-            #[cfg(target_os = "linux")]
-            opencode_recipe,
-            #[cfg(target_os = "linux")]
-            opencode_service,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             opencode_v2,
         },
     )?;

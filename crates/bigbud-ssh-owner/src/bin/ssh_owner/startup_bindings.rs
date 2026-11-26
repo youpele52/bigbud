@@ -60,14 +60,10 @@ pub(super) struct ProofBindings {
     /// Configured remote provider executable for the product provider service.
     #[cfg(target_os = "linux")]
     pub(super) provider_service: Option<(ServiceProvider, PathBuf)>,
-    /// Configured remote OpenCode executable; the only product forwarding authority.
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_service: Option<PathBuf>,
     /// Configured remote OpenCode v2 executable; owner-selected argv and credential.
-    #[cfg(target_os = "linux")]
-    pub(super) opencode_v2_service: Option<PathBuf>,
-    #[cfg(target_os = "linux")]
-    pub(super) opencode: Option<(v1::ProofProviderScope, String)>,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    /// `Some(None)`: discover the remote executable on the target.
+    pub(super) opencode_v2_service: Option<Option<PathBuf>>,
     #[cfg(target_os = "linux")]
     pub(super) tracked_push: Option<super::owner::TrackedPushStartup>,
 }
@@ -175,30 +171,6 @@ pub(super) fn trailing_args(mut args: impl Iterator<Item = OsString>) -> io::Res
                 });
                 continue;
             }
-            #[cfg(target_os = "linux")]
-            Some("--opencode-v1-fixture") if bindings.opencode.is_none() => {
-                let mut text = || {
-                    args.next()
-                        .and_then(|arg| arg.into_string().ok())
-                        .ok_or_else(invalid_input)
-                };
-                let binary = text()?;
-                let sha256 = text()?;
-                let cwd = text()?;
-                let thread_id = text()?;
-                let session_epoch = text()?.parse().map_err(|_| invalid_input())?;
-                bindings.opencode = Some((
-                    v1::ProofProviderScope {
-                        binary,
-                        cwd,
-                        thread_id,
-                        session_epoch,
-                        session_file: None,
-                    },
-                    sha256,
-                ));
-                continue;
-            }
             Some("--deployment-stage-fixture")
                 if cfg!(target_os = "linux") && bindings.stage.is_none() =>
             {
@@ -277,20 +249,7 @@ pub(super) fn trailing_args(mut args: impl Iterator<Item = OsString>) -> io::Res
                 bindings.provider_service = Some((kind, binary));
                 continue;
             }
-            #[cfg(target_os = "linux")]
-            Some("--opencode-service") if bindings.opencode_service.is_none() => {
-                let binary = PathBuf::from(
-                    args.next()
-                        .and_then(|value| value.into_string().ok())
-                        .ok_or_else(invalid_input)?,
-                );
-                if !binary.is_absolute() {
-                    return Err(invalid_input());
-                }
-                bindings.opencode_service = Some(binary);
-                continue;
-            }
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             Some("--opencode-v2-service") if bindings.opencode_v2_service.is_none() => {
                 let binary = PathBuf::from(
                     args.next()
@@ -300,7 +259,12 @@ pub(super) fn trailing_args(mut args: impl Iterator<Item = OsString>) -> io::Res
                 if !binary.is_absolute() {
                     return Err(invalid_input());
                 }
-                bindings.opencode_v2_service = Some(binary);
+                bindings.opencode_v2_service = Some(Some(binary));
+                continue;
+            }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Some("--opencode-v2-discover") if bindings.opencode_v2_service.is_none() => {
+                bindings.opencode_v2_service = Some(None);
                 continue;
             }
             Some("--agent-sha256") if bindings.agent_sha256.is_none() => {

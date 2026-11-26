@@ -7,7 +7,10 @@ import {
   readSshOwnerProductionOwner,
   type SshOwnerProductionRegistration,
 } from "../../../ssh/sshOwnerProductionRegistry.ts";
-import { isTrustedRemoteExecutablePath } from "../../../ssh/sshOwnerRemotePath.ts";
+import {
+  isTrustedRemoteExecutablePath,
+  opencodeV2BindingIdentity,
+} from "../../../ssh/sshOwnerRemotePath.ts";
 import type { PickerProofOpencodeV2Lane } from "../../../ssh/sshOwnerPickerProof.client.providerPorts.ts";
 import type { LaunchedPickerProofOwner } from "../../../ssh/sshOwnerPickerProof.client.types.ts";
 import type { DevOpencodeV2ServiceRefusal } from "../../../ssh/sshOwnerDevRuntime.providerServices.ts";
@@ -121,7 +124,8 @@ export function makeSelectedV2OwnerSource(
         targetId,
         owner: undefined,
         ...(facts.lane === undefined ? {} : { lane: facts.lane }),
-        serviceBinding: facts.service?.binaryPath,
+        serviceBinding:
+          facts.service === undefined ? undefined : opencodeV2BindingIdentity(facts.service),
         ...(facts.refusal === undefined ? {} : { bindingRefusal: facts.refusal }),
       };
     },
