@@ -41,6 +41,10 @@ import {
   type SelectedPeerOwnerSession,
 } from "./peerCoordinator.owner.selected.ts";
 import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
+import { sshOwnerStateDirectory } from "../ssh/sshOwnerProductionClient.launch.ts";
+import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
+import { makeProductionPeerOwnerAdapters } from "./peerCoordinator.owner.production.ts";
 import type { PeerPairingDeps } from "./peerPairing.ts";
 
 export interface PeerCoordinatorRegistration {
@@ -66,19 +70,32 @@ export const PeerCoordinatorLive = Layer.effectDiscard(
     const session = Option.isSome(devOwner) ? devOwner.value.session : undefined;
     // The owner provisions the key under its own profile state; read the public
     // sidecar from there instead of auto-provisioning on a status request.
+    // U24: under production activation the live production owner holds the key and pins.
+    const production =
+      !session && SSH_OWNER_PRODUCTION_ACTIVATION
+        ? makeProductionPeerOwnerAdapters({
+            owner: readSshOwnerProductionOwner,
+            getPairing: (pairingId) => Effect.runPromise(pairings.get(pairingId)),
+          })
+        : undefined;
     const keyDirectory = session
       ? join(session.fixture.root, "peer-coordinator")
-      : peerCoordinatorKeyDirectory(config.stateDir);
-    const adapters = session
-      ? makeSelectedPeerOwnerAdapters(
-          {
-            targetId: session.targetId,
-            // The admitted session client is the same object the picker owns.
-            withOwner: session.picker.withOwner as unknown as SelectedPeerOwnerSession["withOwner"],
-          },
-          (pairingId) => Effect.runPromise(pairings.get(pairingId)),
-        )
-      : undefined;
+      : peerCoordinatorKeyDirectory(
+          production ? sshOwnerStateDirectory(config.stateDir) : config.stateDir,
+        );
+    const adapters =
+      production ??
+      (session
+        ? makeSelectedPeerOwnerAdapters(
+            {
+              targetId: session.targetId,
+              // The admitted session client is the same object the picker owns.
+              withOwner: session.picker
+                .withOwner as unknown as SelectedPeerOwnerSession["withOwner"],
+            },
+            (pairingId) => Effect.runPromise(pairings.get(pairingId)),
+          )
+        : undefined);
     const deps: PeerCoordinatorDeps = {
       coordinatorAuthorityId: Option.isSome(identity) ? identity.value.authority.authorityId : null,
       dispatches: yield* PeerDispatchRepository,
@@ -117,6 +134,9 @@ export const PeerCoordinatorLive = Layer.effectDiscard(
               }),
               scanHostKeys: (host: string, port: number) =>
                 scanPeerHostKeys(adapters.hostKeyOwner, host, port),
+              ...(production
+                ? { approvePin: production.approvePin, revokePin: production.revokePin }
+                : {}),
             }
           : {}),
       },

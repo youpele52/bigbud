@@ -113,6 +113,23 @@ impl TargetAuthority {
 }
 
 impl TargetAuthority {
+    /// The owner-started OpenSSH client and keyscan images (U24 peer routes).
+    pub(super) fn openssh(&self) -> (&std::path::Path, &std::path::Path) {
+        (&self.ssh, &self.keyscan)
+    }
+
+    /// U24: resolve a stored peer host (IP literal or DNS name) now. The pin
+    /// file is derived per open under the dialled address, and the key itself
+    /// is the trust anchor, so the name never selects a known-hosts label.
+    pub(super) fn resolve_peer_host(&self, host: &str, port: u16) -> Result<IpAddr, ErrorCode> {
+        if let Ok(address) = host.parse::<IpAddr>() {
+            return Ok(address);
+        }
+        self.resolver
+            .resolve(host, port)
+            .ok_or(ErrorCode::TargetHostUnresolved)
+    }
+
     /// Read-only alias discovery over the owner's own config scope. No dial, DNS
     /// or credential path; the caller has already consumed a control grant.
     pub(super) fn list_aliases(&self) -> Result<v1::ProofAliases, ErrorCode> {

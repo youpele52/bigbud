@@ -165,11 +165,12 @@ fn push_client(
         assert!(advertisement.starts_with(&format!("{old} refs/heads/main\0")));
         assert!(!advertisement.contains("refs/heads/dev"));
         assert!(!advertisement.contains("agent="));
-        stream
+        // A refused command closes the socket before the pack is read, so the
+        // write may race to EPIPE; accepted cases are proven by their report.
+        let _pushed = stream
             .write_all(&packet(&format!("{old} {new} {reference}\0 report-status")))
             .and_then(|()| stream.write_all(b"0000"))
-            .and_then(|()| stream.write_all(&pack))
-            .expect("push");
+            .and_then(|()| stream.write_all(&pack));
         let _half_close = stream.shutdown(Shutdown::Write);
         let mut report = Vec::new();
         let _read = stream.read_to_end(&mut report);

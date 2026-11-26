@@ -34,6 +34,8 @@ mod opencode;
 mod peer;
 mod peer_enrollment;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod peer_production;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) mod posix_master;
 mod provider_probe;
 #[cfg(test)]

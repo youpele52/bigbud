@@ -18,6 +18,8 @@ import { makePickerProofTerminalClient } from "./sshOwnerPickerProof.client.term
 import { makePickerProofProductionProxyClient } from "./sshOwnerPickerProof.client.productionProxy.ts";
 import { makePickerProofShellClient } from "./sshOwnerPickerProof.client.shell.ts";
 import { makePickerProofAgentActionClient } from "./sshOwnerPickerProof.client.agentAction.ts";
+import { makePickerProofPeerProductionClient } from "./sshOwnerPickerProof.client.peerProduction.ts";
+import { makeWaitingDispatch, OWNER_WIDE } from "./sshOwnerPickerProof.client.session.ownerWide.ts";
 import { makePickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.client.peerEnrollment.ts";
 import { makePickerProofAliasClient } from "./sshOwnerPickerProof.client.aliases.ts";
 import type { ProofAgentProxyOperation } from "./sshOwnerPickerProof.codec.agentProxy.ts";
@@ -172,15 +174,9 @@ export async function openPickerProofSession(
     failClosed,
   });
   const run = exchange.run;
-  const execute = async (
-    operation: PickerProofOperation,
-    beforeDispatch?: (id: Uint8Array) => void,
-  ) => {
-    if (closed) throw new PickerProofOwnerError("ownerUnavailable");
-    if (active || proxyCloseWaiting) throw new PickerProofOwnerError("operationDenied");
-    const current = run(defaultTarget, operation, beforeDispatch);
+  const track = async (current: ReturnType<typeof run>, kind: PickerProofOperation["kind"]) => {
     active = current;
-    activeKind = operation.kind;
+    activeKind = kind;
     try {
       return await current;
     } finally {
@@ -188,6 +184,20 @@ export async function openPickerProofSession(
       activeKind = undefined;
     }
   };
+  const execute = async (
+    operation: PickerProofOperation,
+    beforeDispatch?: (id: Uint8Array) => void,
+  ) => {
+    if (closed) throw new PickerProofOwnerError("ownerUnavailable");
+    if (active || proxyCloseWaiting) throw new PickerProofOwnerError("operationDenied");
+    return track(run(defaultTarget, operation, beforeDispatch), operation.kind);
+  };
+  const gate = { closed: () => closed, active: () => active, waiting: () => proxyCloseWaiting };
+  // U24 owner-wide peer verbs name no target and wait their turn (see the module).
+  const executeOwnerWide = makeWaitingDispatch(gate, async (operation) => {
+    if (closed) throw new PickerProofOwnerError("ownerUnavailable");
+    return track(run(OWNER_WIDE, operation), operation.kind);
+  });
 
   /**
    * Binds one target for per-target requests. The descriptor is sent with every
@@ -220,20 +230,8 @@ export async function openPickerProofSession(
         activeKind = undefined;
       }
     };
-    // OpenCode leases poll their status while other targets (or this one) use
-    // the same single-flight owner session. Wait for the in-flight exchange,
-    // bounded by its own deadline, instead of refusing a concurrent poll; the
-    // re-check and dispatch run in one synchronous step.
-    const runOpencode = async (
-      operation: PickerProofOperation,
-      beforeDispatch?: (id: Uint8Array) => void,
-    ) => {
-      for (;;) {
-        if (closed || (!active && !proxyCloseWaiting)) return runBound(operation, beforeDispatch);
-        if (active) await active.catch(() => undefined);
-        else await new Promise((resolve) => setTimeout(resolve, 5));
-      }
-    };
+    // OpenCode lease polls wait their turn instead of refusing (see the module).
+    const runOpencode = makeWaitingDispatch(gate, runBound);
     const trust = async (operation: PickerProofOperation) => {
       const outcome = await runBound(operation);
       return outcome.kind === "trust" ? outcome.value : invalidProtocol();
@@ -363,6 +361,7 @@ export async function openPickerProofSession(
     })),
     ...makePickerProofShellClient(execute),
     ...makePickerProofPeerEnrollmentClient(execute),
+    peerProduction: makePickerProofPeerProductionClient(executeOwnerWide),
     async unlockSyntheticPosixPassword() {
       const outcome = await execute({ kind: "unlockSyntheticPosixPassword" });
       if (outcome.kind !== "proofSyntheticPosixPasswordUnlocked") return invalidProtocol();

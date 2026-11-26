@@ -51,6 +51,8 @@ export const SSH_OWNER_SYSTEM_SSH = "/usr/bin/ssh";
 export const SSH_OWNER_SYSTEM_KEYSCAN = "/usr/bin/ssh-keyscan";
 
 const OWNER_DIRECTORY = "ssh-owner";
+/** The production owner's private profile state (lock, attach, peer key and pins). */
+export const sshOwnerStateDirectory = (stateDir: string) => join(stateDir, OWNER_DIRECTORY);
 const ATTACH_FILE = "attach.json";
 const LOCK_FILE = "owner.lock";
 const SOCKET_FILE = "owner.sock";

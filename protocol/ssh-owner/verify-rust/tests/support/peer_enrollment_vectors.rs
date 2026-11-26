@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
 
+#[path = "peer_production_vectors.rs"]
+mod peer_production_vectors;
+
 use super::{assert_frame, reply, request, v1};
 use v1::{
     Empty, ProofInspectPeerHostKey, ProofPeerCoordinatorKey, ProofPeerHostKey, reply::Outcome,
@@ -11,6 +14,7 @@ const COORDINATOR_KEY: &str =
 
 /// Peer enrollment (T-peer / U9): public metadata only, no pin write.
 pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
+    peer_production_vectors::verify(values);
     for (name, payload) in [
         (
             "proof_ensure_peer_coordinator_key",

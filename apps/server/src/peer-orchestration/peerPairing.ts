@@ -52,6 +52,18 @@ export interface PeerPairingDeps {
   readonly peerOwner?: PeerCoordinatorKeyOwner;
   /** Owner port for one-shot exact-target host-key inspection. */
   readonly hostKeyOwner?: PeerHostKeyInspectionOwner;
+  /**
+   * U24 production owner: approve the scanned challenge for exactly the confirmed pin before
+   * the pairing is saved, and remove the owner pin when the connection is deleted.
+   */
+  readonly approvePin?: (input: {
+    readonly pairingId: string;
+    readonly host: string;
+    readonly port: number;
+    readonly user: string;
+    readonly pinnedHostKey: string;
+  }) => Promise<void>;
+  readonly revokePin?: (pairingId: string) => Promise<void>;
 }
 
 const fail = (code: PeerPairingError["code"], message: string) =>
@@ -185,10 +197,21 @@ export const handlePeerPairingRequest = Effect.fn("peerPairing.handle")(function
       if (!key.fingerprint)
         return yield* fail("key-unavailable", "Generate the coordinator key before pairing.");
       const existing = yield* c.pairings.findByWorker(request.workerAuthorityId);
+      const pairingId = existing?.pairingId ?? c.newDispatchId();
+      const approvePin = deps.approvePin;
+      if (approvePin)
+        yield* Effect.tryPromise({
+          try: () => approvePin({ ...request, pairingId }),
+          catch: (cause) =>
+            new PeerPairingError({
+              code: "invalid-request",
+              message: cause instanceof Error ? cause.message : "The pin was not confirmed.",
+            }),
+        });
       yield* c.pairings
         .save({
           connection: {
-            pairingId: existing?.pairingId ?? c.newDispatchId(),
+            pairingId,
             label: request.label,
             workerAuthorityId: request.workerAuthorityId,
             host: request.host,
@@ -236,6 +259,16 @@ export const handlePeerPairingRequest = Effect.fn("peerPairing.handle")(function
           "pairing-busy",
           `${unsettled} delegated task(s) on this worker have not settled; cancel or wait first.`,
         );
+      const revokePin = deps.revokePin;
+      if (revokePin)
+        yield* Effect.tryPromise({
+          try: () => revokePin(pairing.pairingId),
+          catch: () =>
+            new PeerPairingError({
+              code: "key-unavailable",
+              message: "The SSH owner could not remove this connection's pin.",
+            }),
+        });
       yield* c.pairings.remove(pairing.pairingId);
       return yield* result(deps);
     }

@@ -176,5 +176,9 @@ impl Owner {
 /// Owner-scoped discovery reads no target and opens no transport. In production
 /// the alias list comes from the owner's own config scope.
 fn requires_target(operation: &Operation, production: bool) -> bool {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    if production && super::peer_store::owner_wide_verb(operation) {
+        return false;
+    }
     !production || !matches!(operation, Operation::ListAliases(_))
 }

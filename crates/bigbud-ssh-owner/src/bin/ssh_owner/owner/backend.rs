@@ -320,6 +320,9 @@ impl Owner {
     }
 }
 
+#[path = "backend.peer.rs"]
+mod peer;
+pub(crate) use peer::PeerRelays;
 #[path = "backend.worker.rs"]
 mod worker;
 use super::lease_worker::Signals;

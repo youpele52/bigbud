@@ -11,6 +11,7 @@ import type { PickerProofShellClient } from "./sshOwnerPickerProof.client.shell.
 import type { PickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.client.peerEnrollment.ts";
 import type { PickerProofAliasClient } from "./sshOwnerPickerProof.client.aliases.ts";
 import type { PickerProofProductionProxyClient } from "./sshOwnerPickerProof.client.productionProxy.ts";
+import type { PickerProofPeerProductionClient } from "./sshOwnerPickerProof.client.peerProduction.ts";
 
 export interface PickerProofSessionOptions {
   readonly profileBinding: Uint8Array;
@@ -88,6 +89,8 @@ export interface PickerProofOwner
   readonly reconciliation?: PickerProofReconciliation | undefined;
   /** The exact reconciliation snapshot this session sent (production only). */
   readonly acknowledgedSnapshot?: import("./sshOwnerProductionHydration.ts").SshOwnerHydrationSnapshot;
+  /** U24 owner-wide peer enrollment and relay (production owner only). */
+  readonly peerProduction: PickerProofPeerProductionClient;
   /** Fires once when the inherited channel is lost unexpectedly (not on detach). */
   onLost(listener: () => void): () => void;
   /** Binds one target for per-target requests (W3.7). */

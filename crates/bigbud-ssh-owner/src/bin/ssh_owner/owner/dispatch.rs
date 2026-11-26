@@ -340,6 +340,24 @@ impl Owner {
             Operation::ProofInspectPeerHostKey(operand) => Ok(transport!()
                 .inspect_peer_host_key(&operand)
                 .map(Outcome::ProofPeerHostKey)),
+            // U24 production peer enrollment and relay (owner-wide).
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::EnsurePeerCoordinatorKey(_)
+            | Operation::InspectPeerHostKey(_)
+            | Operation::ApprovePeerPin(_)
+            | Operation::RevokePeerPin(_)) => Ok(self.dispatch_peer_enrollment(operation)),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::PeerRelayOpen(_)
+            | Operation::PeerRelayStatus(_)
+            | Operation::PeerRelayClose(_)) => Ok(self.dispatch_peer_relay(operation)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::EnsurePeerCoordinatorKey(_)
+            | Operation::InspectPeerHostKey(_)
+            | Operation::ApprovePeerPin(_)
+            | Operation::RevokePeerPin(_)
+            | Operation::PeerRelayOpen(_)
+            | Operation::PeerRelayStatus(_)
+            | Operation::PeerRelayClose(_) => Ok(Err(ErrorCode::OperationDenied)),
             // Reserved transfer boundary (C15). Unreachable here; see the early
             // refusal above and `owner/transfer_fixture*.rs` (cfg(test)).
             Operation::ProofTransferStream(_) | Operation::ProofPackagedRsync(_) => {
@@ -349,37 +367,7 @@ impl Owner {
     }
 }
 
-/// Lease-local control reads or closes an owner-owned resource; it opens no
-/// transport and never needs the target's durable state.
-fn is_agent_control(operation: &Operation) -> bool {
-    matches!(
-        operation,
-        Operation::ProofAgentProxyStatus(_)
-            | Operation::ProofAgentProxyClose(_)
-            | Operation::ProofOpencodeStatus(_)
-            | Operation::ProofOpencodeClose(_)
-            | Operation::GitUploadStatus(_)
-            | Operation::GitUploadClose(_)
-            | Operation::GitReceiveStatus(_)
-            | Operation::GitReceiveClose(_)
-            | Operation::ShellStatus(_)
-            | Operation::ShellClose(_)
-            | Operation::DeploymentStepStatus(_)
-            | Operation::DeploymentStepCancel(_)
-            | Operation::ClientRelayLeaseStatus(_)
-            | Operation::ClientRelayLeaseClose(_)
-            | Operation::ProviderLeaseStatus(_)
-            | Operation::ProviderLeaseClose(_)
-    )
-}
-
-/// Operations that must hydrate the target's durable state before dispatch.
-/// Local-only enrollment reads, lease control and owner-scoped alias discovery
-/// carry no network admission and are excluded.
-pub(super) fn needs_storage(operation: &Operation) -> bool {
-    !(is_agent_control(operation)
-        || matches!(
-            operation,
-            Operation::ProofEnsurePeerCoordinatorKey(_) | Operation::ListAliases(_)
-        ))
-}
+#[path = "dispatch.scope.rs"]
+mod scope;
+use scope::is_agent_control;
+pub(super) use scope::needs_storage;

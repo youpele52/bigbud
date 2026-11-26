@@ -116,3 +116,38 @@ test("reserved transfer grants share no digest with PTY, shell, peer or trust", 
     assert.notEqual(leftDigest, rightDigest, `${label}: grants share one digest`);
   }
 });
+
+/**
+ * U24 production peer grants: owner-held pin approval, revocation and relay are
+ * each their own grant and never coincide with ordinary trust, the proof peer
+ * verbs or one another.
+ */
+test("production peer grants are distinct from trust, proof peer verbs and each other", () => {
+  const digests = goldens("v1.golden.grants");
+  const production = [
+    "ensure_peer_coordinator_key",
+    "inspect_peer_host_key",
+    "inspect_peer_host_key_other_port",
+    "approve_peer_pin",
+    "revoke_peer_pin",
+    "peer_relay_open",
+    "peer_relay_status",
+    "peer_relay_close",
+  ] as const;
+  const others = [
+    "inspect_trust",
+    "approve_trust",
+    "connect",
+    "proof_ensure_peer_coordinator_key",
+    "proof_inspect_peer_host_key",
+    "proof_peer_relay_open",
+    "client_relay_lease_open",
+  ] as const;
+  const seen = new Set<string>();
+  for (const name of [...production, ...others]) {
+    const digest = digests.get(name);
+    assert.ok(digest, `missing ${name}`);
+    assert.ok(!seen.has(digest), `${name} shares a grant digest`);
+    seen.add(digest);
+  }
+});

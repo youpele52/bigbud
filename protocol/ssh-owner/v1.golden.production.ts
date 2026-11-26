@@ -1,5 +1,6 @@
 import type { Message } from "./v1.golden.codec.ts";
 import { gitUploadWireCases } from "./v1.golden.gitUpload.ts";
+import { peerProductionWireCases } from "./v1.golden.peerProduction.ts";
 import { remoteBackendWireCases } from "./v1.golden.remoteBackend.ts";
 
 /**
@@ -13,5 +14,6 @@ export function productionLeaseWireCases(
   return {
     ...gitUploadWireCases(request, reply),
     ...remoteBackendWireCases(request, reply),
+    ...peerProductionWireCases(request, reply),
   };
 }

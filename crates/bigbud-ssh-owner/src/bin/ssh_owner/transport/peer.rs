@@ -13,15 +13,18 @@ use std::time::Instant;
 mod tests;
 
 const KEYGEN: &str = "/usr/bin/ssh-keygen";
+/// The worker's fixed forced-command trigger.
+pub(crate) const PEER_TRIGGER: &str = "bigbud-peer";
 const PUBLIC_LIMIT: usize = 4096;
 const UNSUPPORTED: ErrorCode = ErrorCode::ConfigUnsupported;
 const AUTH: ErrorCode = ErrorCode::AuthRequired;
 const CHANGED: ErrorCode = ErrorCode::HostKeyChanged;
 
 impl Transport {
-    /// Pass the same two trusted startup fingerprints on every call. Keep the
-    /// returned pin snapshot alive through SSH authentication (or child exit).
-    pub(in super::super) fn pinned_peer_ssh(
+    /// Pass the same two trusted fingerprints on every call. Keep the returned
+    /// pin snapshot alive through SSH authentication (or child exit). The
+    /// command has no destination yet: the caller appends `-- host trigger`.
+    pub(super) fn peer_ssh_base(
         &self,
         expected_host_fingerprint: &str,
         expected_coordinator_fingerprint: &str,
@@ -56,13 +59,23 @@ impl Transport {
         verify_coordinator(&identity, expected_coordinator_fingerprint, deadline)?;
         self.identities.apply_to(&mut metadata_only)?;
 
-        pinned.command.env_clear().env("LC_ALL", "C").args([
-            "-o",
-            "EscapeChar=none",
-            "--",
-            &self.host,
-            "bigbud-peer",
-        ]);
+        pinned
+            .command
+            .env_clear()
+            .env("LC_ALL", "C")
+            .args(["-o", "EscapeChar=none"]);
+        Ok(pinned)
+    }
+
+    /// The dev paired-relay proof: the checked base plus the fixed trigger.
+    pub(in super::super) fn pinned_peer_ssh(
+        &self,
+        expected_host_fingerprint: &str,
+        expected_coordinator_fingerprint: &str,
+    ) -> Result<PinnedSsh, ErrorCode> {
+        let mut pinned =
+            self.peer_ssh_base(expected_host_fingerprint, expected_coordinator_fingerprint)?;
+        pinned.command.args(["--", &self.host, PEER_TRIGGER]);
         Ok(pinned)
     }
 }

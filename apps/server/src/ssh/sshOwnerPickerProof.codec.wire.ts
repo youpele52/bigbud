@@ -55,8 +55,14 @@ const wireErrorCodes = [
   "targetHostUnresolved",
   "providerExecutableUnavailable",
 ] as const;
-/** Lane-allocated codes past the dense table (W2 T-term owns 55–58). */
-const sparseErrorCodes = { 55: "terminalShellUnavailable" } as const;
+/** Lane-allocated codes past the dense table (W2 T-term owns 55–58, U24 peer 59–62). */
+const sparseErrorCodes = {
+  55: "terminalShellUnavailable",
+  59: "peerKeyCorrupt",
+  60: "peerPinUnknown",
+  61: "peerPinMismatch",
+  62: "peerAuthRefused",
+} as const;
 
 export type PickerProofOwnerErrorCode =
   | Exclude<(typeof wireErrorCodes)[number], undefined>

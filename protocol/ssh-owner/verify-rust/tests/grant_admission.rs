@@ -39,7 +39,12 @@ impl Class {
             | Verb::RunAcpShell => self == Self::Dispatcher,
             // Peer enrollment is coordinator-dispatcher authority. Ordinary
             // host trust (control) and monitor/read classes can never satisfy it.
-            Verb::EnsurePeerCoordinatorKey | Verb::InspectPeerHostKey => self == Self::Dispatcher,
+            // U24 production pin approval/revocation and relay share that class
+            // but each verb keeps its own grant digest.
+            Verb::EnsurePeerCoordinatorKey
+            | Verb::InspectPeerHostKey
+            | Verb::PeerPin
+            | Verb::PeerRelay => self == Self::Dispatcher,
             // Reserved transfer handoff (C15 / W2 T-xfer). No class admits it in
             // S1-S4 and it never shares a grant with PTY, shell, peer or
             // ordinary trust.
@@ -64,6 +69,8 @@ enum Verb {
     RunAcpShell,
     EnsurePeerCoordinatorKey,
     InspectPeerHostKey,
+    PeerPin,
+    PeerRelay,
     TransferStream,
     PackagedRsync,
     OtherFixtureOperation,
@@ -89,7 +96,14 @@ fn normalized_operand(operation: &Operation) -> (Verb, [u8; 32]) {
         Operation::RunAcpShell(_) => Verb::RunAcpShell,
         Operation::ShellStatus(_) | Operation::ShellClose(_) => Verb::ShellLeaseControl,
         Operation::ProofEnsurePeerCoordinatorKey(_) => Verb::EnsurePeerCoordinatorKey,
-        Operation::ProofInspectPeerHostKey(_) => Verb::InspectPeerHostKey,
+        Operation::ProofInspectPeerHostKey(_) | Operation::InspectPeerHostKey(_) => {
+            Verb::InspectPeerHostKey
+        }
+        Operation::EnsurePeerCoordinatorKey(_) => Verb::EnsurePeerCoordinatorKey,
+        Operation::ApprovePeerPin(_) | Operation::RevokePeerPin(_) => Verb::PeerPin,
+        Operation::PeerRelayOpen(_)
+        | Operation::PeerRelayStatus(_)
+        | Operation::PeerRelayClose(_) => Verb::PeerRelay,
         Operation::ProofTransferStream(_) => Verb::TransferStream,
         Operation::ProofPackagedRsync(_) => Verb::PackagedRsync,
         Operation::ProofPrepareTerminal(_)
@@ -366,5 +380,7 @@ mod cases;
 mod exec_cases;
 #[path = "support/peer_enrollment_cases.rs"]
 mod peer_cases;
+#[path = "support/peer_production_cases.rs"]
+mod peer_production_cases;
 #[path = "support/transfer_cases.rs"]
 mod transfer_cases;

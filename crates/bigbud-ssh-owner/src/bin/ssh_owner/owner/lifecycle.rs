@@ -26,7 +26,11 @@ impl Owner {
     pub(super) fn revoke_all_network_leases(&mut self) -> Result<(), ErrorCode> {
         let active = self.revoke_network_leases();
         let cached = self.targets.revoke_cached_lanes();
-        active.and(cached)
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let peer = self.peer.relays.revoke();
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let peer = Ok(());
+        active.and(cached).and(peer)
     }
 
     pub(super) fn transition<R: Read, W: Write>(

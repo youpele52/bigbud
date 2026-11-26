@@ -328,6 +328,15 @@ message Request {
     WorkspaceEntryInfoRequest workspace_entry_info = 122;
     WorkspaceRenameRequest workspace_rename = 123;
     WorkspaceAppendRequest workspace_append = 124;
+    // U24 production peer enrollment and relay (see v1.peer.proto). Owner-wide:
+    // no target is bound. Pairing authority is the owner's own pin store.
+    Empty ensure_peer_coordinator_key = 130;
+    InspectPeerHostKey inspect_peer_host_key = 131;
+    ApprovePeerPin approve_peer_pin = 132;
+    RevokePeerPin revoke_peer_pin = 133;
+    PeerRelayOpen peer_relay_open = 134;
+    PeerRelayLease peer_relay_status = 135;
+    PeerRelayLease peer_relay_close = 136;
   }
 }
 
@@ -524,6 +533,11 @@ message Reply {
     TerminalShells terminal_shells = 72;
     WorkspaceEntryInfo workspace_entry_info = 73;
     WorkspaceEntryChange workspace_entry_change = 74;
+    // U24 production peer replies (v1.peer.proto).
+    PeerCoordinatorKey peer_coordinator_key = 76;
+    PeerHostKey peer_host_key = 77;
+    PeerPin peer_pin = 78;
+    PeerRelayState peer_relay = 79;
   }
 }
 
@@ -603,6 +617,18 @@ enum ErrorCode {
   // U16: the requested shell is not listed in the target's `/etc/shells` (or is
   // not an executable) at launch. Refused before the PTY starts; carries no path.
   ERROR_CODE_TERMINAL_SHELL_UNAVAILABLE = 55;
+  // U24: the owner's coordinator key or a stored pairing pin is corrupt,
+  // foreign or has unsafe permissions. Refused; never regenerated silently.
+  ERROR_CODE_PEER_KEY_CORRUPT = 59;
+  // U24: no owner pin exists for the pairing (never approved, revoked) or the
+  // inspection challenge is unknown, used or expired.
+  ERROR_CODE_PEER_PIN_UNKNOWN = 60;
+  // U24: the worker presented a host key other than the owner's pin. No
+  // credential was offered.
+  ERROR_CODE_PEER_PIN_MISMATCH = 61;
+  // U24: the coordinator key no longer matches the one bound at approval, or
+  // the worker refused it.
+  ERROR_CODE_PEER_AUTH_REFUSED = 62;
 }
 
 message Trust {

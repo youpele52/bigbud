@@ -38,6 +38,9 @@ pub(crate) struct Owner {
     /// Owner-started images and config roots used to resolve descriptors.
     pub(super) authority: Option<TargetAuthority>,
     pub(super) grants: Grants,
+    /// U24 owner-wide peer challenges and relay channels.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(super) peer: super::peer_store::PeerState,
     pub(super) trust: TrustApproval,
     pub(super) reconnect: ReconnectAdmission,
     /// Masters, PTY, agent proxy and OpenCode leases of the bound target. They

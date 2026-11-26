@@ -36,6 +36,12 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "deploymentStepCancel" ||
     operation.kind === "clientRelayLeaseOpen" ||
     operation.kind === "clientRelayLeaseClose" ||
+    // U24: key provisioning, pin writes/removal and relay channels change state.
+    operation.kind === "ensurePeerCoordinatorKey" ||
+    operation.kind === "approvePeerPin" ||
+    operation.kind === "revokePeerPin" ||
+    operation.kind === "peerRelayOpen" ||
+    operation.kind === "peerRelayClose" ||
     operation.kind === "proofWorkspaceModePublish" ||
     operation.kind === "proofGitTrackedPush" ||
     operation.kind === "openProofTerminal" ||
@@ -71,6 +77,11 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "proofRunThreadShell" ||
     operation.kind === "proofRunProviderWorkspaceShell" ||
     operation.kind === "proofRunAcpCommand" ||
+    // U24: a keyscan, key derivation or pinned dial runs before these reply.
+    operation.kind === "ensurePeerCoordinatorKey" ||
+    operation.kind === "inspectPeerHostKey" ||
+    operation.kind === "approvePeerPin" ||
+    operation.kind === "peerRelayOpen" ||
     (operation.kind === "proofWorkspaceGit" && operation.action !== "isInsideWorkTree");
   const grantTimeout = "pid" in operation ? 2_000 : undefined;
   const agentReply =

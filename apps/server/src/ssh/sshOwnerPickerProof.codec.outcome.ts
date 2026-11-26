@@ -375,6 +375,10 @@ export const readOutcome = (field: number, bytes: Uint8Array): Outcome => {
       return { kind: "shell", value: readShellLease(bytes) };
     case 61:
     case 62:
+    case 76: // U24 peer enrollment and relay replies (76–79).
+    case 77:
+    case 78:
+    case 79:
       return readBackendLeaseOutcome(field, bytes);
     case 32:
       return { kind: "proofGitTrackedPush", value: readProofTrackedPushStatus(bytes) };

@@ -197,18 +197,24 @@ it.skipIf(external === undefined || nodeElf === "" || relayDir === "")(
       });
       expect(probe).toMatchObject({ phase: "exited", exitCode: 0 });
       expect(probe.phase === "exited" && probe.stdout).toMatch(
-        /^home=\/.+\narch=aarch64\nhost=[a-f0-9]{64}\n$/,
+        /^home=\/.+\narch=aarch64\nhost=[a-f0-9]{64}\n(completed=[0-9a-f]{32}\n)?$/,
       );
+      // A repeat run on the same account sees the earlier deployment's completion record.
+      const completed =
+        probe.phase === "exited" && probe.stdout.includes(`completed=${AUTHORITY}\n`);
       // Reset touches only this request's staging directory.
       expect(
         await settle(bound, new Uint8Array(32).fill(2), { kind: "reset", requestId: REQUEST }),
       ).toMatchObject({ phase: "exited", exitCode: 0, stdout: "reset\n" });
-      // A missing completion record is an ordinary nonzero exit, not an unknown outcome.
-      const missing = await settle(bound, new Uint8Array(32).fill(3), {
+      // A missing completion record is an ordinary nonzero exit, not an unknown outcome;
+      // an existing one (repeat run) reads back with exit 0.
+      const record = await settle(bound, new Uint8Array(32).fill(3), {
         kind: "readCompletion",
         authorityId: AUTHORITY,
       });
-      expect(missing.phase === "exited" && missing.exitCode).not.toBe(0);
+      expect(record.phase).toBe("exited");
+      if (completed) expect(record.phase === "exited" && record.exitCode).toBe(0);
+      else expect(record.phase === "exited" && record.exitCode).not.toBe(0);
       // Cancel: a streamed step whose socket is never dialled settles cancelled, and the
       // same token reattaches to that outcome instead of running anything again.
       const lease = new Uint8Array(32).fill(7);

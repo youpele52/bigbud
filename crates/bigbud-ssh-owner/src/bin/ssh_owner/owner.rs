@@ -27,6 +27,8 @@ mod session;
 mod shell_lease;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use picker_cancel::CancelInbox as SnapshotCancelInbox;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod peer_store;
 mod picker_dispatch;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod posix_picker;

@@ -295,6 +295,8 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         production: route_facts.production(),
         authority,
         grants: Grants::new(Budget::for_startup(route_facts.production())),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        peer: Default::default(),
         trust,
         reconnect,
         lanes,

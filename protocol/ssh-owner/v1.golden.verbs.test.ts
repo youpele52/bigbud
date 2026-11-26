@@ -79,6 +79,14 @@ test("frozen production verbs cover every proof_* operation exactly once", () =>
       { name: "workspace_entry_info", field: 122 },
       { name: "workspace_rename", field: 123 },
       { name: "workspace_append", field: 124 },
+      // U24 production peer enrollment and relay (owner-wide, owner-held pins).
+      { name: "ensure_peer_coordinator_key", field: 130 },
+      { name: "inspect_peer_host_key", field: 131 },
+      { name: "approve_peer_pin", field: 132 },
+      { name: "revoke_peer_pin", field: 133 },
+      { name: "peer_relay_open", field: 134 },
+      { name: "peer_relay_status", field: 135 },
+      { name: "peer_relay_close", field: 136 },
     ],
   );
 
@@ -100,7 +108,9 @@ test("frozen production verbs cover every proof_* operation exactly once", () =>
 test("every declared operation field number is unique", () => {
   const fields = declaredOperations.map(({ field }) => field);
   assert.equal(new Set(fields).size, fields.length);
-  assert.ok(fields.every((field) => field >= 10 && field <= 127));
+  // 127 stays the permanent unknown-variant sentinel. U24 (peer enrollment and
+  // relay) was allocated 130–136 above it; protobuf's 19000–19999 stays unused.
+  assert.ok(fields.every((field) => field >= 10 && field !== 127 && field < 19_000));
 });
 
 test("reserved future production names are recorded and remain unallocated", () => {

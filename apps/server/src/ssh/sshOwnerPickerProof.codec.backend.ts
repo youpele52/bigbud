@@ -1,6 +1,12 @@
 import { decodeMessage, WireWriter } from "../remote-agent/remoteAgentProtocol.codec.wire.ts";
 import { isExactRemotePath } from "./sshOwnerPickerProof.codec.gitUpload.ts";
 import {
+  readPeerProductionOutcome,
+  writePeerProduction,
+  type PeerProductionOperation,
+  type PeerProductionOutcome,
+} from "./sshOwnerPickerProof.codec.peerProduction.ts";
+import {
   bytesValue,
   invalid,
   PickerProofOwnerError,
@@ -70,7 +76,9 @@ export type BackendLeaseOperation =
   | {
       readonly kind: "clientRelayLeaseStatus" | "clientRelayLeaseClose";
       readonly lease: Uint8Array;
-    };
+    }
+  // U24 owner-wide peer enrollment and relay (Request 130–136).
+  | PeerProductionOperation;
 
 export type DeploymentStepState = {
   readonly lease: Uint8Array;
@@ -135,7 +143,11 @@ const FIELD = {
   clientRelayLeaseClose: 105,
 } as const;
 
+const isPeerProduction = (operation: BackendLeaseOperation): operation is PeerProductionOperation =>
+  !Object.hasOwn(FIELD, operation.kind);
+
 export function writeBackendLease(writer: WireWriter, operation: BackendLeaseOperation) {
+  if (isPeerProduction(operation)) return writePeerProduction(writer, operation);
   const operands = new WireWriter();
   lease(operands, operation.lease);
   if (operation.kind === "deploymentStepOpen") writeStep(operands, operation.step);
@@ -222,10 +234,15 @@ export function readClientRelayLease(bytes: Uint8Array): ClientRelayLeaseState {
 
 export type BackendLeaseOutcome =
   | { readonly kind: "deploymentStep"; readonly value: DeploymentStepState }
-  | { readonly kind: "clientRelayLease"; readonly value: ClientRelayLeaseState };
+  | { readonly kind: "clientRelayLease"; readonly value: ClientRelayLeaseState }
+  | PeerProductionOutcome;
 
-/** Reply 61 (deployment step) or 62 (client relay channel). */
-export function readBackendLeaseOutcome(field: 61 | 62, bytes: Uint8Array): BackendLeaseOutcome {
+/** Reply 61 (deployment step), 62 (client relay channel) or U24 peer replies 76–79. */
+export function readBackendLeaseOutcome(
+  field: 61 | 62 | 76 | 77 | 78 | 79,
+  bytes: Uint8Array,
+): BackendLeaseOutcome {
+  if (field !== 61 && field !== 62) return readPeerProductionOutcome(field, bytes);
   return field === 61
     ? { kind: "deploymentStep", value: readDeploymentStep(bytes) }
     : { kind: "clientRelayLease", value: readClientRelayLease(bytes) };

@@ -31,3 +31,92 @@ message ProofPeerHostKey {
   // `<type> <base64>`, the public host key the endpoint presented now.
   string public_key = 3;
 }
+
+// U24 production peer enrollment and relay (Request 130–136, Reply 76–79).
+// Pairing authority lives in the owner's private profile state, never in a
+// relay request: inspection returns a one-time challenge, only an approval of
+// that challenge writes a pin, and a relay names nothing but the pairing id.
+
+// One exact worker endpoint (an IP literal or a bare DNS name, no user, port
+// suffix, option or credential syntax).
+message InspectPeerHostKey {
+  string host = 1;
+  uint32 port = 2;
+}
+
+// Public half of the owner-wide coordinator identity; `sha256:<hex>` of the
+// public key blob. No private material, path or comment.
+message PeerCoordinatorKey {
+  string public_key = 1;
+  string fingerprint = 2;
+  string algorithm = 3;
+}
+
+// The key the endpoint presented now, plus a one-time owner challenge bound to
+// that exact host, port and key. Nothing is saved by inspection.
+message PeerHostKey {
+  string key_type = 1;
+  // OpenSSH `SHA256:<base64>` form.
+  string fingerprint = 2;
+  // `<type> <base64>`.
+  string public_key = 3;
+  bytes challenge = 4;
+}
+
+// Consumes one inspection challenge and writes (or replaces) the owner's pin
+// for this pairing: host, port and key from the challenge, the login user and
+// the current coordinator key fingerprint.
+message ApprovePeerPin {
+  bytes challenge = 1;
+  string pairing_id = 2;
+  string user = 3;
+}
+
+message RevokePeerPin {
+  string pairing_id = 1;
+}
+
+// The owner's stored pairing pin (metadata only).
+message PeerPin {
+  string pairing_id = 1;
+  string host = 2;
+  uint32 port = 3;
+  string user = 4;
+  // OpenSSH `SHA256:<base64>` of the pinned host key.
+  string host_key_fingerprint = 5;
+  // `sha256:<hex>` of the coordinator key bound at approval.
+  string coordinator_key_fingerprint = 6;
+}
+
+// One relay channel to the paired worker's fixed `bigbud-peer` trigger, built
+// only from the owner's stored pin and coordinator identity.
+message PeerRelayOpen {
+  bytes lease = 1;
+  string pairing_id = 2;
+}
+
+message PeerRelayLease {
+  bytes lease = 1;
+}
+
+enum PeerRelayPhase {
+  PEER_RELAY_PHASE_UNSPECIFIED = 0;
+  PEER_RELAY_PHASE_LISTENING = 1;
+  PEER_RELAY_PHASE_STREAMING = 2;
+  // Ordinary exit of the owned transport; `exit_code` is set.
+  PEER_RELAY_PHASE_EXITED = 3;
+  // Closed by this lease's own close; the transport was confirmed reaped.
+  PEER_RELAY_PHASE_CLOSED = 4;
+  // Ended without an exit status (signal, deadline, no dial).
+  PEER_RELAY_PHASE_LOST = 5;
+  // Reap could not be confirmed. The lease keeps its slot.
+  PEER_RELAY_PHASE_UNCONFIRMED = 6;
+}
+
+message PeerRelayState {
+  bytes lease = 1;
+  PeerRelayPhase phase = 2;
+  optional string socket_path = 3;
+  optional uint32 exit_code = 4;
+  string pairing_id = 5;
+}

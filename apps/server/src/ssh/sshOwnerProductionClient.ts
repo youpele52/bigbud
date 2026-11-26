@@ -57,6 +57,8 @@ export interface SshOwnerProductionHandle extends SshOwnerProductionOwner {
    * descriptor; grants are bound to that exact target and generation.
    */
   target(descriptor: SshOwnerTargetDescriptor): PickerProofBoundTarget;
+  /** U24 owner-wide peer enrollment and relay; no target is bound. */
+  readonly peer: PickerProofOwner["peerProduction"];
   /** Detach, or reap a non-surviving profile. Idempotent. */
   shutdown(): Effect.Effect<void>;
   onDeath(listener: () => void): () => void;
@@ -142,6 +144,7 @@ function makeHandle(input: {
       : { opencodeV2Refusal: input.facts.opencodeV2Refusal }),
     state: () => state,
     target: (descriptor) => input.owner.bindTarget(descriptor),
+    peer: input.owner.peerProduction,
     onDeath(listener) {
       if (state === "dead") {
         listener();

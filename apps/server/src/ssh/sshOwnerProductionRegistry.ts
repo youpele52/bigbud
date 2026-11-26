@@ -18,7 +18,9 @@ export interface SshOwnerProductionRegistration {
     "target" | "ownerEpoch" | "opencodeV2Service" | "opencodeV2Refusal" | "state"
   > &
     // The owner binary, for durable native terminal rows (W2 T-term); fakes may omit it.
-    Partial<Pick<SshOwnerProductionHandle, "artifactPath">>;
+    Partial<Pick<SshOwnerProductionHandle, "artifactPath">> &
+    // U24 owner-wide peer enrollment and relay; fakes may omit it.
+    Partial<Pick<SshOwnerProductionHandle, "peer">>;
   /**
    * Exact descriptor for a runtime target (`resolveProductionTargetDescriptor`
    * in production). Rejects with a typed `SshOwnerTargetRefusal` when the

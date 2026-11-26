@@ -20,13 +20,16 @@ use std::{
 };
 
 /// The client keeps the caller's stdio; fd 3 is closed for it. The watcher's
-/// `kill 0` targets this shell's own process group.
+/// `kill 0` targets this shell's own process group. Stdin is saved on fd 4
+/// first: dash (Debian `/bin/sh`) points an async list's fd 0 at `/dev/null`
+/// before `<&0` is applied, so `<&0` alone would starve the client.
 const WATCH: &str = r#"
-"$@" <&0 3<&- &
+exec 4<&0
+"$@" <&4 3<&- 4<&- &
 client=$!
 ( read -r _ <&3; kill -s KILL 0 ) </dev/null >/dev/null 2>&1 &
 watch=$!
-exec 3<&-
+exec 3<&- 4<&-
 wait "$client"
 code=$?
 kill -s KILL "$watch" 2>/dev/null

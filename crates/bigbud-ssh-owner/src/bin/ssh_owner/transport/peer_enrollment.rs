@@ -32,41 +32,7 @@ impl Transport {
         state_dir: &Path,
         profile_binding: &[u8],
     ) -> Result<v1::ProofPeerCoordinatorKey, ErrorCode> {
-        let directory = private_state_dir(state_dir)?.join(KEY_DIR);
-        match fs::symlink_metadata(&directory) {
-            Ok(_) => private_directory(&directory)?,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                DirBuilder::new()
-                    .mode(0o700)
-                    .create(&directory)
-                    .map_err(|_| UNSUPPORTED)?;
-                private_directory(&directory)?;
-            }
-            Err(_) => return Err(UNSUPPORTED),
-        }
-        let private = directory.join(KEY_FILE);
-        let sidecar = directory.join(format!("{KEY_FILE}.pub"));
-        let present = private_key(&private)?;
-        let existing = read_public(&sidecar)?;
-        let key = if present {
-            // An existing key is authoritative. A missing or mismatched public
-            // sidecar is a corrupt provision, not a reason to regenerate.
-            let derived = derive_public(&private)?;
-            match existing {
-                Some(public) if public == derived => derived,
-                _ => return Err(UNSUPPORTED),
-            }
-        } else {
-            if existing.is_some() {
-                return Err(UNSUPPORTED);
-            }
-            generate_keypair(&private)?;
-            let derived = derive_public(&private)?;
-            match read_public(&sidecar)? {
-                Some(public) if public == derived => derived,
-                _ => return Err(UNSUPPORTED),
-            }
-        };
+        let (key, _private) = ensure_coordinator(state_dir)?;
         Ok(v1::ProofPeerCoordinatorKey {
             public_key: key.record_value(),
             fingerprint: key.fingerprint_hex(),
@@ -91,38 +57,86 @@ impl Transport {
             return Err(UNSUPPORTED);
         }
         self.require_direct_route()?;
-        let family = enrollment_host(&operand.host)?;
-        if operand.port == 0 || operand.port > u32::from(u16::MAX) {
-            return Err(ErrorCode::InvalidOperands);
-        }
-        let mut scanner = self.images.keyscan()?;
-        if let Some(family) = family {
-            scanner.arg(family);
-        }
-        scanner
-            .args(["-T", "10", "-t", "ed25519", "-p"])
-            .arg(operand.port.to_string())
-            .arg("--")
-            .arg(&operand.host);
-        let output =
-            process::run(scanner, Instant::now() + DEADLINE, PUBLIC_LIMIT).map_err(|error| {
-                match error {
-                    process::Failure::Spawn => ErrorCode::OwnerUnavailable,
-                    process::Failure::TimedOut => ErrorCode::TransportLost,
-                    process::Failure::Io => ErrorCode::TransportLost,
-                }
-            })?;
-        if !output.status.success() || output.truncated {
-            return Err(ErrorCode::TransportLost);
-        }
-        let label = scan_label(&operand.host, operand.port);
-        let key = HostKey::from_keyscan(&output.stdout, &label).ok_or(ErrorCode::TransportLost)?;
+        let key = scan_endpoint(self.images.keyscan()?, &operand.host, operand.port)?;
         Ok(v1::ProofPeerHostKey {
             key_type: host_key::TYPE.to_owned(),
             fingerprint: key.fingerprint(),
             public_key: key.record_value(),
         })
     }
+}
+
+/// Provision or reuse the dedicated coordinator key under the owner's own
+/// profile state; returns its public half and the private key path. A corrupt,
+/// foreign or mismatched key refuses; it is never silently regenerated.
+pub(super) fn ensure_coordinator(state_dir: &Path) -> Result<(HostKey, PathBuf), ErrorCode> {
+    let directory = private_state_dir(state_dir)?.join(KEY_DIR);
+    match fs::symlink_metadata(&directory) {
+        Ok(_) => private_directory(&directory)?,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            DirBuilder::new()
+                .mode(0o700)
+                .create(&directory)
+                .map_err(|_| UNSUPPORTED)?;
+            private_directory(&directory)?;
+        }
+        Err(_) => return Err(UNSUPPORTED),
+    }
+    let private = directory.join(KEY_FILE);
+    let sidecar = directory.join(format!("{KEY_FILE}.pub"));
+    let present = private_key(&private)?;
+    let existing = read_public(&sidecar)?;
+    let key = if present {
+        // An existing key is authoritative. A missing or mismatched public
+        // sidecar is a corrupt provision, not a reason to regenerate.
+        let derived = derive_public(&private)?;
+        match existing {
+            Some(public) if public == derived => derived,
+            _ => return Err(UNSUPPORTED),
+        }
+    } else {
+        if existing.is_some() {
+            return Err(UNSUPPORTED);
+        }
+        generate_keypair(&private)?;
+        let derived = derive_public(&private)?;
+        match read_public(&sidecar)? {
+            Some(public) if public == derived => derived,
+            _ => return Err(UNSUPPORTED),
+        }
+    };
+    Ok((key, private))
+}
+
+/// One-shot scan of the exact host and port with a validated keyscan image and
+/// fixed arguments; no trust store, identity, agent or user configuration.
+pub(super) fn scan_endpoint(
+    mut scanner: std::process::Command,
+    host: &str,
+    port: u32,
+) -> Result<HostKey, ErrorCode> {
+    let family = enrollment_host(host)?;
+    if port == 0 || port > u32::from(u16::MAX) {
+        return Err(ErrorCode::InvalidOperands);
+    }
+    if let Some(family) = family {
+        scanner.arg(family);
+    }
+    scanner
+        .args(["-T", "10", "-t", "ed25519", "-p"])
+        .arg(port.to_string())
+        .arg("--")
+        .arg(host);
+    let output = process::run(scanner, Instant::now() + DEADLINE, PUBLIC_LIMIT).map_err(
+        |error| match error {
+            process::Failure::Spawn => ErrorCode::OwnerUnavailable,
+            process::Failure::TimedOut | process::Failure::Io => ErrorCode::TransportLost,
+        },
+    )?;
+    if !output.status.success() || output.truncated {
+        return Err(ErrorCode::TransportLost);
+    }
+    HostKey::from_keyscan(&output.stdout, &scan_label(host, port)).ok_or(ErrorCode::TransportLost)
 }
 
 fn private_state_dir(state_dir: &Path) -> Result<PathBuf, ErrorCode> {

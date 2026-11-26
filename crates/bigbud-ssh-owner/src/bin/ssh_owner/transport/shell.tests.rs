@@ -122,3 +122,27 @@ fn timeout_is_typed_and_reaps_the_owner_selected_shell() {
         ErrorCode::ShellTimedOut
     );
 }
+
+/// Regression: under dash (Debian `/bin/sh`) the guarded command used to get
+/// `/dev/null` instead of the caller's stdin, starving provider leases.
+#[test]
+fn the_session_guard_keeps_the_callers_stdin_under_posix_sh() {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let script = concat!(include_str!("session_guard.sh"), "\nsession_guard 0 cat\n");
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", script])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("sh");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"through\n")
+        .expect("write");
+    let output = child.wait_with_output().expect("wait");
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"through\n");
+}

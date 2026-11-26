@@ -18,6 +18,47 @@ fn required(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| panic!("missing {name}"))
 }
 
+/// The disposable fixture lives directly under the platform's temp root.
+fn fixture_parent() -> &'static Path {
+    if cfg!(target_os = "macos") {
+        Path::new("/private/tmp")
+    } else {
+        Path::new("/tmp")
+    }
+}
+
+/// Port 22 is admitted only on Linux inside a private network namespace whose
+/// only interface is loopback (no real sshd is reachable there); everything
+/// else stays an unprivileged port.
+fn fixture_port() -> u16 {
+    let port = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_PORT")
+        .parse::<u16>()
+        .expect("numeric fixture port");
+    if port == 22 {
+        let interfaces: Vec<_> = fs::read_dir("/sys/class/net")
+            .expect("network interfaces")
+            .map(|entry| entry.expect("interface").file_name())
+            .collect();
+        assert_eq!(
+            interfaces,
+            ["lo"],
+            "port 22 needs a private network namespace"
+        );
+    } else {
+        assert!(port >= 1024);
+    }
+    port
+}
+
+/// OpenSSH writes the default port without brackets.
+fn pin_host(port: u16) -> String {
+    if port == 22 {
+        "127.0.0.1".into()
+    } else {
+        format!("[127.0.0.1]:{port}")
+    }
+}
+
 /// Host-gated: requires a separately approved disposable loopback sshd with
 /// generated keys, exactly like the existing `posix_master` live fixtures.
 #[test]
@@ -28,16 +69,13 @@ fn production_master_is_reused_and_the_login_pty_round_trips() {
         Ok("approved-disposable")
     );
     let root = PathBuf::from(required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_ROOT"));
-    assert_eq!(root.parent(), Some(Path::new("/private/tmp")));
+    assert_eq!(root.parent(), Some(fixture_parent()));
     assert!(
         root.file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.starts_with("bigbud-picker-sshd-"))
     );
-    let port = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_PORT")
-        .parse::<u16>()
-        .expect("numeric fixture port");
-    assert!(port >= 1024);
+    let port = fixture_port();
     let user = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_USER");
     let cwd =
         std::env::var("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_CWD").unwrap_or_else(|_| "/tmp".into());
@@ -46,7 +84,7 @@ fn production_master_is_reused_and_the_login_pty_round_trips() {
     let mut fields = public.split_ascii_whitespace();
     let key_type = fields.next().expect("fixture key type");
     let key = fields.next().expect("fixture key blob");
-    let pin = format!("[127.0.0.1]:{port} {key_type} {key}\n");
+    let pin = format!("{} {key_type} {key}\n", pin_host(port));
     let mut known_hosts = fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -135,7 +173,7 @@ fn production_master_is_reused_and_the_login_pty_round_trips() {
         .open(root.join("known_hosts"))
         .expect("rewrite pin");
     changed
-        .write_all(format!("[127.0.0.1]:{port} {other}\n").as_bytes())
+        .write_all(format!("{} {other}\n", pin_host(port)).as_bytes())
         .expect("changed pin");
     assert_eq!(
         picker.list(&transport, generation, Some(&cwd)),
@@ -162,10 +200,8 @@ fn production_agent_proxy_reuses_the_verified_master_and_confirms_exit() {
         Ok("approved-disposable")
     );
     let root = PathBuf::from(required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_ROOT"));
-    assert_eq!(root.parent(), Some(Path::new("/private/tmp")));
-    let port = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_PORT")
-        .parse::<u16>()
-        .expect("numeric fixture port");
+    assert_eq!(root.parent(), Some(fixture_parent()));
+    let port = fixture_port();
     let user = required("BIGBUD_SSH_OWNER_PRODUCTION_FIXTURE_USER");
     let public = fs::read_to_string(root.join("host-key.pub")).expect("generated host key");
     let mut fields = public.split_ascii_whitespace();
@@ -179,7 +215,7 @@ fn production_agent_proxy_reuses_the_verified_master_and_confirms_exit() {
         .open(root.join("known_hosts"))
         .expect("explicit fixture pin");
     known_hosts
-        .write_all(format!("[127.0.0.1]:{port} {key_type} {key}\n").as_bytes())
+        .write_all(format!("{} {key_type} {key}\n", pin_host(port)).as_bytes())
         .expect("write pin");
     let transport = Transport::new(TransportConfig {
         ssh: "/usr/bin/ssh".into(),
