@@ -569,6 +569,9 @@ The upload entry above applies unless stated here. This entry closes the blocker
 | E7  | Verified Linux workspace-agent bytes from the release pipeline                                                     |
 | E8  | A rootful disposable Linux VM (U10) and reviewers for the S4 record                                                |
 
+- **E3 Authenticode mode = unsigned for v1** (user decision D2, 26 November 2026). Build A (`v0.4.1-beta.1`) and B NSIS artifacts record `authenticodeMode: unsigned`; W6 Windows runners bypass SmartScreen/Mark-of-the-Web with `Unblock-File` as a test-environment note. See the [Build A plan](2026-11-27-ssh-owner-build-a-and-e7-release-plan.md).
+- **W4 schema ceiling = 187** (user decision D1, 26 November 2026). The runtime refuses any database whose applied migration is above its own latest (`Migrations.downgradeGuard.ts`), so every B migration must already ship in A; 187 (guarded-write journal) ships inert in Build A. Migrations 181–187 are frozen once Build A publishes.
+
 ## 6. Risks
 
 | Risk                                                                                             | Mitigation                                                                  |

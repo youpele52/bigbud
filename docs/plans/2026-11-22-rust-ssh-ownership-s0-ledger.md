@@ -1510,3 +1510,24 @@ Decision U25 (option A, full legacy parity) and its design entry are in the [fin
   - Structural checker on the 6 touched sources: 0 findings.
   - Largest touched file: 398 lines.
   - Cleanup: the guest sshd, account and scratch, the Mac keys, agent builds and SQLite scratch were removed; no owner process remains.
+
+## W4 Build A schema-ceiling review (26 November 2026)
+
+Inspected at `a763e31ab3` (clean tree). Decision **D1: the Build A ceiling is 187**.
+
+- **Migrator behaviour.** `runMigrations` calls `assertDatabaseSchemaNotNewer(latestMigrationId)` before any read or migration (`apps/server/src/persistence/Migrations.downgradeGuard.ts`). A database whose highest applied migration is above the build's latest fails with `DatabaseSchemaNewerThanRuntimeError`. So A must contain every migration B applies, or B→A rollback on the same database refuses to start. Unknown higher IDs are never tolerated.
+- **Classification.**
+
+| ID  | Name                          | Class                    | Note                                                                           |
+| --- | ----------------------------- | ------------------------ | ------------------------------------------------------------------------------ |
+| 181 | SshOwnerTransitions           | A-required               | Owner transition table                                                         |
+| 182 | RecoveredQueueDrafts          | A-neutral                | Additive tables                                                                |
+| 183 | SshAliasDescriptorBindings    | A-neutral                | `CREATE TABLE IF NOT EXISTS`, additive                                         |
+| 184 | SshOwnerRetirement            | A-required               | Edited in place while unreleased; frozen from Build A                          |
+| 185 | SshLegacyRetirement           | A-required               | Drain record and `sshLegacyRetired` marker                                     |
+| 186 | OrganizationAgeBackfillRepair | A-neutral                | Idempotent repair of 148 drift; no-op when the column exists                   |
+| 187 | SshOwnerGuardedWriteJournal   | B-side, ships inert in A | Same DDL as the journal's first-use bootstrap, so either order gives one table |
+
+- **Build A refuses nothing it must open.** The only refusal is a schema newer than 187. `v0.4.0` (main, ceiling 180) databases upgrade forward through 181–187. Downgrade below Build A is unsupported, which the changelog states.
+- **Checks.** `bun run --cwd apps/server vitest run src/persistence/Migrations/18[1-7]_*.test.ts src/persistence/Migrations.downgradeGuard.test.ts` (together with the A3 drain, lock and host tests): 13 files, 43 tests passed.
+- **Frozen.** After Build A publishes, 181–187 cannot change; any fix needs migration 188 or later, which B must then also carry in A's successor.
