@@ -274,6 +274,102 @@ describe("diffSelection.logic", () => {
     ).toBeNull();
   });
 
+  it("resolves a Chromium-retargeted shadow selection from its shadow rows", () => {
+    const filePath = "src/example.ts";
+    const patch = [
+      "diff --git a/src/example.ts b/src/example.ts",
+      "--- a/src/example.ts",
+      "+++ b/src/example.ts",
+      "@@ -30,3 +30,4 @@",
+      "-const active = useRef(null);",
+      "-if (!active.current) {",
+      "-  active.current = {",
+      "+const [active, setActive] = useState(() => ({",
+      "+  session: session ? { ...session } : null,",
+      "+  generation: 1,",
+      "+}));",
+    ].join("\n");
+    const fileDiff = parsePatchFiles(patch, "retargeted-shadow")[0]!.files[0]!;
+    const fileContainer = mockElement({ dataset: { diffFilePath: filePath } });
+    const lines = [
+      mockElement({
+        attributes: { "data-line": "30", "data-line-type": "change-deletion" },
+        parent: fileContainer,
+        textContent: "const active = useRef(null);",
+      }),
+      mockElement({
+        attributes: { "data-line": "31", "data-line-type": "change-deletion" },
+        parent: fileContainer,
+        textContent: "if (!active.current) {",
+      }),
+      mockElement({
+        attributes: { "data-line": "32", "data-line-type": "change-deletion" },
+        parent: fileContainer,
+        textContent: "  active.current = {",
+      }),
+      mockElement({
+        attributes: { "data-line": "30", "data-line-type": "change-addition" },
+        parent: fileContainer,
+        textContent: "const [active, setActive] = useState(() => ({",
+      }),
+      mockElement({
+        attributes: { "data-line": "33", "data-line-type": "change-addition" },
+        parent: fileContainer,
+        textContent: "}));",
+      }),
+    ];
+    const shadowRoot = {
+      querySelectorAll: () => lines,
+    } as unknown as ShadowRoot;
+    const diffHost = {
+      ...mockElement({}),
+      shadowRoot,
+    } as HTMLElement;
+    const selectedLines = new Set<HTMLElement>([
+      lines[0]!,
+      lines[1]!,
+      lines[2]!,
+      lines[3]!,
+      lines[4]!,
+    ]);
+    const selectedText = [
+      "tive = useRef(null);",
+      "if (!active.current) {",
+      "  active.current = {",
+      "const [active, setActive] = useState(() => ({",
+      "}));",
+    ].join("\n");
+    // Chromium reports a real shadow-root drag as collapsed with a document-level
+    // Range, while toString() and containsNode() still describe the shadow rows.
+    const selection = {
+      isCollapsed: true,
+      rangeCount: 1,
+      getRangeAt: () => ({ startContainer: fileContainer, endContainer: fileContainer }),
+      anchorNode: fileContainer,
+      focusNode: fileContainer,
+      toString: () => selectedText,
+      containsNode: (node: Node) => selectedLines.has(node as HTMLElement),
+    } as unknown as Selection;
+
+    expect(
+      resolveDiffSelectionFromDom(selection, {
+        event: { composedPath: () => [lines[0], diffHost] } as unknown as MouseEvent,
+        fileDiff,
+      }),
+    ).toEqual({
+      filePath,
+      range: { startLine: 30, endLine: 33 },
+      selectedText: [
+        ...DIFF_ANNOTATION_HEADER,
+        "-tive = useRef(null);",
+        "-if (!active.current) {",
+        "-  active.current = {",
+        "+const [active, setActive] = useState(() => ({",
+        "+}));",
+      ].join("\n"),
+    });
+  });
+
   it("rejects discontiguous browser selections", () => {
     const filePath = "src/example.ts";
     const selection = {

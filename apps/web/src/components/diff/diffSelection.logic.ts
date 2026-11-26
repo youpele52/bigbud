@@ -45,6 +45,7 @@ export function resolveDiffSelectionFromContextMenu(input: {
   if (selectedText.length > 0) {
     const fileDiff = input.fileDiffByPath.get(filePath);
     const fromDom = resolveDiffSelectionFromDom(input.selection, {
+      event: input.event,
       filePathHint: filePath,
       ...(fileDiff ? { fileDiff } : {}),
     });

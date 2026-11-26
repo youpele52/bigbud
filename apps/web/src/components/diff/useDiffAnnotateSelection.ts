@@ -32,7 +32,11 @@ export function useDiffAnnotateSelection(input: {
       const fileDiff = filePath ? fileDiffByPath.get(filePath) : undefined;
       if (!filePath || !fileDiff) return;
 
-      const resolved = resolveDiffSelectionFromDom(selection, { filePathHint: filePath, fileDiff });
+      const resolved = resolveDiffSelectionFromDom(selection, {
+        event,
+        filePathHint: filePath,
+        fileDiff,
+      });
       if (resolved) {
         onAnnotateRequest(resolved, { clientX: event.clientX, clientY: event.clientY });
       }

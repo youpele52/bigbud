@@ -1,5 +1,10 @@
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 
+import {
+  resolveDiffShadowRootFromPath,
+  resolveShadowSelectionLines,
+} from "./diffSelection.logic.dom.shadow";
+
 export interface DiffSelectionRange {
   readonly startLine: number;
   readonly endLine: number;
@@ -168,6 +173,8 @@ function resolveLineElements(
   readonly endLine: HTMLElement;
   readonly selectedLines: readonly HTMLElement[];
   readonly range: Range | null;
+  /** The selection text is authoritative when Range boundaries were retargeted. */
+  readonly exactSelectionText: boolean;
 } | null {
   const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
   const selectedLines = range ? resolveTextBearingLines(range) : [];
@@ -177,6 +184,21 @@ function resolveLineElements(
       endLine: selectedLines.at(-1)!,
       selectedLines,
       range,
+      exactSelectionText: false,
+    };
+  }
+
+  // Chromium retargets selections inside shadow roots, so the range no longer
+  // intersects the rendered diff rows. Recover them from the diff's shadow root.
+  const shadowRoot = resolveDiffShadowRootFromPath(options?.event?.composedPath() ?? []);
+  const shadowLines = shadowRoot ? resolveShadowSelectionLines(selection, shadowRoot) : [];
+  if (shadowLines.length > 0) {
+    return {
+      startLine: shadowLines[0]!,
+      endLine: shadowLines.at(-1)!,
+      selectedLines: shadowLines,
+      range: null,
+      exactSelectionText: true,
     };
   }
 
@@ -198,6 +220,7 @@ function resolveLineElements(
     endLine,
     selectedLines: [...new Set([startLine, endLine])],
     range,
+    exactSelectionText: false,
   };
 }
 
@@ -238,8 +261,12 @@ function formatSelectedDiffText(
   selectedLines: readonly HTMLElement[],
   range: Range | null,
   fallbackText: string,
+  exactSelectionText = false,
 ): string {
-  const rows = selectedLines.map((line) => {
+  // Retargeted shadow selections cannot be sliced with Range boundaries, so
+  // align the exact selection string with the selected rows instead.
+  const segments = exactSelectionText ? fallbackText.split("\n") : null;
+  const rows = selectedLines.map((line, index) => {
     const lineType = line.getAttribute("data-line-type");
     const prefix =
       lineType === "change-deletion" ? "-" : lineType === "change-addition" ? "+" : " ";
@@ -255,6 +282,8 @@ function formatSelectedDiffText(
         intersection.setEnd(lineRange.endContainer, lineRange.endOffset);
       }
       text = intersection.toString();
+    } else if (segments) {
+      text = segments[index] ?? (selectedLines.length === 1 ? fallbackText : text);
     }
     return `${prefix}${removeStructuralLineEnding(text)}`;
   });
@@ -302,7 +331,9 @@ export function resolveDiffSelectionFromDom(
   selection: Selection | null,
   options?: ResolveDiffSelectionOptions,
 ): ResolvedDiffSelection | null {
-  if (!selection || selection.isCollapsed) return null;
+  // Real drag selections inside open shadow roots report `isCollapsed === true`
+  // even though `toString()` holds the selected text, so only reject empty ranges.
+  if (!selection || selection.rangeCount === 0) return null;
 
   const selectedText = resolveSelectedText(selection);
   if (selectedText.length === 0) return null;
@@ -346,6 +377,7 @@ export function resolveDiffSelectionFromDom(
       lineElements.selectedLines,
       lineElements.range,
       selectedText,
+      lineElements.exactSelectionText,
     ),
   };
 }
