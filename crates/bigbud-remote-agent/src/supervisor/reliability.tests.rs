@@ -101,6 +101,7 @@ impl Rig {
                 rows: 24,
                 environment: vec![],
                 profile_launch: false,
+                ..Default::default()
             }),
         );
         let v1::frame::Payload::PtyCreateResponse(value) = read_until(stream, |p| {

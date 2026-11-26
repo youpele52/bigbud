@@ -21,6 +21,8 @@ function makeSession(): ActivePiSession {
   return {
     process: {
       child: {} as never,
+      isAlive: () => true,
+      onExit: () => () => undefined,
       command: "pi",
       args: [],
       stderrTail: () => "",

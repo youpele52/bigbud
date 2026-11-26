@@ -32,6 +32,7 @@ import {
   projectThreadUnarchived,
   projectThreadUnpinned,
 } from "./projectorThreadLifecycle.ts";
+import { queuedPromptsAfterInteractionActivity } from "./PendingInteractionGate.logic.ts";
 import { compareThreadActivities } from "./projectorThreadState.ts";
 import { projectThreadReverted } from "./projectorThreadReverted.ts";
 import { projectThreadTaskEvent } from "./projectorTasks.ts";
@@ -330,6 +331,10 @@ function projectEventState(
             ...nextBase,
             threads: updateThread(nextBase.threads, payload.threadId, {
               activities,
+              queuedPrompts: queuedPromptsAfterInteractionActivity(
+                thread.queuedPrompts ?? [],
+                payload.activity,
+              ),
               updatedAt: event.occurredAt,
             }),
           };

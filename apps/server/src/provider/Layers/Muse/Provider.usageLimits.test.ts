@@ -99,6 +99,7 @@ describe("readMuseUsageLimits", () => {
       now: () => NOW,
     });
     expect(fresh.windows[0]?.utilization).toBe(7);
+    expect(fresh.lastSuccessfulAt).toBe(new Date(NOW - 60_000).toISOString());
 
     const stale = new MuseUsageObservations();
     stale.record(mspUsage(NOW - 60 * 60_000));

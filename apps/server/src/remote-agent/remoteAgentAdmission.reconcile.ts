@@ -3,7 +3,7 @@ import {
   parseRemoteAgentRegistry,
   type RemoteAgentRegistry,
 } from "./remoteAgentInstall.registry.ts";
-import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { RemoteAgentAdmissionError } from "./remoteAgentAdmission.types.ts";
 
 /** Admission publication cannot race a retired request or a reserved replacement launch. */
@@ -70,20 +70,13 @@ export async function reconcileFailedRemoteAgentAdmission(
     const current = await control.registry.read();
     const identity = JSON.stringify(failed);
     if (JSON.stringify(current) !== identity) return;
-    const epoch = `'${launch.epoch.replaceAll("'", "'\\''")}'`;
     const observed = (
-      await control.run(`set -eu
-# Failed admission death observation: no launch, stop, or replay.
-${buildRemoteAgentSupervisorObservation(build.runtime, launch.attemptId)}
-test -f "$state/epoch" && test ! -L "$state/epoch" &&
-test "$(stat -c '%u' -- "$state/epoch")" = "$(id -u)" &&
-# Native AgentState writes owner-only 0700; older private epoch files may be 0600.
-{ test "$(stat -c '%a' -- "$state/epoch")" = 600 || test "$(stat -c '%a' -- "$state/epoch")" = 700; } &&
-test "$(stat -c '%h' -- "$state/epoch")" = 1 &&
-test "$(wc -c < "$state/epoch")" -le 256 &&
-test "$(cat "$state/epoch")" = ${epoch} || { printf unknown; exit 0; }
-observe_supervisor
-`)
+      await runRemoteAgentControlOp(control, {
+        kind: "admissionDeathObserve",
+        runtime: build.runtime,
+        attemptId: launch.attemptId,
+        epoch: launch.epoch,
+      })
     ).trim();
     if (!/^exited:[0-9]{1,3}$/.test(observed) && observed !== "prior-boot-dead") return;
     await control.registry.update((state) => {

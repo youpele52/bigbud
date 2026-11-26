@@ -1,6 +1,8 @@
 import { type MessageId } from "@bigbud/contracts";
 import { isReadOnlyProviderThread } from "@bigbud/shared/providerLifecycle";
 
+import { useThreadRemoteTarget } from "../../../../hooks/useThreadRemoteTarget";
+import { useRemoteAccessStore } from "../../../../stores/remoteAccess/remoteAccess.store";
 import { openSideChat } from "../../side-chat/sideChat.actions";
 import { SideChatHost } from "../../side-chat/SideChatHost";
 import { ChatViewComposer } from "./ChatViewComposer";
@@ -19,10 +21,18 @@ export function ChatViewMainComposer(props: {
   onOpenOrchestra: () => void;
   onOpenReplySource: (messageId: MessageId) => void;
 }) {
-  if (!props.base.activeThread) {
+  const activeThread = props.base.activeThread;
+  const remoteTarget = useThreadRemoteTarget(props.base.threadId, activeThread?.projectId);
+  // A workspace the user disconnected keeps its threads read-only until it reconnects (Q2).
+  const remoteDisconnected = useRemoteAccessStore((state) =>
+    remoteTarget
+      ? state.disconnectedExecutionTargetIds[remoteTarget.executionTargetId] === true
+      : false,
+  );
+  if (!activeThread) {
     return null;
   }
-  if (props.base.isServerThread && isReadOnlyProviderThread(props.base.activeThread)) {
+  if (props.base.isServerThread && (isReadOnlyProviderThread(activeThread) || remoteDisconnected)) {
     return null;
   }
 
@@ -36,12 +46,12 @@ export function ChatViewMainComposer(props: {
         <ChatViewComposer
           {...props}
           onOpenSideChat={() => {
-            void openSideChat(props.base.activeThread!);
+            void openSideChat(activeThread);
           }}
         />
       </div>
       <SideChatHost
-        mainThreadId={props.base.activeThread.id}
+        mainThreadId={activeThread.id}
         onFocusMainComposer={props.runtime.scheduleComposerFocus}
       />
     </>

@@ -20,6 +20,7 @@ import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { toastManager } from "../../ui/toast";
 import { AgentWorkingBlob } from "../../ui/agent-working-blob";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../../ui/solidSurface";
 import ChatMarkdown from "../common/ChatMarkdown";
 
 function stepStatusIcon(status: string): ReactNode {
@@ -123,7 +124,12 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
   }, [planMarkdown, workspaceExecutionTargetId, workspaceRoot]);
 
   return (
-    <div className="relative flex max-h-[min(28rem,calc(100dvh-15rem))] w-full flex-col overflow-hidden rounded-[24px] border border-border/80 bg-background/92 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)] supports-[backdrop-filter]:bg-background/80 supports-[backdrop-filter]:backdrop-blur-md">
+    <div
+      className={cn(
+        "relative flex max-h-[min(28rem,calc(100dvh-15rem))] w-full flex-col overflow-hidden rounded-[24px] border border-border/80 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)]",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
+      )}
+    >
       <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">

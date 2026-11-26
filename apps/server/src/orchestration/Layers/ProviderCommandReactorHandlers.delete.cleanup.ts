@@ -4,13 +4,23 @@ export function resolveDeletionRequestMode(
   return requestedMode ?? "subtree";
 }
 
+const CLEANUP_STEP_LABEL = {
+  provider: "Provider session cleanup failed",
+  browser: "Browser cleanup failed",
+  terminal: "Terminal cleanup failed",
+  shell: "Shell cleanup failed",
+} as const;
+
+/** Names each failed runtime step with its own reason, e.g. what blocked terminal cleanup. */
 export function describeRuntimeCleanupFailures(
   failures: ReadonlyArray<{
     readonly step: "provider" | "browser" | "terminal" | "shell";
     readonly detail: string;
   }>,
 ): string {
-  return failures.map((failure) => failure.step).join(", ");
+  return failures
+    .map((failure) => `${CLEANUP_STEP_LABEL[failure.step]}: ${failure.detail}`)
+    .join(" ");
 }
 
 const STEP_TIMEOUT = Duration.seconds(15);
@@ -24,7 +34,7 @@ function runCleanupStepOnce<A, E, R>(
     Effect.exit,
     Effect.map((exit) =>
       exit._tag === "Failure"
-        ? { ok: false as const, step, detail: Cause.pretty(exit.cause) }
+        ? { ok: false as const, step, detail: describeDeletionFailure(exit.cause) }
         : { ok: true as const, step },
     ),
   );
@@ -123,7 +133,8 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
-import { Cause, Duration, Effect } from "effect";
+import { Duration, Effect } from "effect";
+import { describeDeletionFailure } from "../../deletion/Layers/DeletionFailure.detail.ts";
 import type { ServerConfigShape } from "../../startup/config.ts";
 import type { TerminalManagerShape } from "../../terminal/Services/Manager.ts";
 import type { DirectCleanupResource } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";

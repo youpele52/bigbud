@@ -5,6 +5,8 @@ import type {
   RemoteAgentPtyListResponse,
 } from "./remoteAgentProtocol.pty.ts";
 import { decodeMessage, requireWireType, WireWriter } from "./remoteAgentProtocol.codec.wire.ts";
+import { PTY_INVENTORY_LIFECYCLE_FIELDS } from "./remoteAgentProtocol.codec.pty.lifecycle.ts";
+import { encodeTableExtension } from "./remoteAgentProtocol.codec.table.ts";
 
 function encodeEntry(value: RemoteAgentPtyInventoryEntry): Uint8Array {
   const writer = new WireWriter();
@@ -16,6 +18,7 @@ function encodeEntry(value: RemoteAgentPtyInventoryEntry): Uint8Array {
   writer.fieldUint(6, value.firstRetainedSequence);
   writer.fieldBool(7, value.verifiedExit);
   writer.fieldString(8, value.launchStatus);
+  writer.bytes.push(...encodeTableExtension(PTY_INVENTORY_LIFECYCLE_FIELDS, value));
   return writer.finish();
 }
 

@@ -30,6 +30,21 @@ describe("Muse interactive command acknowledgements", () => {
         yield* Effect.promise(() =>
           host.request({ method: "approval/request", params: approvalParams(host.sessionId()) }),
         );
+        const refusal = yield* Effect.flip(adapter.sendTurn({ threadId, input: "chat" }));
+        expect(host.calls.some((call) => call.method === "turn/start")).toBe(false);
+        expect(refusal).toMatchObject({
+          turnStartRefusal: {
+            gate: {
+              provider: "muse",
+              sessionEpoch: 7,
+              approvalRequests: [{ requestId: "approval:0", generation: expect.any(String) }],
+            },
+          },
+        });
+        const generation =
+          "turnStartRefusal" in refusal
+            ? refusal.turnStartRefusal?.gate.approvalRequests[0]?.generation
+            : undefined;
         yield* adapter.respondToRequest(threadId, "approval:0" as never, "accept");
         yield* Effect.promise(() =>
           host.request({
@@ -44,7 +59,7 @@ describe("Muse interactive command acknowledgements", () => {
             (event) => event.type === "request.resolved" || event.type === "user-input.resolved",
           ),
         ).toMatchObject([
-          { type: "request.resolved", sessionEpoch: 7 },
+          { type: "request.resolved", sessionEpoch: 7, requestGeneration: generation },
           { type: "user-input.resolved", sessionEpoch: 7 },
         ]);
         yield* adapter.stopAll();

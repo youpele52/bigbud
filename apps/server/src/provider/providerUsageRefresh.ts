@@ -1,20 +1,44 @@
 import type { ServerProvider } from "@bigbud/contracts/server/server.providers.ts";
-import { Deferred, Effect } from "effect";
+import type { SubscriptionRefreshOutcome } from "@bigbud/contracts/server/usageLimits.ts";
+import { Deferred, type Duration, Effect, Option } from "effect";
 import type { ProviderRegistration } from "./ProviderRegistration.ts";
+
+// Five readers in this release. Keep them independent; allow time for Muse's
+// host startup, teardown, and CLI fallback without waiting forever on a hung reader.
+const USAGE_REFRESH_CONCURRENCY = 5;
+const USAGE_READER_TIMEOUT = "60 seconds";
 
 /** Includes healthy providers even when another provider needs recovery. */
 export function refreshSubscriptionProviders(
   registrations: ReadonlyArray<ProviderRegistration>,
   providers: ReadonlyArray<ServerProvider>,
+  timeout: Duration.Input = USAGE_READER_TIMEOUT,
 ) {
+  const enabled = new Set(providers.filter((provider) => provider.enabled).map((p) => p.provider));
+  const readers = registrations.flatMap(({ provider, service }) =>
+    enabled.has(provider) && service.refreshUsageLimits
+      ? [{ provider, read: service.refreshUsageLimits }]
+      : [],
+  );
   return Effect.forEach(
-    registrations.filter(
-      (entry) =>
-        entry.service.refreshUsageLimits &&
-        providers.some((provider) => provider.provider === entry.provider && provider.enabled),
-    ),
-    (entry) => entry.service.refreshUsageLimits!.pipe(Effect.ignoreCause({ log: true })),
-    { concurrency: "unbounded", discard: true },
+    readers,
+    ({ provider, read }) =>
+      read.pipe(
+        Effect.map(({ status }) => status),
+        Effect.catchCause(() =>
+          Effect.logWarning("Subscription usage reader failed", { provider }).pipe(
+            Effect.as("failed" as const),
+          ),
+        ),
+        Effect.timeoutOption(timeout),
+        Effect.map(
+          (status): SubscriptionRefreshOutcome => ({
+            provider,
+            status: Option.getOrElse(status, () => "timed-out"),
+          }),
+        ),
+      ),
+    { concurrency: USAGE_REFRESH_CONCURRENCY },
   );
 }
 

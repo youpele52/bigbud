@@ -41,6 +41,8 @@ describe("PiAdapter methods", () => {
     const stop = vi.fn(async () => undefined);
     vi.mocked(createPiRpcProcess).mockResolvedValueOnce({
       child: { once: vi.fn() } as never,
+      isAlive: () => true,
+      onExit: () => () => undefined,
       command: "ssh",
       args: ["-T", "root@devbox"],
       stderrTail: () => "",
@@ -136,6 +138,8 @@ describe("PiAdapter methods", () => {
     const session: ActivePiSession = {
       process: {
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
         stderrTail: () => "",
@@ -205,6 +209,8 @@ describe("PiAdapter methods", () => {
     const session: ActivePiSession = {
       process: {
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
         stderrTail: () => "",
@@ -304,6 +310,8 @@ describe("PiAdapter methods", () => {
         subscribe: () => () => undefined,
         stop: async () => undefined,
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
       },

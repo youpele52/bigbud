@@ -4,7 +4,11 @@ import type { DesktopCertificateChallenge } from "@bigbud/contracts/server/ipc.d
 import { useSettings } from "~/hooks/useSettings";
 import { isElectron } from "~/config/env";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
-import { closeBrowserTab, openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
+import {
+  closeBrowserTab,
+  openNewBrowserTab,
+  resolveBrowserTabNavigation,
+} from "../../stores/browser/browserPanel.actions";
 import { useBrowserAnnotation } from "./BrowserPanel.annotation.hook";
 import {
   getUnsupportedBrowserOmniboxScheme,
@@ -137,6 +141,16 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     [],
   );
 
+  const handleSelectHistoryUrl = useCallback(
+    (nextUrl: string) => {
+      const handled = resolveBrowserTabNavigation(tabId, nextUrl);
+      setInputUrl(handled ? url : nextUrl);
+      setLoadError(null);
+      if (!handled) setTabUrl(tabId, nextUrl);
+    },
+    [setTabUrl, tabId, url],
+  );
+
   const handleNavigate = useCallback(() => {
     const nextUrl = resolveBrowserOmniboxInput(inputUrl, searchEngine);
     if (!nextUrl) {
@@ -149,19 +163,8 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       }
       return;
     }
-    setInputUrl(nextUrl);
-    setLoadError(null);
-    setTabUrl(tabId, nextUrl);
-  }, [inputUrl, searchEngine, setTabUrl, tabId]);
-
-  const handleSelectHistoryUrl = useCallback(
-    (nextUrl: string) => {
-      setInputUrl(nextUrl);
-      setLoadError(null);
-      setTabUrl(tabId, nextUrl);
-    },
-    [setTabUrl, tabId],
-  );
+    handleSelectHistoryUrl(nextUrl);
+  }, [handleSelectHistoryUrl, inputUrl, searchEngine]);
 
   const handleCancelEmptyUrlEdit = useCallback(() => {
     setInputUrl(url);

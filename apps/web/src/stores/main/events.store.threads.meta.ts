@@ -192,6 +192,7 @@ export function applyThreadMetaEvent(
           : {}),
         runtimeMode: event.payload.runtimeMode,
         interactionMode: event.payload.interactionMode,
+        ...(event.payload.releaseEmptyQueueHold ? { queueHold: false } : {}),
         pendingSourceProposedPlan: event.payload.sourceProposedPlan,
         turnStartRequest: requestTurnStart(event.payload.messageId, event.payload.createdAt),
         updatedAt: event.occurredAt,

@@ -9,9 +9,30 @@ import { sameShellHost } from "./ShellProfiles.launch";
 import type { SessionApiContext } from "./Manager.session.types";
 import { ownedTerminalOwnerRouteKey } from "./OwnedPtyRuntime.owner.ts";
 import { localSupervisorShellHost } from "../../remote-backend/localSupervisorIdentity.ts";
+import {
+  localTerminalHostPlatform,
+  localTerminalHostShellHost,
+} from "../../terminal-host/localTerminalHost.launchSpec.ts";
+import { LOCAL_TERMINAL_HOST_TARGET_ID } from "../../terminal-host/localTerminalHost.paths.ts";
 import { shellProfileId } from "./ShellProfiles.identity";
 import { LOCAL_SHELL_HOST } from "./ShellProfiles.identity";
 import type { TerminalManagerOptions, TerminalSessionState } from "./Manager.types";
+
+/** The local terminal host launches on the real platform; a local supervisor presents Linux. */
+function ownedRuntimeShellHost(target: string) {
+  return target === LOCAL_TERMINAL_HOST_TARGET_ID
+    ? localTerminalHostShellHost(target)
+    : localSupervisorShellHost(target);
+}
+
+function ownedRuntimeShellPlatform(target: string): string {
+  if (target !== LOCAL_TERMINAL_HOST_TARGET_ID) return "linux";
+  try {
+    return localTerminalHostPlatform();
+  } catch {
+    return "linux";
+  }
+}
 
 /** Reattach verifies retained evidence only; requested intent never becomes actual identity. */
 export const assertTerminalShellReattach = Effect.fn("terminal.assertShellReattach")(function* (
@@ -37,7 +58,7 @@ export const assertTerminalShellReattach = Effect.fn("terminal.assertShellReatta
       executionTargetId === session.executionTargetId &&
       requested &&
       runtime?.pidNamespace === "backend-host" &&
-      sameShellHost(requested.host, localSupervisorShellHost(runtime.targetId)) &&
+      sameShellHost(requested.host, ownedRuntimeShellHost(runtime.targetId)) &&
       session.process?.remoteResourceId
     ) {
       const owner = yield* Effect.tryPromise(() =>
@@ -48,7 +69,7 @@ export const assertTerminalShellReattach = Effect.fn("terminal.assertShellReatta
         owner?.target === runtime.targetId &&
         owner.resourceId === session.process.remoteResourceId &&
         owner.state !== "terminal" &&
-        launch?.platform === "linux" &&
+        launch?.platform === ownedRuntimeShellPlatform(runtime.targetId) &&
         launch.requestedProfile &&
         sameShellHost(launch.requestedProfile.host, requested.host) &&
         launch.requestedProfile.profileId === requested.profileId &&

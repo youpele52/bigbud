@@ -9,6 +9,7 @@ import {
   ProviderTurnAdmissions,
   type ProviderTurnAdmissionError,
 } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
+import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { admissionCorrelation } from "./Admission.identity.ts";
 
 export class V2AdmissionUnconfirmed extends Schema.TaggedErrorClass<V2AdmissionUnconfirmed>()(
@@ -25,7 +26,8 @@ export class V2PreparationFailed extends Schema.TaggedErrorClass<V2PreparationFa
 export type V2AdmissionError =
   | ProviderTurnAdmissionError
   | V2AdmissionUnconfirmed
-  | V2PreparationFailed;
+  | V2PreparationFailed
+  | ProviderAdapterValidationError;
 
 export interface V2AdmissionRequest {
   readonly identity: ProviderTurnAdmissionIdentity;
@@ -35,9 +37,14 @@ export interface V2AdmissionRequest {
   /** Non-executing preparation may be retried only against the same immutable reservation. */
   readonly prepare?: (
     row: ProviderTurnAdmission,
-  ) => Effect.Effect<void, V2AdmissionUnconfirmed | V2PreparationFailed>;
+  ) => Effect.Effect<
+    void,
+    V2AdmissionUnconfirmed | V2PreparationFailed | ProviderAdapterValidationError
+  >;
   /** Native ack/observed projection must correlate exact session and admission material. */
-  readonly dispatch: (row: ProviderTurnAdmission) => Effect.Effect<boolean, V2AdmissionUnconfirmed>;
+  readonly dispatch: (
+    row: ProviderTurnAdmission,
+  ) => Effect.Effect<boolean, V2AdmissionUnconfirmed | ProviderAdapterValidationError>;
   readonly reconcile: (
     row: ProviderTurnAdmission,
   ) => Effect.Effect<"accepted" | "unknown", V2AdmissionUnconfirmed>;
@@ -107,8 +114,32 @@ export const admitV2Turn = Effect.fn("admitV2Turn")(function* (request: V2Admiss
     return yield* Effect.fail(
       new V2AdmissionUnconfirmed({ detail: "Admission intent retained after ownership changed." }),
     );
-  const accepted = yield* request.dispatch(row);
-  if (!accepted || !request.isCurrent()) {
+  const dispatched = yield* request.dispatch(row).pipe(Effect.result);
+  if (dispatched._tag === "Failure") {
+    const error = dispatched.failure;
+    if (
+      Schema.is(ProviderAdapterValidationError)(error) &&
+      error.operation === "sendTurn" &&
+      error.turnStartRefusal?.gate.provider === "opencodeV2"
+    ) {
+      if (!request.isCurrent())
+        return yield* new V2AdmissionUnconfirmed({
+          detail: "Local refusal lost ownership of its exact intent; no resend.",
+        });
+      if (error.turnStartRefusal.gate.manualRecovery) {
+        // No same-ID replay is allowed for a manual-recovery hold.
+        yield* journal.settleProvenRefusal(row, new Date().toISOString());
+      } else {
+        if (!journal.reopenUndispatchedIntent)
+          return yield* new V2AdmissionUnconfirmed({
+            detail: "Local refusal could not reopen its exact intent; no resend.",
+          });
+        yield* journal.reopenUndispatchedIntent(row, new Date().toISOString());
+      }
+    }
+    return yield* error;
+  }
+  if (!dispatched.success || !request.isCurrent()) {
     return yield* Effect.fail(
       new V2AdmissionUnconfirmed({
         detail: "Native acknowledgement was uncorrelated or stale; dispatch will not be replayed.",

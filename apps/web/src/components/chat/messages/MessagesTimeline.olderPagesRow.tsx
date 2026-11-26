@@ -1,5 +1,7 @@
 import { Button } from "../../ui/button";
 import { Spinner } from "../../ui/spinner";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "../../ui/solidSurface";
+import { cn } from "~/lib/utils";
 import type { OlderPagesStatus } from "./MessagesTimeline.olderPages";
 
 /**
@@ -16,7 +18,10 @@ export function OlderMessagesStatusRow(props: {
       <div className="absolute inset-x-0 top-1 z-10 flex justify-center">
         <div
           role={props.status === "error" ? "alert" : undefined}
-          className="flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground shadow-xs"
+          className={cn(
+            "flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground shadow-xs",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
+          )}
         >
           {props.status === "loading" ? (
             <>

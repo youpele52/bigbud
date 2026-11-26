@@ -1,10 +1,9 @@
 import type { ThreadId } from "@bigbud/contracts";
 import type { TerminalSearchHit } from "@bigbud/contracts/workspace/terminal.search.ts";
 
-import { useTerminalStateStore } from "../../stores/terminal";
-import { openTerminalPanel } from "../../stores/terminal/terminalPanel.coordinator";
 import { useSearchStore } from "../../stores/ui";
-import { buildTerminalLabelMap } from "../terminal/terminalDisplay";
+import { revealExistingTerminal } from "../terminal/revealTerminal";
+import { terminalPaneLabel, type TerminalLabelStoreSnapshot } from "../terminal/terminalPaneLabel";
 
 export interface TerminalSearchResult {
   id: string;
@@ -18,25 +17,10 @@ export interface TerminalSearchResult {
   type: "terminal";
 }
 
-type TerminalStoreSnapshot = Pick<
-  ReturnType<typeof useTerminalStateStore.getState>,
-  "terminalStateByThreadId" | "panelTerminalStateByThreadId" | "terminalLabelOverridesByThreadId"
->;
+type TerminalStoreSnapshot = TerminalLabelStoreSnapshot;
 
 /** The label the terminal's tab shows ("Terminal 2", or the user's rename). */
-export function terminalSearchLabel(
-  store: TerminalStoreSnapshot,
-  threadId: ThreadId,
-  terminalId: string,
-): string {
-  const overrides = store.terminalLabelOverridesByThreadId[threadId] ?? {};
-  for (const surface of [store.terminalStateByThreadId, store.panelTerminalStateByThreadId]) {
-    const ids = surface[threadId]?.terminalIds ?? [];
-    if (ids.includes(terminalId))
-      return buildTerminalLabelMap(ids, "Terminal", overrides).get(terminalId) ?? "Terminal";
-  }
-  return overrides[terminalId]?.trim() || "Terminal";
-}
+export const terminalSearchLabel = terminalPaneLabel;
 
 /** Hits of threads the user can see (not archived, deleted or hidden), labelled for display. */
 export function toTerminalSearchResults(
@@ -70,15 +54,7 @@ export function toTerminalSearchResults(
  * open find on the query at the hit's line. The caller navigates to the thread.
  */
 export function revealTerminalSearchResult(result: TerminalSearchResult, query: string): void {
-  const store = useTerminalStateStore.getState();
-  if (
-    store.panelTerminalStateByThreadId[result.threadId]?.terminalIds.includes(result.terminalId)
-  ) {
-    store.setPanelActiveTerminal(result.threadId, result.terminalId);
-    openTerminalPanel();
-  } else {
-    store.ensureTerminal(result.threadId, result.terminalId, { open: true, active: true });
-  }
+  revealExistingTerminal(result.threadId, result.terminalId);
   useSearchStore.getState().requestTerminalFind({
     threadId: result.threadId,
     terminalId: result.terminalId,

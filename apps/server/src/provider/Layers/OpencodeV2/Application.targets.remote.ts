@@ -39,6 +39,7 @@ export async function prepareV2SharedRemoteTarget(
     input.threadId,
     workspaceTarget.executionTargetId,
     workspaceTarget.cwd,
+    retained?.directory ?? cursor?.directory,
   );
   const serverName = `bbv2_remote_${createHash("sha256").update(directory).digest("hex").slice(0, 32)}`;
   let canonical: Awaited<ReturnType<typeof prepareV2SharedCanonicalResources>> | undefined;

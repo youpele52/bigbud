@@ -29,15 +29,14 @@ export function searchResultAbsolutePath(result: FileSearchResult): string {
 }
 
 /**
- * Routing for a selected row. Project files keep the existing in-app routing when bigbud can
- * show the type, and go to the system app otherwise. "This computer" rows are outside every
- * project, so they never load into bigbud panels (read-only and out of agents' reach, Q7): they
- * always go through the desktop shell, which refuses excluded paths and reveals executables.
+ * Routing for a selected row, the same for every tier ("this computer" included): bigbud opens
+ * whatever it can show, by absolute path rooted at the row's own folder and on the row's own
+ * machine. Other local files go to the desktop shell, which refuses excluded paths and reveals
+ * executables; other remote files get a notice. "This computer" rows only exist inside the File
+ * Access scope and have passed the exclusion list on the agent and the server.
  */
 export function planSearchResultOpen(result: FileSearchResult): SearchResultOpenPlan {
   const absolutePath = searchResultAbsolutePath(result);
-  const outsideProjects = result.id.startsWith("thisComputer:");
-  if (outsideProjects) return { action: "system", absolutePath };
   if (result.isDirectory || inAppViewerFor(result.path) !== null) {
     const position = result.line
       ? `:${result.line}${result.column ? `:${result.column}` : ""}`
@@ -102,7 +101,6 @@ export function describeSystemOpenResult(result: SystemPathOpenResult): SearchOp
 
 export const REMOTE_UNSUPPORTED_NOTICE: SearchOpenNotice = {
   type: "warning",
-  title: "This remote file type cannot open yet",
-  description:
-    "Opening remote files in a desktop app (download to a private cache) is coming later.",
+  title: "bigbud can't open this file type yet",
+  description: "Remote files bigbud can't show cannot be opened in an app on this computer yet.",
 };

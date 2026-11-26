@@ -29,12 +29,16 @@ pub(crate) struct Fixture {
 impl Fixture {
     pub(crate) fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
-            "bigbud-service-test-{}-{}",
+        // A short `/tmp` root, like the terminal host fixture's, keeps the user-bus socket inside
+        // `sockaddr_un` (104 bytes on macOS) however deep `TMPDIR` is.
+        let root = PathBuf::from(format!(
+            "/tmp/bbsvc-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::SeqCst)
         ));
+        let _stale = fs::remove_dir_all(&root);
         fs::create_dir(&root).unwrap();
+        let root = root.canonicalize().unwrap();
         mode(&root, 0o700);
         let authority = "a".repeat(32);
         let bytes = b"fixture-only artifact; validation must never execute it\n";

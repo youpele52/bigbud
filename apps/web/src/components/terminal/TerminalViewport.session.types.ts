@@ -37,6 +37,8 @@ export interface UseTerminalViewportSessionInput
   runtimeEnv?: Record<string, string> | undefined;
   terminalGpuAcceleration: TerminalGpuAcceleration;
   onSessionExited: () => void;
+  /** Whether the host can restore this view exactly; only restorable views are ever parked. */
+  onRestorableChange?: ((restorable: boolean) => void) | undefined;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   onRequestTerminalAnnotation: (input: {
     selection: TerminalContextSelection;

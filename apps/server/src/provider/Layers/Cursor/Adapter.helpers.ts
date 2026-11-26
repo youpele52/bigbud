@@ -73,6 +73,7 @@ import {
   extractTodosAsPlan,
 } from "../../acp/CursorAcpExtension.ts";
 import { CursorAdapter } from "../../Services/Cursor/Adapter.ts";
+import type { SessionFsOwnerWorkspace } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.owner.ts";
 import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import { resolveCursorAcpBaseModelId } from "./Provider.ts";
@@ -88,6 +89,7 @@ export interface CursorAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
   readonly remoteAgentPtyResolver?: RemoteAgentPtyResolver;
+  readonly sessionFsOwner?: SessionFsOwnerWorkspace;
   readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
 }
 

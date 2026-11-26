@@ -1,4 +1,4 @@
-import { buildSshCommandInvocation } from "../../ssh/sshCommand.ts";
+import { buildSshTerminalCandidateInvocation } from "../../ssh/sshCommand.ts";
 import { remoteShellStartup } from "./Manager.remote-identity.ts";
 import { type ShellCandidate } from "./Manager.shell";
 
@@ -8,7 +8,7 @@ export function buildRemoteTerminalShellCandidate(input: {
   readonly runtimeEnv: Record<string, string> | null;
   readonly runtimeGeneration: string;
 }): ShellCandidate {
-  const invocation = buildSshCommandInvocation({
+  const invocation = buildSshTerminalCandidateInvocation({
     executionTargetId: input.executionTargetId,
     cwd: input.cwd,
     command: "sh",

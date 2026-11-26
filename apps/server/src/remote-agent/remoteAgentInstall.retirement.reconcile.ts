@@ -6,7 +6,7 @@ import type {
 import { remoteAgentBuildIsReferenced } from "./remoteAgentInstall.registry.references.ts";
 import { confirmRemoteAgentRetirementDeletion } from "./remoteAgentInstall.registry.retirement.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
-import { buildRemoteAgentRetirementDeletionCommand } from "./remoteAgentInstall.retirement.deletion.ts";
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { probeRemoteAgentSupervisorState } from "./remoteAgentInstall.retirement.ts";
 import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 
@@ -104,9 +104,10 @@ async function reconcileRetirementTombstone(input: {
 
   let deletion: string;
   try {
-    deletion = await input.control.run(
-      buildRemoteAgentRetirementDeletionCommand(validateRemoteAgentRuntime(currentBuild.runtime)),
-    );
+    deletion = await runRemoteAgentControlOp(input.control, {
+      kind: "retirementDelete",
+      runtime: validateRemoteAgentRuntime(currentBuild.runtime),
+    });
   } catch {
     return false;
   }

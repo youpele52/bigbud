@@ -122,6 +122,17 @@ describe("ChatHeader", () => {
     expect(renderHeader({}, false)).not.toContain(columnGrid);
   });
 
+  it("renders the full project and thread labels with the settings-style chevron", () => {
+    const activeThreadTitle = "A long thread title that should only truncate when space runs out";
+    const markup = renderHeader({ activeProjectName: "Project Alpha", activeThreadTitle });
+    const heading = markup.match(/<h2\b.*?<\/h2>/)?.[0];
+
+    expect(heading).toContain('title="Project Alpha">Project Alpha<');
+    expect(heading).toContain("lucide-chevron-right");
+    expect(heading).toContain(`title="${activeThreadTitle}">${activeThreadTitle}<`);
+    expect(renderHeader().match(/<h2\b.*?<\/h2>/)?.[0]).not.toContain("lucide-chevron-right");
+  });
+
   it("keeps session management out of the chat header", () => {
     const markup = renderHeader();
 

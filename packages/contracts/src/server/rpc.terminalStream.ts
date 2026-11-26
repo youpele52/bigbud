@@ -4,7 +4,7 @@ import { WS_METHODS } from "../constants/websocket.constant";
 import {
   TerminalOutputAckInput,
   TerminalSessionStreamInput,
-  TerminalSessionStreamItem,
+  TerminalSessionStreamRpcItem,
 } from "../workspace/terminal.stream";
 import { TerminalSearchInput, TerminalSearchResult } from "../workspace/terminal.search";
 import { TerminalViewInput } from "../workspace/terminal.activity";
@@ -17,7 +17,7 @@ import {
 /** One terminal's events, flow-controlled by `terminal.outputAck`. */
 export const WsSubscribeTerminalSessionRpc = Rpc.make(WS_METHODS.subscribeTerminalSession, {
   payload: TerminalSessionStreamInput,
-  success: TerminalSessionStreamItem,
+  success: TerminalSessionStreamRpcItem,
   stream: true,
 });
 

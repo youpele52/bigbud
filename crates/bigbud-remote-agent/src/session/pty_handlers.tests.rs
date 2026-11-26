@@ -48,6 +48,7 @@ fn duplicate_pty_create_reuses_the_existing_process() {
         rows: 24,
         environment: Vec::new(),
         profile_launch: false,
+        ..Default::default()
     };
     let (created, job) = session.prepare_pty_create(request.clone()).unwrap();
     assert!(matches!(

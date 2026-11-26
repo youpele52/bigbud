@@ -10,7 +10,7 @@ import { buildWorktreeSnapshot, withProjectScripts } from "./scenarioFixtures";
 const ctx = createChatViewBrowserTestContext();
 ctx.registerLifecycleHooks();
 const worktree = "/repo/worktrees/feature-branch";
-const env = { T3CODE_PROJECT_ROOT: "/repo/project", T3CODE_WORKTREE_PATH: worktree };
+const env = { BIGBUD_PROJECT_ROOT: "/repo/project", BIGBUD_WORKTREE_PATH: worktree };
 
 function setupRetainedTerminal(context: {
   cwd: string;
@@ -64,7 +64,7 @@ describe("ChatView project scripts and retained terminal launches", () => {
         cwd: "/repo/project",
         worktreePath: null,
         executionTargetId: "local",
-        runtimeEnv: { T3CODE_PROJECT_ROOT: "/repo/project" },
+        runtimeEnv: { BIGBUD_PROJECT_ROOT: "/repo/project" },
       },
     },
     {

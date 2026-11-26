@@ -103,8 +103,17 @@ export const ThreadDeletionRequestedPayload = Schema.Struct({
   deletingAt: IsoDateTime,
 });
 
+/** Why a deletion was undone, in user-facing words; bounded like the failure activity detail. */
+export const ThreadDeletionFailureReason = TrimmedNonEmptyString.check(Schema.isMaxLength(1_000));
+
+export const ThreadDeletionInitiator = Schema.Literal("retention");
+
 export const ThreadDeletionFailedPayload = Schema.Struct({
   threadId: ThreadId,
+  /** Absent on events recorded before deletions carried their reason. */
+  reason: Schema.optional(ThreadDeletionFailureReason),
+  /** Set when background thread retention, not a person, requested the deletion. */
+  initiator: Schema.optional(ThreadDeletionInitiator),
   updatedAt: IsoDateTime,
 });
 
@@ -174,6 +183,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
 });
 
 export const ThreadTurnStartRequestedPayload = Schema.Struct({
+  releaseEmptyQueueHold: Schema.optional(Schema.Literal(true)),
   usageAttribution: Schema.optional(UsageAttribution),
   threadId: ThreadId,
   messageId: MessageId,

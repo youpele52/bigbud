@@ -5,13 +5,35 @@ import { expect, vi } from "vitest";
 
 import { makeTerminalManagerWithOptions } from "./Manager.process.ts";
 import { PersistentLocalAdapter } from "./Manager.owned-runtime.test.helpers.ts";
-import { historyLogPath, openInput, waitFor } from "./Manager.test.helpers.ts";
+import { historyLogPath, openInput, restartInput, waitFor } from "./Manager.test.helpers.ts";
 import { FakePtyProcess } from "./Manager.test.helpers.ts";
 import { cleanupFailedTerminalObserver } from "./Manager.process-drain.ts";
 
 it.layer(NodeServices.layer, { excludeTestServices: true })(
   "owned local terminal lifecycle",
   (it) => {
+    it.effect(
+      "requests replacement only after explicit restart confirms the owned process stopped",
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const logsDir = yield* fs.makeTempDirectoryScoped({ prefix: "owned-restart-" });
+          const adapter = new PersistentLocalAdapter();
+          const manager = yield* makeTerminalManagerWithOptions({
+            logsDir,
+            ptyAdapter: adapter,
+            subprocessPollIntervalMs: 60_000,
+          });
+          yield* manager.open(openInput());
+          adapter.prepareRestart.mockRejectedValueOnce(new Error("termination unknown"));
+          const refused = yield* manager.restart(restartInput()).pipe(Effect.result);
+          expect(refused._tag).toBe("Failure");
+          expect(adapter.spawnInputs).toHaveLength(1);
+          yield* manager.restart(restartInput());
+          expect(adapter.spawnInputs.at(-1)?.replaceTerminalOwner).toBe(true);
+          expect(adapter.processes).toHaveLength(2);
+        }),
+    );
     it.effect(
       "detaches a provisional owned observer on failure and retains normal Node cleanup",
       () =>

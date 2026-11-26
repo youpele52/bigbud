@@ -34,7 +34,7 @@ import {
   resolveDelegationModelDecision,
   startDelegatedFirstTurn,
 } from "./ThreadOrchestrationTools.createThread.modelChoice.ts";
-import { isAbsentModelSelection } from "./ThreadOrchestrationTools.modelChoice.ts";
+import { resolveDelegatedChildTarget } from "./ThreadOrchestrationTools.modelChoice.context.ts";
 import {
   buildInitialDelegationPrompt,
   delegationError,
@@ -206,23 +206,23 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
             executionTargetId: callerThread.executionTargetId,
           }
         : {};
-    const decision = isAbsentModelSelection(input.modelSelection)
-      ? undefined
-      : yield* resolveDelegationModelDecision({
-          repository: input.threadDelegationRepository,
-          delegation,
-          identity,
-          request: input.modelSelection,
-          sources: input.modelSources,
-          trunk: callerModelSelection,
-          target:
-            targetProjectId === callerThread.projectId
-              ? callerExecutionTargets
-              : {
-                  providerRuntimeExecutionTargetId: targetProject.providerRuntimeExecutionTargetId,
-                  workspaceExecutionTargetId: targetProject.workspaceExecutionTargetId,
-                },
-        });
+    const storedDecision = yield* resolveDelegationModelDecision({
+      repository: input.threadDelegationRepository,
+      delegation,
+      identity,
+      request: input.modelSelection,
+      sources: input.modelSources,
+      trunk: callerModelSelection,
+      existingChildSelection: Schema.is(ModelSelection)(child?.modelSelection)
+        ? child.modelSelection
+        : undefined,
+      target: resolveDelegatedChildTarget(targetProject, callerExecutionTargets),
+    });
+    const decision = "modelDecision" in storedDecision ? storedDecision.modelDecision : undefined;
+    const selectedModel =
+      "modelDecision" in storedDecision
+        ? decisionThreadModel(storedDecision.modelDecision)
+        : storedDecision.inheritedModelSelection;
 
     yield* updateState("project_resolved");
     const createResult = yield* input.orchestrationEngine
@@ -234,8 +234,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
         title,
         purpose: "standard",
         ...callerExecutionTargets,
-        modelSelection:
-          decision === undefined ? callerModelSelection : decisionThreadModel(decision),
+        modelSelection: selectedModel,
         runtimeMode: callerThread.runtimeMode,
         interactionMode: callerThread.interactionMode,
         branch: null,
@@ -271,7 +270,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
               commandId: CommandId.makeUnsafe(stableThreadToolId("command", `${identity}:turn`)),
               threadId: delegation.childThreadId,
               message: { ...prompt, role: "user", attachments: [] },
-              modelSelection: callerModelSelection,
+              modelSelection: selectedModel,
               runtimeMode: callerThread.runtimeMode,
               interactionMode: callerThread.interactionMode,
               createdAt,
@@ -286,7 +285,6 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
             callerThread,
             prompt,
           });
-    const storedDecision = decision === undefined ? {} : { modelDecision: decision };
     if (input.watchForCompletion) {
       yield* input.projectionThreadWatchRepository
         .addActiveWatch({
@@ -304,7 +302,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
                 .storeResult({
                   delegationId: delegation.delegationId,
                   // Keep the decision so a retry reuses it rather than re-deciding.
-                  resultJson: decision === undefined ? null : JSON.stringify(storedDecision),
+                  resultJson: JSON.stringify(storedDecision),
                   errorJson: JSON.stringify({ message: error.message }),
                   updatedAt: new Date().toISOString(),
                 })

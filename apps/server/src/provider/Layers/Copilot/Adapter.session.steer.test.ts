@@ -3,10 +3,15 @@ import os from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ThreadId } from "@bigbud/contracts";
-import type { CopilotClient, CopilotSession, SessionEvent } from "@github/copilot-sdk";
+import { ApprovalRequestId, ThreadId } from "@bigbud/contracts";
+import type {
+  CopilotClient,
+  CopilotSession,
+  PermissionRequest,
+  SessionEvent,
+} from "@github/copilot-sdk";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { vi } from "vitest";
 
 import {
@@ -45,10 +50,14 @@ function setup() {
   const root = mkdtempSync(path.join(os.tmpdir(), "copilot-steer-"));
   const sessions = [makeFakeSession("copilot-session-1"), makeFakeSession("copilot-session-2")];
   let created = 0;
+  let sessionConfig: Parameters<CopilotClient["createSession"]>[0];
   const layer = makeCopilotAdapterLive({
     clientFactory: () =>
       ({
-        createSession: async () => sessions[created++]!.session,
+        createSession: async (config: typeof sessionConfig) => {
+          sessionConfig = config;
+          return sessions[created++]!.session;
+        },
         stop: async () => {},
       }) as unknown as CopilotClient,
   }).pipe(
@@ -82,13 +91,46 @@ function setup() {
     });
     return adapter;
   });
-  return { layer, sessions, start };
+  return { layer, sessions, start, getConfig: () => sessionConfig };
 }
 
 const activeTurnId = (adapter: CopilotAdapterShape) =>
   adapter.listSessions().pipe(Effect.map((sessions) => sessions[0]?.activeTurnId));
 
 describe("CopilotAdapter turn control", () => {
+  it.effect("refuses chat before SDK send while a permission callback is pending", () => {
+    const { layer, sessions, start, getConfig } = setup();
+    return Effect.gen(function* () {
+      const adapter = yield* start;
+      const permission = getConfig()!.onPermissionRequest!(
+        { kind: "read" } as PermissionRequest,
+        {} as never,
+      );
+      const refusal = yield* Effect.flip(adapter.sendTurn({ threadId: THREAD_ID, input: "chat" }));
+      expect(refusal).toMatchObject({
+        turnStartRefusal: {
+          gate: {
+            provider: "copilot",
+            approvalRequests: [expect.objectContaining({ requestId: expect.any(String) })],
+          },
+        },
+      });
+      expect(sessions[0]!.send).not.toHaveBeenCalled();
+      const opened = yield* Stream.runHead(
+        Stream.filter(adapter.streamEvents, (event) => event.type === "request.opened"),
+      );
+      if (opened._tag !== "Some" || opened.value.requestId === undefined)
+        throw new Error("Missing request");
+      const id = ApprovalRequestId.makeUnsafe(opened.value.requestId);
+      yield* adapter.respondToRequest(THREAD_ID, id, "decline");
+      yield* Effect.promise(() => Promise.resolve(permission));
+      const closed = yield* Stream.runHead(
+        Stream.filter(adapter.streamEvents, (event) => event.type === "request.resolved"),
+      );
+      expect(closed).toMatchObject({ value: { requestGeneration: id, sessionEpoch: 0 } });
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect("declares native steering", () => {
     const { layer } = setup();
     return Effect.gen(function* () {

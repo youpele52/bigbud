@@ -26,3 +26,32 @@ export const TurnStartFailureClass = Schema.Literals([
   "unknown",
 ]);
 export type TurnStartFailureClass = typeof TurnStartFailureClass.Type;
+
+/** Why a remote workspace target could not be used when a turn started. */
+export const TurnStartRemoteTargetFailureReason = Schema.Literals([
+  "auth-required",
+  "disconnected",
+  "unreachable",
+]);
+export type TurnStartRemoteTargetFailureReason = typeof TurnStartRemoteTargetFailureReason.Type;
+
+/** The credential an `auth-required` remote target is waiting for. */
+export const TurnStartRemoteTargetAuthMode = Schema.Literals([
+  "password",
+  "ssh-key-passphrase",
+  "host-trust",
+]);
+export type TurnStartRemoteTargetAuthMode = typeof TurnStartRemoteTargetAuthMode.Type;
+
+/**
+ * Additive `remoteTarget` marker on a `provider.turn.start.failed` activity payload: the turn
+ * failed because its remote (SSH) target was unavailable, not because the provider session died.
+ * Activity payloads are untyped on the wire, so older clients ignore it. `executionTargetId` is
+ * absent when the failure was recognised only from its message text.
+ */
+export const TurnStartRemoteTargetFailure = Schema.Struct({
+  executionTargetId: Schema.optional(Schema.String),
+  reason: TurnStartRemoteTargetFailureReason,
+  authMode: Schema.optional(TurnStartRemoteTargetAuthMode),
+});
+export type TurnStartRemoteTargetFailure = typeof TurnStartRemoteTargetFailure.Type;

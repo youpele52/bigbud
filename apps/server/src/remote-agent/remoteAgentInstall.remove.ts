@@ -1,3 +1,4 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { randomUUID } from "node:crypto";
 
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
@@ -17,8 +18,6 @@ import {
   type RemoteAgentRemovalBlocker,
 } from "./remoteAgentInstall.remove.blockers.ts";
 import {
-  buildRemoteAgentRemovalCommand,
-  buildRemoteAgentRemovalOutcomeProbe,
   isRemovableRemoteAgentRoot,
   parseRemoteAgentRemovalCommandResult,
 } from "./remoteAgentInstall.remove.deletion.ts";
@@ -86,7 +85,7 @@ function ownerBlockers(list: RemoteAgentTerminalOwnerList): RemoteAgentRemovalBl
 
 /** The host's clock in milliseconds; falls back to this controller's when it cannot be read. */
 export async function readRemoteAgentHostClock(control: RemoteAgentControl): Promise<number> {
-  const output = await control.run("date +%s").catch(() => "");
+  const output = await runRemoteAgentControlOp(control, { kind: "hostClock" }).catch(() => "");
   const seconds = /^\d{1,12}$/.test(output.trim()) ? Number(output.trim()) : Number.NaN;
   return Number.isFinite(seconds) ? seconds * 1000 : Date.now();
 }
@@ -179,14 +178,11 @@ async function deleteAgentTree(
 ): Promise<RemoteAgentRemovalResult> {
   let output: string;
   try {
-    output = await control.run(
-      buildRemoteAgentRemovalCommand(control.root, { mode: "remove", fenceId }),
-      { timeoutMs: REMOTE_AGENT_REMOVAL_TIMEOUT_MS },
-    );
+    output = await runRemoteAgentControlOp(control, { kind: "removal", fenceId });
   } catch (cause) {
-    const probe = await control
-      .run(buildRemoteAgentRemovalOutcomeProbe(control.root))
-      .catch(() => "");
+    const probe = await runRemoteAgentControlOp(control, { kind: "removalOutcome" }).catch(
+      () => "",
+    );
     // Renamed away: the removal completed; install and cleanup delete any leftover bytes.
     if (probe.trim() === "gone") return { outcome: "removed" };
     await clearFence(control, fenceId);
@@ -262,9 +258,7 @@ export async function resumeRemoteAgentRemoval(control: RemoteAgentControl): Pro
   // A removal is never started for such a root, so it cannot have left anything behind.
   if (!isRemovableRemoteAgentRoot(control.root)) return false;
   const result = parseRemoteAgentRemovalCommandResult(
-    await control.run(buildRemoteAgentRemovalCommand(control.root, { mode: "resume" }), {
-      timeoutMs: REMOTE_AGENT_REMOVAL_TIMEOUT_MS,
-    }),
+    await runRemoteAgentControlOp(control, { kind: "removalResume" }),
   );
   if (result.kind === "refused")
     throw new RemoteAgentRemovalError(

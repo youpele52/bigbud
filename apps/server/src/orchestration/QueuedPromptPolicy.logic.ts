@@ -7,6 +7,7 @@ import type {
 import { Equal } from "effect";
 import type { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
 
+import { hasPendingInteractionGate } from "./PendingInteractionGate.logic.ts";
 import { canUserReleasePendingTurnStart } from "./PendingTurnStart.logic.ts";
 import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
 
@@ -190,6 +191,8 @@ export function evaluateQueuedPromptFlush(input: QueueDecisionInput): QueueDecis
   const userReleasesHold = input.userRelease === true && controlOperationId === undefined;
   if (thread.archivedAt != null || thread.deletingAt != null || thread.deletedAt != null)
     return { status: "invalid", reason: "queue_unavailable" };
+  if (hasPendingInteractionGate(thread))
+    return { status: "blocked", reason: "queue_waiting_for_user" };
   const operation = thread.pendingTurnControlOperation;
   if (controlOperationId !== undefined) {
     if (

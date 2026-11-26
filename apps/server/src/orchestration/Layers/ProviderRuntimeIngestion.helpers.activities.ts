@@ -7,6 +7,16 @@ import { taskRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers
 import { toolingRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tooling.ts";
 import type { RuntimeEventActivityHelpers } from "./ProviderRuntimeIngestion.helpers.activities.types.ts";
 
+function interactionClosureScope(event: ProviderRuntimeEvent) {
+  return event.sessionEpoch !== undefined && event.requestGeneration !== undefined
+    ? {
+        interactionProvider: event.provider,
+        interactionSessionEpoch: event.sessionEpoch,
+        requestGeneration: event.requestGeneration,
+      }
+    : {};
+}
+
 export function runtimeEventToActivitiesFromHelpers(
   event: ProviderRuntimeEvent,
   helpers: RuntimeEventActivityHelpers,
@@ -57,6 +67,7 @@ export function runtimeEventToActivitiesFromHelpers(
           summary: "Approval resolved",
           payload: {
             requestId: helpers.toApprovalRequestId(event.requestId),
+            ...interactionClosureScope(event),
             ...(requestKind ? { requestKind } : {}),
             requestType: event.payload.requestType,
             ...(event.payload.decision ? { decision: event.payload.decision } : {}),
@@ -148,6 +159,7 @@ export function runtimeEventToActivitiesFromHelpers(
           payload: {
             ...(event.requestId ? { requestId: event.requestId } : {}),
             answers: event.payload.answers,
+            ...interactionClosureScope(event),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
           ...sequence,

@@ -18,10 +18,12 @@ it.skipIf(process.platform === "win32")(
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const dir = yield* fs.makeTempDirectoryScoped({ prefix: "bigbud-terminal-handoff-" });
+          // The overflow burst has no trailing newline: with one, retention may find a safe line
+          // cut (trimmed, not truncated) depending on how the PTY chunks the burst (Linux does).
           const shell = path.join(dir, "synthetic-tui");
           yield* fs.writeFileString(
             shell,
-            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>console.log(d.toString()==='overflow'?'x'.repeat(1048577):d.toString()==='modes'?'\\x1b[?1049h\\x1b[?2004h':'INPUT:'+d));\n`,
+            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>d.toString()==='overflow'?process.stdout.write('x'.repeat(1048577)):console.log(d.toString()==='modes'?'\\x1b[?1049h\\x1b[?2004h':'INPUT:'+d));\n`,
           );
           yield* fs.chmod(shell, 0o755);
           const adapter = yield* PtyAdapter;
@@ -41,9 +43,12 @@ it.skipIf(process.platform === "win32")(
           const events: TerminalEvent[] = [];
           let responseReturned = false;
           const startedBeforeResponse: boolean[] = [];
+          // Counted as events arrive so the overflow wait never re-joins a 1 MiB output string.
+          let overflowBytes = 0;
           const unsubscribe = yield* manager.subscribe((event) =>
             Effect.sync(() => {
               events.push(event);
+              if (event.type === "output") overflowBytes += event.data.split("x").length - 1;
               if (event.type === "started") startedBeforeResponse.push(!responseReturned);
             }),
           );
@@ -96,7 +101,14 @@ it.skipIf(process.platform === "win32")(
           yield* Effect.promise(() => expect.poll(output).toContain("INPUT:fixture-only"));
           yield* handlers[WS_METHODS.terminalWrite]({ ...input, data: "modes" });
           yield* Effect.promise(() => expect.poll(output).toContain("\x1b[?2004h"));
+          const overflowStart = overflowBytes;
           yield* handlers[WS_METHODS.terminalWrite]({ ...input, data: "overflow" });
+          // Delivering the 1 MiB burst through a real PTY is the slow step on loaded CI runners;
+          // wait for it event by event (bounded), then expect the discard promptly.
+          yield* waitFor(
+            Effect.sync(() => overflowBytes - overflowStart >= 1_048_577),
+            "40 seconds",
+          );
           yield* waitFor(
             handlers[WS_METHODS.terminalSnapshot](input).pipe(
               Effect.map((snapshot) => snapshot.historyTruncated === true),

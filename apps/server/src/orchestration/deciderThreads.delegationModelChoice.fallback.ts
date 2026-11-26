@@ -66,6 +66,7 @@ export const decideDelegationModelChoiceFallbackStart = Effect.fn(
           {
             choiceId: command.choiceId,
             requested: requested.requested,
+            ...(requested.effort !== undefined ? { effort: requested.effort } : {}),
             fallback: requested.fallback,
             reason: requested.reason,
             used: requested.fallback,

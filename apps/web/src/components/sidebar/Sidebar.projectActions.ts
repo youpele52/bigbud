@@ -18,8 +18,9 @@ import type {
   SidebarProjectActionsInput,
   SidebarProjectActionsOutput,
 } from "./Sidebar.projectActions.types";
-import { useSidebarProjectReconnectActions } from "./Sidebar.projectActions.reconnect";
-import { useSidebarProjectConnectionActions } from "./Sidebar.projectActions.connection";
+import { requestConnect } from "../../stores/remoteAccess/remoteTargetActions.connection";
+import { runRemoteTargetMenuAction } from "../../stores/remoteAccess/remoteTargetActions.menu";
+import { isReconnectPending } from "../../stores/remoteAccess/remoteTargetActions.store";
 import { resolveProjectOpenAction } from "./Sidebar.projectActions.connection.logic";
 import { buildProjectContextMenuItems } from "./Sidebar.projectActions.menu";
 import { useProjectEditor } from "./Sidebar.projectEdit.logic";
@@ -46,8 +47,6 @@ export function useSidebarProjectActions({
     (store) => store.verifiedExecutionTargetIds,
   );
   const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
-  const reconnect = useSidebarProjectReconnectActions(projects);
-  const connection = useSidebarProjectConnectionActions(projects);
   const {
     renamingProjectId,
     setRenamingProjectId,
@@ -82,22 +81,11 @@ export function useSidebarProjectActions({
 
       const menuItems = buildProjectContextMenuItems({
         project,
-        reconnectDisabled: reconnect.isReconnectPending(projectId),
+        reconnectDisabled: isReconnectPending(projectId),
         disconnected: isExecutionTargetDisconnected(resolveWorkspaceExecutionTargetId(project)),
       });
       const clicked = await api.contextMenu.show(menuItems, position);
-      if (clicked === "reconnect") {
-        reconnect.requestReconnect(projectId);
-        return;
-      }
-      if (clicked === "disconnect") {
-        connection.requestDisconnect(projectId);
-        return;
-      }
-      if (clicked === "connect") {
-        await connection.requestConnect(projectId);
-        return;
-      }
+      if (await runRemoteTargetMenuAction(clicked, projectId)) return;
       if (clicked === "rename") {
         cancelThreadRename();
         setRenamingProjectId(projectId);
@@ -137,8 +125,6 @@ export function useSidebarProjectActions({
       requestProjectDelete,
       setRenamingProjectId,
       setRenamingProjectTitle,
-      reconnect,
-      connection,
     ],
   );
 
@@ -222,7 +208,7 @@ export function useSidebarProjectActions({
         // Threads are local, so the workspace opens while the reconnect runs.
         setSelectedProject(projectId);
         setProjectExpanded(projectId, true);
-        void connection.requestConnect(projectId);
+        void requestConnect(projectId);
         return;
       }
       void beginRemoteExecutionTargetAccessCheck({
@@ -236,7 +222,6 @@ export function useSidebarProjectActions({
     },
     [
       beginRemoteExecutionTargetAccessCheck,
-      connection,
       projects,
       setProjectExpanded,
       setSelectedProject,
@@ -305,12 +290,6 @@ export function useSidebarProjectActions({
     dismissPendingProjectDeleteConfirmation,
     confirmPendingProjectDelete,
     requestProjectDelete,
-    pendingReconnect: reconnect.pendingReconnect,
-    dismissReconnect: reconnect.dismissReconnect,
-    confirmReconnect: reconnect.confirmReconnect,
-    pendingDisconnect: connection.pendingDisconnect,
-    dismissDisconnect: connection.dismissDisconnect,
-    confirmDisconnect: connection.confirmDisconnect,
     handleProjectContextMenu,
     handleProjectDragStart,
     handleProjectDragEnd,

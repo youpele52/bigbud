@@ -4,6 +4,7 @@ import { Effect, Layer, Schema } from "effect";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
 import {
+  ClaimThreadDelegationResultInput,
   ReserveThreadDelegationInput,
   StoreThreadDelegationResultInput,
   ThreadDelegation,
@@ -128,6 +129,17 @@ export const makeThreadDelegationRepository = Effect.gen(function* () {
       WHERE delegation_id = ${delegationId}
     `,
   });
+  const claimResult = SqlSchema.findOne({
+    Request: ClaimThreadDelegationResultInput,
+    Result: Schema.Struct({ resultJson: Schema.String }),
+    execute: ({ delegationId, resultJson, updatedAt }) => sql`
+      UPDATE thread_delegations
+      SET updated_at = CASE WHEN result_json IS NULL THEN ${updatedAt} ELSE updated_at END,
+          result_json = COALESCE(result_json, ${resultJson})
+      WHERE delegation_id = ${delegationId}
+      RETURNING result_json AS "resultJson"
+    `,
+  });
   const storeResult = SqlSchema.void({
     Request: StoreThreadDelegationResultInput,
     execute: ({ delegationId, resultJson, errorJson, updatedAt }) => sql`
@@ -146,6 +158,11 @@ export const makeThreadDelegationRepository = Effect.gen(function* () {
       reserve(input).pipe(Effect.mapError(mapError("ThreadDelegationRepository.reserve"))),
     updateState: (input) =>
       updateState(input).pipe(Effect.mapError(mapError("ThreadDelegationRepository.updateState"))),
+    claimResult: (input) =>
+      claimResult(input).pipe(
+        Effect.map(({ resultJson }) => resultJson),
+        Effect.mapError(mapError("ThreadDelegationRepository.claimResult")),
+      ),
     storeResult: (input) =>
       storeResult(input).pipe(Effect.mapError(mapError("ThreadDelegationRepository.storeResult"))),
     findDirectByChild: (input) =>

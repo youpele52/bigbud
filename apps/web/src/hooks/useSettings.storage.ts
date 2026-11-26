@@ -1,6 +1,11 @@
 import { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
-import { type ClientSettings, DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import {
+  type ClientSettings,
+  ClientSettingsSchema,
+  DEFAULT_CLIENT_SETTINGS,
+} from "@bigbud/contracts/core/settings.ts";
 import * as Schema from "effect/Schema";
+import { getLocalStorageItem } from "./useLocalStorage";
 
 export const CLIENT_SETTINGS_STORAGE_KEY = "bigbud:client-settings:v2";
 export const CLIENT_SETTINGS_LEGACY_KEYS = [
@@ -19,6 +24,20 @@ export const CLIENT_SETTINGS_STORAGE_OPTIONS = {
   legacyKeys: CLIENT_SETTINGS_LEGACY_KEYS,
   migrateLegacyValue: migrateClientSettingsFont,
 };
+
+/** Reads the latest client-side cap for browser commands outside React. */
+export function getBrowserTabLimit(): number {
+  try {
+    const settings = getLocalStorageItem(
+      CLIENT_SETTINGS_STORAGE_KEY,
+      ClientSettingsSchema,
+      CLIENT_SETTINGS_STORAGE_OPTIONS,
+    );
+    return settings?.browserTabLimit ?? DEFAULT_CLIENT_SETTINGS.browserTabLimit;
+  } catch {
+    return DEFAULT_CLIENT_SETTINGS.browserTabLimit;
+  }
+}
 
 const isProviderKind = Schema.is(ProviderKind);
 

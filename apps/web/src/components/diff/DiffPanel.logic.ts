@@ -168,6 +168,12 @@ export function useDiffPanelData() {
       activeProject ? resolveWorkspaceExecutionTargetId(activeProject) : undefined,
     ),
   );
+  // Same precedence as the Files panel's own workspace (`resolveWorkspaceContext`).
+  const activeExecutionTargetId = activeThread
+    ? resolveWorkspaceExecutionTargetId(activeThread)
+    : activeProject
+      ? resolveWorkspaceExecutionTargetId(activeProject)
+      : undefined;
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -299,6 +305,7 @@ export function useDiffPanelData() {
     activeThreadId,
     activeProject,
     activeCwd,
+    activeExecutionTargetId,
     isGitRepo,
     orderedTurnDiffSummaries,
     inferredCheckpointTurnCountByTurnId,

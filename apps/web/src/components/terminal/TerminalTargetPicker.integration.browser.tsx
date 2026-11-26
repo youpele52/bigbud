@@ -36,7 +36,7 @@ it.each(["drawer", "panel"] as const)(
           return {
             ...(ctx.resolveDefaultRpc(body) as object),
             cwd: "/mapped/project",
-            runtimeEnv: { T3CODE_PROJECT_ROOT: "/mapped/project" },
+            runtimeEnv: { BIGBUD_PROJECT_ROOT: "/mapped/project" },
             wslIdentity: { distribution: "Ubuntu dev", username: "alice", uid: 1000 },
           };
         return undefined;
@@ -44,7 +44,8 @@ it.each(["drawer", "panel"] as const)(
     });
     try {
       await waitForComposerEditor();
-      useTerminalStateStore.getState().setTerminalOpen(THREAD_ID, true);
+      // Threads have no implicit terminal: open the drawer with an explicit pane.
+      useTerminalStateStore.getState().newTerminal(THREAD_ID, "default");
       useTerminalStateStore
         .getState()
         .ensurePanelTerminal(THREAD_ID, "independent-panel", { open: true });
@@ -81,7 +82,7 @@ it.each(["drawer", "panel"] as const)(
         threadId: THREAD_ID,
         executionTargetId: "wsl:Ubuntu%20dev",
         cwd: "/repo/project",
-        env: { T3CODE_PROJECT_ROOT: "/repo/project" },
+        env: { BIGBUD_PROJECT_ROOT: "/repo/project" },
       });
       expect(launched.terminalId).not.toBe(terminalId);
       await vi.waitFor(() =>

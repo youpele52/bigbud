@@ -132,6 +132,69 @@ message WriteFileResponse {
   string current_sha256 = 7;
 }
 
+// Receipt query (`workspace.write` 1.2): whether this agent applied the guarded write identified by
+// operation_id and request_digest. It never performs or retries a write. "Not applied" is not
+// definitive: a write frame from a lost connection may still be processed.
+message WriteReceiptRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+}
+
+message WriteReceiptResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  // True only when this agent recorded a successful write for the identity.
+  bool applied = 3;
+  // Lowercase hex SHA-256 of the bytes written; set when applied.
+  string result_sha256 = 4;
+  // OPERATION_ID_CONFLICT when the identity was accepted with a different request digest.
+  string error_code = 5;
+  string error_message = 6;
+}
+
+// Create one folder (capability `workspace.mkdir` 1.0). The parent must already exist; every
+// component is opened without following symlinks. An existing entry fails with ALREADY_EXISTS.
+message CreateDirectoryRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+}
+
+message CreateDirectoryResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+// Permanently delete one entry (capability `workspace.delete` 1.0). The workspace root is refused
+// (ROOT_ENTRY). A symlink is removed as a link and never followed. A real directory is removed
+// recursively without crossing symlinks, after a bounded count pass (DELETE_LIMIT_EXCEEDED, with
+// nothing removed). expected_kind is "file" or "directory"; a different real entry is refused
+// (KIND_MISMATCH). A failure after removal started reports UNKNOWN_OUTCOME.
+message DeleteEntryRequest {
+  string request_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+  string workspace_handle = 4;
+  string path = 5;
+  string expected_kind = 6;
+}
+
+message DeleteEntryResponse {
+  string request_id = 1;
+  string operation_id = 2;
+  bool terminal = 3;
+  string error_code = 4;
+  string error_message = 5;
+  // "file", "directory" or "symlink" on success.
+  string deleted_kind = 6;
+}
+
 message WorkspaceWatchStartRequest {
   string request_id = 1;
   string subscription_id = 2;

@@ -6,6 +6,7 @@ import {
   callV2PreparedOrchestration,
   prepareV2OrchestrationRequest,
 } from "./Execution.orchestration.ts";
+import { V2_SCOPED_BOOTSTRAP_ABI, V2_SUMMARY_BOOTSTRAP_ABI } from "./Orchestration.registration.ts";
 import type { V2ThreadImplementationRegistry } from "./Orchestration.implementation.ts";
 import type { V2ThreadReceipts } from "./Orchestration.receipts.ts";
 import type { V2PureJson } from "./Orchestration.implementation.types.ts";
@@ -27,9 +28,14 @@ export async function invokeV2ThreadOwner(
   const { session, runtime, enrollment } = owner,
     controller = new AbortController();
   const captured = implementations.acquire(owner.implementation);
+  const supportsModelChoice = captured.handler.bootstrapAbi === V2_SCOPED_BOOTSTRAP_ABI;
+  if (request.action === "list_available_models" && !supportsModelChoice) {
+    captured.release();
+    throw new Error("Retained bootstrap does not authorize model discovery.");
+  }
   if (
     request.action === "render_html" &&
-    !["bigbud.thread.bootstrap.v4", "bigbud.thread.bootstrap.v5"].includes(
+    !["bigbud.thread.bootstrap.v4", V2_SUMMARY_BOOTSTRAP_ABI, V2_SCOPED_BOOTSTRAP_ABI].includes(
       captured.handler.bootstrapAbi,
     )
   ) {
@@ -38,7 +44,8 @@ export async function invokeV2ThreadOwner(
   }
   if (
     request.action === "set_elevator_summary" &&
-    captured.handler.bootstrapAbi !== "bigbud.thread.bootstrap.v5"
+    !supportsModelChoice &&
+    captured.handler.bootstrapAbi !== V2_SUMMARY_BOOTSTRAP_ABI
   ) {
     captured.release();
     throw new Error("Retained bootstrap does not authorize summary updates.");
@@ -86,6 +93,7 @@ export async function invokeV2ThreadOwner(
               callerThreadId: session.threadId,
             }),
             session.threadId,
+            supportsModelChoice,
           );
           const prepared = prepareV2OrchestrationRequest(
               body.action === "render_html" ? { ...body, htmlExpectedTurnId: row.turnId } : body,

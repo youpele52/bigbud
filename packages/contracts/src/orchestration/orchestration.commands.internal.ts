@@ -36,6 +36,10 @@ import {
 } from "./orchestration.delegationModelChoice";
 
 import { ThreadTurnSettleCommand } from "./orchestration.turnSettled";
+import {
+  ThreadDeletionFailureReason,
+  ThreadDeletionInitiator,
+} from "./orchestration.events.thread";
 
 const ThreadDeletionMode = Schema.Literals(["single", "subtree"]);
 
@@ -68,6 +72,8 @@ const ThreadDeleteAbortCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   mode: Schema.optional(ThreadDeletionMode),
+  reason: Schema.optional(ThreadDeletionFailureReason),
+  initiator: Schema.optional(ThreadDeletionInitiator),
   createdAt: IsoDateTime,
 });
 

@@ -14,6 +14,7 @@ import {
   createRemoteWorkspaceExecutionTargetId,
   type RemoteWorkspaceDraft,
 } from "./Sidebar.remoteWorkspaces.logic";
+import { closeTerminalsForConnectionChange } from "./Sidebar.remoteWorkspaceAddActions.edit.terminals";
 
 /** Unique, non-blank worktree paths from the bounded per-project read. */
 export function collectRemoteWorkspaceWorktreePaths(
@@ -89,6 +90,12 @@ export async function reconfigureRemoteWorkspaceWithApi(input: {
       workspaceExecutionTargetId: createRemoteWorkspaceExecutionTargetId(input.draft),
       providerRuntimeLocation: input.draft.providerRuntimeLocation,
     });
+    const terminalsBlocked = await closeTerminalsForConnectionChange({
+      api,
+      projectId: input.projectId,
+      nextWorkspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+    });
+    if (terminalsBlocked) return terminalsBlocked;
     await connectExecutionTargetForSetup(api, executionTargets.workspaceExecutionTargetId);
     const verifiedWorktreePaths = await verifyRemoteWorkspaceWorktrees({
       api,

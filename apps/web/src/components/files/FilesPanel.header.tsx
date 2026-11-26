@@ -1,6 +1,6 @@
 import { FolderLibraryIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -10,9 +10,12 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 export function FilesPanelHeader({
   treeControl,
   keptOpen = false,
+  actions,
 }: {
   readonly treeControl?: ComponentProps<typeof Button> | undefined;
   readonly keptOpen?: boolean;
+  /** Header actions before the tree toggle (the add file/folder menu). */
+  readonly actions?: ReactNode;
 }) {
   const treeLabel = keptOpen ? "Close file tree" : "Keep file tree open";
   return (
@@ -24,38 +27,41 @@ export function FilesPanelHeader({
       )}
     >
       <p className="text-sm font-medium text-foreground">Files</p>
-      {treeControl ? (
+      {treeControl || actions ? (
         <div
           className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
           data-files-panel-controls
         >
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  {...treeControl}
-                  className={cn(
-                    "shrink-0 [-webkit-app-region:no-drag]",
-                    keptOpen && "bg-accent text-accent-foreground",
-                  )}
-                  data-files-tree-toggle
-                  aria-label={treeLabel}
-                  aria-pressed={keptOpen}
-                  variant="toolbar"
-                  size="icon-xs"
-                >
-                  <HugeiconsIcon
-                    icon={FolderLibraryIcon}
-                    size={16}
-                    strokeWidth={1.5}
-                    className="size-4"
-                    aria-hidden="true"
-                  />
-                </Button>
-              }
-            />
-            <TooltipPopup side="bottom">{treeLabel}</TooltipPopup>
-          </Tooltip>
+          {actions}
+          {treeControl ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    {...treeControl}
+                    className={cn(
+                      "shrink-0 [-webkit-app-region:no-drag]",
+                      keptOpen && "bg-accent text-accent-foreground",
+                    )}
+                    data-files-tree-toggle
+                    aria-label={treeLabel}
+                    aria-pressed={keptOpen}
+                    variant="toolbar"
+                    size="icon-xs"
+                  >
+                    <HugeiconsIcon
+                      icon={FolderLibraryIcon}
+                      size={16}
+                      strokeWidth={1.5}
+                      className="size-4"
+                      aria-hidden="true"
+                    />
+                  </Button>
+                }
+              />
+              <TooltipPopup side="bottom">{treeLabel}</TooltipPopup>
+            </Tooltip>
+          ) : null}
         </div>
       ) : null}
     </div>

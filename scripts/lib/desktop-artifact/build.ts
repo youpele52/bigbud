@@ -219,6 +219,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     main: "apps/desktop/dist-electron/main.js",
     build: yield* createBuildConfig(
       options.platform,
+      options.arch,
       options.target,
       releaseIdentity,
       options.signed,

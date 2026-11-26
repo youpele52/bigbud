@@ -18,14 +18,33 @@ describe("project write errors", () => {
       "remoteWorkspace.writeFile",
       "remote agent rejected: workspace file changed since it was read",
     ],
-  ])("reports %s as a conflict", (operation, detail) => {
+  ])("reports a typed %s conflict with the disk hash", (operation, detail) => {
     const result = projectWriteFileError(
-      new WorkspaceFileSystemError({ ...input, operation, detail }),
+      new WorkspaceFileSystemError({
+        ...input,
+        operation,
+        detail,
+        conflict: true,
+        currentSha256: "b".repeat(64),
+      }),
     );
     expect(result).toMatchObject({
       conflict: true,
+      currentSha256: "b".repeat(64),
       message: "Workspace file changed since it was read.",
     });
+  });
+
+  it("does not infer a conflict from message text alone", () => {
+    const result = projectWriteFileError(
+      new WorkspaceFileSystemError({
+        ...input,
+        operation: "remoteWorkspace.writeFile",
+        detail: "workspace file changed since it was read",
+      }),
+    );
+    expect(result.conflict).toBeUndefined();
+    expect(result.currentSha256).toBeUndefined();
   });
 
   it("reports a create-only write over an existing file as alreadyExists, not a conflict", () => {

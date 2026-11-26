@@ -4,11 +4,7 @@ import type { ThreadTerminalDrawerProps } from "./ThreadTerminalDrawer.types";
 import type { TerminalProfileLaunch } from "../../lib/terminalProfileLaunch";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
-import {
-  DEFAULT_THREAD_TERMINAL_ID,
-  MAX_TERMINALS_PER_GROUP,
-  type ThreadTerminalGroup,
-} from "../../models/types";
+import { MAX_TERMINALS_PER_GROUP, type ThreadTerminalGroup } from "../../models/types";
 import { ThreadTerminalDrawerSidebar } from "./ThreadTerminalDrawerSidebar";
 import { ThreadTerminalDrawerFloatingActions } from "./ThreadTerminalDrawerFloatingActions";
 import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
@@ -25,7 +21,20 @@ export {
   terminalSelectionActionDelayForClickCount,
 } from "./ThreadTerminalDrawer.logic";
 
-export default function ThreadTerminalDrawer({
+function cleanTerminalIds(terminalIds: readonly string[]): string[] {
+  return [...new Set(terminalIds.map((id) => id.trim()).filter((id) => id.length > 0))];
+}
+
+/**
+ * Renders nothing for an empty pane list: a surface with no panes has no terminal, and mounting
+ * a viewport for an invented id would spawn one (for example during the close animation).
+ */
+export default function ThreadTerminalDrawer(props: ThreadTerminalDrawerProps) {
+  if (cleanTerminalIds(props.terminalIds).length === 0) return null;
+  return <ThreadTerminalDrawerBody {...props} />;
+}
+
+function ThreadTerminalDrawerBody({
   threadId,
   executionTargetId,
   cwd,
@@ -71,14 +80,12 @@ export default function ThreadTerminalDrawer({
     onHeightChange,
   });
 
-  const normalizedTerminalIds = useMemo(() => {
-    const cleaned = [...new Set(terminalIds.map((id) => id.trim()).filter((id) => id.length > 0))];
-    return cleaned.length > 0 ? cleaned : [DEFAULT_THREAD_TERMINAL_ID];
-  }, [terminalIds]);
+  // The wrapper guarantees at least one pane.
+  const normalizedTerminalIds = useMemo(() => cleanTerminalIds(terminalIds), [terminalIds]);
 
   const resolvedActiveTerminalId = normalizedTerminalIds.includes(activeTerminalId)
     ? activeTerminalId
-    : (normalizedTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID);
+    : (normalizedTerminalIds[0] ?? "");
 
   const resolvedTerminalGroups = useMemo(() => {
     const validTerminalIdSet = new Set(normalizedTerminalIds);
@@ -117,7 +124,7 @@ export default function ThreadTerminalDrawer({
       const baseGroupId =
         terminalGroup.id.trim().length > 0
           ? terminalGroup.id.trim()
-          : `group-${nextTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID}`;
+          : `group-${nextTerminalIds[0] ?? ""}`;
       nextGroups.push({
         id: assignUniqueGroupId(baseGroupId),
         layout: terminalGroup.layout,

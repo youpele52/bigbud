@@ -9,6 +9,12 @@ import { ProviderKind } from "../orchestration/orchestration.provider";
 import { TerminalWslIdentity } from "./terminal.wsl";
 import { TerminalAgentIdentity } from "./terminal.agentIdentity";
 import { ShellLaunchIdentity, ShellSelection, ShellUnconfirmedLaunch } from "./terminalShell";
+import {
+  TerminalEndedReason,
+  TerminalEvictTarget,
+  TerminalLimitError,
+  TerminalScreenSource,
+} from "./terminal.limit";
 
 export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
@@ -52,6 +58,10 @@ export const TerminalOpenInput = Schema.Struct({
   cols: Schema.optional(TerminalColsSchema),
   rows: Schema.optional(TerminalRowsSchema),
   env: Schema.optional(TerminalEnvSchema),
+  /** Reattach only: never spawn. Older servers ignore it (excess keys are stripped). */
+  attachOnly: Schema.optional(Schema.Boolean),
+  /** At the live limit, close this pane first; the host re-checks it is still a candidate. */
+  evict: Schema.optional(TerminalEvictTarget),
 });
 export type TerminalOpenInput = Schema.Codec.Encoded<typeof TerminalOpenInput>;
 
@@ -145,11 +155,18 @@ export const TerminalSessionSnapshot = Schema.Struct({
   historyTruncated: Schema.optional(Schema.Boolean),
   // An attached surviving process has no baseline at its persisted output cut.
   historyUnavailable: Schema.optional(Schema.Boolean),
+  // The history is a rolling tail cut at a line boundary, with SGR and modes re-asserted first.
+  // Replayable, but not a full baseline: earlier output and other screen state are missing.
+  historyTrimmed: Schema.optional(Schema.Boolean),
   // Present only without a baseline: lets a view reattach live with the process's input modes.
   liveModes: Schema.optional(TerminalLiveModes),
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
   updatedAt: Schema.String,
+  screenSource: Schema.optional(TerminalScreenSource),
+  // Only restorable views may be parked; absent means not restorable.
+  restorable: Schema.optional(Schema.Boolean),
+  endedReason: Schema.optional(TerminalEndedReason),
 });
 export type TerminalSessionSnapshot = typeof TerminalSessionSnapshot.Type;
 
@@ -334,5 +351,6 @@ export const TerminalError = Schema.Union([
   TerminalSessionLookupError,
   TerminalNotRunningError,
   TerminalExecutionTargetError,
+  TerminalLimitError,
 ]);
 export type TerminalError = typeof TerminalError.Type;

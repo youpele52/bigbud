@@ -217,20 +217,21 @@ export function useSidebarState(): SidebarState {
     cancelThreadRenameRef.current?.();
   }, []);
 
-  const threadActions = useSidebarThreadActions({
-    sidebarThreadsById,
-    projectCwdById,
-    appSettings,
-    navigateToThreadRoute: remoteThreadActivation.navigateToThread,
-    cancelProjectRename: forwardCancelProjectRename,
-  });
-
   const projectAddActions = useSidebarProjectAddActions({
     projects,
     focusMostRecentThreadForProject,
     handleNewThread,
     defaultThreadEnvMode: appSettings.defaultThreadEnvMode,
     serverProviders,
+  });
+
+  const threadActions = useSidebarThreadActions({
+    sidebarThreadsById,
+    projectCwdById,
+    appSettings,
+    navigateToThreadRoute: remoteThreadActivation.navigateToThread,
+    cancelProjectRename: forwardCancelProjectRename,
+    openRemoteWorkspaceEditDialog: projectAddActions.openRemoteWorkspaceEditDialog,
   });
 
   const projectActions = useSidebarProjectActions({

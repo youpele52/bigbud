@@ -8,6 +8,7 @@
  * @module backendInstance
  */
 import * as fs from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 
 import { Effect, Layer, Option, ServiceMap } from "effect";
 
@@ -15,6 +16,11 @@ import { ServerConfig } from "./config.ts";
 import { writeStartupStatus } from "./startupStatus.ts";
 import { OwnershipShutdown } from "./ownershipShutdown";
 import { createOwnershipHandoff } from "./ownershipHandoff";
+import {
+  BackendDrainControlUnavailableError,
+  startBackendDrainControlServer,
+} from "./backendDrain.server.ts";
+import { handleBackendDrain } from "./backendDrain.handler.ts";
 import {
   acquireStateDirLock,
   classifyStateDirLockOwner,
@@ -136,6 +142,26 @@ export const StateDirLockLive = Layer.effect(
       (handle) => Effect.promise(() => handle.release().catch(() => {})),
     );
     if (handoff) yield* Effect.promise(() => handoff.attach(handle));
+    // Same-user drain control; an unavailable socket leaves local features working and makes
+    // `backend stop --for-upgrade` fail closed instead of guessing an offline drain.
+    yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () =>
+          startBackendDrainControlServer({
+            stateDir: config.stateDir,
+            token: randomBytes(32).toString("hex"),
+            handle: handleBackendDrain,
+          }),
+        catch: (cause) => new BackendDrainControlUnavailableError(String(cause)),
+      }).pipe(
+        Effect.catch((cause) =>
+          Effect.logWarning("Backend drain control unavailable", { cause }).pipe(
+            Effect.as(undefined),
+          ),
+        ),
+      ),
+      (server) => (server ? Effect.promise(() => server.close()) : Effect.void),
+    );
     return makeBackendInstance(handle, config.stateDir);
   }),
 );

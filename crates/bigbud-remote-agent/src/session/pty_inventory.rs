@@ -43,6 +43,14 @@ impl AgentSession {
         {
             return Err("PTY_INVENTORY_INVALID");
         }
+        // A lost PTY (its spool outlived a crashed host) is listed until dismissed or expired,
+        // unless a live session reuses its id.
+        let lost = self
+            .terminal_host
+            .as_ref()
+            .map(|host| host.lost_ptys())
+            .unwrap_or_default();
+        let no_digest = Vec::new();
         let mut members: Vec<_> = self
             .pty_sessions
             .iter()
@@ -51,6 +59,14 @@ impl AgentSession {
                 self.pty_create_failures
                     .iter()
                     .map(|(id, failure)| (id, &failure.request_digest)),
+            )
+            .chain(
+                lost.keys()
+                    .filter(|id| {
+                        !self.pty_sessions.contains_key(*id)
+                            && !self.pty_create_failures.contains_key(*id)
+                    })
+                    .map(|id| (id, &no_digest)),
             )
             .collect();
         members.sort_by(|left, right| left.0.cmp(right.0));
@@ -111,6 +127,18 @@ impl AgentSession {
                 entry.first_retained_sequence = snapshot.first_retained_sequence;
                 entry.verified_exit = session.handle.child_reaped()
                     && (snapshot.exit_code.is_some() || snapshot.signal.is_some());
+                if session.handle.close_outcome_unknown() && !session.handle.child_reaped() {
+                    // A terminating close escalated to SIGKILL and the child was still not
+                    // reaped: never claim it closed (R8).
+                    entry.state = "outcome-unknown".to_owned();
+                }
+                if let Some(lifecycle) = &session.lifecycle {
+                    lifecycle_facts(lifecycle, &mut entry);
+                }
+            } else if lost.contains_key(*id) {
+                // `state` keeps the pre-1.9 vocabulary (clients validate it); `lost` says why.
+                entry.lost = true;
+                entry.screen_available = true;
             }
             entries.push(entry);
         }
@@ -125,6 +153,26 @@ impl AgentSession {
         };
         Ok((entries, next, snapshot_id))
     }
+}
+
+/// 1.9 inventory fields (plan §9.1): activity, LRU key, screen and opt-in state.
+fn lifecycle_facts(
+    lifecycle: &super::pty_lifecycle::PtyLifecycle,
+    entry: &mut v1::PtyInventoryEntry,
+) {
+    let screen = lifecycle.model_state() == Some(crate::terminal_screen::ModelState::Live);
+    let state = lifecycle.lock();
+    entry.activity_state = if state.activity.warning_closes_at().is_some() {
+        "idle_warning"
+    } else if state.activity.idle_busy() {
+        "busy"
+    } else {
+        "idle"
+    }
+    .to_owned();
+    entry.last_used_ms = state.activity.last_used();
+    entry.screen_available = screen;
+    entry.lifecycle_managed = lifecycle.managed();
 }
 
 #[cfg(test)]

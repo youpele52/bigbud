@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { canEditFilePreview, canReconcileFilePreview } from "./fileEditEligibility";
+import type { ProjectFileEditCapability } from "@bigbud/contracts/workspace/project";
+import {
+  canEditFilePreview,
+  canReconcileFilePreview,
+  fileEditReadOnlyReason,
+} from "./fileEditEligibility";
 import {
   fileEditKey,
   getFileEditDraft,
@@ -19,6 +24,7 @@ interface UseFileEditDraftInput {
     readonly loading: boolean;
     readonly contents: string;
     readonly sha256: string | null;
+    readonly edit: ProjectFileEditCapability | null;
     readonly sizeBytes: number | null;
     readonly truncated: boolean;
     readonly readVersion: number;
@@ -46,6 +52,7 @@ export function useFileEditDraft({
     sha256: preview.sha256,
     sizeBytes: preview.sizeBytes,
     truncated: preview.truncated,
+    edit: preview.edit,
   });
   const eligible =
     verifiedFromRead ||
@@ -57,6 +64,7 @@ export function useFileEditDraft({
         sha256: draft.baseHash,
         sizeBytes: new TextEncoder().encode(draft.baseContents).byteLength,
         truncated: false,
+        edit: preview.edit,
       }),
     );
   useEffect(() => {
@@ -73,6 +81,7 @@ export function useFileEditDraft({
         sha256: preview.sha256,
         sizeBytes: preview.sizeBytes,
         truncated: preview.truncated,
+        edit: preview.edit,
       })
     ) {
       invalidateFileEditRead(draftKey);
@@ -95,6 +104,7 @@ export function useFileEditDraft({
     preview.sha256,
     preview.sizeBytes,
     preview.truncated,
+    preview.edit,
     preview.readVersion,
     preview.readEpoch,
     preview.error,
@@ -104,5 +114,8 @@ export function useFileEditDraft({
   useEffect(() => {
     if (draft?.needsVerification) void refreshPreview();
   }, [draft?.verificationEpoch, draft?.needsVerification, refreshPreview]);
-  return { draftKey, draft, eligible };
+  const readOnlyReason = eligible
+    ? null
+    : fileEditReadOnlyReason({ executionTargetId, edit: preview.edit });
+  return { draftKey, draft, eligible, readOnlyReason };
 }

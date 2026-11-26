@@ -43,13 +43,18 @@ export async function verifyOwnedLogsAbsent(input: {
   readonly terminalDirectory: string;
   readonly knownThreadIds: ReadonlyArray<string>;
   readonly threadId: string;
+  /** Files allowed to remain, e.g. terminal history the retained-pane rule holds. */
+  readonly tolerate?: (type: "provider" | "terminal", name: string) => boolean;
 }): Promise<void> {
   for (const [directory, type] of [
     [input.providerDirectory, "provider"],
     [input.terminalDirectory, "terminal"],
   ] as const) {
     const entries = await readOwnedLogDirectory(directory);
-    if (exclusiveOwnedLogNames({ ...input, entries, type }).length > 0) {
+    const remaining = exclusiveOwnedLogNames({ ...input, entries, type }).filter(
+      (name) => !input.tolerate?.(type, name),
+    );
+    if (remaining.length > 0) {
       throw new Error(`${type} log appeared or remained after purge`);
     }
   }

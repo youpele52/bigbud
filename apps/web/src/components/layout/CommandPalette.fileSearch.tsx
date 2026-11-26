@@ -15,6 +15,7 @@ import {
   thisComputerNote,
 } from "./SearchPalette.systemSearch.logic";
 import { SearchPaletteSystemSections } from "./SearchPalette.systemSections";
+import { useOpenedFileRank } from "./SearchPalette.frecency";
 import { SearchPaletteThisComputerHint } from "./SearchPalette.thisComputerHint";
 import { useSectionVisibility } from "./SearchPalette.visibility";
 
@@ -60,12 +61,15 @@ export function CommandPaletteFileSearch(props: CommandPaletteFileSearchProps) {
   });
   const visibility = useSectionVisibility(`${open}:${streamQuery}`, PAGE_SIZE);
   const view = stream.view;
+  const openedRank = useOpenedFileRank();
   const tiers = {
-    otherProjectFiles: { files: systemSearchTierRows(view, "otherProjectFiles") },
-    thisComputer: { files: systemSearchTierRows(view, "thisComputer") },
-    remoteOutsideProjects: { files: systemSearchTierRows(view, "remoteOutsideProjects") },
+    otherProjectFiles: { files: systemSearchTierRows(view, "otherProjectFiles", openedRank) },
+    thisComputer: { files: systemSearchTierRows(view, "thisComputer", openedRank) },
+    remoteOutsideProjects: {
+      files: systemSearchTierRows(view, "remoteOutsideProjects", openedRank),
+    },
   };
-  const remoteCurrentRows = systemSearchTierRows(view, "currentProject");
+  const remoteCurrentRows = systemSearchTierRows(view, "currentProject", openedRank);
   const select = (result: FileSearchResult) => {
     props.onBeforeOpenFile();
     void openSearchResult(result).catch((cause) => console.error("Failed to open file:", cause));

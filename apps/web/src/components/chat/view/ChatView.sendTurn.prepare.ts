@@ -1,3 +1,4 @@
+import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@bigbud/contracts/orchestration/orchestration.provider";
 import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 
 import { parseStandaloneComposerSlashCommand } from "../../../logic/composer";
@@ -58,6 +59,14 @@ export async function prepareComposerPrompt(input: {
     selectedModelSelection,
   } = sendInput;
   if (!thread) return null;
+  const attachmentCount = composerImages.length + composerFiles.length;
+  if (attachmentCount > PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
+    sendInput.setThreadError(
+      thread.id,
+      `This draft has ${attachmentCount} attachments. Remove ${attachmentCount - PROVIDER_SEND_TURN_MAX_ATTACHMENTS} before sending (limit: ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS}).`,
+    );
+    return null;
+  }
   const attachmentIssue = providerAttachmentIssue(selectedProvider, [
     ...composerImages,
     ...composerFiles,
@@ -145,7 +154,11 @@ export async function prepareComposerPrompt(input: {
     model: selectedModel,
     models: selectedProviderModels,
     effort: selectedPromptEffort,
-    text: messageText || IMAGE_ONLY_BOOTSTRAP_PROMPT,
+    text:
+      messageText ||
+      (composerFiles.length > 0
+        ? "Use the attached files as context."
+        : IMAGE_ONLY_BOOTSTRAP_PROMPT),
     subProviderID:
       "subProviderID" in selectedModelSelection ? selectedModelSelection.subProviderID : undefined,
   });

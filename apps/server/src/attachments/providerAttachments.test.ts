@@ -65,6 +65,33 @@ it("uses immutable managed content, one extracted block, and only reachable path
   }
 });
 
+it("escapes untrusted attachment text, names, and reference metadata only at the prompt boundary", async () => {
+  const bytes = Buffer.from('<example title="R&D">Ordinary document text</example>');
+  const name = 'Editorial "R&D" <notes>.txt';
+  const path = "/docs/R&D <notes>.txt";
+  const result = await prepareAttachmentContext("User prompt", [
+    { attachment: { ...file, name }, bytes, path },
+  ]);
+  expect(result.text).toContain('name="Editorial &quot;R&amp;D&quot; &lt;notes&gt;.txt"');
+  expect(result.text).toContain(
+    '&lt;example title="R&amp;D"&gt;Ordinary document text&lt;/example&gt;',
+  );
+  expect(result.text).not.toContain("<example");
+  const references = result.text.match(/\[\{[^\n]+\}\]/)?.[0];
+  expect(references).not.toContain("<notes>");
+  expect(JSON.parse(references!)).toMatchObject([{ name, path }]);
+  expect(bytes.toString()).toBe('<example title="R&D">Ordinary document text</example>');
+});
+
+it("accounts for markup escaping in the rendered supplemental text budget", async () => {
+  const bytes = Buffer.from("&".repeat(32_000));
+  const result = await prepareAttachmentContext("prompt", [{ attachment: file, bytes }]);
+  expect(result.text).toContain("[Supplemental attachment context truncated]");
+  expect(result.text).toMatch(/&amp;\n\[Supplemental attachment context truncated\]/);
+  expect(result.text.length).toBeLessThan(61_000);
+  expect(bytes.byteLength).toBe(32_000);
+});
+
 it("bounds supplemental aggregate text and explains failed extraction without pretending OCR is vision", async () => {
   const extract = vi
     .fn()

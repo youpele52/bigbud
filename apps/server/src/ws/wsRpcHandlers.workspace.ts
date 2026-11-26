@@ -17,16 +17,15 @@ import {
 } from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import type { WsRpcContext } from "./wsRpcContext";
+import { makeWorkspaceEntryWsRpcHandlers } from "./wsRpcHandlers.workspace.entries";
 
 export function projectWriteFileError(
   cause: WorkspaceFileSystemError | WorkspacePathOutsideRootError,
 ): ProjectWriteFileError {
-  const conflict =
-    Schema.is(WorkspaceFileSystemError)(cause) &&
-    ((cause.operation === "workspaceFileSystem.writeFileExpectedHash" &&
-      cause.detail.startsWith("Workspace file changed since it was read")) ||
-      (cause.operation === "remoteWorkspace.writeFile" &&
-        /workspace file changed since it was read/i.test(cause.detail)));
+  // Backends mark guarded-write conflicts explicitly; messages are not parsed.
+  const conflict = Schema.is(WorkspaceFileSystemError)(cause) && cause.conflict === true;
+  const currentSha256 =
+    conflict && Schema.is(WorkspaceFileSystemError)(cause) ? cause.currentSha256 : undefined;
   const alreadyExists =
     Schema.is(WorkspaceFileSystemError)(cause) &&
     cause.operation === WORKSPACE_WRITE_CREATE_ONLY_OPERATION &&
@@ -41,6 +40,7 @@ export function projectWriteFileError(
   return new ProjectWriteFileError({
     message,
     ...(conflict ? { conflict: true } : {}),
+    ...(currentSha256 ? { currentSha256 } : {}),
     ...(alreadyExists ? { alreadyExists: true } : {}),
     writeDisposition: Schema.is(WorkspacePathOutsideRootError)(cause)
       ? "not-dispatched"
@@ -54,6 +54,7 @@ export function makeWorkspaceWsRpcHandlers(
   toProjectDirectoryWatchError: (cause: any) => ProjectDirectoryWatchError,
 ) {
   return {
+    ...makeWorkspaceEntryWsRpcHandlers(context.workspaceMutations),
     [WS_METHODS.projectsSearchEntries]: (
       input: Parameters<WsRpcContext["workspaceRuntime"]["search"]["searchEntries"]>[0],
     ) =>

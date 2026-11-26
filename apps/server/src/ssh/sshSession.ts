@@ -18,35 +18,31 @@ import {
   parseSshExecutionTarget,
   type SshExecutionTarget,
 } from "./sshExecutionTarget.ts";
+import { writePasswordAskpassScript } from "./sshSession.askpass.ts";
 import { buildSshControlArgs, type SshPasswordSessionRecord } from "./sshSession.control.ts";
+import {
+  drainOwnedSshMastersWith,
+  type OwnedSshMaster,
+  type OwnedSshMasterDrain,
+} from "./sshSession.ownedMasters.ts";
 import {
   assertSshTargetConnected,
   isSshTargetDisconnected,
   RemoteTargetDisconnectedError,
 } from "./sshTargetDisconnects.ts";
+import {
+  buildSshPasswordRequiredMessage,
+  SSH_PASSWORD_AUTH_REQUIRED_MESSAGE,
+  SshTargetAuthRequiredError,
+} from "./sshTargetUnavailable.ts";
 
 const SSH_PASSWORD_SESSION_DIR_PREFIX = "bbs-";
 const SSH_PASSWORD_ASKPASS_DIR_PREFIX = "bigbud-ssh-password-askpass-";
-// Keep the SSH ControlPath short to avoid hitting Unix socket path limits.
-// `os.tmpdir()` can be very long on macOS (e.g. `/var/folders/...`), so prefer
-// `/tmp` when available.
+// Prefer /tmp: the macOS temp dir can be too long for a Unix-socket ControlPath.
 const sessionRootBaseDirectory =
   process.platform === "win32" ? os.tmpdir() : fs.existsSync("/tmp") ? "/tmp" : os.tmpdir();
-const sessionRootDirectory = fs.mkdtempSync(
-  path.join(sessionRootBaseDirectory, SSH_PASSWORD_SESSION_DIR_PREFIX),
-);
+let sessionRootDirectory: string | undefined;
 const passwordSessionByExecutionTargetId = new Map<string, SshPasswordSessionRecord>();
-
-function writePasswordAskpassScript(directoryPath: string): string {
-  const scriptPath = path.join(directoryPath, "askpass.sh");
-  fs.writeFileSync(
-    scriptPath,
-    '#!/bin/sh\ncase "$1" in\n  *authenticity*|*fingerprint*) exit 1 ;;\n  *[Pp]assword*|*[Pp]asscode*) printf "%s\\n" "$BIGBUD_SSH_PASSWORD" ;;\n  *) exit 1 ;;\nesac\n',
-    "utf8",
-  );
-  fs.chmodSync(scriptPath, 0o700);
-  return scriptPath;
-}
 
 function buildPasswordSessionDestination(target: SshExecutionTarget): string {
   return target.port
@@ -55,6 +51,10 @@ function buildPasswordSessionDestination(target: SshExecutionTarget): string {
 }
 
 export function buildPasswordSessionControlPath(executionTargetId: string): string {
+  // Key-only and local-only backends do not need a password socket directory.
+  sessionRootDirectory ??= fs.mkdtempSync(
+    path.join(sessionRootBaseDirectory, SSH_PASSWORD_SESSION_DIR_PREFIX),
+  );
   const digest = createHash("sha256").update(executionTargetId).digest("hex").slice(0, 20);
   return path.join(sessionRootDirectory, `s-${digest}`);
 }
@@ -158,10 +158,18 @@ async function isPasswordSessionActiveAsync(
 export function formatSshPasswordRequiredMessage(executionTargetId: string): string {
   const target = parseSshExecutionTarget(executionTargetId);
   if (!target) {
-    return "SSH password authentication is required before using this target.";
+    return SSH_PASSWORD_AUTH_REQUIRED_MESSAGE;
   }
 
-  return `SSH password is required for ${buildPasswordSessionDestination(target)}. Re-enter it before using this target.`;
+  return buildSshPasswordRequiredMessage(buildPasswordSessionDestination(target));
+}
+
+function passwordRequiredError(target: SshExecutionTarget): SshTargetAuthRequiredError {
+  return new SshTargetAuthRequiredError(
+    target.executionTargetId,
+    "password",
+    formatSshPasswordRequiredMessage(target.executionTargetId),
+  );
 }
 
 export function assertSshPasswordExecutionTargetReady(
@@ -175,7 +183,7 @@ export function assertSshPasswordExecutionTargetReady(
     return;
   }
   if (!isPasswordSessionActive(target)) {
-    throw new Error(formatSshPasswordRequiredMessage(target.executionTargetId));
+    throw passwordRequiredError(target);
   }
 }
 
@@ -194,7 +202,7 @@ export async function assertSshPasswordExecutionTargetReadyAsync(
   if (
     !(await isPasswordSessionActiveAsync(target, deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS)))
   ) {
-    throw new Error(formatSshPasswordRequiredMessage(target.executionTargetId));
+    throw passwordRequiredError(target);
   }
 }
 
@@ -336,7 +344,7 @@ export async function unlockSshExecutionTargetPassword(input: {
  */
 export async function closeSshPasswordSession(executionTargetId: string): Promise<void> {
   const target = parseSshExecutionTarget(executionTargetId);
-  if (!target) return;
+  if (!target || sessionRootDirectory === undefined) return;
   const session = passwordSessionByExecutionTargetId.get(target.executionTargetId) ?? {
     controlPath: buildPasswordSessionControlPath(target.executionTargetId),
     destination: formatSshDestination(target),
@@ -364,7 +372,28 @@ function closeAllPasswordSessions(): void {
     fs.rmSync(session.controlPath, { force: true });
   }
   passwordSessionByExecutionTargetId.clear();
-  fs.rmSync(sessionRootDirectory, { recursive: true, force: true });
+  if (sessionRootDirectory !== undefined) {
+    fs.rmSync(sessionRootDirectory, { recursive: true, force: true });
+  }
+}
+
+/** The masters recorded by this process; never discovered from disk or user config. */
+export function listOwnedSshMasters(): ReadonlyArray<OwnedSshMaster> {
+  return [...passwordSessionByExecutionTargetId.entries()].map(([executionTargetId, session]) => ({
+    executionTargetId,
+    controlPath: session.controlPath,
+    destination: session.destination,
+  }));
+}
+
+/** Drain-on-quit: exits only the password masters recorded in this process. */
+export function drainOwnedSshMasters(): Promise<OwnedSshMasterDrain> {
+  return drainOwnedSshMastersWith(listOwnedSshMasters(), {
+    forget: (master) => {
+      const target = parseSshExecutionTarget(master.executionTargetId);
+      if (target) forgetPasswordSession(target, master.controlPath);
+    },
+  });
 }
 
 process.once("exit", closeAllPasswordSessions);

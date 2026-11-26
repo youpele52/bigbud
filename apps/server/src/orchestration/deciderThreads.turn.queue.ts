@@ -40,7 +40,7 @@ import {
 type QueueCommand = Extract<
   OrchestrationCommand,
   | { type: "thread.message.submit" }
-  | { type: "thread.queued-prompt.remove" }
+  | { type: "thread.queued-prompt.remove" | "thread.queued-prompt.claim" }
   | { type: "thread.queued-prompt.flush" }
   | { type: "thread.queued-prompt.flush-cancel" }
 >;
@@ -151,12 +151,29 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     };
   }
 
-  if (command.type === "thread.queued-prompt.remove") {
+  if (
+    command.type === "thread.queued-prompt.remove" ||
+    command.type === "thread.queued-prompt.claim"
+  ) {
+    const claim = command.type === "thread.queued-prompt.claim" ? command : undefined;
+    if (claim) {
+      if (thread.archivedAt != null || thread.deletingAt != null || thread.deletedAt != null)
+        return yield* queueDecisionError("queue_unavailable");
+      const prompt = thread.queuedPrompts?.find((candidate) => candidate.id === command.messageId);
+      if (
+        !prompt ||
+        prompt.createdAt !== claim.promptCreatedAt ||
+        (prompt.alreadySent === true) !== claim.alreadySent ||
+        (!prompt.pendingInteractionGate && !thread.queueHold)
+      )
+        return yield* queueDecisionError("queue_stale_selection");
+    }
     if (
       (hasActiveQueueReservation(thread) &&
         thread.pendingTurnControlOperation?.reservedPromptIds.includes(command.messageId)) ||
       thread.pendingInterruptFlushIntent?.queuedPromptIds.includes(command.messageId)
     ) {
+      if (claim) return yield* queueDecisionError("queue_reserved");
       return [];
     }
     return {

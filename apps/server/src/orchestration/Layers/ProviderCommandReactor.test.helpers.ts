@@ -114,8 +114,10 @@ export async function waitFor(
   return poll();
 }
 
+type ReactorProvider = typeof ProviderService.Service;
 export async function createHarness(input?: {
   readonly startReactor?: boolean;
+  readonly overrideProvider?: (service: ReactorProvider) => ReactorProvider;
   readonly cleanupExecutor?: DirectResourceCleanupExecutorShape;
   readonly baseDir?: string;
   readonly workspaceRoot?: string;
@@ -136,7 +138,7 @@ export async function createHarness(input?: {
   const { stateDir } = deriveServerPathsSync(baseDir, undefined);
   trackedDirs.add(stateDir);
   const {
-    service,
+    service: defaultProvider,
     modelSelection,
     startSession,
     sendTurn,
@@ -146,6 +148,7 @@ export async function createHarness(input?: {
     stopSession,
     settleLiveSession,
   } = makeReactorProvider(input, now);
+  const service = input?.overrideProvider?.(defaultProvider) ?? defaultProvider;
   const renameBranch = vi.fn((gitInput: unknown) =>
     Effect.succeed({
       branch:

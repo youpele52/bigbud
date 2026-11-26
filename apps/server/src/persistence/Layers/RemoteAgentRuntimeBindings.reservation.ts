@@ -13,7 +13,15 @@ export const makeRemoteAgentRuntimeReservations = Effect.gen(function* () {
   const replayFence = remoteAgentReplayFence(sql);
   const run = Effect.runPromiseWith(yield* Effect.services<SqlClient.SqlClient>());
   return {
-    reserve: async (owner, replaceTerminal = false, expectedTarget?: string) => {
+    reserve: async (
+      owner,
+      replaceTerminal = false,
+      expectedTarget?: string,
+      expectedTerminal?: Pick<
+        import("../../remote-agent/remoteAgentOwners.ts").RemoteAgentOwner,
+        "resourceId" | "reservationId" | "epoch" | "connectionId"
+      >,
+    ) => {
       const intent = parseRemoteAgentOwner(JSON.stringify(owner));
       if (expectedTarget !== undefined && intent.target !== expectedTarget)
         throw new Error("Owner reservation belongs to another target.");
@@ -28,6 +36,16 @@ export const makeRemoteAgentRuntimeReservations = Effect.gen(function* () {
             const previous = existing[0]
               ? parseRemoteAgentOwner(existing[0].route_json)
               : undefined;
+            if (
+              expectedTerminal !== undefined &&
+              (!previous ||
+                previous.state !== "terminal" ||
+                previous.resourceId !== expectedTerminal.resourceId ||
+                previous.reservationId !== expectedTerminal.reservationId ||
+                previous.epoch !== expectedTerminal.epoch ||
+                previous.connectionId !== expectedTerminal.connectionId)
+            )
+              return yield* Effect.die(new Error("Terminal owner changed before replacement."));
             if (expectedTarget !== undefined && previous && previous.target !== expectedTarget)
               return yield* Effect.die(new Error("Existing owner belongs to another target."));
             if (

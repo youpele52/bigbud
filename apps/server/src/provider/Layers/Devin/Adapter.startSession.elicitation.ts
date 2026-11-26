@@ -56,6 +56,7 @@ export function registerDevinElicitationHandler(deps: DevinElicitationDeps) {
           raw: { source: "acp.jsonrpc", method: DEVIN_ELICITATION_METHOD, payload: params },
         });
         const resolved = yield* Deferred.await(answers);
+        deps.pendingUserInputs.delete(requestId);
         yield* deps.offerRuntimeEvent({
           type: "user-input.resolved",
           ...(yield* deps.makeEventStamp()),
@@ -64,6 +65,7 @@ export function registerDevinElicitationHandler(deps: DevinElicitationDeps) {
           threadId: deps.threadId,
           turnId: deps.getActiveTurnId(),
           requestId: runtimeRequestId,
+          requestGeneration: requestId,
           payload: { answers: resolved },
         });
         return devinElicitationResult(form, resolved);

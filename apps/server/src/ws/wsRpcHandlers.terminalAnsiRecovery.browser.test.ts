@@ -67,10 +67,12 @@ it.skipIf(process.platform === "win32").each(["sustained", "detached-query", "fa
               "--outfile",
               bundle,
             ]);
+            // Redraws carry no newline or screen-clear baseline, so retention has no safe cut and
+            // discards the history (historyTruncated): the intake must use the recovery RPC.
             const shell = path.join(dir, "fixture");
             yield* fs.writeFileString(
               shell,
-              `#!${process.execPath}\nprocess.stdin.setRawMode(true);let n=0;const timer=setInterval(()=>{process.stdout.write('\\x1b[H'+'x'.repeat(${overload ? 4096 : 32768})+'\\r\\n');if(++n===${overload ? 2400 : 300}){clearInterval(timer);process.stdout.write('\\x1b[2J\\x1b[HRECOVERY-FINAL');}},${overload ? 3 : 50});process.stdin.on('data',d=>{if(d.toString()==='query')process.stdout.write('\\x1b[6n');else process.stdout.write('\\r\\nINPUT:'+d.toString('hex'));});\n`,
+              `#!${process.execPath}\nprocess.stdin.setRawMode(true);let n=0;const timer=setInterval(()=>{process.stdout.write('\\x1b[H'+'x'.repeat(${overload ? 4096 : 32768}));if(++n===${overload ? 2400 : 300}){clearInterval(timer);process.stdout.write('\\x1b[2J\\x1b[HRECOVERY-FINAL');}},${overload ? 3 : 50});process.stdin.on('data',d=>{if(d.toString()==='query')process.stdout.write('\\x1b[6n');else process.stdout.write('\\r\\nINPUT:'+d.toString('hex'));});\n`,
             );
             yield* fs.chmod(shell, 0o755);
             const adapter = yield* PtyAdapter;

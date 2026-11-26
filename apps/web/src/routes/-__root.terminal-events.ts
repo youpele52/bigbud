@@ -1,6 +1,25 @@
 import type { NativeApi, TerminalEvent } from "@bigbud/contracts";
 import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalWorkActivity } from "@bigbud/contracts/workspace/terminal.activity.ts";
+import type { TerminalLifecycleNotice } from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
+
+import { createTerminalLifecycleNotices } from "../components/terminal/terminalLifecycleNotices";
+import { toastManager } from "../components/ui/toast.manager";
+import {
+  applyTerminalLivenessEvents,
+  applyTerminalLivenessNotice,
+  reconcileTerminalLivenessInventory,
+} from "../stores/terminal/terminalLiveness.store";
+import { terminalNoticeEndsPane } from "../stores/terminal/terminal.store.ended";
+import {
+  markAllTerminalPanesRestoredInState,
+  markTerminalServerRunUnknown,
+  observeTerminalServerRun,
+} from "../stores/terminal/terminal.store.serverRun";
+import { useTerminalStateStore } from "../stores/terminal/terminal.store";
+import { appAtomRegistry } from "../rpc/atomRegistry";
+import { getServerConfig, onWelcome } from "../rpc/serverState";
+import { wsConnectionStatusAtom } from "../rpc/wsConnectionState";
 
 /** Keep batching ordered across subscription inventories, including same-tick resubscriptions. */
 export function subscribeGlobalTerminalState(input: {
@@ -10,6 +29,8 @@ export function subscribeGlobalTerminalState(input: {
   reconcileInventory: (inventory: TerminalSessionInventory) => void;
   /** Terminal recency and finished work; applied in arrival order, never batched. */
   applyWork?: (item: TerminalWorkActivity) => void;
+  /** Lifecycle notices (idle warnings, closes, limit refusals); applied in arrival order. */
+  applyLifecycle?: (notice: TerminalLifecycleNotice) => void;
 }): () => void {
   const pending: TerminalEvent[] = [];
   let disposed = false;
@@ -41,11 +62,90 @@ export function subscribeGlobalTerminalState(input: {
             },
           }
         : {}),
+      ...(input.applyLifecycle
+        ? {
+            onLifecycle: (notice: TerminalLifecycleNotice) => {
+              if (!disposed) input.applyLifecycle?.(notice);
+            },
+          }
+        : {}),
     },
   );
   return () => {
     disposed = true;
     pending.length = 0;
     unsubscribe();
+  };
+}
+
+/**
+ * The app's terminal subscription: pane state, sidebar liveness and, in the renderer that owns
+ * notifications, lifecycle toasts. Liveness follows the same ordered pipeline as pane state.
+ */
+export function subscribeAppTerminalState(input: {
+  terminal: Pick<
+    NativeApi["terminal"],
+    "onEvent" | "keepOpen" | "retrySetup" | "closeDrainingHosts"
+  >;
+  isArchived: (threadId: string) => boolean;
+  applyEvents: (events: ReadonlyArray<TerminalEvent>) => void;
+  reconcileInventory: (inventory: TerminalSessionInventory) => void;
+  applyWork: (item: TerminalWorkActivity) => void;
+  /** False in renderers that must not toast (the compact chat window). */
+  showLifecycleNotices: boolean;
+  /** A host close (idle, memory, limit, orphan, quit) removes the pane, mounted or not (§11.1). */
+  removeEndedTerminal?: (threadId: string, terminalId: string) => void;
+}): () => void {
+  const notices = input.showLifecycleNotices
+    ? createTerminalLifecycleNotices({ terminal: input.terminal, toasts: toastManager })
+    : null;
+  const unsubscribe = subscribeGlobalTerminalState({
+    terminal: input.terminal,
+    isArchived: input.isArchived,
+    applyEvents: (events) => {
+      input.applyEvents(events);
+      applyTerminalLivenessEvents(events);
+    },
+    reconcileInventory: (inventory) => {
+      input.reconcileInventory(inventory);
+      reconcileTerminalLivenessInventory(inventory);
+    },
+    applyWork: input.applyWork,
+    applyLifecycle: (notice) => {
+      applyTerminalLivenessNotice(notice);
+      notices?.handle(notice);
+      if (notice.threadId && notice.terminalId && terminalNoticeEndsPane(notice))
+        input.removeEndedTerminal?.(notice.threadId, notice.terminalId);
+    },
+  });
+  return () => {
+    unsubscribe();
+    notices?.dispose();
+  };
+}
+
+/**
+ * A backend restart without a page reload (§14): a dropped connection makes the server run
+ * unknown, and a welcome from a new run marks every pane restored, so no open respawns a
+ * terminal the old run's host closed (`terminal.store.serverRun`). Only with the terminal host
+ * on: without it nothing is host-closed, and panes behave exactly as before.
+ */
+export function trackTerminalServerRun(): () => void {
+  const hostEnabled = () =>
+    getServerConfig()?.workspaceCapabilities?.terminalHost?.enabled === true;
+  const stopStatus = appAtomRegistry.subscribe(wsConnectionStatusAtom, (status) => {
+    if (status.phase !== "connected" && hostEnabled()) markTerminalServerRunUnknown();
+  });
+  const stopWelcome = onWelcome((payload) =>
+    observeTerminalServerRun(payload.serverRunId, (inventoryFromNewRun) => {
+      if (!hostEnabled()) return;
+      useTerminalStateStore.setState((state) =>
+        markAllTerminalPanesRestoredInState(state, inventoryFromNewRun),
+      );
+    }),
+  );
+  return () => {
+    stopStatus();
+    stopWelcome();
   };
 }

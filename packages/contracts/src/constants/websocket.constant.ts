@@ -29,6 +29,9 @@ export const WS_METHODS = {
   subscribeProjectDirectoryChanges: "subscribeProjectDirectoryChanges",
   projectsReadFilePreview: "projects.readFilePreview",
   projectsWriteFile: "projects.writeFile",
+  projectsEntryActions: "projects.entryActions",
+  projectsCreateDirectory: "projects.createDirectory",
+  projectsDeleteEntry: "projects.deleteEntry",
 
   // Notes methods
   notesList: "notes.list",
@@ -83,6 +86,8 @@ export const WS_METHODS = {
   terminalRemoteAttach: "terminal.remoteAttach",
   terminalRemoteDetach: "terminal.remoteDetach",
   terminalRemoteStop: "terminal.remoteStop",
+  terminalRetainedShellOwners: "terminal.retainedShellOwners",
+  terminalForgetRetainedShellOwners: "terminal.forgetRetainedShellOwners",
   terminalRecovery: "terminal.recovery",
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",
@@ -93,6 +98,9 @@ export const WS_METHODS = {
   terminalSearch: "terminal.search",
   terminalView: "terminal.view",
   terminalStagePasteFile: "terminal.stagePasteFile",
+  terminalKeepOpen: "terminal.keepOpen",
+  terminalRetrySetup: "terminal.retrySetup",
+  terminalCloseDrainingHosts: "terminal.closeDrainingHosts",
 
   // Server meta
   serverPing: "server.ping",

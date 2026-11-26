@@ -21,16 +21,49 @@ import { pinRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.t
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { makeRemotePtyRestartBarrier } from "./remoteAgentOwnedPty.restart.ts";
-import { remoteAgentTerminalLaunch } from "./remoteAgentTerminalLaunch.ts";
+import {
+  remoteAgentTerminalLaunch,
+  type RemoteAgentCommandLaunch,
+} from "./remoteAgentTerminalLaunch.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { RemoteAgentColdAttach, RemoteAgentOwnedInput } from "./remoteAgentOwnedPty.input.ts";
 import { REMOTE_PTY_INPUT_RECONCILE } from "./remoteAgentPtyClient.reconcile.ts";
+import {
+  recoveredRemoteAgentPtyHostFeatures,
+  remoteAgentOwnedPtyHostControls,
+  remoteAgentPtyHostFeatures,
+  type RemoteAgentPtyHostFeatures,
+} from "./remoteAgentOwnedPty.host.ts";
 import type { ShellHostScope } from "@bigbud/contracts/workspace/terminalShell.ts";
+import {
+  remoteAgentPtyCreateLifecycleFields,
+  remoteAgentPtyWorkspaceHandle,
+  type RemoteAgentPtyCreateDefaults,
+} from "./remoteAgentPtyClient.lifecycle.ts";
 
 export interface OwnedRemoteAgentPtyOptions {
   /** Local supervisor callers share durable ownership without resolving an SSH control endpoint. */
   readonly openControl?: (target: string) => Promise<Pick<RemoteAgentControl, "registry">>;
   readonly resolveShellHost?: (target: string) => ShellHostScope;
+  /**
+   * Protocol 1.9 create defaults (`lifecycle_managed`, `activity_source`, `local_launch`, ...).
+   * `PtySpawnInput.hostLifecycle` overrides them per spawn; each is sent only when advertised.
+   */
+  readonly hostLifecycle?: RemoteAgentPtyCreateDefaults;
+  /** The full spawn environment, used only when the create carries `local_launch` (S6). */
+  readonly localLaunchEnvironment?: (
+    input: PtySpawnInput,
+  ) => ReadonlyArray<{ readonly name: string; readonly value: string }>;
+  /** A profile-less command for a `local_launch` create (Direct SSH in the local host, M7). */
+  readonly commandLaunch?: (input: PtySpawnInput) => RemoteAgentCommandLaunch | undefined;
+  /** Remote-agent PTYs expose their host's policy, close-all and events (never the local host). */
+  readonly remoteHostControls?: boolean;
+  /** Protocol 1.10 X2 inventory identity for this pane. */
+  readonly paneIdentity?: (input: PtySpawnInput) => {
+    readonly threadId: string;
+    readonly paneId: string;
+    readonly kind: "local" | "managed-ssh";
+  };
 }
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
@@ -162,6 +195,7 @@ export function makeOwnedRemoteAgentPty(
       await update((current) => ({ ...current, state: "outcome-unknown" }));
     };
     let process: RemoteAgentPtyProcess;
+    let features: RemoteAgentPtyHostFeatures;
     try {
       await observe(
         control.registry.update((state) => pinRemoteAgentBuild(state, pinOwner, buildId)),
@@ -169,6 +203,7 @@ export function makeOwnedRemoteAgentPty(
       cold?.signal.throwIfAborted();
       if (!created || owner.state !== "prepared") {
         process = new RemoteAgentPtyProcess(connection, owner.resourceId, reconnect);
+        features = recoveredRemoteAgentPtyHostFeatures(owner, connection, options.hostLifecycle);
         process.restoreSequences(
           owner.outputSequence,
           owner.nextInputSequence,
@@ -182,8 +217,26 @@ export function makeOwnedRemoteAgentPty(
           throw cause;
         }
       } else {
-        owner = await update((current) => ({ ...current, state: "may-have-been-sent" }));
-        const workspaceHandle = `terminal-${owner.resourceId}`;
+        // Resolved before dispatch can begin, so an unusable environment never strands an owner.
+        const lifecycle = remoteAgentPtyCreateLifecycleFields(connection, {
+          ...options.hostLifecycle,
+          ...input.hostLifecycle,
+        });
+        const localEnvironment =
+          lifecycle.localLaunch && options.localLaunchEnvironment
+            ? options.localLaunchEnvironment(input)
+            : undefined;
+        features = remoteAgentPtyHostFeatures(lifecycle);
+        owner = await update((current) => ({
+          ...current,
+          state: "may-have-been-sent",
+          hostFeatures: features,
+        }));
+        const workspaceHandle = remoteAgentPtyWorkspaceHandle(connection, {
+          target: owner.target,
+          cwd: input.remoteCwd,
+          resourceId: owner.resourceId,
+        });
         try {
           await new RemoteAgentWorkspaceClient(connection).openWorkspace(
             workspaceHandle,
@@ -199,9 +252,16 @@ export function makeOwnedRemoteAgentPty(
           requestDigest: Buffer.from(owner.digest, "hex"),
           workspaceHandle,
           cwd: "",
-          ...remoteAgentTerminalLaunch(input.env, owner.shellLaunch),
+          ...remoteAgentTerminalLaunch(
+            input.env,
+            owner.shellLaunch,
+            localEnvironment,
+            options.commandLaunch?.(input),
+          ),
           cols: input.cols,
           rows: input.rows,
+          lifecycle,
+          ...(options.paneIdentity ? { paneIdentity: options.paneIdentity(input) } : {}),
           onRejected: releaseDefinitiveFailure,
         });
       }
@@ -306,11 +366,16 @@ export function makeOwnedRemoteAgentPty(
       get launchStatus() {
         return process.launchStatus;
       },
+      get interruptionReason() {
+        return process.interruptionReason;
+      },
       get shellUnconfirmedLaunch() {
         return requestedProfile && process.launchStatus === "unconfirmed"
           ? { status: "unconfirmed" as const, requestedProfile }
           : undefined;
       },
+      // Host capabilities only for what this PTY's create asked for (never the connection's).
+      ...remoteAgentOwnedPtyHostControls(process, features, options.remoteHostControls),
       write: (data) => process.write(data),
       resize: (cols, rows) => process.resize(cols, rows),
       kill: (signal) => process.kill(signal),

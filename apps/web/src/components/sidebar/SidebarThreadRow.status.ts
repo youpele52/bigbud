@@ -1,6 +1,7 @@
 import type { TerminalFinishedItem } from "@bigbud/contracts/workspace/terminal.activity.ts";
 import { presentTerminalFinished } from "./Sidebar.terminalFinished.logic";
 import type { GitStatusResult } from "@bigbud/contracts";
+import type { ThreadTerminalLiveness } from "../../stores/terminal/terminalLiveness.store";
 
 import { CHILD_PROVIDER_ICON_CLASS } from "../chat/agents/agentActivity.presentation";
 import type { ThreadStatusPill } from "./Sidebar.logic";
@@ -56,14 +57,69 @@ export function shouldShowThreadStatusLabel(status: ThreadStatusPill | null): bo
   );
 }
 
-export function terminalStatusFromRunningIds(
-  runningTerminalIds: string[],
-): TerminalStatusIndicator | null {
-  if (runningTerminalIds.length === 0) {
-    return null;
+const EMPTY_LIVENESS: ThreadTerminalLiveness = Object.freeze({});
+
+/**
+ * The live terminals the row counts: those that are panes of the thread in this client. A thread
+ * with no known panes (opened by another client, or local state lost) shows every live terminal,
+ * so a running process is never hidden.
+ */
+export function livenessForThreadPanes(
+  liveness: ThreadTerminalLiveness,
+  panes: ReadonlyArray<string>,
+): ThreadTerminalLiveness {
+  if (panes.length === 0) return liveness;
+  const ids = Object.keys(liveness);
+  const kept = ids.filter((terminalId) => panes.includes(terminalId));
+  if (kept.length === ids.length) return liveness;
+  if (kept.length === 0) return EMPTY_LIVENESS;
+  return Object.fromEntries(kept.map((terminalId) => [terminalId, liveness[terminalId]!]));
+}
+
+/** How often a pending idle warning's "closes in N minutes" label is recomputed. */
+export const TERMINAL_LIVENESS_REFRESH_MS = 15_000;
+
+function pendingIdleDeadlineMs(liveness: ThreadTerminalLiveness, nowMs: number): number | null {
+  let soonest: number | null = null;
+  for (const entry of Object.values(liveness)) {
+    const closesAt = entry.idleClosesAt ? Date.parse(entry.idleClosesAt) : Number.NaN;
+    if (Number.isFinite(closesAt) && closesAt > nowMs && (soonest === null || closesAt < soonest))
+      soonest = closesAt;
   }
+  return soonest;
+}
+
+/** Whether the label depends on the clock (an idle warning is pending). */
+export function hasPendingIdleWarning(liveness: ThreadTerminalLiveness, nowMs: number): boolean {
+  return pendingIdleDeadlineMs(liveness, nowMs) !== null;
+}
+
+/**
+ * The row's terminal glyph for live terminals (plan §11.2): amber while an idle warning is
+ * pending, blue with a pulse when any is busy, muted otherwise. Passed deadlines are ignored, as
+ * the close notice or the next inventory removes the terminal.
+ */
+export function terminalStatusFromLiveness(
+  liveness: ThreadTerminalLiveness,
+  nowMs: number,
+): TerminalStatusIndicator | null {
+  const entries = Object.values(liveness);
+  if (entries.length === 0) return null;
+  const deadline = pendingIdleDeadlineMs(liveness, nowMs);
+  if (deadline !== null) {
+    const minutes = Math.max(1, Math.ceil((deadline - nowMs) / 60_000));
+    return {
+      label: `Terminal closes in ${minutes} ${minutes === 1 ? "minute" : "minutes"} (idle)`,
+      colorClass: "text-warning",
+      pulse: false,
+    };
+  }
+  const busy = entries.filter((entry) => entry.busy).length;
+  const running =
+    entries.length === 1 ? "1 terminal running" : `${entries.length} terminals running`;
+  if (busy === 0) return { label: running, colorClass: "text-muted-foreground", pulse: false };
   return {
-    label: "Terminal process running",
+    label: entries.length === 1 ? `${running} (busy)` : `${running} (${busy} busy)`,
     colorClass: "text-info-foreground",
     pulse: true,
   };

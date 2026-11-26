@@ -225,9 +225,10 @@ export function applyThreadRuntimeEvent(
     case "thread.session-stop-requested": {
       return updateThreadState(state, event.payload.threadId, (thread) =>
         thread.session === null
-          ? thread
+          ? { ...thread, queueHold: true }
           : {
               ...thread,
+              queueHold: true,
               turnStartRequest: clearPendingTurnStartRequest(thread.turnStartRequest),
               session: {
                 ...thread.session,

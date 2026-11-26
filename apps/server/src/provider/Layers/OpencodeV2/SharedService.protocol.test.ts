@@ -126,6 +126,27 @@ it.each([
   expect(() => assertV2SharedCapabilities(contract, "2.1.0")).toThrow("incompatible");
 });
 
+it("accepts annotated references rendered as allOf in query parameters", () => {
+  const contract = v2OfficialContract();
+  const operation = schemaObject(contract.paths["/api/session"]!.get);
+  const parameters = (operation.parameters as unknown[]).map(schemaObject);
+  for (const name of ["cursor", "directory"]) {
+    const parameter = parameters.find((p) => p.name === name)!;
+    parameter.schema = { allOf: [parameter.schema, { description: "Annotated reference." }] };
+  }
+  expect(() => assertV2SharedCapabilities(contract, "2.4.2")).not.toThrow();
+});
+
+it("rejects conflicting allOf conjuncts", () => {
+  const contract = v2OfficialContract();
+  const operation = schemaObject(contract.paths["/api/session"]!.get);
+  const parameter = (operation.parameters as unknown[])
+    .map(schemaObject)
+    .find((p) => p.name === "cursor")!;
+  parameter.schema = { allOf: [{ type: "string" }, { type: "number" }] };
+  expect(() => assertV2SharedCapabilities(contract, "2.4.2")).toThrow("incompatible");
+});
+
 it("accepts equivalent renamed/inlined projections and additive fields/values", () => {
   const contract = v2OfficialContract();
   contract.components.schemas["Session.Inbox.Delivery"]!.enum = ["queue", "steer", "future"];

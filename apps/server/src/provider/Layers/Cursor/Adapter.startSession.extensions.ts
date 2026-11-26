@@ -73,6 +73,7 @@ function registerAskQuestionHandler(deps: CursorExtensionRegistrationDeps) {
 
         const resolved = yield* Deferred.await(resolution);
         const answers = resolved.outcome === "answered" ? resolved.answers : emptyAnswers();
+        deps.pendingUserInputs.delete(requestId);
         yield* deps.offerRuntimeEvent({
           type: "user-input.resolved",
           ...(yield* deps.makeEventStamp()),
@@ -81,6 +82,7 @@ function registerAskQuestionHandler(deps: CursorExtensionRegistrationDeps) {
           threadId: deps.threadId,
           turnId: activeTurnId(deps),
           requestId: runtimeRequestId,
+          requestGeneration: requestId,
           payload: { answers },
         });
 

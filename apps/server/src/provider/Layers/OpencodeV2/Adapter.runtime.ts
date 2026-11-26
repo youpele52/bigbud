@@ -1,4 +1,4 @@
-import { Effect, PubSub, Stream, Exit } from "effect";
+import { Effect, PubSub, Stream, Exit, Schema } from "effect";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts/orchestration/providerRuntime.events.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.ts";
@@ -58,6 +58,7 @@ export const makeV2RuntimeAdapter = Effect.fn("makeV2RuntimeAdapter")(function* 
             ? runV2Caller(signal, operation === "sendTurn", () => runtime.authorized(run))
             : runtime.authorized(run),
       catch: (error) => {
+        if (Schema.is(ProviderAdapterValidationError)(error)) return error;
         const issue = v2ExecutionIssue(error);
         return new ProviderAdapterValidationError({
           provider: "opencodeV2",

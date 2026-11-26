@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"],
+    "typeRoots": ["../../../apps/server/node_modules/@types"]
+  },
+  "files": ["preflight.ts", "preflight.test.ts", "vitest.config.ts"]
+}

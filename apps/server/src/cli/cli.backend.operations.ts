@@ -7,6 +7,9 @@ import * as Option from "effect/Option";
 import { resolveServerConfig } from "./cli.config.ts";
 import { prepareBackendSetupCliInput, type BackendSetupCliInput } from "./cli.backend.inputs.ts";
 import { backendCliOwned, BackendCliError } from "./cli.backend.effect.ts";
+import { BackendDrainError } from "./cli.backend.drain.ts";
+import { requestBackendDrain } from "../startup/backendDrain.client.ts";
+import { version } from "../../package.json" with { type: "json" };
 import { backendUnitRunning } from "./cli.backend.failure.ts";
 import { readLocalSupervisorServiceConfig } from "../remote-backend/localSupervisorService.config.read.ts";
 import {
@@ -147,16 +150,62 @@ export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (i
   readonly authorityId: string;
   readonly action: BackendNativeAction;
   readonly confirmStartup?: boolean;
+  readonly forUpgrade?: boolean;
+  readonly savedWork?: boolean;
 }) {
   const fixed = Object.freeze({ ...input });
   if (
     !Object.hasOwn(NATIVE_TIMEOUT_MS, fixed.action) ||
     (fixed.action === "enable" && fixed.confirmStartup !== true)
   )
-    return yield* Effect.fail(
-      new BackendCliError({ message: "Explicit startup confirmation is required." }),
-    );
+    return yield* new BackendCliError({ message: "Explicit startup confirmation is required." });
   const selected = yield* backendCliOwned((signal) => selectedNative(fixed.authorityId, signal));
+  if (fixed.action === "stop" && fixed.forUpgrade) {
+    const config = yield* configuration(selected.config.backend_home);
+    const artifactId = `bigbud-server@${version}`;
+    const result = yield* Effect.tryPromise({
+      try: () =>
+        requestBackendDrain({
+          stateDir: config.stateDir,
+          artifactId,
+          consent: fixed.savedWork ? "non-interactive" : "ui",
+        }),
+      catch: (cause) =>
+        new BackendDrainError(
+          "unavailable",
+          "The running backend's drain control is unavailable; nothing was drained and no marker was written.",
+          cause,
+        ),
+    });
+    if (!result.ok)
+      return yield* new BackendDrainError(
+        result.error.code === "unauthorized" ? "refused" : "failed",
+        result.error.message,
+      );
+    if (result.status !== "drained") {
+      const reason =
+        result.status === "consent-required"
+          ? "consent-required"
+          : result.status === "busy"
+            ? "busy"
+            : result.status === "unknown-artifact"
+              ? "unknown-artifact"
+              : result.status === "cancelled"
+                ? "cancelled"
+                : "timeout";
+      return yield* new BackendDrainError(
+        reason,
+        result.status === "consent-required"
+          ? "A UI client must confirm the pane drain, or pass --i-have-saved-my-work for explicit non-interactive consent. Nothing was drained."
+          : `The backend drain did not complete: ${result.status}. Nothing was marked retired.`,
+      );
+    }
+    return Object.freeze({
+      authorityId: fixed.authorityId,
+      action: fixed.action,
+      output: "Backend drain completed; the backend will release its lock on exit.\n",
+    });
+  }
   if (fixed.action === "start") {
     // A running backend holds the state directory its preflight needs, so start is answered
     // from read-only unit status instead of failing on the lock: an idempotent no-op.
@@ -184,11 +233,9 @@ export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (i
       operation: inspectLocalSupervisorServiceSetup,
     });
     if (observed.status !== "present")
-      return yield* Effect.fail(
-        new BackendCliError({
-          message: "Setup completion could not be verified; preserve it for repair.",
-        }),
-      );
+      return yield* new BackendCliError({
+        message: "Setup completion could not be verified; preserve it for repair.",
+      });
   }
   return yield* backendCliOwned(async (signal) => {
     const current = await readLocalSupervisorServiceConfig({

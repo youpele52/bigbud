@@ -39,6 +39,7 @@ interface StartSessionDeps {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly nativeEventLogger: CursorAdapterLiveOptions["nativeEventLogger"] | undefined;
   readonly remoteAgentPtyResolver: RemoteAgentPtyResolver | undefined;
+  readonly sessionFsOwner?: CursorAdapterLiveOptions["sessionFsOwner"];
   readonly remoteWorkspaceReadinessProbe: CursorAdapterLiveOptions["remoteWorkspaceReadinessProbe"];
   readonly serverConfig: {
     readonly stateDir: string;
@@ -124,6 +125,7 @@ export function makeStartSessionEffect(
       sessionInput: input,
       ptyResolver: deps.remoteAgentPtyResolver,
       orchestrationCleanup: orchestration.bridge.cleanup,
+      ...(deps.sessionFsOwner ? { sessionFsOwner: deps.sessionFsOwner } : {}),
       ...(deps.remoteWorkspaceReadinessProbe
         ? { readinessProbe: deps.remoteWorkspaceReadinessProbe }
         : {}),
@@ -240,7 +242,9 @@ export function makeStartSessionEffect(
           };
         }),
       );
-      return yield* acp.start();
+      const session = yield* acp.start();
+      workspaceSession.remoteBridge?.bindCaller?.(session.sessionId);
+      return session;
     }).pipe(
       Effect.mapError((error) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, "session/start", error),

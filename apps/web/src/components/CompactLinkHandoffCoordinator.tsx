@@ -2,7 +2,9 @@ import type { CompactChatLinkHandoff, DesktopMenuAction } from "@bigbud/contract
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { openLinkFromClick } from "~/lib/openLink";
+import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useStore } from "~/stores/main";
 import { openChatFileTarget } from "./chat/common/chatFileTargets";
 import {
@@ -20,6 +22,15 @@ function resolveFallbackWorkspaceRoot(handoff: CompactChatLinkHandoff): string |
     ? useStore.getState().projects.find((entry) => entry.id === thread.projectId)
     : undefined;
   return thread?.worktreePath ?? project?.cwd ?? undefined;
+}
+
+/** The machine the link's own thread works on (never the thread that happens to be open). */
+function resolveHandoffExecutionTargetId(
+  handoff: CompactChatLinkHandoff,
+): ExecutionTargetId | undefined {
+  const thread = useStore.getState().threads.find((entry) => entry.id === handoff.threadId);
+  if (thread) return resolveWorkspaceExecutionTargetId(thread);
+  return undefined;
 }
 
 export function CompactLinkHandoffCoordinator() {
@@ -42,7 +53,13 @@ export function CompactLinkHandoffCoordinator() {
         workspaceRoot: () =>
           resolveCompactLinkWorkspaceRoot(action, resolveFallbackWorkspaceRoot(action)),
         isCurrent: () => latestRequestRef.current === requestId,
-        openFile: (targetPath, workspaceRoot) => openChatFileTarget(targetPath, workspaceRoot),
+        openFile: (targetPath, workspaceRoot) =>
+          openChatFileTarget(
+            targetPath,
+            workspaceRoot,
+            "file",
+            resolveHandoffExecutionTargetId(action),
+          ),
         openBrowser: openLinkFromClick,
       }).catch((error) => {
         if (latestRequestRef.current === requestId) {

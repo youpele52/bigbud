@@ -1,10 +1,8 @@
 import { extractPromptTextFromBuffer, supportsPromptTextExtraction } from "./documentText.ts";
-import { truncateExtractedText } from "./documentText.shared.ts";
-
-const DEFAULT_TIMEOUT_MS = 15_000;
-const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
-
-type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
+import { OfficeDocumentLimitError } from "./documentText.office.zip.ts";
+import { extractHtmlDocument } from "./documentUrl.html.ts";
+import { downloadDocumentUrl, type DocumentDownloadTransport } from "./documentUrl.download.ts";
+import { DocumentUrlError, validateDocumentUrl } from "./documentUrl.policy.ts";
 
 export interface DocumentUrlReadResult {
   readonly sourceUrl: string;
@@ -13,34 +11,19 @@ export interface DocumentUrlReadResult {
   readonly text: string;
 }
 
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function normalizeText(value: string): string {
-  return value
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 function inferFileName(url: URL): string {
   const lastSegment = url.pathname.split("/").findLast((segment) => segment.length > 0);
   return lastSegment && lastSegment.length > 0 ? lastSegment : "document";
 }
 
-function inferResponseFileName(response: Response, url: URL): string {
-  const contentDisposition = response.headers.get("content-disposition") ?? "";
+function inferResponseFileName(contentDisposition: string, url: URL): string {
   const encodedFileNameMatch = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
   if (encodedFileNameMatch?.[1]) {
-    return decodeURIComponent(encodedFileNameMatch[1]);
+    try {
+      return decodeURIComponent(encodedFileNameMatch[1]);
+    } catch {
+      // A malformed optional filename should not hide otherwise readable content.
+    }
   }
 
   const fileNameMatch = /filename="?([^";]+)"?/i.exec(contentDisposition);
@@ -67,85 +50,59 @@ function resolveAcademicPdfUrl(url: URL): URL | null {
   return null;
 }
 
-function extractHtmlDocument(input: {
-  readonly html: string;
-  readonly fallbackTitle: string | null;
-}) {
-  const withoutScripts = input.html
-    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ");
-  const title =
-    /<title[^>]*>([\s\S]*?)<\/title>/i.exec(withoutScripts)?.[1]?.trim() ?? input.fallbackTitle;
-  const body = withoutScripts
-    .replace(/<\/(p|div|section|article|li|tr|h\d)>/gi, "\n")
-    .replace(/<br\b[^>]*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ");
-  const text = normalizeText(decodeHtmlEntities(body));
-
-  return {
-    title: title ? decodeHtmlEntities(title) : null,
-    text,
-  };
-}
-
-function createRequestSignal(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-}
-
 export async function readPromptTextFromUrl(input: {
   readonly url: string;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
-  readonly fetchImpl?: FetchLike;
-}): Promise<DocumentUrlReadResult | null> {
-  const sourceUrl = new URL(input.url);
+  readonly transport?: DocumentDownloadTransport;
+}): Promise<DocumentUrlReadResult> {
+  const sourceUrl = URL.parse(input.url);
+  if (!sourceUrl) throw new DocumentUrlError("Enter a valid HTTP or HTTPS document URL.");
+  validateDocumentUrl(sourceUrl);
   const targetUrl = resolveAcademicPdfUrl(sourceUrl) ?? sourceUrl;
-  const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const response = await (input.fetchImpl ?? fetch)(targetUrl, {
-    signal: createRequestSignal(input.signal, timeoutMs),
+  const { url, bytes, contentType, contentDisposition } = await downloadDocumentUrl({
+    ...input,
+    url: targetUrl,
   });
-  if (!response.ok) {
-    return null;
+  const mimeType = contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const extractionTimeout = AbortSignal.timeout(30_000);
+  const signal = input.signal
+    ? AbortSignal.any([input.signal, extractionTimeout])
+    : extractionTimeout;
+  try {
+    signal.throwIfAborted();
+    let title: string | null = null;
+    let text: string | null;
+    if (mimeType === "text/html") {
+      ({ title, text } = await extractHtmlDocument(
+        new TextDecoder().decode(bytes),
+        url.hostname,
+        signal,
+      ));
+    } else {
+      const fileName = inferResponseFileName(contentDisposition ?? "", url);
+      if (!supportsPromptTextExtraction({ mimeType, fileName })) {
+        throw new DocumentUrlError(
+          "This URL did not return a supported document. Try a web page, PDF, Office document, or text file.",
+        );
+      }
+      text = await extractPromptTextFromBuffer({ bytes, mimeType, fileName, signal });
+    }
+    signal.throwIfAborted();
+    if (!text) {
+      throw new DocumentUrlError(
+        "No readable text was found. Check the document or try a different URL.",
+      );
+    }
+    return { sourceUrl: sourceUrl.href, resolvedUrl: url.href, title, text };
+  } catch (error) {
+    if (input.signal?.aborted) throw new DocumentUrlError("The document read was cancelled.");
+    if (extractionTimeout.aborted) {
+      throw new DocumentUrlError(
+        "Extracting text took too long. Try a smaller document or attach the relevant pages.",
+      );
+    }
+    if (error instanceof OfficeDocumentLimitError) throw new DocumentUrlError(error.message);
+    throw error;
   }
-
-  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "";
-
-  if (mimeType.startsWith("text/html")) {
-    const html = await response.text();
-    const rendered = extractHtmlDocument({ html, fallbackTitle: sourceUrl.hostname });
-    if (rendered.text.length === 0) return null;
-    return {
-      sourceUrl: sourceUrl.toString(),
-      resolvedUrl: targetUrl.toString(),
-      title: rendered.title,
-      text: truncateExtractedText(rendered.text),
-    };
-  }
-
-  const responseFileName = inferResponseFileName(response, targetUrl);
-
-  if (!supportsPromptTextExtraction({ mimeType, fileName: responseFileName })) {
-    return null;
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_DOWNLOAD_BYTES) {
-    return null;
-  }
-
-  const text = await extractPromptTextFromBuffer({
-    bytes,
-    mimeType,
-    fileName: responseFileName,
-  });
-  if (!text) return null;
-
-  return {
-    sourceUrl: sourceUrl.toString(),
-    resolvedUrl: targetUrl.toString(),
-    title: null,
-    text,
-  };
 }

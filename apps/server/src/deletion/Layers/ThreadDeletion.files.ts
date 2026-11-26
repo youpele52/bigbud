@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { threadAttachmentRelativePaths, type ThreadAssetRow } from "./EntityPurge.assets.ts";
-import { exclusiveOwnedLogNames, readOwnedLogDirectory } from "./EntityPurge.logs.ts";
 import { deleteResourceAtomically, resolvePurgeResource } from "./EntityPurge.resources.ts";
 import type { PurgeResource } from "../../persistence/Services/PurgeJobRepository.ts";
 import { ServerConfig } from "../../startup/config.ts";
@@ -14,6 +13,8 @@ import type { DirectCleanupResource } from "../Services/DirectResourceCleanupExe
 import { captureDirectCleanupIdentity } from "./DirectResourceCleanup.identity.ts";
 import { parseAttachmentIdFromRelativePath } from "../../attachments/attachmentStore.ts";
 import { discoverThreadWorktrees } from "./ThreadDeletion.worktrees.ts";
+import { discoverThreadLogResources } from "./ThreadDeletion.logs.ts";
+import type { RetainedTerminalHistory } from "./TerminalHistoryRetention.ts";
 
 export interface DiscoveredThreadDeletionFiles {
   readonly resources: ReadonlyArray<PurgeResource>;
@@ -88,6 +89,8 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
   function* (input: {
     readonly rootThreadId: ThreadId;
     readonly threadIds: ReadonlyArray<ThreadId>;
+    /** The terminal manager's retained panes: their history is left for its guards (N8). */
+    readonly retainedTerminalHistory: RetainedTerminalHistory;
   }) {
     const sql = yield* SqlClient.SqlClient;
     const config = yield* ServerConfig;
@@ -241,28 +244,12 @@ export const discoverThreadDeletionFiles = Effect.fn("ThreadDeletion.discoverFil
     const knownThreadIds = (yield* sql<{ readonly threadId: string }>`
     SELECT thread_id AS "threadId" FROM projection_threads
   `).map((row) => row.threadId);
-    for (const [kind, directory, type] of [
-      ["provider-log", config.providerLogsDir, "provider"],
-      ["terminal-history", config.terminalLogsDir, "terminal"],
-    ] as const) {
-      const entries = yield* Effect.tryPromise(() => readOwnedLogDirectory(directory));
-      for (const threadId of threadIds) {
-        for (const relativePath of exclusiveOwnedLogNames({
-          entries,
-          knownThreadIds,
-          threadId,
-          type,
-        })) {
-          resources.set(`${kind}:${relativePath}`, {
-            kind,
-            relativePath,
-            identity: null,
-            quarantineName: null,
-            action: "delete",
-          });
-        }
-      }
-    }
+    for (const resource of yield* discoverThreadLogResources({
+      threadIds,
+      knownThreadIds,
+      retainedTerminalHistory: input.retainedTerminalHistory,
+    }))
+      resources.set(`${resource.kind}:${resource.relativePath}`, resource);
     const allResources = [...resources.values()];
     const directResources = yield* Effect.forEach(
       allResources.filter(

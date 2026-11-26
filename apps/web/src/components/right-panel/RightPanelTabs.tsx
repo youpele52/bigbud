@@ -8,9 +8,7 @@ import { cn } from "~/lib/utils";
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
 import { requestRightPanel } from "~/stores/rightPanel/rightPanel.coordinator";
 import {
-  countRightPanelTabsByKind,
   getRightPanelTabKind,
-  MAX_RIGHT_PANEL_BROWSER_TABS,
   type RightPanelTabId,
   useRightPanelTabsStore,
 } from "~/stores/rightPanel/rightPanelTabs.store";
@@ -132,11 +130,6 @@ export function RightPanelTabs({
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
   const browserTabsById = useBrowserPanelStore((state) => state.tabsById);
   const setBrowserTabFavicon = useBrowserPanelStore((state) => state.setTabFavicon);
-  const browserTabLimitReached =
-    countRightPanelTabsByKind(openTabs, "browser") >= MAX_RIGHT_PANEL_BROWSER_TABS;
-  const browserTabMenuLabel = browserTabLimitReached
-    ? `Browser (${MAX_RIGHT_PANEL_BROWSER_TABS} max)`
-    : null;
 
   const closeTab = (tabId: RightPanelTabId) => {
     const kind = getRightPanelTabKind(tabId);
@@ -307,9 +300,7 @@ export function RightPanelTabs({
         />
         <MenuPopup align="end" className="min-w-40">
           <TabMenuItem
-            disabled={browserTabLimitReached}
             kind="browser"
-            {...(browserTabMenuLabel ? { label: browserTabMenuLabel } : {})}
             onSelect={onOpenNewBrowserTab}
             shortcutLabel={browserShortcutLabel}
           />

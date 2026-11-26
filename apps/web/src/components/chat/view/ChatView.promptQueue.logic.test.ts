@@ -103,6 +103,20 @@ describe("buildComposerFollowUpCommand", () => {
 });
 
 describe("visibleQueuedPrompts", () => {
+  it.each([{}, { manualRecovery: "discard-and-resend" as const }])(
+    "keeps a held entry visible (%j) even though its text is in the transcript",
+    (pendingInteractionGate) => {
+      const prompt = {
+        id: "held",
+        text: "Held original",
+        createdAt: "now",
+        alreadySent: true,
+        pendingInteractionGate,
+      };
+      expect(visibleQueuedPrompts([prompt])).toEqual([prompt]);
+    },
+  );
+
   it("hides already-sent redeliveries that the timeline already shows", () => {
     const prompts = [
       { ...queuedPrompt("Redelivered", 1), alreadySent: true },

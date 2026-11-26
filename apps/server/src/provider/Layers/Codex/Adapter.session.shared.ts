@@ -1,5 +1,5 @@
 import { type ProviderSendTurnInput, ThreadId } from "@bigbud/contracts";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import { isCodexModelSelectionError } from "../../../codex/codexAppServerManager.modelSelection.ts";
@@ -79,6 +79,7 @@ export function toRequestError(
   method: string,
   cause: unknown,
 ): ProviderAdapterError {
+  if (Schema.is(ProviderAdapterValidationError)(cause) && cause.turnStartRefusal) return cause;
   const modelSelectionError = toModelSelectionError(method, cause);
   if (modelSelectionError) {
     return modelSelectionError;

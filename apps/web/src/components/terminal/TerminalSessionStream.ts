@@ -1,6 +1,9 @@
 import type { NativeApi } from "@bigbud/contracts";
 import type { TerminalEvent } from "@bigbud/contracts/workspace/terminal.ts";
-import type { TerminalSessionStreamItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalScreenItem,
+  TerminalSessionStreamItem,
+} from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalStreamDiagnostics } from "./TerminalDiagnostics";
 
 /** Acknowledge once this much parsed output is unacknowledged, else after `ACK_DELAY_MS`. */
@@ -13,6 +16,8 @@ type TerminalStreamApi = Pick<NativeApi["terminal"], "subscribeSession" | "ackOu
 
 export interface TerminalSessionStreamHandlers {
   readonly deliver: (event: TerminalEvent) => void;
+  /** Given: the stream opts in (`acceptScreen`) and the host screen copy goes here. */
+  readonly screen?: (screen: TerminalScreenItem) => void;
   /** Credited output still queued or being parsed by the view(s) fed by this stream. */
   readonly outstanding: () => number;
   /** Events may have been missed (reconnect or server overflow); views must replay a snapshot. */
@@ -49,8 +54,17 @@ export class TerminalSessionStream {
       return;
     }
     this.readyTimer = setTimeout(() => this.markReady(), TERMINAL_SESSION_READY_TIMEOUT_MS);
+    const screen = handlers.screen;
     this.unsubscribe = api.subscribeSession(input, (item) => this.receive(item), {
       onError: () => this.markReady(),
+      // Never credited output: the screen is a baseline, not stream data.
+      ...(screen
+        ? {
+            onScreen: (item: TerminalScreenItem) => {
+              if (!this.closed) screen(item);
+            },
+          }
+        : {}),
     });
   }
 

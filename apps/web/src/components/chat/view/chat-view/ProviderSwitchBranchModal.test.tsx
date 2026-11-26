@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
+import { ProviderSwitchBranchContent as ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 
 function makeProps(
   overrides: Partial<React.ComponentProps<typeof ProviderSwitchBranchModal>> = {},

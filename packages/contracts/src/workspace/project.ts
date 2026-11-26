@@ -189,6 +189,22 @@ export const ProjectReadFilePreviewInput = Schema.Struct({
 });
 export type ProjectReadFilePreviewInput = typeof ProjectReadFilePreviewInput.Type;
 
+export const ProjectFileEditReadOnlyReason = Schema.Literals([
+  "directSshPendingOwner",
+  "agentTooOld",
+  "ownerUnavailable",
+  "unsupportedTarget",
+]);
+export type ProjectFileEditReadOnlyReason = typeof ProjectFileEditReadOnlyReason.Type;
+
+/** Whether the composed backend can perform guarded (hash-checked) saves for this file. */
+export const ProjectFileEditCapability = Schema.Struct({
+  mode: Schema.Literals(["guarded", "readOnly"]),
+  maxBytes: Schema.Number,
+  reason: Schema.optional(ProjectFileEditReadOnlyReason),
+});
+export type ProjectFileEditCapability = typeof ProjectFileEditCapability.Type;
+
 export const ProjectReadFilePreviewResult = Schema.Struct({
   relativePath: FilesystemPath,
   contents: Schema.String,
@@ -196,6 +212,8 @@ export const ProjectReadFilePreviewResult = Schema.Struct({
   truncated: Schema.Boolean,
   /** Hash of the exact bytes decoded into contents (absent on older servers). */
   sha256: Schema.optional(Schema.String),
+  /** Editing support for this file on the composed backend (absent on older servers). */
+  edit: Schema.optional(ProjectFileEditCapability),
 });
 export type ProjectReadFilePreviewResult = typeof ProjectReadFilePreviewResult.Type;
 
@@ -223,6 +241,8 @@ export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
 export const ProjectWriteFileResult = Schema.Struct({
   relativePath: FilesystemPath,
+  /** SHA-256 of the bytes now on disk, when the backend reports it. */
+  resultSha256: Schema.optional(Schema.String),
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
@@ -239,6 +259,8 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
   {
     message: TrimmedNonEmptyString,
     conflict: Schema.optional(Schema.Boolean),
+    /** On conflict, SHA-256 of the file on disk; absent when it is missing or unknown. */
+    currentSha256: Schema.optional(Schema.String),
     /** A create-only write found the file already present and left it untouched. */
     alreadyExists: Schema.optional(Schema.Boolean),
     writeDisposition: Schema.optional(ProjectWriteFileDisposition),

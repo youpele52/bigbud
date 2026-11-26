@@ -2,6 +2,7 @@ import { Writable } from "node:stream";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CodexAppServerManager } from "./codexAppServerManager.ts";
+import { assertCodexInteractionAdmission } from "./codexAppServerManager.interactionAdmission.ts";
 import { handleServerRequest } from "./codexAppServerManager.handlers.ts";
 import { handleServerNotification } from "./codexAppServerManager.handlers.notification.ts";
 import { closeCodexTransport, writeCodexMessage } from "./codexAppServerManager.transport.ts";
@@ -69,6 +70,36 @@ afterEach(() => {
 });
 
 describe("Codex interaction response admission at actual stdin dispatch", () => {
+  it.each(["approval", "user-input"] as const)(
+    "keeps a %s fence until native confirmation",
+    async (kind) => {
+      const { context, receive, resolve, callbacks, blocked, emitEvent } = harness();
+      receive(kind);
+      const pending = [
+        ...(kind === "approval" ? context.pendingApprovals : context.pendingUserInputs).values(),
+      ][0]!;
+      expect(() => assertCodexInteractionAdmission(context)).toThrow(
+        expect.objectContaining({
+          turnStartRefusal: {
+            kind: "pending-interaction",
+            gate: expect.objectContaining({ provider: "codex", sessionEpoch: 3 }),
+          },
+        }),
+      );
+      pending.uiClosed = true;
+      resolve();
+      expect(emitEvent).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          method: "serverRequest/resolved",
+          payload: expect.objectContaining({ interactionGeneration: pending.requestId }),
+        }),
+      );
+      expect(() => assertCodexInteractionAdmission(context)).not.toThrow();
+      callbacks.shift()!();
+      await blocked;
+    },
+  );
+
   it.each(["approval", "user-input"] as const)(
     "does not write a %s resolved while queued behind backpressure",
     async (kind) => {

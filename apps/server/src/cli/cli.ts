@@ -43,7 +43,7 @@ const hostFlag = Flag.string("host").pipe(
   Flag.optional,
 );
 const baseDirFlag = Flag.string("base-dir").pipe(
-  Flag.withDescription("Base directory path (equivalent to T3CODE_HOME)."),
+  Flag.withDescription("Base directory path (equivalent to BIGBUD_HOME)."),
   Flag.optional,
 );
 const devUrlFlag = Flag.string("dev-url").pipe(
@@ -142,6 +142,12 @@ const canonicalThreadCleanupCommand = Command.make("canonical-thread-cleanup", {
       }
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveServerConfig(flags, logLevel);
+      yield* holdBackendLockForCli({
+        stateDir: config.stateDir,
+        port: config.port,
+        command: "canonical-thread-cleanup",
+        mode: apply ? "write" : "read",
+      });
       const persistenceLayer = apply
         ? SqlitePersistenceLayerLive
         : makeSqliteReadOnlyPersistenceLive(config.dbPath);
@@ -160,7 +166,7 @@ const canonicalThreadCleanupCommand = Command.make("canonical-thread-cleanup", {
         failedCount: result.failedCount,
         candidates: result.candidates,
       });
-    }),
+    }).pipe(Effect.scoped),
   ),
 );
 
@@ -188,13 +194,12 @@ const canonicalEventCompactionCommand = Command.make("canonical-event-compaction
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveServerConfig(flags, logLevel);
       // Held until the command ends: proves no backend runs, and keeps one from starting.
-      if (apply) {
-        yield* holdBackendLockForCli({
-          stateDir: config.stateDir,
-          port: config.port,
-          command: "canonical-event-compaction",
-        });
-      }
+      yield* holdBackendLockForCli({
+        stateDir: config.stateDir,
+        port: config.port,
+        command: "canonical-event-compaction",
+        mode: apply ? "write" : "read",
+      });
       const persistenceLayer = apply
         ? SqlitePersistenceLayerLive
         : makeSqliteReadOnlyPersistenceLive(config.dbPath);
@@ -319,6 +324,12 @@ const legacyOrphanRecoveryCommand = Command.make("legacy-orphan-recovery", {
       }
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveServerConfig(flags, logLevel);
+      yield* holdBackendLockForCli({
+        stateDir: config.stateDir,
+        port: config.port,
+        command: "legacy-orphan-recovery",
+        mode: apply ? "write" : "read",
+      });
       const persistenceLayer = apply
         ? SqlitePersistenceLayerLive
         : makeSqliteReadOnlyPersistenceLive(config.dbPath);
@@ -330,7 +341,7 @@ const legacyOrphanRecoveryCommand = Command.make("legacy-orphan-recovery", {
         mode: apply ? "apply" : "dry-run",
         ...result,
       });
-    }),
+    }).pipe(Effect.scoped),
   ),
 );
 

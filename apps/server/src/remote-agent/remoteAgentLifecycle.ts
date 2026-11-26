@@ -34,6 +34,7 @@ export class RemoteAgentLifecycle {
   private snapshotValue: RemoteAgentLifecycleSnapshot = { state: "unavailable" };
   private connectionValue: RemoteAgentConnection | null = null;
   private pendingValue: RemoteAgentConnection | null = null;
+  private instanceId: string | undefined;
 
   constructor(private readonly factory: RemoteAgentConnectionFactory) {
     if (factory.expectedEpoch)
@@ -76,16 +77,23 @@ export class RemoteAgentLifecycle {
       } finally {
         this.pendingValue = null;
       }
-      if (previousEpoch && previousEpoch !== hello.agentEpoch) {
+      const identityChange =
+        previousEpoch && previousEpoch !== hello.agentEpoch
+          ? "epoch"
+          : this.instanceId && this.instanceId !== hello.agentInstanceId
+            ? "instance"
+            : undefined;
+      if (identityChange) {
         connection.close();
         this.connectionValue = null;
         this.snapshotValue = {
           state: "degraded",
-          detail: "Remote agent epoch changed; retained operation continuity is unknown.",
-          agentEpoch: previousEpoch,
+          detail: `Remote agent ${identityChange} changed. Retained operation continuity is unknown.`,
+          ...(previousEpoch ? { agentEpoch: previousEpoch } : {}),
         };
         throw new Error(this.snapshotValue.detail);
       }
+      this.instanceId = hello.agentInstanceId;
       this.connectionValue = connection;
       this.snapshotValue = {
         state: "ready",
@@ -144,6 +152,7 @@ export class RemoteAgentLifecycle {
   close(): void {
     this.connectionValue?.close();
     this.connectionValue = null;
+    this.instanceId = undefined;
     this.snapshotValue = { state: "unavailable" };
   }
 }

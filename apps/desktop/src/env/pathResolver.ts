@@ -11,6 +11,7 @@ import {
   resolvePackagedOpencodeBinaryPlan,
   resolvePackagedWorkspaceAgentPlan,
   resolvePackagedDesktopSupervisorPlan,
+  resolvePackagedSshOwnerPlan,
 } from "./pathResolver.platform";
 
 // ---------------------------------------------------------------------------
@@ -138,9 +139,7 @@ export function resolveAboutCommitHash(rootDir: string): string | null {
     return aboutCommitHashCache;
   }
 
-  const envCommitHash = normalizeCommitHash(
-    process.env.BIGBUD_COMMIT_HASH ?? process.env.T3CODE_COMMIT_HASH,
-  );
+  const envCommitHash = normalizeCommitHash(process.env.BIGBUD_COMMIT_HASH);
   if (envCommitHash) {
     aboutCommitHashCache = envCommitHash;
     return aboutCommitHashCache;
@@ -227,6 +226,13 @@ export function resolvePackagedDesktopSupervisorBinary(): string | null {
   if (!app.isPackaged) return null;
 
   const plan = resolvePackagedDesktopSupervisorPlan(process.platform, process.resourcesPath);
+  return FS.existsSync(plan.binaryPath) ? plan.binaryPath : null;
+}
+
+export function resolvePackagedSshOwnerBinary(): string | null {
+  if (!app.isPackaged) return null;
+
+  const plan = resolvePackagedSshOwnerPlan(process.platform, process.resourcesPath);
   return FS.existsSync(plan.binaryPath) ? plan.binaryPath : null;
 }
 

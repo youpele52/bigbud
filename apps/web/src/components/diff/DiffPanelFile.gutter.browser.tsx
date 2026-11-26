@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { DiffPanelFile } from "./DiffPanelFile";
-import { DIFF_ANNOTATION_HEADER, type ResolvedDiffSelection } from "./diffSelection.logic";
+import type { ResolvedDiffSelection } from "./diffSelection.logic";
 
 const FILE_PATH = "src/example.ts";
 const PATCH = [
@@ -17,6 +17,16 @@ const PATCH = [
   "-const oldValue = true;",
   "+const newValue = true;",
   " const after = true;",
+].join("\n");
+
+const CHANGE_BLOCK_TEXT = [
+  "Diff annotation (both states)",
+  "",
+  "Before (old line 2):",
+  "-const oldValue = true;",
+  "",
+  "After (new line 2):",
+  "+const newValue = true;",
 ].join("\n");
 
 async function renderDiff(
@@ -97,7 +107,7 @@ describe("DiffPanelFile annotation gutter", () => {
     expect(onAnnotationRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         range: { startLine: 2, endLine: 2 },
-        selectedText: [...DIFF_ANNOTATION_HEADER, "+const newValue = true;"].join("\n"),
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
       expect.objectContaining({ clientX: expect.any(Number), clientY: expect.any(Number) }),
     );
@@ -155,7 +165,7 @@ describe("DiffPanelFile annotation gutter", () => {
     expect(onAnnotationRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         range: { startLine: 2, endLine: 2 },
-        selectedText: [...DIFF_ANNOTATION_HEADER, "-const oldValue = true;"].join("\n"),
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
       expect.any(Object),
     );
@@ -205,7 +215,8 @@ describe("DiffPanelFile annotation gutter", () => {
     await vi.waitFor(() => expect(onAnnotationRequest).toHaveBeenCalledOnce());
     expect(onAnnotationRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        selectedText: [...DIFF_ANNOTATION_HEADER, "+const newValue = true;"].join("\n"),
+        range: { startLine: 2, endLine: 2 },
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
       expect.any(Object),
     );
@@ -267,13 +278,8 @@ describe("DiffPanelFile annotation gutter", () => {
     await vi.waitFor(() => expect(onAnnotationRequest).toHaveBeenCalledOnce());
     expect(onAnnotationRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        range: { startLine: 1, endLine: 2 },
-        selectedText: [
-          ...DIFF_ANNOTATION_HEADER,
-          " const context = true;",
-          "-const oldValue = true;",
-          "+const newValue = true;",
-        ].join("\n"),
+        range: { startLine: 2, endLine: 2 },
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
       expect.any(Object),
     );

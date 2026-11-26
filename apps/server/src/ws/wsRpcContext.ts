@@ -37,6 +37,7 @@ import {
 } from "../command-admission/RuntimeMaintenanceGate.ts";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "../terminal/Services/Manager";
+import { serverWorkspaceCapabilities } from "./wsServerCapabilities.ts";
 import { TerminalActivity } from "../terminal/Services/TerminalActivity.ts";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
 import { WorkspaceEntries } from "../workspace/Services/WorkspaceEntries";
@@ -275,7 +276,6 @@ export const makeWsRpcContext = (
       const discovery = yield* observeConfigStage("discovery", discoveryRegistry.getCatalog);
       const rawSettings = yield* observeConfigStage("settings", serverSettings.getSettings);
       const settings = resolveTextGenByProbeStatus(rawSettings, providers);
-      const remoteAgentEnabled = isRemoteAgentConfigured();
       // Same source as workspace `~` expansion, so clients can address home-relative files.
       const homeDir = homedir();
 
@@ -301,13 +301,10 @@ export const makeWsRpcContext = (
           ...(config.otlpMetricsUrl !== undefined ? { otlpMetricsUrl: config.otlpMetricsUrl } : {}),
           otlpMetricsEnabled: config.otlpMetricsUrl !== undefined,
         },
-        workspaceCapabilities: {
-          remoteAgent: {
-            enabled: remoteAgentEnabled,
-            supportsDirectoryWatch: true,
-            supportsPtyReattach: remoteAgentEnabled,
-          },
-        },
+        workspaceCapabilities: serverWorkspaceCapabilities({
+          remoteAgentEnabled: isRemoteAgentConfigured(),
+          stateDir: config.stateDir,
+        }),
         settings,
       };
     }).pipe(Effect.flatMap(validateServerConfig));
@@ -368,6 +365,8 @@ export const makeWsRpcContext = (
       workspaceEntries,
       workspaceFileSystem,
       workspaceRuntime,
+      // Read before any router wraps workspaceRuntime, so mutations keep their own backend choice.
+      workspaceMutations: workspaceRuntime.mutations,
       remoteAgentHealth: Option.getOrUndefined(remoteAgentHealth),
       remoteAgentInstaller: Option.getOrUndefined(remoteAgentInstaller),
       remoteAgentInstallOperations: Option.getOrUndefined(remoteAgentInstallOperations),

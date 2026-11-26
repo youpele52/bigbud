@@ -52,6 +52,7 @@ export function UsagePanel({ visible }: { visible: boolean }) {
         </section>
         <UsageSubscriptionLimits
           compact
+          visible={visible}
           loading={providersLoading}
           limits={providers
             .filter((provider) => provider.enabled)

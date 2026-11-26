@@ -1,36 +1,17 @@
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.remoteWorkspaces.logic";
-import { toastManager } from "../components/ui/toast";
 import {
-  areDisconnectedTargetsLoaded,
-  isExecutionTargetDisconnected,
-  isExecutionTargetVerified,
   type RemoteExecutionAuthMode,
   useRemoteAccessStore,
 } from "../stores/remoteAccess/remoteAccess.store";
-import {
-  REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS,
-  resolveRemoteExecutionFailureStatus,
-} from "./useRemoteExecutionAccessGate.shared";
-import {
-  ensureBackgroundRemoteExecutionToast,
-  readRemoteExecutionCheck,
-  showRemoteExecutionFailureToast,
-  startRemoteExecutionCheck,
-} from "./useRemoteExecutionAccessGate.checks";
-import { verifyRemoteExecutionTarget } from "./useRemoteExecutionAccessGate.verification";
 import { submitRemoteExecutionAuth as submitAuth } from "./useRemoteExecutionAccessGate.auth";
-import { blockDisconnectedRemoteExecutionTarget } from "./useRemoteExecutionAccessGate.connection";
+import {
+  beginRemoteExecutionTargetAccessCheck,
+  type EnsureRemoteExecutionTargetAccessInput,
+  ensureRemoteExecutionTargetAccess,
+} from "./useRemoteExecutionAccessGate.access";
 
-interface EnsureRemoteExecutionTargetAccessInput {
-  readonly executionTargetId: string | null | undefined;
-  readonly cwd?: string;
-  readonly unavailableTitle?: string;
-  readonly onVerified?: () => Promise<void> | void;
-  readonly resumeOnUnlockOnly?: boolean;
-}
 export interface RemoteExecutionAccessGate {
   readonly beginRemoteExecutionTargetAccessCheck: (
     input: EnsureRemoteExecutionTargetAccessInput,
@@ -49,32 +30,12 @@ export interface RemoteExecutionAccessGate {
   readonly submitRemoteExecutionAuth: () => Promise<void>;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-function openRemoteExecutionAuthDialog(input: {
-  readonly executionTargetId: string;
-  readonly cwd?: string;
-  readonly onVerified?: () => Promise<void> | void;
-  readonly unavailableTitle?: string;
-  readonly authMode: RemoteExecutionAuthMode;
-  readonly promptLabel: string;
-}): boolean {
-  if (!input.onVerified) {
-    return false;
-  }
-  return useRemoteAccessStore.getState().openAuthDialog({
-    pendingAction: {
-      executionTargetId: input.executionTargetId,
-      ...(input.cwd ? { cwd: input.cwd } : {}),
-      onVerified: input.onVerified,
-      ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-    },
-    authMode: input.authMode,
-    promptLabel: input.promptLabel,
+/** Submits the global auth dialog; a non-auth failure offers Retry through the access check. */
+export async function submitPendingRemoteExecutionAuth(): Promise<void> {
+  const pending = useRemoteAccessStore.getState().pendingAction;
+  await submitAuth(() => {
+    if (pending)
+      void beginRemoteExecutionTargetAccessCheck({ ...pending, resumeOnUnlockOnly: false });
   });
 }
 
@@ -103,183 +64,18 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
     })),
   );
 
-  const beginRemoteExecutionTargetAccessCheck = useCallback(
-    async (input: EnsureRemoteExecutionTargetAccessInput) => {
-      if (!input.executionTargetId || !isRemoteExecutionTargetId(input.executionTargetId)) {
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      }
-      const executionTargetId = input.executionTargetId;
-
-      // Navigation only reads local history, so a user-disconnected target proceeds unverified,
-      // as does any target before the server's disconnect list has loaded.
-      if (
-        // Read live: Connect clears verification just before re-checking.
-        isExecutionTargetVerified(executionTargetId) ||
-        isExecutionTargetDisconnected(executionTargetId) ||
-        !areDisconnectedTargetsLoaded()
-      ) {
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      }
-
-      const activeCheck = startRemoteExecutionCheck({
-        executionTargetId,
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-        verify: verifyRemoteExecutionTarget,
-      });
-      const outcome = await Promise.race([
-        activeCheck.promise.then(() => "settled" as const),
-        sleep(REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS).then(() => "timeout" as const),
-      ]);
-      const check =
-        executionTargetChecks[executionTargetId] ?? readRemoteExecutionCheck(executionTargetId);
-
-      if (outcome === "timeout") {
-        ensureBackgroundRemoteExecutionToast({
-          executionTargetId,
-          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-        });
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      }
-
-      if (check?.status === "verified") {
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      }
-
-      if (
-        check?.status === "auth_required" &&
-        check.authMode !== null &&
-        check.promptLabel !== null
-      ) {
-        const opened = openRemoteExecutionAuthDialog({
-          executionTargetId,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(input.onVerified ? { onVerified: input.onVerified } : {}),
-          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-          authMode: check.authMode,
-          promptLabel: check.promptLabel,
-        });
-        if (!opened) {
-          toastManager.add({
-            type: "warning",
-            title: "Another remote authentication request is already pending.",
-          });
-        }
-        return false;
-      }
-
-      showRemoteExecutionFailureToast({
-        executionTargetId,
-        ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-        check:
-          check ??
-          resolveRemoteExecutionFailureStatus("Failed to reconnect to the remote workspace."),
-        retry: () => {
-          void beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false });
-        },
-      });
-      return false;
-    },
+  // Identity follows the checks (as before the module split), so callers that captured a gate
+  // callback re-render when access changes; the functions themselves always read live state.
+  const begin = useCallback(
+    (input: EnsureRemoteExecutionTargetAccessInput) => beginRemoteExecutionTargetAccessCheck(input),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [executionTargetChecks],
   );
-
-  const ensureRemoteExecutionTargetAccess = useCallback(
-    async (input: EnsureRemoteExecutionTargetAccessInput) => {
-      if (!input.executionTargetId || !isRemoteExecutionTargetId(input.executionTargetId)) {
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      }
-      const executionTargetId = input.executionTargetId;
-      if (
-        blockDisconnectedRemoteExecutionTarget({
-          executionTargetId,
-          onConnected: () =>
-            beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false }),
-        })
-      ) {
-        return false;
-      }
-
-      // Auth dialogs retain callbacks across renders; verification must be read live.
-      if (isExecutionTargetVerified(executionTargetId)) {
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      }
-
-      const check = readRemoteExecutionCheck(executionTargetId);
-      if (
-        check?.status === "auth_required" &&
-        check.authMode !== null &&
-        check.promptLabel !== null
-      ) {
-        const opened = openRemoteExecutionAuthDialog({
-          executionTargetId,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(input.onVerified ? { onVerified: input.onVerified } : {}),
-          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-          authMode: check.authMode,
-          promptLabel: check.promptLabel,
-        });
-        if (!opened) {
-          toastManager.add({
-            type: "warning",
-            title: "Another remote authentication request is already pending.",
-          });
-        }
-        return false;
-      }
-      if (check?.status === "error") {
-        showRemoteExecutionFailureToast({
-          executionTargetId,
-          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-          check,
-          retry: () => {
-            void beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false });
-          },
-        });
-        return false;
-      }
-
-      // The background check waits for the disconnect list; the server still guards the action.
-      if (check?.status !== "checking" && areDisconnectedTargetsLoaded()) {
-        startRemoteExecutionCheck({
-          executionTargetId,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-          verify: verifyRemoteExecutionTarget,
-        });
-      }
-      if (!input.resumeOnUnlockOnly) {
-        await input.onVerified?.();
-      }
-      return true;
-    },
-    [beginRemoteExecutionTargetAccessCheck],
+  const ensure = useCallback(
+    (input: EnsureRemoteExecutionTargetAccessInput) => ensureRemoteExecutionTargetAccess(input),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [executionTargetChecks],
   );
-
-  const submitRemoteExecutionAuth = useCallback(async () => {
-    const pending = useRemoteAccessStore.getState().pendingAction;
-    await submitAuth(() => {
-      if (pending)
-        void beginRemoteExecutionTargetAccessCheck({ ...pending, resumeOnUnlockOnly: false });
-    });
-  }, [beginRemoteExecutionTargetAccessCheck]);
 
   const closeRemoteExecutionAuthDialog = useCallback(() => {
     if (isAuthenticatingRemoteExecution) {
@@ -289,8 +85,8 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   }, [closeAuthDialog, isAuthenticatingRemoteExecution]);
 
   return {
-    beginRemoteExecutionTargetAccessCheck,
-    ensureRemoteExecutionTargetAccess,
+    beginRemoteExecutionTargetAccessCheck: begin,
+    ensureRemoteExecutionTargetAccess: ensure,
     isRemoteExecutionAuthDialogOpen,
     remoteExecutionAuthMode,
     remoteExecutionAuthPromptLabel,
@@ -299,6 +95,6 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
     isAuthenticatingRemoteExecution,
     closeRemoteExecutionAuthDialog,
     setRemoteExecutionAuthSecret,
-    submitRemoteExecutionAuth,
+    submitRemoteExecutionAuth: submitPendingRemoteExecutionAuth,
   };
 }

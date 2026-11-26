@@ -3,6 +3,7 @@ import {
   formatSshDestination,
   parseSshExecutionTarget,
 } from "./sshExecutionTarget.ts";
+import { assertLegacySshLaunchAllowed } from "./sshOwnerSelection.ts";
 import { buildSshPasswordSessionTransportArgs } from "./sshSession.ts";
 import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 
@@ -69,6 +70,14 @@ export function buildSshTransportArgs(input: {
 }
 
 export function buildSshCommandInvocation(input: BuildSshCommandInput): SshCommandInvocation {
+  assertLegacySshLaunchAllowed();
+  return buildSshTerminalCandidateInvocation(input);
+}
+
+/** Terminal routing still needs a candidate before choosing the native or legacy adapter. */
+export function buildSshTerminalCandidateInvocation(
+  input: BuildSshCommandInput,
+): SshCommandInvocation {
   const target = parseSshExecutionTarget(input.executionTargetId);
   if (!target) {
     throw new Error(`Invalid SSH execution target '${input.executionTargetId ?? "local"}'.`);

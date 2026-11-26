@@ -1,5 +1,7 @@
 import { runSshCommand } from "../ssh/sshProcess.ts";
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
+import { makeRemoteAgentOwnerExec } from "./remoteAgentControl.owner.ts";
+import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
 import {
   buildRemoteAgentPreflightScript,
   parseRemoteAgentPreflight,
@@ -46,22 +48,35 @@ export function parseRemoteAgentPlatformProbe(output: string): RemoteAgentPlatfo
   };
 }
 
+/** One round trip: OS, architecture and, on Linux, the install prerequisites. */
+export function buildRemoteAgentPlatformProbeScript(): string {
+  return [
+    'printf \'%s\\n%s\\n\' "$(uname -s)" "$(uname -m)"',
+    // Prerequisite facts are Linux-specific; other systems stop at the unsupported triple.
+    'if [ "$(uname -s)" = Linux ]; then',
+    buildRemoteAgentPreflightScript(),
+    "fi",
+  ].join("\n");
+}
+
 export async function probeRemoteAgentPlatform(
   executionTargetId: string,
 ): Promise<RemoteAgentPlatformInfo> {
+  // U25: production activation runs the same probe as one typed owner operation.
+  const owner = remoteAgentOwnerSelection();
+  if (owner) {
+    const { stdout } = await makeRemoteAgentOwnerExec(
+      owner,
+      executionTargetId,
+    )({
+      kind: "platformProbe",
+    });
+    return parseRemoteAgentPlatformProbe(stdout);
+  }
   const result = await runRemoteAgentDiagnosedCommand(runSshCommand, "platform", {
     executionTargetId,
     command: "sh",
-    args: [
-      "-lc",
-      [
-        'printf \'%s\\n%s\\n\' "$(uname -s)" "$(uname -m)"',
-        // Prerequisite facts are Linux-specific; other systems stop at the unsupported triple.
-        'if [ "$(uname -s)" = Linux ]; then',
-        buildRemoteAgentPreflightScript(),
-        "fi",
-      ].join("\n"),
-    ],
+    args: ["-lc", buildRemoteAgentPlatformProbeScript()],
     timeoutMs: 8_000,
     maxBufferBytes: 4096,
   });

@@ -30,5 +30,5 @@ it("captures environment precedence and dev state from the actual launch snapsho
     entry: "/server",
     inspector: null,
   });
-  expect(getOwnershipLaunch()?.stateDir).toBe(path.resolve("/legacy", "userdata"));
+  expect(getOwnershipLaunch()?.stateDir).toBe(path.resolve("/default", "userdata"));
 });

@@ -1,6 +1,11 @@
 import type { MessageId } from "@bigbud/contracts";
+import type { TurnStartRemoteTargetFailure } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { findOwnTurnStartFailure } from "@bigbud/shared/threadFork";
 
+import {
+  decodeRemoteTargetFailure,
+  inferRemoteTargetFailure,
+} from "../../../lib/remoteTargetFailure";
 import type { ChatMessage } from "../../../models/types/app.types";
 
 /** Failure classes in-place recovery cannot fix; only a new thread continues (plan D16). */
@@ -31,6 +36,13 @@ export interface ServerTurnFailure {
   readonly failureClass: string;
   /** The provider's own failure detail from the activity payload, when present. */
   readonly detail?: string;
+  /** Server time the failure was recorded (activity `createdAt`). */
+  readonly createdAt?: string;
+  /**
+   * Set when the turn failed because its remote (SSH) target was unavailable: the server's
+   * `remoteTarget` marker, or for legacy rows inferred from an SSH auth/disconnect detail.
+   */
+  readonly remoteTarget?: TurnStartRemoteTargetFailure;
 }
 
 interface FailureActivity {
@@ -70,10 +82,13 @@ export function deriveServerTurnFailure(thread: {
     typeof payload?.detail === "string" && payload.detail.trim()
       ? payload.detail.trim()
       : undefined;
+  const remoteTarget = decodeRemoteTargetFailure(payload) ?? inferRemoteTargetFailure(detail);
   return {
     pendingMessageId: pending.id,
     failureEventId: failure.id,
     failureClass: typeof payload?.failureClass === "string" ? payload.failureClass : "",
     ...(detail ? { detail } : {}),
+    createdAt: failure.createdAt,
+    ...(remoteTarget ? { remoteTarget } : {}),
   };
 }

@@ -11,9 +11,19 @@ import {
   type RemoteSessionFsShellOptions,
 } from "./remoteWorkspaceSessionFsBridge.handler.ts";
 import {
+  assertRemoteWorkspaceBridgeOperationSupported,
+  makeSelectedOwnerReadinessProbe,
   probeRemoteWorkspaceReadiness,
   type RemoteWorkspaceReadinessProbe,
 } from "./remoteWorkspaceReadiness.ts";
+import {
+  createSelectedSessionFsProvider,
+  type SessionFsOwnerCapability,
+} from "./remoteWorkspaceSessionFsBridge.ownerProvider.ts";
+import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
+import { usesProductionAcpBridge } from "./remoteWorkspaceAcpBridge.production.ts";
+import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
+import { withProductionWorkspaceOwner } from "../ws/wsSshOwnerProduction.workspace.ts";
 export {
   createErrnoError,
   REMOTE_WORKSPACE_SESSION_STATE_PATH,
@@ -41,8 +51,33 @@ export async function createRemoteWorkspaceSessionFsBridge(
   prefix: string,
   readmeLines: ReadonlyArray<string>,
   readinessProbe: RemoteWorkspaceReadinessProbe = probeRemoteWorkspaceReadiness,
+  selectedOwner?: SessionFsOwnerCapability,
 ): Promise<RemoteWorkspaceSessionFsBridge> {
-  const readiness = await readinessProbe(workspaceTarget);
+  // W2 T-files: production activation binds the live owner's exact target and the
+  // session's own root (the same workspace verbs as the ACP bridge); no legacy path.
+  const production: SessionFsOwnerCapability | undefined =
+    workspaceTarget.location === "remote" && usesProductionAcpBridge(workspaceTarget)
+      ? {
+          targetId: workspaceTarget.executionTargetId,
+          // An absent root is refused by the owner's root rule, never defaulted.
+          workspaceRoot: workspaceTarget.cwd ?? "",
+          withOwner: (id, use, signal) =>
+            withProductionWorkspaceOwner(readSshOwnerProductionOwner, id, use, signal),
+        }
+      : undefined;
+  const sessionFsOwner: SessionFsOwnerCapability | undefined = production ?? selectedOwner;
+  const selected =
+    (isSshOwnerDevFixtureSelected() || production !== undefined) &&
+    workspaceTarget.location === "remote";
+  // A provider-supplied readiness probe cannot grant authority to the legacy session FS.
+  assertRemoteWorkspaceBridgeOperationSupported(
+    workspaceTarget,
+    "session-filesystem",
+    selected && sessionFsOwner !== undefined,
+  );
+  const readiness =
+    selected && sessionFsOwner ? makeSelectedOwnerReadinessProbe(sessionFsOwner) : readinessProbe;
+  const readinessResult = await readiness(workspaceTarget);
   const bridge = await createRemoteWorkspaceBridge({ workspaceTarget, prefix, readmeLines });
   const stateRoot = path.join(bridge.bridgeDir, "session-state");
   await fs.mkdir(stateRoot, { recursive: true });
@@ -74,14 +109,21 @@ export async function createRemoteWorkspaceSessionFsBridge(
       conventions: "posix",
     },
     createSessionFsHandler: (sessionId = "bigbud-session-fs") =>
-      createRemoteSessionFsProvider({
-        sessionId,
-        initialCwd,
-        bridgeCwd: bridge.cwd,
-        stateRoot,
-        readiness,
-        runRemoteShell,
-      }),
+      selected && sessionFsOwner
+        ? createSelectedSessionFsProvider({
+            capability: sessionFsOwner,
+            initialCwd,
+            bridgeCwd: bridge.cwd,
+            stateRoot,
+          })
+        : createRemoteSessionFsProvider({
+            sessionId,
+            initialCwd,
+            bridgeCwd: bridge.cwd,
+            stateRoot,
+            readiness: readinessResult,
+            runRemoteShell,
+          }),
     cleanup: bridge.cleanup,
   };
 }

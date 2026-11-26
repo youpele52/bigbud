@@ -14,11 +14,12 @@ use bigbud_protocol::{
     DEFAULT_MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR, read_frame, v1, write_frame,
 };
 
-/// Kept short: a Unix socket path must fit `sockaddr_un` (104 bytes on macOS).
+/// Kept short under `/tmp` rather than `TMPDIR`, whose depth varies: a Unix socket path must fit
+/// `sockaddr_un` (104 bytes on macOS).
 fn scratch_dir() -> PathBuf {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let path = std::env::temp_dir().join(format!(
-        "bbss-{}-{}",
+    let path = PathBuf::from(format!(
+        "/tmp/bbss-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));

@@ -7,7 +7,7 @@
 import {
   CommandId,
   EventId,
-  type ModelSelection,
+  ModelSelection,
   type OrchestrationThread,
   type ThreadId,
 } from "@bigbud/contracts";
@@ -25,19 +25,32 @@ import type {
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
 import {
   decideModelChoice,
+  isAbsentModelSelection,
+  parseRequestedModelSelection,
   ModelDecision,
   type ModelDecision as ModelDecisionType,
 } from "./ThreadOrchestrationTools.modelChoice.ts";
+import type { ModelChoiceContext } from "./ThreadOrchestrationTools.modelChoice.usable.ts";
 import { loadModelChoiceContext } from "./ThreadOrchestrationTools.modelChoice.context.ts";
 import { delegationError, stableThreadToolId } from "./ThreadOrchestrationTools.origins.ts";
 
 const decodeStoredDecision = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ modelDecision: Schema.optional(ModelDecision) })),
+  Schema.fromJsonString(
+    Schema.Union([
+      Schema.Struct({ modelDecision: ModelDecision }),
+      Schema.Struct({ inheritedModelSelection: ModelSelection }),
+    ]),
+  ),
 );
+type StoredDecision = Option.Option.Value<ReturnType<typeof decodeStoredDecision>>;
+
+function readStoredDecision(resultJson: string | null) {
+  return resultJson === null ? undefined : Option.getOrUndefined(decodeStoredDecision(resultJson));
+}
 
 export function readStoredModelDecision(resultJson: string | null): ModelDecisionType | undefined {
-  if (resultJson === null) return undefined;
-  return Option.getOrUndefined(decodeStoredDecision(resultJson))?.modelDecision;
+  const stored = readStoredDecision(resultJson);
+  return stored && "modelDecision" in stored ? stored.modelDecision : undefined;
 }
 
 /** Decide once per invocation; a retry reuses the stored decision and never re-decides (AC9). */
@@ -49,36 +62,50 @@ export const resolveDelegationModelDecision = Effect.fn("resolveDelegationModelD
     readonly request: unknown;
     readonly sources: ThreadToolModelSources | null | undefined;
     readonly trunk: ModelSelection;
-    readonly target: {
-      readonly providerRuntimeExecutionTargetId?: string | null | undefined;
-      readonly workspaceExecutionTargetId?: string | null | undefined;
-    };
-  }) {
-    const stored = readStoredModelDecision(input.delegation.resultJson);
+    readonly existingChildSelection: ModelSelection | undefined;
+    readonly target: ModelChoiceContext["target"];
+  }): Effect.fn.Return<StoredDecision, Error> {
+    const stored = readStoredDecision(input.delegation.resultJson);
     if (stored !== undefined) return stored;
-    const context = yield* loadModelChoiceContext({ sources: input.sources, target: input.target });
-    const decision = decideModelChoice({
-      request: input.request,
-      context,
-      trunk: input.trunk,
-      choiceId: stableThreadToolId("model-choice", input.identity),
-      delegationId: input.delegation.delegationId,
-      heldMessageId: input.delegation.sourceMessageId,
-      deadlineAt: new Date(
-        Date.parse(input.delegation.createdAt) + DELEGATED_MODEL_CHOICE_HOLD_MS,
-      ).toISOString(),
-    });
-    yield* input.repository
-      .storeResult({
+    // Legacy invocations did not persist the inherited selection; reuse the child when present.
+    const inherited = { inheritedModelSelection: input.existingChildSelection ?? input.trunk };
+    if (input.delegation.resultJson !== null) return inherited;
+    const candidate =
+      input.existingChildSelection !== undefined || isAbsentModelSelection(input.request)
+        ? inherited
+        : { modelDecision: yield* computeModelDecision(input) };
+    const claimed = yield* input.repository
+      .claimResult({
         delegationId: input.delegation.delegationId,
-        resultJson: JSON.stringify({ modelDecision: decision }),
-        errorJson: null,
+        resultJson: JSON.stringify(candidate),
         updatedAt: new Date().toISOString(),
       })
       .pipe(Effect.mapError(delegationError));
-    return decision;
+    return readStoredDecision(claimed) ?? inherited;
   },
 );
+
+const computeModelDecision = Effect.fn("computeModelDecision")(function* (
+  input: Parameters<typeof resolveDelegationModelDecision>[0],
+) {
+  const request = parseRequestedModelSelection(input.request);
+  const context = yield* loadModelChoiceContext({
+    sources: input.sources,
+    target: input.target,
+    qualifyWorkspaceEffort: request?.provider === "opencodeV2" && request.effort !== undefined,
+  });
+  return decideModelChoice({
+    request: input.request,
+    context,
+    trunk: input.trunk,
+    choiceId: stableThreadToolId("model-choice", input.identity),
+    delegationId: input.delegation.delegationId,
+    heldMessageId: input.delegation.sourceMessageId,
+    deadlineAt: new Date(
+      Date.parse(input.delegation.createdAt) + DELEGATED_MODEL_CHOICE_HOLD_MS,
+    ).toISOString(),
+  });
+});
 
 export function decisionThreadModel(decision: ModelDecisionType): ModelSelection {
   return decision.kind === "hold" ? decision.requested.fallback : decision.resolved.used;

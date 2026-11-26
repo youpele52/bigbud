@@ -140,6 +140,8 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       const serverDirectory = input.cwd;
       const cleanupBridge = orchestrationBridge.cleanup;
 
+      // Remote OpenCode runs only through the owner-selected v2 lane; the
+      // legacy manager refuses a remote target before any SSH spawn.
       const serverHandle = yield* Effect.tryPromise({
         try: () =>
           deps.serverManager.acquire({
@@ -350,7 +352,7 @@ function makeOpencodeBridgeCleanup(input: {
   readonly orchestrationServerName: string;
   readonly cleanup: () => Promise<void>;
 }): () => Promise<void> {
-  return composeBridgeCleanups(async () => {
+  const cleanupBridge = composeBridgeCleanups(async () => {
     try {
       await disconnectOpencodeOrchestrationMcpBridge({
         client: input.serverHandle.client,
@@ -361,4 +363,7 @@ function makeOpencodeBridgeCleanup(input: {
       // Best effort: bridge cleanup below removes bigbud auth and files.
     }
   }, input.cleanup);
+  return async () => {
+    await cleanupBridge();
+  };
 }

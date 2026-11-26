@@ -5,8 +5,6 @@ use std::sync::Arc;
 #[cfg(unix)]
 use std::collections::VecDeque;
 #[cfg(unix)]
-use std::io::Read;
-#[cfg(unix)]
 use std::sync::Mutex;
 
 #[cfg(unix)]
@@ -14,12 +12,17 @@ use std::os::fd::AsRawFd;
 
 const MAX_INPUT_BYTES: usize = 64 * 1024;
 pub const MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
-const READ_CHUNK_BYTES: usize = 16 * 1024;
+/// Largest output chunk: one read batch (`reader.rs`) and one `PtyOutput` frame.
+const READ_CHUNK_BYTES: usize = 64 * 1024;
+
+/// One PTY output chunk, shared (not copied) by the replay ring, the screen model's feed
+/// queue and the spool writer's queue (terminal lifecycle R7).
+pub type OutputBytes = Arc<[u8]>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PtyOutputChunk {
     pub sequence: u64,
-    pub bytes: Vec<u8>,
+    pub bytes: OutputBytes,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +104,10 @@ struct PtyInner {
     launch_outcome: LaunchOutcome,
     input: input::InputWriter,
     state: Mutex<PtyStateRecord>,
+    /// Set by the first terminating close; later closes do not start a second escalation.
+    terminating: std::sync::atomic::AtomicBool,
+    /// The escalation ended without a reap: the outcome is unknown (zombie or unreapable).
+    outcome_unknown: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(unix)]
@@ -109,6 +116,9 @@ struct PtyStateRecord {
     next_sequence: u64,
     first_retained_sequence: u64,
     retained_bytes: usize,
+    /// Replay ring cap: `MAX_OUTPUT_BYTES`, or less for a PTY whose screen model and spool
+    /// serve restores (terminal lifecycle plan §13 host RSS budget).
+    retention_bytes: usize,
     output: VecDeque<PtyOutputChunk>,
     exit_code: Option<i32>,
     signal: Option<i32>,
@@ -129,7 +139,7 @@ pub struct PtyJob {
 
 #[derive(Debug)]
 pub enum PtyEvent {
-    Output(Vec<u8>),
+    Output(OutputBytes),
     Exited {
         exit_code: Option<i32>,
         signal: Option<i32>,
@@ -138,6 +148,12 @@ pub enum PtyEvent {
 
 #[path = "handle.rs"]
 mod handle;
+#[path = "handle.close.rs"]
+mod handle_close;
+#[path = "handle.lifecycle.rs"]
+mod handle_lifecycle;
+pub use handle_close::{CLOSE_GRACE, CloseOutcome};
+pub use handle_lifecycle::RebuildRing;
 #[cfg(unix)]
 #[path = "launch.rs"]
 mod launch;
@@ -164,6 +180,11 @@ pub use input::{InputOutcome, InputReceipt};
 #[cfg(unix)]
 #[path = "environment.rs"]
 mod environment;
+#[cfg(unix)]
+#[path = "reader.rs"]
+mod reader;
+#[cfg(unix)]
+pub use reader::{run_events, run_events_gated};
 
 #[cfg(all(test, unix))]
 #[path = "reliability.tests.rs"]
@@ -171,53 +192,6 @@ mod reliability_tests;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
-
-#[cfg(unix)]
-#[allow(clippy::indexing_slicing)]
-pub fn run_events(
-    mut reader: std::fs::File,
-    handle: &PtyHandle,
-    mut callback: impl FnMut(PtyEvent),
-) {
-    let mut buffer = [0; READ_CHUNK_BYTES];
-    let mut exit = None;
-    while let Ok(result) = handle.inner.child.poll() {
-        exit = result;
-        match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(size) => callback(PtyEvent::Output(buffer[..size].to_vec())),
-            Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                if exit.is_some() {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(5));
-            }
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(_) => break,
-        }
-    }
-    // EOF can precede actual child exit. This owned worker polls without holding
-    // state locks; restart escalation can still signal the live leader authority.
-    while exit.is_none() {
-        match handle.inner.child.poll() {
-            Ok(result) => exit = result,
-            Err(_) => return,
-        }
-        if exit.is_none() {
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-    }
-    if let Some(exit) = exit {
-        if handle.inner.input.shutdown().is_err() {
-            return;
-        }
-        callback(PtyEvent::Exited {
-            exit_code: exit.code,
-            signal: exit.signal,
-        });
-    }
-}
 
 #[cfg(not(unix))]
 pub fn run_events(_reader: (), _pid: u32, _callback: impl FnMut(PtyEvent)) {}

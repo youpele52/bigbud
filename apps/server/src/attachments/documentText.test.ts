@@ -2,6 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deflateRawSync } from "node:zlib";
+import { MAX_OFFICE_ENTRY_BYTES } from "./documentText.office.zip.ts";
 
 import { describe, expect, it } from "vitest";
 
@@ -17,7 +19,10 @@ function makeZipWithStoredEntry(fileName: string, content: string): Buffer {
   return makeZipWithStoredEntries([[fileName, content]]);
 }
 
-function makeZipWithStoredEntries(entries: ReadonlyArray<readonly [string, string]>): Buffer {
+function makeZipWithStoredEntries(
+  entries: ReadonlyArray<readonly [string, string]>,
+  compression: "stored" | "deflated" = "stored",
+): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;
@@ -25,14 +30,16 @@ function makeZipWithStoredEntries(entries: ReadonlyArray<readonly [string, strin
   for (const [fileName, content] of entries) {
     const fileNameBytes = Buffer.from(fileName, "utf8");
     const contentBytes = Buffer.from(content, "utf8");
+    const stored = compression === "deflated" ? deflateRawSync(contentBytes) : contentBytes;
+    const method = compression === "deflated" ? 8 : 0;
     const localHeader = Buffer.alloc(30);
     localHeader.writeUInt32LE(0x04034b50, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(0, 6);
-    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(method, 8);
     localHeader.writeUInt32LE(0, 10);
     localHeader.writeUInt32LE(0, 14);
-    localHeader.writeUInt32LE(contentBytes.length, 18);
+    localHeader.writeUInt32LE(stored.length, 18);
     localHeader.writeUInt32LE(contentBytes.length, 22);
     localHeader.writeUInt16LE(fileNameBytes.length, 26);
     localHeader.writeUInt16LE(0, 28);
@@ -42,10 +49,10 @@ function makeZipWithStoredEntries(entries: ReadonlyArray<readonly [string, strin
     centralDirectory.writeUInt16LE(20, 4);
     centralDirectory.writeUInt16LE(20, 6);
     centralDirectory.writeUInt16LE(0, 8);
-    centralDirectory.writeUInt16LE(0, 10);
+    centralDirectory.writeUInt16LE(method, 10);
     centralDirectory.writeUInt32LE(0, 12);
     centralDirectory.writeUInt32LE(0, 16);
-    centralDirectory.writeUInt32LE(contentBytes.length, 20);
+    centralDirectory.writeUInt32LE(stored.length, 20);
     centralDirectory.writeUInt32LE(contentBytes.length, 24);
     centralDirectory.writeUInt16LE(fileNameBytes.length, 28);
     centralDirectory.writeUInt16LE(0, 30);
@@ -55,9 +62,9 @@ function makeZipWithStoredEntries(entries: ReadonlyArray<readonly [string, strin
     centralDirectory.writeUInt32LE(0, 38);
     centralDirectory.writeUInt32LE(offset, 42);
 
-    localParts.push(localHeader, fileNameBytes, contentBytes);
+    localParts.push(localHeader, fileNameBytes, stored);
     centralParts.push(centralDirectory, fileNameBytes);
-    offset += localHeader.length + fileNameBytes.length + contentBytes.length;
+    offset += localHeader.length + fileNameBytes.length + stored.length;
   }
 
   const centralDirectoryOffset = offset;
@@ -113,13 +120,43 @@ ${xrefOffset}
 }
 
 describe("documentText", () => {
-  it("extracts paragraph text from DOCX document XML", () => {
+  it("extracts paragraph text from DOCX document XML", async () => {
     const docx = makeZipWithStoredEntry(
       "word/document.xml",
       "<w:document><w:body><w:p><w:r><w:t>First paragraph</w:t></w:r></w:p><w:p><w:r><w:t>Second &amp; final</w:t></w:r></w:p></w:body></w:document>",
     );
 
-    expect(extractDocxTextFromBuffer(docx)).toBe("First paragraph\nSecond & final");
+    expect(await extractDocxTextFromBuffer(docx)).toBe("First paragraph\nSecond & final");
+  });
+
+  it("inflates only needed Office entries and observes extraction cancellation", async () => {
+    const docx = makeZipWithStoredEntries(
+      [
+        ["word/document.xml", "<w:p><w:t>Monthly report</w:t></w:p>"],
+        ["word/media/preview.txt", "unused ".repeat(MAX_OFFICE_ENTRY_BYTES / 6)],
+      ],
+      "deflated",
+    );
+    await expect(extractDocxTextFromBuffer(docx)).resolves.toBe("Monthly report");
+    const controller = new AbortController();
+    const pending = extractDocxTextFromBuffer(docx, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toThrow();
+  });
+
+  it("rejects an oversized expanded text-bearing Office entry", async () => {
+    const docx = makeZipWithStoredEntries(
+      [
+        [
+          "word/document.xml",
+          `<w:p><w:t>${"notes ".repeat(MAX_OFFICE_ENTRY_BYTES / 5)}</w:t></w:p>`,
+        ],
+      ],
+      "deflated",
+    );
+    await expect(extractDocxTextFromBuffer(docx)).rejects.toThrow(
+      "exceeds the text extraction limit",
+    );
   });
 
   it("extracts text from PPTX slides", async () => {

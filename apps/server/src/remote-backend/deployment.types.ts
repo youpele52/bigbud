@@ -23,11 +23,21 @@ export interface DeploymentRemoteResult {
   readonly stderr: string;
 }
 /** Production: SSH `clean-posix` with strict host keys. Tests: a local process in a private HOME. */
-export type DeploymentRemoteRunner = (
+export type DeploymentRemoteRunner = ((
   executionTargetId: string,
   command: DeploymentRemoteCommand,
   signal: AbortSignal,
-) => Promise<DeploymentRemoteResult>;
+) => Promise<DeploymentRemoteResult>) & {
+  /** Selected owner uses typed request and authority instead of matching raw shell operands. */
+  readonly readCompletion?: (
+    scope: {
+      readonly executionTargetId: string;
+      readonly authorityId: string;
+      readonly requestId: string;
+    },
+    signal: AbortSignal,
+  ) => Promise<DeploymentRemoteResult>;
+};
 
 /** A signed graph selected for one target triple, pinned by its archive sha256. */
 export interface DeploymentGraphSource {

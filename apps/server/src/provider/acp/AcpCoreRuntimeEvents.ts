@@ -131,6 +131,7 @@ export function makeAcpRequestResolvedEvent(input: {
 }): ProviderRuntimeEvent {
   return {
     type: "request.resolved",
+    requestGeneration: input.requestId,
     ...input.stamp,
     sessionEpoch: input.session.sessionEpoch,
     provider: input.provider,

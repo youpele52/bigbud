@@ -2,7 +2,8 @@ import { Effect, Layer, FileSystem, Path } from "effect";
 import { chmod } from "node:fs/promises";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { runMigrations } from "../Migrations.ts";
+import { latestMigrationId, runMigrations } from "../Migrations.ts";
+import { assertDatabaseSchemaNotNewer } from "../Migrations.downgradeGuard.ts";
 import { UsageSqlClient } from "../Services/UsageSqlClient.ts";
 import { ensureProjectionThreadsElevatorSummaryColumns } from "../Migrations/ProjectionThreadsElevatorSummary.columns.ts";
 import { ServerConfig } from "../../startup/config.ts";
@@ -22,7 +23,20 @@ type Loader = {
   layer: (config: RuntimeSqliteLayerConfig) => Layer.Layer<SqlClient.SqlClient>;
 };
 const defaultSqliteClientLoaders = {
-  bun: () => import("@effect/sql-sqlite-bun/SqliteClient"),
+  bun: async (): Promise<Loader> => {
+    const { layer } = await import("@effect/sql-sqlite-bun/SqliteClient");
+    return {
+      layer: (config) =>
+        layer({
+          ...config,
+          // The adapter otherwise defaults both write and create to true, even with readonly.
+          readwrite: !config.readonly,
+          create: !config.readonly,
+          // Only migrateSchema may enable WAL; preflight must never change journal mode.
+          disableWAL: true,
+        }),
+    };
+  },
   node: () => import("../NodeSqliteClient.ts"),
 } satisfies Record<string, () => Promise<Loader>>;
 
@@ -86,6 +100,20 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   yield* fs.makeDirectory(path.dirname(dbPath), { recursive: true });
+
+  if (yield* fs.exists(dbPath)) {
+    // Even a writable connection that only reads can checkpoint WAL on close. Refuse a newer
+    // schema with a read-only probe before building either the writer or the usage reader.
+    // A cleanly closed WAL database has no -wal/-shm files, and SQLite cannot open it read-only
+    // then (it cannot create -shm). With no WAL there is nothing to checkpoint, so a writable
+    // connection that only reads leaves the database unchanged.
+    const hasWal = yield* fs.exists(`${dbPath}-wal`);
+    yield* Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`PRAGMA busy_timeout = 5000;`;
+      yield* assertDatabaseSchemaNotNewer(latestMigrationId);
+    }).pipe(Effect.provide(makeRuntimeSqliteLayer({ filename: dbPath, readonly: hasWal })));
+  }
 
   const operational = Layer.provideMerge(
     Layer.effectDiscard(Effect.andThen(migrateSchema(options), restrictDatabaseFiles(dbPath))),

@@ -1,5 +1,5 @@
 import { classifyRemoteAgentFailure } from "./remoteAgentFailure.classify.ts";
-import type { RunSshCommandInput } from "../ssh/sshProcess.ts";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { readRemoteAgentRegistryReadOnly } from "./remoteAgentReadOnlyStatus.ts";
 
 export { buildRemoteAgentRegistryReadOnlyProbe } from "./remoteAgentReadOnlyStatus.ts";
@@ -16,7 +16,7 @@ export interface RemoteAgentApprovalEvidence {
 
 export async function readRemoteAgentApprovalEvidence(
   executionTargetId: string,
-  run?: (input: RunSshCommandInput) => Promise<unknown>,
+  run?: RemoteAgentCommandRunner,
 ): Promise<RemoteAgentApprovalEvidence> {
   let state: Awaited<ReturnType<typeof readRemoteAgentRegistryReadOnly>>;
   try {
@@ -40,7 +40,7 @@ export async function readRemoteAgentApprovalEvidence(
 
 export async function remoteAgentHasManagedBuildReadOnly(
   executionTargetId: string,
-  run?: (input: RunSshCommandInput) => Promise<unknown>,
+  run?: RemoteAgentCommandRunner,
 ): Promise<boolean> {
   return (await readRemoteAgentApprovalEvidence(executionTargetId, run)).approved;
 }

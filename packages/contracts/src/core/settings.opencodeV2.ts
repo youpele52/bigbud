@@ -22,5 +22,10 @@ export const OpencodeV2DevelopmentSettings = Schema.Struct({
   serviceFile: Schema.optionalKey(TrimmedString),
   nativeServiceTrust: Schema.optionalKey(OpencodeV2NativeServiceTrust),
   nativePluginConfigRoot: Schema.optionalKey(OpencodeV2PluginConfigRoot),
+  /**
+   * Optional absolute path of the OpenCode v2 executable on SSH targets. When
+   * unset, the SSH owner discovers it on each target. `binaryPath` stays local.
+   */
+  remoteBinaryPath: Schema.optionalKey(TrimmedString),
 });
 export type OpencodeV2DevelopmentSettings = typeof OpencodeV2DevelopmentSettings.Type;

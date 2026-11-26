@@ -1,10 +1,10 @@
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { usageRecord } from "../../providerUsageLimits.ts";
 import type { UsageCredential } from "../../providerUsageLimits.http.ts";
+import { readCursorSessionValue } from "./Provider.usageLimits.credentials.sqlite.ts";
 
 /** Resolves only Cursor's known desktop credential database; never opens browser stores. */
 export function cursorCredentialDatabasePath(
@@ -38,15 +38,7 @@ export async function readCursorUsageCredential(
   // Do not create sidecars or ignore active WAL state when Cursor is publishing a login.
   if (wal !== shm) throw new Error("Cursor credential database is changing.");
   const filename = wal ? databasePath : `${pathToFileURL(databasePath).href}?immutable=1`;
-  const database = new DatabaseSync(filename, { readOnly: true, timeout: 250 });
-  let value: unknown;
-  try {
-    value = database
-      .prepare("SELECT value FROM ItemTable WHERE key = ? LIMIT 1")
-      .get("cursorAuth/accessToken")?.value;
-  } finally {
-    database.close();
-  }
+  const value = await readCursorSessionValue(filename);
   if (
     wal !== (await exists(`${databasePath}-wal`)) ||
     shm !== (await exists(`${databasePath}-shm`))

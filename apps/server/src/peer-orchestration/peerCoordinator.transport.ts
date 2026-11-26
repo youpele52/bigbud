@@ -1,15 +1,16 @@
 /**
- * Live coordinator peer transport (WP-8D): `ensureCoordinatorPeerKey`, then one dedicated-key SSH
- * channel per request (`makePeerRelaySshChannels`), then `sendPeerRequest`. A request that fails
- * is classified from the ssh exit: a host key mismatch or refused key is a setup error, anything
- * else is "unreachable" (the dispatcher then probes status, never relaunches).
+ * Live coordinator peer transport (WP-8D, T-peer / U9).
+ *
+ * Every channel is opened by the Rust owner from the saved pairing approval: the
+ * pinned worker host key and the dedicated coordinator identity bound by the
+ * grant are both required, and ordinary user host trust or a shared master can
+ * never substitute. The TypeScript path launches no `ssh`, `ssh-keygen` or
+ * `ssh-keyscan`; an absent owner refuses instead of falling back.
  *
  * @module peerCoordinator.transport
  */
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import type { PeerScannedHostKey } from "@bigbud/contracts/server/remotePeer.pairing.ts";
 
@@ -18,12 +19,20 @@ import {
   type PeerTransport,
   type PeerTransportOutcome,
 } from "../orchestration-tools/peerDispatch.transport.ts";
+import {
+  makeOwnedPeerRelaySshChannels,
+  PeerRelayAdmissionError,
+  type PeerRelaySshOwner,
+} from "../remote-backend/peerRelay.ssh.owner.ts";
 import { sendPeerRequest } from "../remote-backend/peerRelay.request.ts";
-import { makePeerRelaySshChannels } from "../remote-backend/peerRelay.ssh.ts";
-import { ensureCoordinatorPeerKey, parsePinnedHostKey } from "./peerSshKey.ts";
+import type { PeerRelayChannelOutcome } from "../remote-backend/peerRelay.ssh.ts";
+import {
+  PeerEnrollmentOwnerMismatchError,
+  PeerEnrollmentOwnerUnavailableError,
+  parsePinnedHostKey,
+} from "./peerSshKey.ts";
 
 export const peerCoordinatorKeyDirectory = (stateDir: string) => join(stateDir, "peer-coordinator");
-const knownHostsDirectory = (keyDirectory: string) => join(keyDirectory, "known_hosts");
 
 const SETUP_MESSAGES = {
   "host-identity-mismatch":
@@ -35,25 +44,76 @@ const SETUP_MESSAGES = {
 const exitWithin = <T>(promise: Promise<T>, ms: number, fallback: T) =>
   Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 
+/** Owner port for one-shot, exact-target host-key inspection. */
+export interface PeerHostKeyInspectionOwner {
+  inspectPeerHostKey(
+    host: string,
+    port: number,
+  ): Promise<{
+    readonly keyType: string;
+    readonly fingerprint: string;
+    readonly publicKey: string;
+  }>;
+}
+
+/**
+ * Read the worker's currently presented host key for the user to compare.
+ * Returns metadata only; the owner saves no pin and releases no credential.
+ */
+export async function scanPeerHostKeys(
+  owner: PeerHostKeyInspectionOwner | undefined,
+  host: string,
+  port: number,
+): Promise<ReadonlyArray<PeerScannedHostKey>> {
+  if (!owner)
+    throw new PeerEnrollmentOwnerUnavailableError(
+      "The selected SSH owner must inspect the peer host key.",
+    );
+  const key = await owner.inspectPeerHostKey(host, port);
+  let pinnedHostKey: string;
+  try {
+    pinnedHostKey = parsePinnedHostKey(key.publicKey);
+  } catch {
+    throw new PeerEnrollmentOwnerMismatchError(
+      "The SSH owner returned an invalid presented host key.",
+    );
+  }
+  if (
+    key.keyType !== pinnedHostKey.split(" ")[0] ||
+    sshHostKeyFingerprint(pinnedHostKey) !== key.fingerprint
+  )
+    throw new PeerEnrollmentOwnerMismatchError(
+      "The SSH owner returned inconsistent host-key metadata.",
+    );
+  return [{ pinnedHostKey, fingerprint: key.fingerprint }];
+}
+
 export function makeSshPeerTransport(input: {
-  readonly keyDirectory: string;
-  readonly sshBinary?: string;
+  readonly owner?: PeerRelaySshOwner | undefined;
 }): PeerTransport {
   return {
     async request({ pairing, action, body, deadlineMs, signal }): Promise<PeerTransportOutcome> {
-      const { keyFile } = await ensureCoordinatorPeerKey(input.keyDirectory);
-      const channels = makePeerRelaySshChannels({
-        target: {
-          host: pairing.host,
-          port: pairing.port,
-          user: pairing.user,
-          workerAuthorityId: pairing.workerAuthorityId,
-          pinnedHostKey: pairing.pinnedHostKey,
-          identityFile: keyFile,
-        },
-        knownHostsDirectory: knownHostsDirectory(input.keyDirectory),
-        ...(input.sshBinary ? { sshBinary: input.sshBinary } : {}),
-      });
+      signal.throwIfAborted();
+      if (!input.owner)
+        return {
+          _tag: "unreachable",
+          message: "The selected SSH owner is unavailable for peer relay.",
+        };
+      let channels: ReturnType<typeof makeOwnedPeerRelaySshChannels>;
+      try {
+        channels = makeOwnedPeerRelaySshChannels(pairing, input.owner);
+      } catch (error) {
+        if (error instanceof PeerRelayAdmissionError)
+          return {
+            _tag: "setup",
+            code: "authentication-refused",
+            message: SETUP_MESSAGES["authentication-refused"],
+          };
+        return {
+          _tag: "unreachable",
+          message: error instanceof Error ? error.message : "The worker is unreachable.",
+        };
+      }
       try {
         const channel = await channels.openChannel(signal);
         try {
@@ -61,7 +121,11 @@ export function makeSshPeerTransport(input: {
           return classifyPeerReply(reply.status, reply.body);
         } catch (error) {
           channel.stream.end();
-          const exit = await exitWithin(channel.outcome, 3_000, "unreachable" as const);
+          const exit: PeerRelayChannelOutcome = await exitWithin(
+            channel.outcome,
+            3_000,
+            "unreachable",
+          );
           if (exit === "host-identity-mismatch" || exit === "authentication-refused")
             return { _tag: "setup", code: exit, message: SETUP_MESSAGES[exit] };
           return {
@@ -72,6 +136,12 @@ export function makeSshPeerTransport(input: {
           channel.stream.destroy();
         }
       } catch (error) {
+        if (error instanceof PeerRelayAdmissionError)
+          return {
+            _tag: "setup",
+            code: "authentication-refused",
+            message: SETUP_MESSAGES["authentication-refused"],
+          };
         return {
           _tag: "unreachable",
           message: error instanceof Error ? error.message : "The worker is unreachable.",
@@ -90,7 +160,7 @@ export function sshHostKeyFingerprint(pinnedHostKey: string): string {
   return `SHA256:${digest.replace(/=+$/, "")}`;
 }
 
-/** Parses `ssh-keyscan` output lines (`host type base64`), dropping comments and duplicates. */
+/** Parses host-key lines (`host type base64`), dropping comments and duplicates. */
 export function parseKeyscanOutput(output: string): ReadonlyArray<PeerScannedHostKey> {
   const keys = new Map<string, PeerScannedHostKey>();
   for (const line of output.split("\n")) {
@@ -105,18 +175,4 @@ export function parseKeyscanOutput(output: string): ReadonlyArray<PeerScannedHos
     }
   }
   return [...keys.values()].slice(0, 8);
-}
-
-/** Reads the worker's host keys for the user to compare and confirm; never pins anything. */
-export async function scanPeerHostKeys(
-  host: string,
-  port: number,
-  keyscan = "ssh-keyscan",
-): Promise<ReadonlyArray<PeerScannedHostKey>> {
-  const { stdout } = await promisify(execFile)(
-    keyscan,
-    ["-T", "10", "-p", String(port), "-t", "ed25519,ecdsa,rsa", "--", host],
-    { timeout: 20_000, maxBuffer: 64 * 1024 },
-  );
-  return parseKeyscanOutput(stdout);
 }

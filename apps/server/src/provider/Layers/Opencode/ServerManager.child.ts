@@ -1,11 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import net from "node:net";
 import readline from "node:readline";
 
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 
-import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
-import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { normalizeManagedServerStartError } from "./ServerManager.errors.ts";
 import type { ProcessLedgerShape } from "../../../process-ledger/Services/ProcessLedger.ts";
 import {
@@ -18,24 +15,6 @@ import type { ManagedServerConfig, RunningManagedServer } from "./ServerManager.
 
 const LOCAL_HOST = "127.0.0.1";
 const LOCAL_OPENCODE_START_TIMEOUT_MS = 5_000;
-const REMOTE_OPENCODE_START_TIMEOUT_MS = 8_000;
-const REMOTE_OPENCODE_PORT = 4096;
-
-async function allocateLocalPort(): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on("error", reject);
-    server.listen(0, LOCAL_HOST, () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        server.close(() => reject(new Error("Failed to allocate a local port.")));
-        return;
-      }
-      server.close((error) => (error ? reject(error) : resolve(address.port)));
-    });
-  });
-}
 
 function watchChild(
   child: ChildProcess,
@@ -65,7 +44,6 @@ async function waitForServer(
     readonly config: ManagedServerConfig;
     readonly binaryPath: string;
     readonly executionTargetId: string;
-    readonly resolvedUrl?: string;
   },
 ): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -97,7 +75,7 @@ async function waitForServer(
     const onLine = (line: string) => {
       output += `${line}\n`;
       const url = readManagedServerListeningUrl(line);
-      if (url) finish(() => resolve(input.resolvedUrl ?? url));
+      if (url) finish(() => resolve(url));
     };
     const timer = setTimeout(
       () =>
@@ -121,23 +99,17 @@ async function startChild(input: {
   readonly binaryPath: string;
   readonly ledger?: ProcessLedgerShape | undefined;
 }): Promise<RunningManagedServer> {
-  const isLocal = input.executionTargetId === LOCAL_EXECUTION_TARGET_ID;
-  const localPort = isLocal ? undefined : await allocateLocalPort();
-  if (!isLocal) await assertSshExecutionTargetReadyAsync(input.executionTargetId);
-  const invocation = isLocal
-    ? { command: input.binaryPath, args: ["serve", `--hostname=${LOCAL_HOST}`, "--port=0"] }
-    : buildSshCommandInvocation({
-        executionTargetId: input.executionTargetId,
-        cwd: "",
-        command: input.binaryPath,
-        args: ["serve", `--hostname=${LOCAL_HOST}`, `--port=${REMOTE_OPENCODE_PORT}`],
-        transportArgs: [
-          "-o",
-          "ExitOnForwardFailure=yes",
-          "-L",
-          `${localPort}:${LOCAL_HOST}:${REMOTE_OPENCODE_PORT}`,
-        ],
-      });
+  // The OpenCode v1 SSH transport is retired: remote OpenCode runs only through
+  // the owner-selected v2 lane, so a remote target is refused before any spawn.
+  if (input.executionTargetId !== LOCAL_EXECUTION_TARGET_ID) {
+    throw new Error(
+      `Remote ${input.config.displayName} v1 is retired; use OpenCode v2 for SSH targets.`,
+    );
+  }
+  const invocation = {
+    command: input.binaryPath,
+    args: ["serve", `--hostname=${LOCAL_HOST}`, "--port=0"],
+  };
   const child = spawn(invocation.command, invocation.args, {
     env: { ...process.env, [input.config.configContentEnvKey]: JSON.stringify({}) },
     stdio: ["pipe", "pipe", "pipe"],
@@ -146,11 +118,7 @@ async function startChild(input: {
   void trackManagedServerChild(input.ledger, child, invocation, `${input.config.provider}-server`);
   let stopping = false;
   const onUnexpectedDeath = watchChild(child, () => stopping);
-  const url = await waitForServer(
-    child,
-    isLocal ? LOCAL_OPENCODE_START_TIMEOUT_MS : REMOTE_OPENCODE_START_TIMEOUT_MS,
-    { ...input, ...(localPort ? { resolvedUrl: `http://${LOCAL_HOST}:${localPort}` } : {}) },
-  );
+  const url = await waitForServer(child, LOCAL_OPENCODE_START_TIMEOUT_MS, input);
   return {
     url,
     isRunning: () => child.exitCode === null && child.signalCode === null && !child.killed,

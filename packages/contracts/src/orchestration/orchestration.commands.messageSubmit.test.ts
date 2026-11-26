@@ -53,6 +53,21 @@ it("does not allow ordinary clients to assert trusted agent provenance", () => {
   assert.equal("originSegments" in parsed, false);
 });
 
+it("only preserves pending-interaction fences on normalized server submissions", () => {
+  const pendingInteractionGate = {
+    provider: "codex",
+    sessionEpoch: 2,
+    approvalRequests: [{ requestId: "approval", generation: "generation" }],
+    userInputRequests: [{ requestId: "question", generation: "generation" }],
+  };
+  const input = { ...submission, redeliverSentMessage: true, pendingInteractionGate };
+  const client = Schema.decodeUnknownSync(ClientOrchestrationCommand)(input);
+  assert.equal("pendingInteractionGate" in client, false);
+  assert.equal("redeliverSentMessage" in client, false);
+  const internal = Schema.decodeUnknownSync(ThreadMessageSubmitCommand)(input);
+  assert.deepStrictEqual(internal.pendingInteractionGate, pendingInteractionGate);
+});
+
 it("preserves legacy text-only submissions and rejects empty content", () => {
   const parsed = Schema.decodeUnknownSync(ClientThreadMessageSubmitCommand)(submission);
   assert.equal(parsed.delivery, "auto");

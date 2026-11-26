@@ -1,3 +1,4 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type {
   RemoteAgentInventory,
@@ -28,7 +29,7 @@ function managedIdentity(root: string, entry: RemoteAgentInventoryEntry) {
   return { version, digest, binaryPath: entry.path };
 }
 
-function orphanDeletionCommand(input: {
+export function buildRemoteAgentOrphanDeletionCommand(input: {
   readonly root: string;
   readonly version: string;
   readonly digest: string;
@@ -118,9 +119,11 @@ export async function reclaimUnregisteredRemoteAgentBuild(input: {
       continue;
 
     try {
-      const result = await input.control.run(
-        orphanDeletionCommand({ root: input.control.root, ...identity }),
-      );
+      const result = await runRemoteAgentControlOp(input.control, {
+        kind: "orphanDelete",
+        version: identity.version,
+        digest: identity.digest,
+      });
       if (result.trim() === "reclaimed") return true;
     } catch {
       return false;

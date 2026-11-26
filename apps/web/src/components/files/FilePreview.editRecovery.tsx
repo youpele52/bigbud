@@ -1,13 +1,16 @@
+import type { ProjectFileEditReadOnlyReason } from "@bigbud/contracts/workspace/project";
 import { Button } from "../ui/button";
 import type { FileEditDraft } from "./fileEditDrafts";
-import { discardConflictedFileEditDraft, retryFileEditDraft } from "./fileEditDrafts";
+import { retryFileEditDraft } from "./fileEditDrafts";
+import { FilePreviewEditCompare } from "./FilePreview.editCompare";
+import { FILE_EDIT_READ_ONLY_COPY } from "./fileEditEligibility";
 
 interface FilePreviewEditRecoveryProps {
   readonly eligible: boolean;
   readonly draft: FileEditDraft | null;
   readonly draftKey: string;
   readonly editing: boolean;
-  readonly executionTargetId?: string | undefined;
+  readonly readOnlyReason: ProjectFileEditReadOnlyReason | null;
   readonly onRefresh: () => void | Promise<void>;
 }
 
@@ -16,12 +19,17 @@ export function FilePreviewEditRecovery({
   draft,
   draftKey,
   editing,
-  executionTargetId,
+  readOnlyReason,
   onRefresh,
 }: FilePreviewEditRecoveryProps) {
   if (!eligible || !draft) {
-    return executionTargetId?.includes("transport=direct-ssh") ? (
-      <span className="text-xs text-muted-foreground">Read only</span>
+    return readOnlyReason ? (
+      <span
+        className="text-xs text-muted-foreground"
+        title={FILE_EDIT_READ_ONLY_COPY[readOnlyReason]}
+      >
+        Read only
+      </span>
     ) : null;
   }
   return (
@@ -47,17 +55,7 @@ export function FilePreviewEditRecovery({
         </Button>
       ) : null}
       {draft.status === "conflict" && draft.diskVerified && !editing ? (
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => {
-            if (window.confirm("Discard your in-memory draft and use the latest file from disk?")) {
-              discardConflictedFileEditDraft(draftKey);
-            }
-          }}
-        >
-          Discard draft
-        </Button>
+        <FilePreviewEditCompare draft={draft} draftKey={draftKey} />
       ) : null}
     </>
   );

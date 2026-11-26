@@ -8,6 +8,7 @@ import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import { captureV2OperationAuthority } from "./Client.guard.ts";
 import { assertV2ImplementationCompatible } from "./Orchestration.compatibility.ts";
 import {
+  v2DefaultImplementationVersion,
   v2ThreadImplementation,
   type V2ImplementationVersion,
   type V2ThreadImplementationRegistry,
@@ -15,7 +16,7 @@ import {
 
 const Selection = Schema.Struct({
   protocol: Schema.Literal("bigbud.thread.implementation.selection.v1"),
-  version: Schema.Literals(["v1", "v2", "v3", "v4", "v5"]),
+  version: Schema.Literals(["v1", "v2", "v3", "v4", "v5", "v6"]),
   implementationDigest: Schema.String,
   bootstrapAbi: Schema.String,
   schemaDigest: Schema.String,
@@ -55,12 +56,7 @@ export class V2ImplementationSelection {
   }
   async refresh() {
     const signed = await this.records.read("default");
-    const preferred =
-      this.artifact.bootstrapAbi === "bigbud.thread.bootstrap.v5"
-        ? "v5"
-        : this.artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4"
-          ? "v3"
-          : "v1";
+    const preferred = v2DefaultImplementationVersion(this.artifact.bootstrapAbi);
     if (!signed) {
       this.registry.select(preferred);
       return this.registry.current();

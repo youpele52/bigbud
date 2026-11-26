@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { isLocalExecutionTarget } from "../executionTargets.ts";
+import type { CodexAppServerProcess } from "./codexAppServerManager.processHandle.ts";
 import { assertSupportedCodexCliVersion } from "./codexVersionCheck.ts";
 import {
   startRemoteCodexAppServerProcess,
@@ -61,7 +62,7 @@ export async function startCodexAppServerProcessAsync(
   input: CodexAppServerStartSessionInput,
   cwd: string,
   signal?: AbortSignal,
-): Promise<ChildProcessWithoutNullStreams> {
+): Promise<CodexAppServerProcess> {
   if (!isLocalExecutionTarget(resolveProviderRuntimeExecutionTargetId(input))) {
     return startRemoteCodexAppServerProcessAsync({ ...input, cwd }, signal);
   }

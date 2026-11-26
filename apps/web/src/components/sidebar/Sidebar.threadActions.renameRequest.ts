@@ -50,7 +50,7 @@ export function useSidebarThreadRenameRequest(input: {
     if (routeThreadId !== requested) {
       if (attempted.current !== requestId) {
         attempted.current = requestId;
-        // This is the sidebar's existing remote-access-gated navigation, not a raw router call.
+        // The sidebar navigation; the route-level remote gate owns reconnecting, not this hook.
         try {
           void Promise.resolve(input.navigateToThreadRoute(requested)).then((accepted) => {
             if (accepted === false) consume();

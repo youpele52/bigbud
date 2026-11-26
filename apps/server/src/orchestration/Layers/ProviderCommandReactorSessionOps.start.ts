@@ -8,6 +8,7 @@ import type {
 import { Effect } from "effect";
 
 import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
+import { assertSessionSshTargetsReady } from "./ProviderCommandReactorSessionOps.preflight.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 export function startProviderSession(input: {
@@ -64,7 +65,15 @@ export function startProviderSession(input: {
     }),
   );
 
-  return markSessionStarting.pipe(
+  // A dead SSH target fails before the session is marked starting: nothing was started.
+  const preflight = assertSessionSshTargetsReady({
+    provider: input.provider,
+    threadId: input.threadId,
+    targets: executionTargets,
+  });
+
+  return preflight.pipe(
+    Effect.andThen(markSessionStarting),
     Effect.andThen(input.services.assertRuntimeStartAllowed(input.threadId)),
     Effect.andThen(startSession),
   );

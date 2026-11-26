@@ -47,6 +47,11 @@ export const OS_INDEX_MAX_PAGED_RESULTS = 200;
 export const OS_INDEX_DEADLINE_MS = 1_500;
 export const OS_INDEX_MIN_CHARS = 2;
 
+/** T5 rows for page `n` (`n + 1` pages, up to the agent's cap); also T5's own emitter cap. */
+export function osIndexMaxResults(page: number | undefined): number {
+  return Math.min(OS_INDEX_MAX_RESULTS * ((page ?? 0) + 1), OS_INDEX_MAX_PAGED_RESULTS);
+}
+
 export interface OsIndexGate {
   /** The server runs as the desktop-embedded backend (never the remote-backend profile). */
   readonly desktopEmbedded: boolean;
@@ -78,8 +83,21 @@ export function resolveOsIndexScope(gate: OsIndexGate):
   }
 }
 
-function toRow(hit: RemoteAgentOsIndexSearchHit, home: string): SystemSearchHit | null {
+/** Inside a local project or worktree folder, which the project tiers already search. */
+function isInsideRoot(path: string, roots: ReadonlyArray<string>): boolean {
+  return roots.some((root) => {
+    const base = root.endsWith(nodePath.sep) ? root : `${root}${nodePath.sep}`;
+    return path === root || path.startsWith(base);
+  });
+}
+
+function toRow(
+  hit: RemoteAgentOsIndexSearchHit,
+  home: string,
+  projectRoots: ReadonlyArray<string>,
+): SystemSearchHit | null {
   if (!nodePath.isAbsolute(hit.path) || isOsIndexExcludedPath(hit.path, home)) return null;
+  if (isInsideRoot(hit.path, projectRoots)) return null;
   const root = nodePath.dirname(hit.path);
   const name = nodePath.basename(hit.path);
   if (!name || root === hit.path) return null;
@@ -114,6 +132,8 @@ export async function runOsIndexSearch(input: {
   readonly gate: OsIndexGate;
   readonly localConnection: () => Promise<SearchAgentConnection>;
   readonly home: string;
+  /** Local project and worktree folders; their files belong to the project tiers. */
+  readonly projectRoots?: ReadonlyArray<string> | undefined;
   readonly query: string;
   readonly emitter: SystemSearchEmitter;
   readonly signal: AbortSignal;
@@ -132,10 +152,7 @@ export async function runOsIndexSearch(input: {
   }
   input.emitter.state({ tier, sourceId: expected, state: "searching" });
   let sourceId = expected;
-  const maxResults = Math.min(
-    OS_INDEX_MAX_RESULTS * ((input.page ?? 0) + 1),
-    OS_INDEX_MAX_PAGED_RESULTS,
-  );
+  const maxResults = osIndexMaxResults(input.page);
   try {
     const connection = await input.localConnection();
     if (!connection.supportsCapability(REMOTE_AGENT_OS_INDEX_CAPABILITY)) {
@@ -164,7 +181,7 @@ export async function runOsIndexSearch(input: {
       input.emitter.state({ tier, sourceId, state: "unavailable", reason });
       return;
     }
-    const items = hits.flatMap((hit) => toRow(hit, input.home) ?? []);
+    const items = hits.flatMap((hit) => toRow(hit, input.home, input.projectRoots ?? []) ?? []);
     const complete = input.emitter.rowsFor({ tier, sourceId, items });
     // The agent's own cap ends paging: no page asks past it.
     const truncated = (completed.truncated && maxResults < OS_INDEX_MAX_PAGED_RESULTS) || !complete;

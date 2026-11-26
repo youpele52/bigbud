@@ -68,7 +68,10 @@ describe("file edit drafts", () => {
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(write).toHaveBeenCalledTimes(1);
     observeFileEditRead({ ...input, contents: "other", sha256: "b".repeat(64) });
-    expect(getFileEditDraft(input.key)?.status).toBe("error");
+    // Someone else's bytes: the draft is kept as a verified conflict and nothing is re-sent.
+    expect(getFileEditDraft(input.key)).toMatchObject({ contents: "draft", status: "conflict" });
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("does not replace a conflicted draft on further edits or refreshes", () => {

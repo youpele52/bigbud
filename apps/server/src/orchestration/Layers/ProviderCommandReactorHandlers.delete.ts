@@ -8,7 +8,6 @@ import {
   OrchestrationEngineService,
 } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
-import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { toThreadDeletionOperationError } from "../../deletion/Services/ThreadDeletion.ts";
@@ -24,7 +23,6 @@ import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/Di
 import { directCleanupProofDigest } from "../../deletion/Layers/DirectResourceCleanup.proof.ts";
 import {
   describeRuntimeCleanupFailures,
-  appendDeletionFailureActivity,
   abortUnsafeProjectCascadeThreadDeletion,
   cleanupDeletedThreadTerminalHistory,
   hydrateStoredDirectCleanupResources,
@@ -38,7 +36,8 @@ import { ServerConfig } from "../../startup/config.ts";
 import { recoverDirectCleanupWorktrees } from "../../deletion/Layers/DirectResourceCleanupRecovery.worktrees.ts";
 import { serializeManagedWorktreeResource } from "../../persistence/Layers/DirectResourceCleanupRepository.worktrees.ts";
 import type * as DeleteTypes from "./ProviderCommandReactorHandlers.delete.types.ts";
-import { reportSkippedActiveThreadDeletion } from "./ProviderCommandReactorHandlers.delete.skipped.ts";
+import { abortThreadDeletion } from "./ProviderCommandReactorHandlers.delete.abort.ts";
+import { terminalManagerRetainedHistory } from "../../deletion/Layers/TerminalHistoryRetention.ts";
 export const makeProcessDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
@@ -152,9 +151,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             );
             const failures = results.filter((result) => !result.ok);
             if (failures.length > 0) {
-              return yield* Effect.fail(
-                new Error(`Runtime cleanup failed: ${describeRuntimeCleanupFailures(failures)}.`),
-              );
+              return yield* Effect.fail(new Error(describeRuntimeCleanupFailures(failures)));
             }
           }).pipe(Effect.mapError(toThreadDeletionOperationError)),
         finalize: (threadIds) =>
@@ -168,6 +165,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             const files = yield* orchestrationEngine.threadDeletion!.discoverFiles({
               rootThreadId: thread.id,
               threadIds,
+              retainedTerminalHistory: terminalManagerRetainedHistory(terminal),
             });
             const operationId = `direct-cleanup:${event.eventId}`;
             preparedOperationId = operationId;
@@ -370,30 +368,15 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
       yield* cleanupRepository
         .cancelIntentIfUnplanned(`deletion-intent:${event.eventId}`, createdAt)
         .pipe(Effect.ignore);
-      yield* orchestrationEngine.dispatch({
-        type: "thread.delete.abort",
-        commandId: serverCommandId("thread-delete-abort"),
+      yield* abortThreadDeletion(orchestrationEngine, {
         threadId: thread.id,
         mode,
+        origin: event.payload.origin,
+        deletionEventId: event.eventId,
+        deletionCommandId: event.commandId,
         createdAt,
+        outcome,
       });
-      if (outcome.type === "failed") {
-        yield* appendDeletionFailureActivity(orchestrationEngine, {
-          threadId: thread.id,
-          createdAt,
-          detail: outcome.detail,
-        }).pipe(Effect.asVoid);
-      } else if (outcome.type === "skipped_active") {
-        yield* reportSkippedActiveThreadDeletion(orchestrationEngine, {
-          rootThreadId: thread.id,
-          threadIds: outcome.threadIds,
-          reason: outcome.reason,
-          mode,
-          origin: event.payload.origin,
-          deletionEventId: event.eventId,
-          createdAt,
-        });
-      }
     }
   });
 });

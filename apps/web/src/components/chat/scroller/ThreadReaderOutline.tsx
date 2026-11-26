@@ -2,6 +2,7 @@ import { type MessageId } from "@bigbud/contracts";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 
 const BASE_SEGMENT_WIDTH_PX = 7;
 const NEIGHBOR_SEGMENT_WIDTH_PX = 14;
@@ -141,7 +142,12 @@ export function ThreadReaderOutline({
       }}
     >
       {outlineOpen ? (
-        <div className="absolute right-full top-1/2 mr-3 flex max-h-[50dvh] w-56 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border/70 bg-background/96 shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92">
+        <div
+          className={cn(
+            "absolute right-full top-1/2 mr-3 flex max-h-[50dvh] w-56 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border/70 shadow-lg shadow-black/10 dark:border-border/60",
+            SOLID_FLOATING_SURFACE_CLASS_NAME,
+          )}
+        >
           <div className="overflow-y-auto overscroll-y-contain px-1 py-2">
             {anchors.map((anchor) => {
               const isCurrent = currentAnchorMessageId === anchor.messageId;
@@ -231,7 +237,12 @@ export function ThreadReaderOutline({
             onFocus={() => setHoveredAnchorIndex(index)}
           >
             {isHovered && !outlineOpen ? (
-              <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-56 -translate-y-1/2 rounded-xl border border-border/70 bg-background/96 px-3 py-2 text-left text-xs text-foreground shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92">
+              <span
+                className={cn(
+                  "pointer-events-none absolute right-full top-1/2 mr-3 w-56 -translate-y-1/2 rounded-xl border border-border/70 px-3 py-2 text-left text-xs text-foreground shadow-lg shadow-black/10 dark:border-border/60",
+                  SOLID_FLOATING_SURFACE_CLASS_NAME,
+                )}
+              >
                 <span className="line-clamp-3 block">{anchor.label}</span>
               </span>
             ) : null}

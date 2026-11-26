@@ -67,7 +67,7 @@ describe("resolveDesktopMainConfig", () => {
     },
   );
 
-  it.each(["BIGBUD_HOME", "T3CODE_HOME"])("honors exact %s override", (name) => {
+  it.each(["BIGBUD_HOME"])("honors exact %s override", (name) => {
     delete process.env.VITE_DEV_SERVER_URL;
     delete process.env.BIGBUD_HOME;
     delete process.env.T3CODE_HOME;

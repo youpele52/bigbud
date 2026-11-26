@@ -188,6 +188,37 @@ describe("DevSupervisor", () => {
     expect(f.exitCode).toBe(3);
   });
 
+  it("replaces one opted-in abnormal backend exit and does not loop after another failure", () => {
+    const f = fakeHost();
+    new DevSupervisor(
+      parseDevCommands(["server=bun run src/bin.ts"]),
+      f.host,
+      undefined,
+      1,
+    ).start();
+    f.exit(100, null, "SIGKILL");
+    expect(f.spawned.map(({ pid }) => pid)).toEqual([100, 102]);
+    expect(f.signals).toEqual([]);
+    f.exit(102, 3);
+    expect(f.spawned).toHaveLength(2);
+    expect(f.exitCode).toBe(3);
+  });
+
+  it("does not replace an opted-in backend during intentional launcher shutdown", () => {
+    const f = fakeHost();
+    new DevSupervisor(
+      parseDevCommands(["server=bun run src/bin.ts"]),
+      f.host,
+      undefined,
+      1,
+    ).start();
+    f.handlers.get("SIGTERM")!();
+    f.exit(100, null, "SIGTERM");
+    f.advance(50);
+    expect(f.spawned).toHaveLength(1);
+    expect(f.exitCode).toBe(143);
+  });
+
   it("keeps the others running after a clean exit and exits 0 when all are done", () => {
     const f = fakeHost();
     new DevSupervisor(commands, f.host).start();

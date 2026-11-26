@@ -55,6 +55,14 @@ Bun scripts remain the source of truth for workflow implementation. The just rec
 | `bun run start:marketing`          | `just start-marketing`          |
 | `bun run start:mock-update-server` | `just start-mock-update-server` |
 
+On macOS, prefix `bun run dev` / `just dev` or `bun run dev:desktop` / `just dev-desktop` with `BIGBUD_SSH_OWNER=1` to build the owner and run the normal app with a separate development profile and one disposable SSH target. See the [manual test runbook](/Users/youpele/DevWorld/bigbud/protocol/ssh-owner/MANUAL-TEST.md#macos-normal-app-dev-opt-in). This flag is off by default and cannot activate in packaged releases.
+
+For the stock OpenSSH backend replacement proof, run `BIGBUD_SSH_OWNER=1 BIGBUD_SSH_OWNER_RETAIN=1 bun run dev` (or `just dev` with the same environment). This is non-root macOS Bun development only, with the generated loopback target and no custom SSH config. The launcher keeps the fixture alive across one unexpected backend exit; stopping the launcher retires it. The default, desktop, Linux, Windows, and packaged launch paths do not enable retention.
+
+**Temporary: Rust SSH owner activation (local builds only).** `BIGBUD_SSH_OWNER_ACTIVATION=1` turns on the production SSH owner composition for a local build; it will be removed when SSH becomes Rust-only (W7). Release builds ignore it: the server and desktop bundles bake the decision in at build time, and any CI build (`CI`/`GITHUB_ACTIONS` set) is forced off. Source runs (`bun run dev`, `bun run dev:server`) and `--watch` dev bundles (`bun run dev:desktop`) honour it directly. A local packaged build honours it only when built with `BIGBUD_SSH_OWNER_ACTIVATION_LOCAL_BUILD=1`, for example `BIGBUD_SSH_OWNER_ACTIVATION_LOCAL_BUILD=1 bun run dist:desktop:dmg:arm64`, then launched with `BIGBUD_SSH_OWNER_ACTIVATION=1`. An activated startup with no Build A retirement marker keeps local work running and fences SSH with `legacyEntryFenced`; the app shows an amber "SSH is paused" notice whose **Drain identified panes** action lists the managed SSH panes on the attached terminal host, retires exactly those through the host, records the marker and starts the owner. A terminal host too old to retire SSH panes must exit first; the drain refuses rather than writing the marker. Restarting with `BIGBUD_SSH_OWNER_DRAIN_IDENTIFIED=1` as well is the fallback for the same drain. The resolver lives in `packages/shared/src/SshOwnerActivation.ts`.
+
+**Strict terminal performance tests.** `crates/bigbud-remote-agent/tests/terminal_host_flow.rs` always checks correctness (complete, in-order output; honest screen-model state) and compares echo latency against an idle baseline taken in the same run. The absolute budgets (echo p99 < 5 ms, managed throughput >= 20 MB/s, model never invalidated) run only with `BIGBUD_TERMINAL_PERF_STRICT=1 cargo test --release -p bigbud-remote-agent --test terminal_host_flow` on a quiet machine; strict mode refuses debug builds.
+
 ## Root: builds
 
 | Bun                                  | just                              |
@@ -221,6 +229,8 @@ dev and optional dependencies are not followed), plus the project `LICENSE`. Run
 first. The closure is a superset of what Vite bundles. Outputs must not exist.
 
 ## Root: checks, tests, and cleanup
+
+**Typecheck exit code and Effect diagnostics.** Each workspace `prepare` script patches the installed TypeScript so `@effect/language-service` diagnostics run during `tsc --noEmit`. Suggestions print as `message TS…` and warning-category diagnostics print as `warning TS…`; only error-category diagnostics should fail the gate. `apps/server` sets `ignoreEffectSuggestionsInTscExitCode` and `ignoreEffectWarningsInTscExitCode`, so the exit code reflects only error-category diagnostics: native type errors and Effect rules configured as `error` (for example `importFromBarrel`) still fail the gate, while `message TS…` and `warning TS…` output is advisory. When error diagnostics are present the exit code is `1` or `2` depending on whether that run wrote `tsconfig.tsbuildinfo`; both mean failure. A non-zero exit with no `error TS…` line is a crash rather than a type failure; a full rebuild after deleting `tsconfig.tsbuildinfo` needs `NODE_OPTIONS=--max-old-space-size=8192`. TypeScript replays the plugin diagnostics recorded in `tsconfig.tsbuildinfo`, so a changed `diagnosticSeverity` does not take effect on a warm incremental run; delete `tsconfig.tsbuildinfo` and rebuild before trusting the result. The other plugin-configured packages (`apps/web`, `apps/mobile-web`, `packages/contracts`, `scripts`) still use the plugin default where warnings affect the exit code; set the same option there if they begin to emit warnings.
 
 | Bun                                 | just                             |
 | ----------------------------------- | -------------------------------- |
@@ -400,6 +410,8 @@ Source: [apps/server/package.json](../apps/server/package.json).
 | --------------------------------------------------------------------- | ------------------------------------------------------- |
 | `bun run --cwd apps/server dev`                                       | `just server-dev`                                       |
 | `bun run --cwd apps/server build`                                     | `just server-build`                                     |
+| `bun run --cwd apps/server agent-control:templates`                   | `just server-agent-control-templates`                   |
+| `bun run --cwd apps/server agent-control:templates:check`             | `just server-agent-control-templates-check`             |
 | `bun run --cwd apps/server thread-tools:manifest`                     | `just server-thread-tools-manifest`                     |
 | `bun run --cwd apps/server thread-tools:manifest:check`               | `just server-thread-tools-manifest-check`               |
 | `bun run --cwd apps/server thread-tools:native-qualification:check`   | `just server-thread-tools-native-qualification-check`   |
@@ -414,6 +426,71 @@ Source: [apps/server/package.json](../apps/server/package.json).
 | `bun run --cwd apps/server test:browser:install`                      | `just server-test-browser-install`                      |
 | `bun run --cwd apps/server benchmark:startup-catalog`                 | `just server-benchmark-startup-catalog`                 |
 | `bun run --cwd apps/server benchmark:mobile-recovery-memory`          | `just server-benchmark-mobile-recovery-memory`          |
+| `bun run --cwd apps/server benchmark:terminal-host`                   | `just server-benchmark-terminal-host`                   |
+| `bun run --cwd apps/server soak:terminal-host`                        | `just server-soak-terminal-host`                        |
+
+### Terminal host qualification (Q1)
+
+The local terminal host keeps terminals running across thread switches, backend restarts and
+(in keep mode) app quits. It is **opt-in** until its qualification passes: start the app or
+server with `BIGBUD_TERMINAL_HOST=1` (for example `BIGBUD_TERMINAL_HOST=1 bun run dev:desktop`).
+`BIGBUD_TERMINAL_HOST=0` is the kill switch. The host is the `bigbud-remote-agent` binary;
+build it first with `bun run build:workspace-agent` (debug) or
+`cargo build --release --locked -p bigbud-remote-agent` (release). Set
+`BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY` to choose a specific binary.
+
+**Soak.** `bun run --cwd apps/server soak:terminal-host -- [options]` runs terminals against the
+real binary and writes a JSON report (default `/tmp/bigbud-terminal-soak-<time>.json`); it exits
+non-zero when a Q1 (b) criterion fails. Options: `--minutes` (default 5; the Q1 run is 1440),
+`--terminals` (12), `--tui` (4 agent-like floods), `--sample-seconds` (15),
+`--restore-seconds` (3), `--warmup-minutes` (60; short runs use a fifth of the duration),
+`--flood-sleep` (0.05 s between TUI redraws), `--seed`, `--out`, and `--release` (use
+`target/release/bigbud-remote-agent`). The report has host RSS, open file descriptors and
+workspace roots per sample (the host writes a `terminal host stats:` line to its
+`supervisor.log` when `BIGBUD_DEBUG_TERMINAL_HOST_STATS_MS` is set, which the soak does), restore
+latency (subscribe to first screen item) p50/p95, cell-identical fidelity of restored prompt
+screens against a reference xterm.js, unexpected closes and `modelInvalid` notices. Every soak
+terminal is reported visible, so any idle or pressure close counts as unexpected.
+
+```sh
+cargo build --release --locked -p bigbud-remote-agent
+bun run --cwd apps/server soak:terminal-host -- --minutes 1440 --release --out ~/soak-macos.json
+```
+
+**Release bench.** `bun run --cwd apps/server benchmark:terminal-host -- [--runs 3] [--out f]
+[--skip-rss]` builds and runs the crate's ignored release benches with a clean `TMPDIR`: the R1
+screen ingest rate (target ≥ 50 MiB/s) and snapshot serialisation, and the R5/R7 host RSS at 24
+PTYs with two snapshots in flight (target ≤ 256 MiB; macOS runs use `MallocMaxMagazines=1` like
+the shipped host). Close other apps first; the report records the load average.
+
+**End-to-end tests** (real binary, opt-in):
+
+```sh
+BIGBUD_TERMINAL_HOST_IT=1 bun run --cwd apps/server vitest run \
+  src/terminal-host/localTerminalHost.e2e.restore.it.test.ts \
+  src/terminal-host/localTerminalHost.e2e.lifecycle.it.test.ts \
+  src/terminal-host/localTerminalHost.e2e.quit.it.test.ts
+```
+
+They use the debug host's test clocks, which release builds ignore and which reach the host
+through the `BIGBUD_DEBUG_TERMINAL_*` environment: `BIGBUD_DEBUG_TERMINAL_IDLE_MS` (idle
+timeout; the warning comes at half of it), `BIGBUD_DEBUG_TERMINAL_HOST_SELF_EXIT_MS` (orphaned
+empty host exit) and `BIGBUD_DEBUG_TERMINAL_PRESSURE` (`normal`, `low` or `critical`).
+
+**Cross-engine fidelity.** `bun run --cwd apps/server vitest run
+src/terminal/Layers/TerminalScreenFidelity.goldens.test.ts` restores every R1 screen golden in
+`@xterm/headless`. To add randomized streams, export them from the crate and point the test at
+them:
+
+```sh
+BIGBUD_SCREEN_EXPORT_RANDOM=/tmp/screen-random BIGBUD_SCREEN_EXPORT_COUNT=1000 \
+  cargo test -p bigbud-remote-agent --locked terminal_screen::tests::goldens::export_random_stream_goldens
+BIGBUD_SCREEN_GOLDENS_RANDOM_DIR=/tmp/screen-random bun run --cwd apps/server vitest run \
+  src/terminal/Layers/TerminalScreenFidelity.goldens.test.ts
+```
+
+The manual checklist is
+[docs/reports/2026-11-22-terminal-host-qualification-checklist.md](reports/2026-11-22-terminal-host-qualification-checklist.md).
 
 ## Workspace: apps/web
 
@@ -569,7 +646,18 @@ bigbud backend enable --authority 00000000000000000000000000000000 --confirm-sta
 bigbud backend disable-boot --authority 00000000000000000000000000000000
 bigbud backend start --authority 00000000000000000000000000000000
 bigbud backend stop --authority 00000000000000000000000000000000
+bigbud backend stop --authority 00000000000000000000000000000000 --for-upgrade
+bigbud backend stop --authority 00000000000000000000000000000000 --for-upgrade --i-have-saved-my-work
 ```
+
+`--for-upgrade` runs the W3.2 drain before the unit stops. The CLI sends one bounded request to the
+running backend's owner-only drain socket. Without `--i-have-saved-my-work`, an attached UI must
+confirm the pane drain; the CLI otherwise exits with `consent-required` and nothing is drained.
+The explicit flag is the recorded non-interactive consent. A foreign token, unknown artifact,
+concurrent drain, cancel or failure exits non-zero with a typed reason and writes no marker. The
+deployed unit uses this path from `ExecStop` before graph replacement. The live backend drain
+handler and installer/updater hook are still pending, so the current command can return
+`unavailable` rather than faking success.
 
 Replace the example paths, request UUID and authority. Keep executable files separate from backend
 data and account service state. Setup stages the units and admits the signed Rust runtime; backend
@@ -584,6 +672,33 @@ continues. Start launches the staged backend for this session without enabling b
 changing lingering; the backend then starts its Rust unit. Stop ends both units, including Rust
 terminals, and keeps configuration, data and boot policy. A partial setup must be preserved for inspection; repeating its request does not repair or
 overwrite it. These are installed CLI subcommands, with no separate Bun script or just recipe.
+
+## Offline database commands
+
+`bigbud canonical-thread-cleanup`, `bigbud canonical-event-compaction` and
+`bigbud legacy-orphan-recovery` open `state.sqlite` directly. Both their dry-run and `--apply`
+forms hold `<stateDir>/backend.lock` before the database or migrations open, so a live backend
+is refused with exit 1 instead of racing it. Stop the desktop app/backend, or use a different
+`BIGBUD_HOME`. `--apply` on cleanup and orphan recovery still requires `--server-stopped`.
+Commands that delegate to a running backend (`backend`, `mobile`, `peer`, `remote-agent`,
+`command-line`, and the root server) take no CLI-side copy of the lock, except
+`backend stop --for-upgrade`, which acquires it because it performs the offline W3.2 drain.
+
+### Owner retirement recovery (operator only)
+
+If the SSH owner refuses with `ownerRetirementUnverified`, stop bigbud and re-verify the exact
+journal record before doing anything else:
+
+```sh
+bigbud-ssh-owner --retirement-recover \
+  --lock <stateDir>/backend.lock \
+  --record owner.retirement.master.<slot>
+```
+
+The command re-reads the record and clears it only when the recorded process is provably absent
+or provably belongs to a different process (PID reuse). A live exact instance, an unreadable
+record and an unknown name all refuse. It never signals or adopts a process. Use the full record
+name printed by the journal (one per master/connector instance); do not delete files by hand.
 
 ## Remote account mobile pairing
 

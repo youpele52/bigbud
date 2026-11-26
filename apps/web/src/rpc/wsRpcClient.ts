@@ -1,7 +1,7 @@
 import { ORGANIZATION_AUTOMATION_METHODS } from "@bigbud/contracts/server/organizationAutomation.ts";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 
-import { randomUUID } from "~/lib/utils";
+import { withOperationId } from "./wsRpcClient.operationId";
 
 import { resetWsReconnectBackoff } from "./wsConnectionState";
 import { WsTransport } from "./wsTransport";
@@ -25,6 +25,8 @@ import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import { createMetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
+import { createBackendDrainRpcMethods } from "./wsRpcClient.backendDrain";
+import { createSshOwnerAdmissionRpcMethods } from "./wsRpcClient.sshOwnerAdmission";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 import { resolveBoundWsRpcClient } from "./backendScope.state";
 
@@ -108,12 +110,20 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.projectsSearchFileContents](input)),
       searchEntries: (input) =>
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
-      writeFile: (input) => {
-        const operationInput = input.operationId
-          ? input
-          : { ...input, operationId: `workspace-write-${randomUUID()}` };
-        return transport.request((client) => client[WS_METHODS.projectsWriteFile](operationInput));
-      },
+      writeFile: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsWriteFile](withOperationId(input, "workspace-write")),
+        ),
+      entryActions: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsEntryActions](input)),
+      createDirectory: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsCreateDirectory](withOperationId(input, "workspace-mkdir")),
+        ),
+      deleteEntry: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.projectsDeleteEntry](withOperationId(input, "workspace-delete")),
+        ),
     },
     notes: {
       list: (input) => transport.request((client) => client[WS_METHODS.notesList](input)),
@@ -216,6 +226,8 @@ export function createWsRpcClient(
     server: {
       ...createDatabaseCompactionRpcMethods(transport),
       ...createMetadataWarningRpcMethods(transport),
+      ...createBackendDrainRpcMethods(transport),
+      ...createSshOwnerAdmissionRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
@@ -248,8 +260,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.serverSetThreadRetentionPolicy](input)),
       setThreadPinned: (input) =>
         transport.request((client) => client[WS_METHODS.serverSetThreadPinned](input)),
-      readDocumentUrl: (input) =>
-        transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
+      readDocumentUrl: (input, options) =>
+        transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input), options),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
       retryTextGeneration: (input) =>

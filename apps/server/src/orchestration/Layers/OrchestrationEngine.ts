@@ -55,6 +55,7 @@ import {
 import { settlePreflightFailure } from "./OrchestrationEngine.preflight.ts";
 import { makeDeletionFence } from "./OrchestrationEngine.deletionFence.ts";
 import { makeThreadOwnershipResolver } from "./OrchestrationEngine.ownership.ts";
+import { readRecoveredQueueDraft } from "./OrchestrationEngine.recoveredQueue.ts";
 import { makePrepareCommandState } from "./OrchestrationEngine.prepareCommandState.ts";
 import { makeCommandOutcomeQuery } from "./OrchestrationEngine.commandOutcome.ts";
 import { makeOrchestrationDomainEventDistribution } from "./OrchestrationEngine.domainEvents.ts";
@@ -140,7 +141,13 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     },
   });
 
-  const prepareCommandState = makePrepareCommandState({ threadStateHydrator });
+  const prepareCommandState = makePrepareCommandState({
+    threadStateHydrator,
+    recoveredSourceThreadId: (command) =>
+      readRecoveredQueueDraft(workspaceSql, command).pipe(
+        Effect.map((draft) => draft?.sourceProposedPlan?.threadId),
+      ),
+  });
   const deletionFence = makeDeletionFence({
     threadDeletion,
     readModel: () => readModel,

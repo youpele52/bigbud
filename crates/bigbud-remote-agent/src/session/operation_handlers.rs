@@ -1,6 +1,127 @@
+use bigbud_protocol::pty_lifecycle::UNSUPPORTED;
+
 use super::*;
 
+#[cfg(test)]
+#[path = "operation_handlers.tests.rs"]
+mod tests;
+
+/// Protocol 1.9 lifecycle requests (frames 80-95). A terminal host answers them; an agent
+/// without one (stdio) does not advertise the capabilities, so a conforming client never sends
+/// them, and a stray one still gets a refusal it can correlate by request id.
+pub(super) fn is_pty_lifecycle_request(payload: &v1::frame::Payload) -> bool {
+    use v1::frame::Payload;
+    matches!(
+        payload,
+        Payload::PtyScreenSnapshotRequest(_)
+            | Payload::HostPolicyUpdateRequest(_)
+            | Payload::PtyViewStateRequest(_)
+            | Payload::PtyKeepOpenRequest(_)
+            | Payload::PtyCloseAllRequest(_)
+            | Payload::HostNoticeReplayRequest(_)
+    )
+}
+
+/// Answers an unsupported lifecycle request with its typed refusal.
+pub(super) fn refuse_pty_lifecycle_request(
+    payload: v1::frame::Payload,
+    agent_epoch: &str,
+) -> v1::Frame {
+    use v1::frame::Payload;
+    let code = UNSUPPORTED.to_owned();
+    let message = "terminal lifecycle is not supported by this agent".to_owned();
+    let payload = match payload {
+        Payload::PtyScreenSnapshotRequest(request) => {
+            Payload::PtyScreenSnapshotHeader(Box::new(v1::PtyScreenSnapshotHeader {
+                request_id: request.request_id,
+                pty_id: request.pty_id,
+                error_code: code,
+                error_message: message,
+                ..Default::default()
+            }))
+        }
+        Payload::HostPolicyUpdateRequest(request) => {
+            Payload::HostPolicyUpdateResponse(Box::new(v1::HostPolicyUpdateResponse {
+                request_id: request.request_id,
+                error_code: code,
+                error_message: message,
+                ..Default::default()
+            }))
+        }
+        Payload::PtyViewStateRequest(request) => {
+            Payload::PtyViewStateResponse(Box::new(v1::PtyViewStateResponse {
+                request_id: request.request_id,
+                pty_id: request.pty_id,
+                accepted: false,
+                error_code: code,
+                error_message: message,
+            }))
+        }
+        Payload::PtyKeepOpenRequest(request) => {
+            Payload::PtyKeepOpenResponse(Box::new(v1::PtyKeepOpenResponse {
+                request_id: request.request_id,
+                pty_id: request.pty_id,
+                accepted: false,
+                error_code: code,
+                error_message: message,
+            }))
+        }
+        Payload::PtyCloseAllRequest(request) => {
+            Payload::PtyCloseAllResponse(Box::new(v1::PtyCloseAllResponse {
+                request_id: request.request_id,
+                error_code: code,
+                error_message: message,
+                ..Default::default()
+            }))
+        }
+        Payload::HostNoticeReplayRequest(request) => {
+            Payload::HostNoticeReplayResponse(Box::new(v1::HostNoticeReplayResponse {
+                request_id: request.request_id,
+                agent_epoch: agent_epoch.to_owned(),
+                error_code: code,
+                ..Default::default()
+            }))
+        }
+        _ => return protocol_error_frame(&SessionError::UnexpectedMessage),
+    };
+    v1::Frame {
+        payload: Some(payload),
+    }
+}
+
 impl AgentSession {
+    /// Lifecycle requests that reach the session. The supervisor serves snapshots on its
+    /// snapshot worker and runs close-all outside the session lock before they get here.
+    pub(super) fn handle_pty_lifecycle_request(
+        &mut self,
+        payload: v1::frame::Payload,
+    ) -> v1::Frame {
+        use v1::frame::Payload;
+        let Some(host) = self.terminal_host.clone() else {
+            return refuse_pty_lifecycle_request(payload, &self.agent_epoch);
+        };
+        match payload {
+            Payload::HostPolicyUpdateRequest(request) => {
+                self.handle_host_policy_update(&host, *request)
+            }
+            Payload::PtyViewStateRequest(request) => self.handle_pty_view_state(*request),
+            Payload::PtyKeepOpenRequest(request) => self.handle_pty_keep_open(request),
+            Payload::HostNoticeReplayRequest(request) => v1::Frame {
+                payload: Some(Payload::HostNoticeReplayResponse(Box::new(
+                    host.replay_notices(request),
+                ))),
+            },
+            Payload::PtyCloseAllRequest(request) => {
+                let (response, closed) = self.prepare_close_all(request).execute();
+                for pty_id in closed {
+                    self.note_pty_closed(&pty_id);
+                }
+                response
+            }
+            other => refuse_pty_lifecycle_request(other, &self.agent_epoch),
+        }
+    }
+
     pub(super) fn handle_diagnostic_request(
         &mut self,
         request: v1::DiagnosticRequest,
@@ -97,6 +218,7 @@ impl AgentSession {
                 AcceptedOperation {
                     request_digest,
                     expires_at: now + ACCEPTED_OPERATION_RETENTION,
+                    result_sha256: None,
                 },
             );
         }

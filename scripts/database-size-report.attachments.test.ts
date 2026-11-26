@@ -36,6 +36,7 @@ function seed() {
       terminal_at TEXT);
     CREATE TABLE purge_jobs (job_id TEXT PRIMARY KEY, status TEXT);
     CREATE TABLE purge_resource_claims (job_id TEXT, resource_kind TEXT, relative_path TEXT);
+    CREATE TABLE recovered_queue_draft_attachments (attachment_id TEXT, claim_id TEXT);
     INSERT INTO projection_threads VALUES ('thread-1', NULL);
     -- Read by the attachment holds (queued prompts, pending turn starts).
     ALTER TABLE projection_threads ADD COLUMN queued_prompts_json TEXT NOT NULL DEFAULT '[]';

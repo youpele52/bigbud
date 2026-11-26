@@ -1,0 +1,44 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,2],
+    "cursorHidden": false,
+    "screen": [
+      [["a",1,"default","default",0],["b",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "decrc_keeps_the_underline_style",
+  "geometry": {
+    "cols": 10,
+    "rows": 3,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcab\r\n\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;3H\u001b[?25h",
+    "cols": 10,
+    "excludedAlternate": false,
+    "excludedRows": [0,1,2],
+    "exclusions": [
+      {
+        "kind": "unsupported_attributes",
+        "rows": 3
+      }
+    ],
+    "fidelity": "trimmed",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "1342c67776b45cb45aff30d27c9c4b0f2723dc7102a0d47af299b18251e2748f",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b[21m\u001b8\u001b]8;;\u0007ab\u001b[m"
+    }
+  ]
+}

@@ -4,6 +4,22 @@ import { describe, expect, it } from "vitest";
 import { makeMuseTestHost, startInput, threadId } from "./Adapter.failures.test.helpers.ts";
 import { getMuseFailureEvidence } from "./Client.errors.ts";
 
+it("forwards the selected native effort in the first turn/start", async () => {
+  const host = makeMuseTestHost();
+  const modelSelection = { ...startInput.modelSelection, options: { reasoningEffort: "high" } };
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const adapter = yield* host.adapter();
+      yield* adapter.startSession({ ...startInput, modelSelection });
+      yield* adapter.sendTurn({ threadId, input: "First prompt", modelSelection });
+      yield* adapter.stopAll();
+    }),
+  );
+  expect(host.calls.filter(({ method }) => method === "turn/start")).toMatchObject([
+    { params: { reasoningEffort: "high" } },
+  ]);
+});
+
 describe("Muse turn admission failure boundaries", () => {
   it.each([
     [{ kind: "commandRejected", detail: "refused" }, "invalid-request"],

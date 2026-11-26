@@ -5,3 +5,7 @@ pub use core::{
     PreparedWorkspaceWatch, ProcessJob, SessionError, is_pty_control, protocol_error_frame,
     workspace_watch_event_frame,
 };
+pub(crate) use core::{
+    HostLifecycle, PtyLifecycle, SnapshotSource, SnapshotTransfer, is_blocking_pty_control,
+    produce_snapshot,
+};

@@ -165,7 +165,7 @@ describe("terminalStateStore events", () => {
 
     expect(terminalState.terminalOpen).toBe(true);
     expect(terminalState.activeTerminalId).toBe("setup-bootstrap");
-    expect(terminalState.terminalIds).toEqual(["default", "setup-bootstrap"]);
+    expect(terminalState.terminalIds).toEqual(["setup-bootstrap"]);
     expect(
       useTerminalStateStore.getState().terminalLaunchContextByThreadId[THREAD_ID],
     ).toBeUndefined();
@@ -268,7 +268,7 @@ describe("terminalStateStore events", () => {
       "panel-terminal-1",
     );
 
-    expect(drawerTerminalState.terminalIds).toEqual(["default"]);
+    expect(drawerTerminalState.terminalIds).toEqual([]);
     expect(panelTerminalState.terminalIds).toEqual(["panel-terminal-1"]);
     expect(panelTerminalState.runningTerminalIds).toEqual(["panel-terminal-1"]);
     expect(entries.map((entry) => entry.event.type)).toEqual(["started", "activity"]);

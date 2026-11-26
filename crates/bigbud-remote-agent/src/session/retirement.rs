@@ -22,7 +22,14 @@ impl AgentSession {
             evidence.process_cancellations += 1;
         }
         for session in self.pty_sessions.values() {
-            match session.handle.signal("SIGTERM") {
+            // SIGHUP and SIGTERM to the PTY's jobs, SIGKILL after the close grace (R8):
+            // interactive shells ignore SIGTERM alone.
+            let result = if session.handle.child_reaped() {
+                Ok(())
+            } else {
+                session.handle.terminate()
+            };
+            match result {
                 Ok(()) => evidence.pty_shutdowns += 1,
                 Err(_) => evidence.pty_failures += 1,
             }

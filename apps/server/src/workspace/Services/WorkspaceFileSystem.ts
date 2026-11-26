@@ -31,6 +31,10 @@ export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceF
     detail: Schema.String,
     retryable: Schema.optional(Schema.Boolean),
     writeDisposition: Schema.optional(ProjectWriteFileDisposition),
+    /** A guarded write found different bytes on disk and wrote nothing. */
+    conflict: Schema.optional(Schema.Boolean),
+    /** SHA-256 on disk at conflict time; absent when the file is missing. */
+    currentSha256: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

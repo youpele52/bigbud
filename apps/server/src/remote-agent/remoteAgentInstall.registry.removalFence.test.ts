@@ -126,13 +126,16 @@ function storeReading(state: RemoteAgentRegistry, hostSeconds?: number) {
 
 describe("stale and skewed removal fences", () => {
   it("drops an expired fence on the next registry write", async () => {
-    const stale = fenced(Date.now() - REMOTE_AGENT_REMOVAL_FENCE_TTL_MS - 1000);
-    const { store } = storeReading(stale);
+    // One injected clock (the host clock the store reads, and `now` for the pure helper), so
+    // no comparison depends on two separate `Date.now()` reads.
+    const stale = fenced(NOW - REMOTE_AGENT_REMOVAL_FENCE_TTL_MS - 1000);
+    const { store } = storeReading(stale, Math.floor(NOW / 1000));
     const written = await store.update(withStage);
     expect(written.removal).toBeUndefined();
     expect(written.stages).toHaveLength(1);
-    expect(dropExpiredRemoteAgentRemovalFence(stale).removal).toBeUndefined();
-    expect(dropExpiredRemoteAgentRemovalFence(fenced(Date.now()))).toEqual(fenced(Date.now()));
+    expect(dropExpiredRemoteAgentRemovalFence(stale, NOW).removal).toBeUndefined();
+    const fresh = fenced(NOW);
+    expect(dropExpiredRemoteAgentRemovalFence(fresh, NOW)).toBe(fresh);
   });
 
   it("times fences by the host's clock from the registry read, not this controller's", async () => {

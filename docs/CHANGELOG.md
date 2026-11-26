@@ -11,6 +11,8 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
 - **[A window that feels all of a piece](#a-window-that-feels-all-of-a-piece):** Let your wallpaper show through the whole window, and browse files beside your code instead of under a drawer.
 
+## v0.4.1 Preview (29 November, 2026)
+
 ## v0.4.0 (21 November, 2026)
 
 ### Run bigbud on Your Own Linux Server
@@ -120,7 +122,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 - **Trust task-completion notifications:** **Task completed** appears only after a turn has truly finished with nothing left to do. Agent updates have their own notifications.
 - **Close every notification:** Notifications close reliably in the desktop app and dismiss themselves after a time based on severity. A dismissed warning stays away for five minutes unless it gets worse.
-- **Read notifications, comments, dialogs and menus clearly:** Notifications, comment boxes (including **Comment on selection** and saved annotations), the **Cmd/Ctrl+F** and **Cmd/Ctrl+P** palettes, dialogs, menus, popovers and tooltips stay solid even with a translucent **Window Material**, so text behind them never shows through. Notifications keep their severity colour.
+- **Read notifications, comments, dialogs and menus clearly:** Notifications, comment boxes (including **Comment on selection** and saved annotations), the **Cmd/Ctrl+F** and **Cmd/Ctrl+P** palettes, the **Tasks** panel, **Sidecar**, the floating file tree, dialogs, menus, popovers and tooltips stay solid even with a translucent **Window Material**, so text behind them never shows through. Notifications keep their severity colour.
 
 ### Small Changes That Remove Friction
 

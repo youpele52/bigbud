@@ -6,6 +6,7 @@ import {
   withCommandCancellation,
 } from "../utils/commandCancellation.ts";
 import type { RunSshToolCommandInput } from "./toolTransport.ssh.ts";
+import { assertSelectedSshToolTransportAvailable } from "./toolTransport.ssh.errors.ts";
 
 /** A separate SSH control request terminates and verifies the exact remote process group. */
 export async function runCancellableSshToolCommand(
@@ -14,6 +15,7 @@ export async function runCancellableSshToolCommand(
     readonly signal: AbortSignal;
   },
 ) {
+  assertSelectedSshToolTransportAvailable();
   input.signal.throwIfAborted();
   const directory = `/tmp/bigbud-tool-${randomUUID()}`;
   const control = (script: string, args: string[] = []) =>

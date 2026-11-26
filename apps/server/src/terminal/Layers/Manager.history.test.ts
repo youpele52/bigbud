@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { expect } from "vitest";
 
 import { capHistory } from "./Manager.history";
+import { TERMINAL_HISTORY_BYTE_LIMIT } from "./Manager.history.retention";
 import {
   createManager,
   historyLogPath,
@@ -48,28 +49,51 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
     }),
   );
 
-  it.effect(
-    "refuses incomplete replay after the line limit without restarting the live process",
-    () =>
+  it.effect("keeps a line-cut tail past the line limit without restarting the live process", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(3);
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      process.emitData("\x1b[32mline1\nline2\nline3\nline4\n");
+      yield* waitFor(
+        manager.snapshot(openInput()).pipe(Effect.map((s) => s.historyTrimmed === true)),
+      );
+      const reopened = yield* manager.open(openInput());
+      // The tail re-asserts the SGR and modes in force at the cut, then keeps whole lines.
+      expect(reopened.history).toMatch(/\[0;32mline3\nline4\n$/);
+      expect(reopened.history).not.toContain("line2");
+      expect(reopened.historyTrimmed).toBe(true);
+      expect(reopened.historyTruncated).toBeUndefined();
+      expect(reopened.pid).toBe(process.pid);
+      expect(ptyAdapter.processes).toHaveLength(1);
+      expect(process.killed).toBe(false);
+    }),
+  );
+
+  for (const [name, output] of [
+    ["a newline-free stream", "x".repeat(TERMINAL_HISTORY_BYTE_LIMIT + 1)],
+    ["a multi-line control string", "ok\n\x1b]0;a\nb\nc\nd\x07"],
+  ] as const) {
+    it.effect(`refuses replay of ${name} past a limit without restarting the process`, () =>
       Effect.gen(function* () {
         const { manager, ptyAdapter } = yield* createManager(3);
         yield* manager.open(openInput());
-        const process = ptyAdapter.processes[0];
-        expect(process).toBeDefined();
-        if (!process) return;
-
-        process.emitData("line1\nline2\nline3\nline4\n");
+        const process = ptyAdapter.processes[0]!;
+        process.emitData(output);
         yield* waitFor(
           manager.snapshot(openInput()).pipe(Effect.map((s) => s.historyTruncated === true)),
         );
         const reopened = yield* manager.open(openInput());
         expect(reopened.history).toBe("");
-        expect(reopened.historyTruncated).toBe(true);
+        expect(reopened.historyTrimmed).toBeUndefined();
         expect(reopened.pid).toBe(process.pid);
-        expect(ptyAdapter.processes).toHaveLength(1);
         expect(process.killed).toBe(false);
       }),
-  );
+    );
+  }
 
   it.effect("strips replay-unsafe terminal query and reply sequences from persisted history", () =>
     Effect.gen(function* () {

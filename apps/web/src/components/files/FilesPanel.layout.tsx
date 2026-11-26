@@ -1,5 +1,6 @@
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 import { cn } from "~/lib/utils";
 import { useFilesTreeDrawer } from "./FilesPanel.drawer";
 import { FilesPanelHeader } from "./FilesPanel.header";
@@ -17,6 +18,9 @@ interface FilesPanelLayoutProps {
   readonly workspaceKey: string;
   readonly contextMenuOpen: boolean;
   readonly visible?: boolean;
+  readonly headerActions?: ReactNode | undefined;
+  /** Changes when the tree must be shown (e.g. a new-entry input appeared in it). */
+  readonly revealTreeSignal?: number | undefined;
 }
 
 /** Keeps tree DOM/scroll and preview identity stable across drawer and split modes. */
@@ -32,10 +36,18 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
   const split = props.hasPreview && visible && canDock;
   const overlay = props.hasPreview && !split;
   const resizeRef = useRef<{ x: number; pointerId: number } | null>(null);
+  // Only a new signal reveals the tree; preview or drawer changes alone must not reopen it.
+  const reveal = useRef({ hasPreview: props.hasPreview, open: drawer.open });
+  reveal.current = { hasPreview: props.hasPreview, open: drawer.open };
+  const revealTreeSignal = props.revealTreeSignal;
+  useEffect(() => {
+    if (revealTreeSignal && reveal.current.hasPreview) reveal.current.open();
+  }, [revealTreeSignal]);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <FilesPanelHeader
+        actions={props.headerActions}
         keptOpen={pinned}
         treeControl={
           props.hasPreview
@@ -138,7 +150,7 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
             !props.hasPreview && "w-full",
             props.hasPreview && "border-l border-border",
             overlay
-              ? "absolute inset-y-0 right-0 z-20 bg-background shadow-xl"
+              ? cn("absolute inset-y-0 right-0 z-20 shadow-xl", SOLID_FLOATING_SURFACE_CLASS_NAME)
               : "bg-[var(--app-shell-pane-fill)]",
             split && "shrink-0",
             !visible && "invisible pointer-events-none",

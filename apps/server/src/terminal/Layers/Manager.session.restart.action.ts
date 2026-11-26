@@ -22,7 +22,11 @@ import {
   terminalShellSelectionForNewProcess,
 } from "./Manager.shell.profile";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
-import { resolveOwnedTerminalRecoverOnly } from "./OwnedPtyRuntime.owner.ts";
+import {
+  findNativeTerminalHostLoss,
+  resolveOwnedTerminalRecoverOnly,
+} from "./OwnedPtyRuntime.owner.ts";
+import { NativeSshPtyHostLostError } from "../Services/PTY.ts";
 import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 
 export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShape["restart"] {
@@ -31,6 +35,7 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
     undefined,
     undefined,
     ctx.resolveRuntimePathIdentity,
+    ctx.directSshCwdOwner,
   );
   const resolveShellProfile = makeResolveTerminalShellProfile(
     ctx.resolveShellProfile,
@@ -93,8 +98,16 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
               "The previous terminal session is no longer available; no replacement was started.",
           });
         }
+        const ownedRuntime = sessionOwnedPtyRuntime(ctx, executionTargetId);
+        if (yield* findNativeTerminalHostLoss(ownedRuntime, request.threadId, terminalId))
+          return yield* new TerminalExecutionTargetError({
+            threadId: request.threadId,
+            terminalId,
+            executionTargetId,
+            detail: new NativeSshPtyHostLostError().message,
+          });
         const recoverOnly = yield* resolveOwnedTerminalRecoverOnly({
-          runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
+          runtime: ownedRuntime,
           threadId: request.threadId,
           terminalId,
           existing,

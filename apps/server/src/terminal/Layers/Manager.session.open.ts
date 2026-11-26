@@ -9,11 +9,23 @@ import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
 import { createTerminalSessionState } from "./Manager.session.state.ts";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
-import { makeResolveTerminalFolder } from "./Manager.cwd";
+import { makeResolveTerminalFolder, type ResolvedTerminalFolder } from "./Manager.cwd";
 import { prepareTerminalRestart } from "./Manager.session.restart";
-import { resizeWithRecovery } from "./Manager.recovery";
+import { reattachRunningTerminalSession } from "./Manager.session.open.reattach.ts";
+import {
+  endedTerminalSnapshot,
+  hostLostPane,
+  openTerminalAttachOnly,
+  rejectTerminalHostLimit,
+} from "./Manager.session.open.host.ts";
+import { resolveTerminalEvictLifecycle } from "./Manager.hostLimit.ts";
+import { terminalHostClosedSession } from "./Manager.hostLifecycle.ts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
-import { resolveOwnedTerminalRecoverOnly } from "./OwnedPtyRuntime.owner.ts";
+import {
+  findNativeTerminalHostLoss,
+  findNativeTerminalRecovery,
+  resolveOwnedTerminalRecoverOnly,
+} from "./OwnedPtyRuntime.owner.ts";
 import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
 import {
@@ -51,6 +63,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
     undefined,
     undefined,
     ctx.resolveRuntimePathIdentity,
+    ctx.directSshCwdOwner,
   );
 
   const resolveShellProfile = makeResolveTerminalShellProfile(
@@ -77,97 +90,84 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         const terminalId = request.terminalId ?? DEFAULT_TERMINAL_ID;
         const existing = yield* getSession(request.threadId, terminalId);
         // Open means reattach, never reinterpret mutable chat launch settings as a restart.
-        if (Option.isSome(existing) && existing.value.process) {
-          const session = existing.value;
-          if (
-            expectedRemoteResourceId &&
-            session.process?.remoteResourceId !== expectedRemoteResourceId
-          )
-            return yield* new TerminalExecutionTargetError({
-              threadId: request.threadId,
-              terminalId,
-              executionTargetId: session.executionTargetId,
-              detail: "Discovered terminal identity changed. Refresh discovery before attaching.",
-            });
-          yield* assertTerminalShellReattach(
-            session,
-            resolveExecutionTargetId(request.executionTargetId),
-            request.shellSelection,
+        if (Option.isSome(existing) && existing.value.process)
+          return yield* reattachRunningTerminalSession({
             ctx,
-          );
-          const process = session.process!;
-          const runtimeEpoch = session.runtimeEpoch;
-          if (process.reconnectRemote) {
-            // Bound this caller's wait, not the shared same-identity reconnect
-            // episode. A late completion must not retain the thread lock or
-            // continue this open into resize/snapshot/launch work.
-            yield* Effect.tryPromise({
-              try: (signal) => process.reconnectRemote!(signal),
-              catch: unconfirmed,
-            }).pipe(
-              Effect.timeoutOrElse({
-                duration: 15_000,
-                orElse: () => Effect.fail(unconfirmed()),
-              }),
-            );
-            if (
-              session.process !== process ||
-              session.runtimeEpoch !== runtimeEpoch ||
-              session.observedExit?.process === process
-            )
-              return yield* unconfirmed();
-            session.pid = process.pid;
-            session.status = "running";
-            session.updatedAt = nextTerminalTimestamp(session.updatedAt);
-          }
-          const cols = request.cols ?? session.cols;
-          const rows = request.rows ?? session.rows;
-          if (session.cols !== cols || session.rows !== rows) {
-            session.cols = cols;
-            session.rows = rows;
-            session.updatedAt = nextTerminalTimestamp(session.updatedAt);
-            // Reattach must not fail on a resize race with a process that is exiting.
-            const resizeError = yield* Effect.sync(() => {
-              try {
-                resizeWithRecovery(session, process, cols, rows);
-                return null;
-              } catch (cause) {
-                return cause instanceof Error ? cause.message : String(cause);
-              }
-            });
-            if (resizeError !== null) {
-              yield* Effect.logDebug("terminal reattach resize failed", {
-                threadId: session.threadId,
-                terminalId,
-                error: resizeError,
-              });
-            }
-          }
-          return snapshot(session);
-        }
+            session: existing.value,
+            request,
+            terminalId,
+            expectedRemoteResourceId,
+            unconfirmed,
+          });
+        // A pane the host closed (idle, memory, limit, orphan) is gone: never respawn it (§11.1).
+        if (Option.isSome(existing) && terminalHostClosedSession(existing.value))
+          return snapshot(existing.value);
+        const closedReason = Option.isNone(existing)
+          ? ctx.hostClosed?.find(request.threadId, terminalId)
+          : undefined;
+        if (closedReason) return endedTerminalSnapshot(ctx, request, terminalId, closedReason);
         const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
+        const ownedRuntime = sessionOwnedPtyRuntime(ctx, executionTargetId);
+        const lost = yield* findNativeTerminalHostLoss(ownedRuntime, request.threadId, terminalId);
+        if (lost) {
+          if (expectedRemoteResourceId && lost.resourceId !== expectedRemoteResourceId)
+            return yield* unconfirmed();
+          return endedTerminalSnapshot(
+            ctx,
+            request,
+            terminalId,
+            "host-lost",
+            yield* ctx.readHistory(request.threadId, terminalId),
+          );
+        }
+        const attachOnly = () =>
+          openTerminalAttachOnly({ ctx, request, terminalId, executionTargetId, existing });
+        // A restored pane whose PTY the host lost opens read-only with its cold screen.
+        if (request.attachOnly && Option.isNone(existing) && hostLostPane(ctx, request, terminalId))
+          return yield* attachOnly();
+        const nativeRecovery = yield* findNativeTerminalRecovery(
+          ownedRuntime,
+          request,
+          terminalId,
+        ).pipe(Effect.mapError(unconfirmed));
+        if (
+          nativeRecovery &&
+          expectedRemoteResourceId &&
+          nativeRecovery.resourceId !== expectedRemoteResourceId
+        )
+          return yield* unconfirmed();
+        const recoveryLease = nativeRecovery?.resourceId ?? expectedRemoteResourceId;
         const recoverOnly =
-          Boolean(expectedRemoteResourceId) ||
+          Boolean(recoveryLease) ||
           (yield* resolveOwnedTerminalRecoverOnly({
-            runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
+            runtime: ownedRuntime,
             threadId: request.threadId,
             terminalId,
             existing,
             historyExists: ctx.historyExists,
           }));
+        // Attach-only never spawns (plan D1): only a retained owner may be reattached.
+        if (request.attachOnly && !recoverOnly) return yield* attachOnly();
+        const hostLifecycle = yield* resolveTerminalEvictLifecycle({
+          evict: request.evict,
+          sessions: () => ctx.hostLimit?.sessions() ?? Effect.succeed([]),
+          runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
+        });
         yield* assertDirectShellLaunchAvailable(ctx.directShellOwners, {
           threadId: request.threadId,
           terminalId,
           executionTargetId,
         });
-        const folder = yield* resolveFolder({
-          threadId: request.threadId,
-          terminalId,
-          executionTargetId,
-          cwd: request.cwd,
-          worktreePath: request.worktreePath,
-          env: request.env,
-        });
+        const folder: ResolvedTerminalFolder = nativeRecovery
+          ? { cwd: request.cwd }
+          : yield* resolveFolder({
+              threadId: request.threadId,
+              terminalId,
+              executionTargetId,
+              cwd: request.cwd,
+              worktreePath: request.worktreePath,
+              env: request.env,
+            });
         const localDefault =
           !request.shellSelection &&
           Option.isNone(existing) &&
@@ -241,7 +241,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
 
           const createdSession = session;
           session.remoteOwnerRecoveryRequired = recoverOnly;
-          session.expectedRemoteResourceId = expectedRemoteResourceId;
+          session.expectedRemoteResourceId = recoveryLease;
           if (recoverOnly) session.history = yield* ctx.readHistory(input.threadId, terminalId);
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
@@ -270,6 +270,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
               cols,
               rows,
               ...(input.env ? { env: input.env } : {}),
+              ...(hostLifecycle ? { hostLifecycle } : {}),
             },
             "started",
           ).pipe(
@@ -281,6 +282,8 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
               }),
             ),
           );
+          if (session.hostLimitRefusal)
+            return yield* rejectTerminalHostLimit({ ctx, session, created: true });
           if (recoverOnly && session.process)
             yield* assertTerminalShellReattach(
               session,
@@ -299,8 +302,8 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         }
 
         const liveSession = existing.value;
-        if (expectedRemoteResourceId) {
-          liveSession.expectedRemoteResourceId = expectedRemoteResourceId;
+        if (recoveryLease) {
+          liveSession.expectedRemoteResourceId = recoveryLease;
           liveSession.remoteOwnerRecoveryRequired = true;
         }
         const nextRuntimeEnv = normalizedRuntimeEnv(input.env);
@@ -341,6 +344,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
               cols: targetCols,
               rows: targetRows,
               ...(input.env ? { env: input.env } : {}),
+              ...(hostLifecycle ? { hostLifecycle } : {}),
             },
             "started",
           ).pipe(
@@ -353,6 +357,8 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
             ),
             Effect.ensuring(Effect.sync(restoreFailedHistory)),
           );
+          if (liveSession.hostLimitRefusal)
+            return yield* rejectTerminalHostLimit({ ctx, session: liveSession, created: false });
           yield* persistHistory(input.threadId, terminalId, liveSession.history);
           if (recoverOnly && liveSession.process)
             yield* assertTerminalShellReattach(
@@ -381,9 +387,7 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         return snapshot(liveSession);
       }),
     );
-    // A queued caller owns its own deadline; it must not wait another full
-    // recovery budget after acquiring the thread lock. Cancellation reaches
-    // both warm confirmation and provisional cold attachment observers.
+    // Bound the whole queued recovery, including warm confirmation and cold attachment.
     return expectedRemoteResourceId
       ? operation.pipe(
           Effect.timeoutOrElse({ duration: 15_000, orElse: () => Effect.fail(unconfirmed()) }),

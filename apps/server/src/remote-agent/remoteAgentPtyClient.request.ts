@@ -36,3 +36,19 @@ export async function signalRemotePty(
     cancellation,
   );
 }
+
+/** An acknowledged close is not exit evidence; only `ptyExited` proves termination. */
+export async function closeRemotePty(
+  connection: RemoteAgentConnection,
+  ptyId: string,
+  terminate: boolean,
+  cancellation: AbortSignal,
+): Promise<void> {
+  const requestId = randomUUID();
+  await sendRemotePtyRequest(
+    connection,
+    { type: "ptyCloseRequest", value: { requestId, ptyId, terminate } },
+    (frame) => frame.type === "ptyCloseResponse" && frame.value.ptyId === ptyId,
+    cancellation,
+  );
+}

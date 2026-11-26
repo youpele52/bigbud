@@ -197,6 +197,7 @@ mod tests {
                     max_frame_bytes: DEFAULT_MAX_FRAME_BYTES as u64,
                     max_operation_output_bytes: 0,
                     max_journal_bytes: 0,
+                    ..Default::default()
                 })),
             },
         );

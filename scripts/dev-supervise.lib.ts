@@ -102,16 +102,19 @@ export class DevSupervisor {
   private readonly commands: readonly DevCommand[];
   private readonly host: DevSupervisorHost;
   private readonly graceMs: number;
+  private replacementsRemaining: number;
 
   // Plain fields, not parameter properties: Node runs this file with strip-only type removal.
   constructor(
     commands: readonly DevCommand[],
     host: DevSupervisorHost,
     graceMs = DEV_SUPERVISOR_GRACE_MS,
+    replacements = 0,
   ) {
     this.commands = commands;
     this.host = host;
     this.graceMs = graceMs;
+    this.replacementsRemaining = replacements;
   }
 
   start(): void {
@@ -126,20 +129,30 @@ export class DevSupervisor {
     }, DEV_SUPERVISOR_ORPHAN_POLL_MS);
     const prefixOutput = this.commands.length > 1;
     for (const command of this.commands) {
-      const entry: Running = {
-        command,
-        child: this.host.spawn(command, prefixOutput),
-        exited: false,
-      };
-      this.running.push(entry);
-      entry.child.onExit((code, signal) => this.onChildExit(entry, code, signal));
+      this.spawn(command, prefixOutput);
     }
+  }
+
+  private spawn(command: DevCommand, prefixOutput: boolean): void {
+    const entry: Running = {
+      command,
+      child: this.host.spawn(command, prefixOutput),
+      exited: false,
+    };
+    this.running.push(entry);
+    entry.child.onExit((code, signal) => this.onChildExit(entry, code, signal));
   }
 
   private onChildExit(entry: Running, code: number | null, signal: string | null): void {
     entry.exited = true;
     if (this.stopping) return;
     if (signal !== null || (code ?? 1) !== 0) {
+      if (this.replacementsRemaining > 0) {
+        this.replacementsRemaining--;
+        this.host.log(`${entry.command.name} | unexpected exit; replacing the dev backend once`);
+        this.spawn(entry.command, this.commands.length > 1);
+        return;
+      }
       // `bun run --parallel` semantics: one failure stops the rest with its code.
       this.host.log(
         `${entry.command.name} | exited with ${signal ?? `code ${String(code)}`}; stopping the rest`,

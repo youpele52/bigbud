@@ -89,11 +89,14 @@ export function handleServerRequestResolved(
   canonicalThreadId: ThreadId,
 ): ReadonlyArray<ProviderRuntimeEvent> {
   const payload = asObject(event.payload);
+  const generation = asString(payload?.interactionGeneration);
+  const scope = generation ? { requestGeneration: generation } : {};
   if (payload?.interaction === "user-input") {
     return [
       {
         ...runtimeEventBase(event, canonicalThreadId),
         type: "user-input.resolved",
+        ...scope,
         payload: { answers: toCanonicalUserInputAnswers(undefined) },
       },
     ];
@@ -108,6 +111,7 @@ export function handleServerRequestResolved(
     {
       ...runtimeEventBase(event, canonicalThreadId),
       type: "request.resolved",
+      ...scope,
       payload: {
         requestType,
         ...(event.payload !== undefined ? { resolution: event.payload } : {}),

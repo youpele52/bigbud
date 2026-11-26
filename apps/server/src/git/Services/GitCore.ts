@@ -15,6 +15,7 @@ import type {
   GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitDiscardSelection,
   GitFetchResult,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
@@ -36,6 +37,7 @@ import type { GitCommandError } from "@bigbud/contracts";
 
 import type { ExecuteGitInput, ExecuteGitResult } from "./GitCore.execution.ts";
 export type { ExecuteGitInput, ExecuteGitResult, ExecuteGitProgress } from "./GitCore.execution.ts";
+export type { GitDiscardSelection };
 
 export interface GitOperationOptions {
   readonly operationId?: string | undefined;
@@ -288,13 +290,12 @@ export interface GitCoreShape {
     operationId?: string,
   ) => Effect.Effect<GitFetchResult, GitCommandError>;
 
-  /**
-   * Discard all working tree changes (reset to HEAD).
-   */
+  /** Discard working tree changes: everything tracked, or only a validated `selection`. */
   readonly discardChanges: (
     cwd: string,
     executionTargetId?: string,
     operationId?: string,
+    selection?: GitDiscardSelection,
   ) => Effect.Effect<void, GitCommandError>;
 
   /**

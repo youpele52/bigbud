@@ -1,11 +1,18 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { once } from "node:events";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { assertSupportedRemoteCodexCliVersionAsync } from "./codexAppServerManager.process.remote.ts";
+import {
+  assertSupportedRemoteCodexCliVersionAsync,
+  startRemoteCodexAppServerProcess,
+  startRemoteCodexAppServerProcessAsync,
+} from "./codexAppServerManager.process.remote.ts";
+import { readCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "bigbud-fake-remote-codex-"));
 const argsFile = join(directory, "args.txt");
@@ -40,6 +47,44 @@ describe.skipIf(process.platform === "win32")("assertSupportedRemoteCodexCliVers
     installFakeSsh('echo "codex-cli 9.0.0"');
     await assertSupportedRemoteCodexCliVersionAsync(input("198.51.100.1"));
     expect(readFileSync(argsFile, "utf8")).toMatch(/ConnectTimeout=10/);
+  });
+
+  it("refuses the removed synchronous remote launcher without spawning ssh", () => {
+    rmSync(argsFile, { force: true });
+    installFakeSsh('echo "codex-cli 0.167.0"');
+    expect(() => startRemoteCodexAppServerProcess(input("198.51.100.1"))).toThrow(/asynchronous/);
+    expect(existsSync(argsFile)).toBe(false);
+  });
+
+  it("launches the legacy app-server with pipes and the version-conditioned config", async () => {
+    installFakeSsh(`case "$*" in
+      *--version*) echo "codex-cli 0.167.0" ;;
+      *) printf "ready\\n" ;;
+    esac`);
+    // The unselected legacy branch returns a local child process.
+    const child = (await startRemoteCodexAppServerProcessAsync({
+      ...input("198.51.100.1"),
+      configArgs: ["-c", "feature=true"],
+    })) as ChildProcessWithoutNullStreams;
+    const closed = once(child, "close");
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.stdin.end();
+    expect(await closed).toEqual([0, null]);
+    expect(Buffer.concat(chunks).toString()).toBe("ready\n");
+    expect(readCodexProcessVersion(child)).toBe("0.167.0");
+    expect(readFileSync(argsFile, "utf8")).toContain(
+      "'app-server' '-c' 'feature=true' '-c' 'features.default_mode_request_user_input=true'",
+    );
+  });
+
+  it("does not launch a legacy app-server after a cancelled start", async () => {
+    installFakeSsh('echo "codex-cli 0.167.0"');
+    const reason = new Error("cancelled start");
+    await expect(
+      startRemoteCodexAppServerProcessAsync(input("198.51.100.1"), AbortSignal.abort(reason)),
+    ).rejects.toBe(reason);
+    expect(readFileSync(argsFile, "utf8")).toContain("'--version'");
   });
 
   it("fails at its deadline against an unreachable host while the event loop stays free", async () => {

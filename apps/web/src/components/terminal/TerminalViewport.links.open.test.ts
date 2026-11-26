@@ -60,12 +60,12 @@ describe("openTerminalPath", () => {
     });
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
-      workspaceRootOverride: null,
+      workspaceRootOverride: "/Users/alice/project",
       workspaceExecutionTargetIdOverride: null,
       fileOpenRequest: {
         path: "src/index.ts",
         position: { line: 12, column: 4 },
-        workspaceRootOverride: null,
+        workspaceRootOverride: "/Users/alice/project",
       },
     });
   });
@@ -109,7 +109,7 @@ describe("openTerminalPath", () => {
       relativePath: "src",
     });
     expect(useFilesPanelStore.getState()).toMatchObject({
-      workspaceRootOverride: null,
+      workspaceRootOverride: "//server/share/workspace",
       workspaceExecutionTargetIdOverride: "ssh:dev",
       fileOpenRequest: { path: "src/index.ts" },
     });
@@ -130,7 +130,7 @@ describe("openTerminalPath", () => {
       open: true,
       directoryNavigationRequest: {
         path: "src/components.txt",
-        workspaceRootOverride: null,
+        workspaceRootOverride: "/Users/alice/project",
       },
     });
     expect(useFilesPanelStore.getState().fileOpenRequest).toBeNull();
@@ -200,13 +200,33 @@ describe("openTerminalPath", () => {
     });
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
-      workspaceRootOverride: null,
+      workspaceRootOverride: "/srv/project",
       workspaceExecutionTargetIdOverride: "ssh:dev",
       fileOpenRequest: {
         path: "src/index.ts",
         position: { line: 8, column: 2 },
       },
     });
+  });
+
+  it("resolves a remote link from the terminal's own folder to its absolute path", async () => {
+    const { api, listDirectory } = makeApi();
+    listDirectory.mockResolvedValue({ entries: [fileEntry("src/util.ts")] });
+
+    await openTerminalPath({
+      api,
+      rawPath: "../src/util.ts:3",
+      cwd: "/srv/project/pkg",
+      workspaceRoot: "/srv/project",
+      executionTargetId: "ssh:dev",
+    });
+
+    // /srv/project/pkg/../src/util.ts → /srv/project/src/util.ts, on ssh:dev.
+    const state = useFilesPanelStore.getState();
+    expect(`${state.workspaceRootOverride}/${state.fileOpenRequest?.path}`).toBe(
+      "/srv/project/src/util.ts",
+    );
+    expect(state.workspaceExecutionTargetIdOverride).toBe("ssh:dev");
   });
 
   it("passes the exact execution target while opening a remote directory", async () => {
@@ -223,7 +243,7 @@ describe("openTerminalPath", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
-      workspaceRootOverride: null,
+      workspaceRootOverride: "/srv/project",
       workspaceExecutionTargetIdOverride: "ssh:dev",
       directoryNavigationRequest: {
         path: "src",

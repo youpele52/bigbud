@@ -50,7 +50,7 @@ describe("subscription-only refresh", () => {
           ? {
               refreshUsageLimits: Effect.sync(() => {
                 reads[index]!();
-                return provider;
+                return { snapshot: provider, status: "fresh" as const };
               }),
             }
           : {}),
@@ -59,6 +59,38 @@ describe("subscription-only refresh", () => {
     await Effect.runPromise(refreshSubscriptionProviders(registrations, snapshots));
     expect(reads.map((read) => read.mock.calls.length)).toEqual([1, 1, 1, 1, 0, 0]);
     expect(recover).not.toHaveBeenCalled();
+  });
+
+  it("returns fresh, cached, failed and timed-out results independently", async () => {
+    const snapshots = [
+      snapshot("codex"),
+      snapshot("cursor"),
+      snapshot("claudeAgent"),
+      snapshot("muse"),
+    ];
+    const registrations: ProviderRegistration[] = snapshots.map((provider, index) => ({
+      provider: provider.provider,
+      service: {
+        getSnapshot: Effect.succeed(provider),
+        refresh: Effect.succeed(provider),
+        refreshWithRecovery: () => Effect.succeed(provider),
+        streamChanges: Stream.empty,
+        refreshUsageLimits: [
+          Effect.succeed({ snapshot: provider, status: "fresh" as const }),
+          Effect.succeed({ snapshot: provider, status: "cached" as const }),
+          Effect.die(new Error("reader failed")),
+          Effect.never,
+        ][index]!,
+      },
+    }));
+    expect(
+      await Effect.runPromise(refreshSubscriptionProviders(registrations, snapshots, "10 millis")),
+    ).toEqual([
+      { provider: "codex", status: "fresh" },
+      { provider: "cursor", status: "cached" },
+      { provider: "claudeAgent", status: "failed" },
+      { provider: "muse", status: "timed-out" },
+    ]);
   });
 
   it("coalesces concurrent requests but never caches completed manual reads", async () => {
@@ -133,8 +165,19 @@ describe("subscription-only refresh", () => {
           read: () => Effect.succeed(limits),
         });
         const next = yield* refresh;
-        expect(next).toEqual({ ...base, usageLimits: limits });
-        expect(next.models).toBe(base.models);
+        expect(next).toEqual({ snapshot: { ...base, usageLimits: limits }, status: "fresh" });
+        expect(next.snapshot.models).toBe(base.models);
+        const cached = managedProviderUsageRefresh({
+          getSettings: Effect.sync(() => settings),
+          settingsRef,
+          snapshotRef,
+          generationRef,
+          changes,
+          haveSettingsChanged: (a, b) => a.home !== b.home,
+          read: () => Effect.succeed({ ...limits, lastSuccessfulAt: "2026-10-21T11:59:00.000Z" }),
+        });
+        const cachedResult = yield* cached;
+        expect(cachedResult.status).toBe("cached");
         const interrupted = managedProviderUsageRefresh({
           getSettings: Effect.sync(() => settings),
           settingsRef,
@@ -148,8 +191,8 @@ describe("subscription-only refresh", () => {
               return { ...limits, status: "error" as const };
             }),
         });
-        expect(yield* interrupted).toBe(next);
-        expect(yield* Ref.get(snapshotRef)).toBe(next);
+        expect(yield* interrupted).toEqual({ snapshot: cachedResult.snapshot, status: "skipped" });
+        expect(yield* Ref.get(snapshotRef)).toBe(cachedResult.snapshot);
         yield* PubSub.shutdown(changes);
       }),
     );

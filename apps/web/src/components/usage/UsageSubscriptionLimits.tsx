@@ -4,16 +4,19 @@ import { UsageSubscriptionProviderLimits } from "./UsageSubscriptionLimits.provi
 import { SUBSCRIPTION_PROVIDER_LABELS } from "./UsageSubscriptionLimits.logic";
 import { CenteredStatus } from "../common/CenteredStatus";
 import { UsageSubscriptionLimitsRefresh } from "./UsageSubscriptionLimits.refresh";
+import { UsageSubscriptionLowAllowance } from "./UsageSubscriptionLimits.lowAllowance";
 import { BigbudLoader } from "../layout/BigbudLoader";
 
 export function UsageSubscriptionLimits({
   limits,
   compact = false,
   loading = false,
+  visible = false,
 }: {
   readonly limits: ReadonlyArray<ServerProviderUsageLimits | undefined>;
   readonly compact?: boolean;
   readonly loading?: boolean;
+  readonly visible?: boolean;
 }) {
   const supportedLimits = limits
     .filter(
@@ -29,13 +32,13 @@ export function UsageSubscriptionLimits({
     <section aria-label="Subscription limits" className="space-y-4">
       <div className="space-y-1">
         <h2 className={compact ? "text-sm font-semibold" : undefined}>Subscription limits</h2>
-        <div className="flex items-center justify-between gap-2">
+        <UsageSubscriptionLimitsRefresh visible={visible}>
           <p className="text-xs text-muted-foreground">
             {compact ? "Remaining allowance · provider-defined windows" : "Remaining allowance"}
           </p>
-          <UsageSubscriptionLimitsRefresh />
-        </div>
+        </UsageSubscriptionLimitsRefresh>
       </div>
+      <UsageSubscriptionLowAllowance limits={supportedLimits} />
       {supportedLimits.length === 0 ? (
         loading ? (
           <Card className="overflow-hidden">

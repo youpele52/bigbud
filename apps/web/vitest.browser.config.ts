@@ -8,6 +8,7 @@ import {
   checkHtmlRenderNavigation,
   clickHtmlRenderLinks,
 } from "./src/components/chat/messages/HtmlRenderFrame.browser.commands";
+import { dragSelectDiffLines } from "./src/components/diff/diffSelection.browser.commands";
 
 const srcPath = fileURLToPath(new URL("./src", import.meta.url));
 
@@ -23,7 +24,12 @@ export default mergeConfig(
       include: ["src/components/**/*.browser.tsx", "src/routes/**/*.browser.tsx"],
       browser: {
         enabled: true,
-        commands: { checkHtmlRenderLinkClick, checkHtmlRenderNavigation, clickHtmlRenderLinks },
+        commands: {
+          checkHtmlRenderLinkClick,
+          checkHtmlRenderNavigation,
+          clickHtmlRenderLinks,
+          dragSelectDiffLines,
+        },
         provider: playwright({
           // Keep native scrollbars hittable for preview-edge track and thumb tests.
           launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] },

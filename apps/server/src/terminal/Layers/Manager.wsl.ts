@@ -22,12 +22,7 @@ import {
 } from "./Manager.wsl.invocation";
 import { normalizedRuntimeEnv } from "./Manager.shell";
 
-const PATH_ENV_KEYS = new Set([
-  "T3CODE_PROJECT_ROOT",
-  "T3CODE_WORKTREE_PATH",
-  "BIGBUD_PROJECT_ROOT",
-  "BIGBUD_WORKTREE_PATH",
-]);
+const PATH_ENV_KEYS = new Set(["BIGBUD_PROJECT_ROOT", "BIGBUD_WORKTREE_PATH"]);
 const windowsAbsolute = (value: string) =>
   /^[a-zA-Z]:[/\\]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
 

@@ -1,8 +1,15 @@
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { PositiveInt, TrimmedNonEmptyString } from "@bigbud/contracts";
 
 import { runProcess } from "../../utils/processRunner";
 import { GitHubCliError } from "@bigbud/contracts";
+import { isSshOwnerSelected } from "../../ssh/sshOwnerSelection.ts";
+import { initiatingGitOwnerUnavailable } from "./GitCore.initiatingFence.ts";
+import {
+  githubCliOwnerDenied,
+  GitHubCliOwnerTransport,
+  isOwnerAdmittedGitHubCliCommand,
+} from "./GitHubCli.owner.ts";
 import {
   GitHubCli,
   type GitHubRepositoryCloneUrls,
@@ -163,13 +170,49 @@ function decodeGitHubJson<S extends Schema.Top>(
 
 const makeGitHubCli = Effect.sync(() => {
   const execute: GitHubCliShape["execute"] = (input) =>
-    Effect.tryPromise({
-      try: () =>
-        runProcess("gh", input.args, {
-          cwd: input.cwd,
-          timeoutMs: input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        }),
-      catch: (error) => normalizeGitHubCliError("execute", error),
+    Effect.gen(function* () {
+      const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+      if (isSshOwnerSelected()) {
+        const owner = yield* Effect.serviceOption(GitHubCliOwnerTransport);
+        if (Option.isNone(owner)) {
+          return yield* new GitHubCliError({
+            operation: "execute",
+            detail: initiatingGitOwnerUnavailable,
+          });
+        }
+        if (!isOwnerAdmittedGitHubCliCommand(input.args)) {
+          return yield* githubCliOwnerDenied(input.args, input.cwd);
+        }
+        return yield* Effect.tryPromise({
+          try: async (signal) => {
+            const result = await owner.value.execute(
+              { cwd: input.cwd, args: input.args, timeoutMs },
+              signal,
+            );
+            if (result.code !== 0) {
+              throw new Error(
+                result.stderr.trim() || `GitHub CLI command failed with code ${result.code}.`,
+              );
+            }
+            return {
+              stdout: result.stdout,
+              stderr: result.stderr,
+              code: result.code,
+              signal: null,
+              timedOut: false,
+            };
+          },
+          catch: (error) => normalizeGitHubCliError("execute", error),
+        });
+      }
+      return yield* Effect.tryPromise({
+        try: () =>
+          runProcess("gh", input.args, {
+            cwd: input.cwd,
+            timeoutMs,
+          }),
+        catch: (error) => normalizeGitHubCliError("execute", error),
+      });
     });
 
   const service = {

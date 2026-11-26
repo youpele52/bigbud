@@ -7,6 +7,8 @@ import {
 } from "../../terminal/Layers/DirectShellLaunch.owner";
 
 import { verifyDirectShellTermination } from "../../terminal/Layers/DirectShellLaunch.lifecycle";
+import { isHostedDirectShellRecord } from "../../terminal/Layers/DirectShellLaunch.hosted";
+import { makeHostedDirectShellOwners } from "./DirectShellLaunchOwners.hosted";
 
 const MAX_OWNERS = 4096;
 
@@ -26,6 +28,7 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
     state: DirectShellLaunchOwner["state"];
     owner_json: string;
   };
+  const hostedRow = (row: OwnerRow) => isHostedDirectShellRecord(JSON.parse(row.owner_json));
   const decodeRow = (row: OwnerRow) => {
     const owner = parseDirectShellLaunchOwner(JSON.parse(row.owner_json));
     if (
@@ -37,11 +40,15 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
       throw new Error("Direct shell owner storage identity conflict.");
     return { owner, text: row.owner_json };
   };
-  const read = async (key: string) => {
-    const rows =
+  const readRow = async (key: string) =>
+    (
       await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
-       FROM direct_shell_launch_owners WHERE owner_key = ${key}`);
-    return rows[0] ? decodeRow(rows[0]) : undefined;
+       FROM direct_shell_launch_owners WHERE owner_key = ${key}`)
+    )[0];
+  // Legacy members see version 1 owners only; a hosted record is never a legacy owner.
+  const read = async (key: string) => {
+    const row = await readRow(key);
+    return row && !hostedRow(row) ? decodeRow(row) : undefined;
   };
   const transition = async (
     key: string,
@@ -66,16 +73,32 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
         AND owner_json = ${current.text} RETURNING owner_key`);
     return rows.length === 1;
   };
+  // The journal is capped at MAX_OWNERS. Validate stored bindings before trusting scope;
+  // an old opaque hash matches only a pane the caller proves belongs to this thread.
+  const rowsForThread = async (threadId: string, isThreadPaneKey: (key: string) => boolean) => {
+    const rows =
+      await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
+      FROM direct_shell_launch_owners`);
+    return rows
+      .filter((row) => !hostedRow(row))
+      .map(decodeRow)
+      .filter(({ owner }) =>
+        owner.pane ? owner.pane.threadId === threadId : isThreadPaneKey(owner.ownerKey),
+      );
+  };
   return {
-    hasOwnersForThread: async (threadId) => {
-      // The journal is capped at MAX_OWNERS. Validate stored bindings before trusting scope;
-      // old opaque hashes cannot be assigned to a thread and must fail closed.
-      const rows =
-        await run(sql<OwnerRow>`SELECT owner_key, reservation_id, controller_id, state, owner_json
-        FROM direct_shell_launch_owners`);
-      return rows
-        .map(decodeRow)
-        .some(({ owner }) => !owner.pane || owner.pane.threadId === threadId);
+    hasOwnersForThread: async (threadId, isThreadPaneKey = () => true) =>
+      (await rowsForThread(threadId, isThreadPaneKey)).length > 0,
+    listForThread: async (threadId, isThreadPaneKey) =>
+      (await rowsForThread(threadId, isThreadPaneKey)).map(({ owner }) => owner),
+    forgetForThread: async (threadId, isThreadPaneKey) => {
+      let forgotten = 0;
+      for (const { owner, text } of await rowsForThread(threadId, isThreadPaneKey)) {
+        const rows = await run(sql`DELETE FROM direct_shell_launch_owners
+          WHERE owner_key = ${owner.ownerKey} AND owner_json = ${text} RETURNING owner_key`);
+        forgotten += rows.length;
+      }
+      return forgotten;
     },
     get: async (key) => (await read(key))?.owner,
     reserve: async (input) => {
@@ -130,5 +153,6 @@ export const makeDirectShellLaunchOwners = Effect.fn("makeDirectShellLaunchOwner
     },
     markUnknown: (key, reservationId, controllerId) =>
       transition(key, reservationId, controllerId, "may-have-been-sent", "outcome-unknown"),
+    ...makeHostedDirectShellOwners(run, sql, readRow, MAX_OWNERS),
   } satisfies DirectShellLaunchOwnerStore;
 });

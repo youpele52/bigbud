@@ -1,22 +1,55 @@
 #[path = "directory.rs"]
 mod directory;
+#[path = "entries.rs"]
+mod entries;
+#[cfg(unix)]
+#[path = "entries.unix.rs"]
+mod entries_unix;
 #[path = "files.rs"]
 mod files;
 #[path = "files.create.rs"]
 mod files_create;
+#[cfg(unix)]
+#[path = "files.inplace.rs"]
+mod files_inplace;
+#[cfg(unix)]
+#[path = "files.lock.rs"]
+mod files_lock;
+#[cfg(unix)]
+#[path = "files.seams.rs"]
+mod files_seams;
+#[cfg(unix)]
+#[path = "files.target.rs"]
+mod files_target;
+#[cfg(unix)]
+#[path = "files.write.rs"]
+mod files_write;
 #[path = "path.rs"]
 mod path;
 #[path = "search.rs"]
 mod search;
 
 #[cfg(test)]
+#[path = "entries.tests.rs"]
+mod entries_tests;
+#[cfg(test)]
+#[path = "files.lock.tests.rs"]
+mod lock_tests;
+#[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "files.tests.support.rs"]
+mod write_test_support;
+#[cfg(test)]
+#[path = "files.write.tests.rs"]
+mod write_tests;
 
 use std::io;
 
 pub use directory::DirectoryEntry;
-pub use files::ReadFileResult;
+pub use entries::EntryKind;
+pub use files::{ReadFileResult, content_sha256};
 pub use path::WorkspaceRoot;
 pub use search::ContentMatch;
 
@@ -51,6 +84,13 @@ pub enum WorkspaceError {
         expected: String,
         actual: Option<String>,
     },
+    #[error("timed out waiting for another workspace write in the same directory")]
+    WriteLockTimeout,
+    #[error("written bytes did not read back as requested; the target was not replaced")]
+    WriteVerificationFailed,
+    /// The write may have partly changed the file (an in-place write failed after truncation).
+    #[error("workspace write outcome is unknown: {0}")]
+    UnknownOutcome(#[source] Box<WorkspaceError>),
     #[error("workspace file already exists")]
     AlreadyExists,
     #[error("create-only writes cannot carry an expected hash")]
@@ -59,6 +99,14 @@ pub enum WorkspaceError {
     EmptySearchQuery,
     #[error("workspace search exceeded the configured file limit")]
     SearchLimitExceeded,
+    #[error("the workspace root itself cannot be created or deleted")]
+    RootEntry,
+    #[error("workspace entry is not the kind that was confirmed; nothing was deleted")]
+    KindMismatch,
+    #[error("folder is too large or too deep to delete here; nothing was deleted")]
+    DeleteLimitExceeded,
+    #[error("folder contains another mounted file system; nothing was deleted")]
+    DeleteCrossesMount,
     #[error("workspace I/O failed: {0}")]
     Io(#[source] io::Error),
 }

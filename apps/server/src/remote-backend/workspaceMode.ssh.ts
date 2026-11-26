@@ -18,11 +18,14 @@ import {
   type WorkspaceModeRecord,
   type WorkspaceModeStore,
 } from "./workspaceMode.record.ts";
+import {
+  assertWorkspaceModeSshRoot,
+  makeOwnedSshWorkspaceModeStore,
+  type WorkspaceModeSshOwnerSelection,
+} from "./workspaceMode.ssh.owner.ts";
 
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const RETRIES = 4;
-const hasControlCharacters = (value: string) =>
-  [...value].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f);
 
 /** Host facts and private directories; every failure is a stdout verdict, never a guess. */
 const PRELUDE = `set -eu
@@ -65,10 +68,7 @@ latest_generation() {
 `;
 
 export function buildWorkspaceModeInspect(workspaceRoot: string): string {
-  if (!workspaceRoot.startsWith("/") || hasControlCharacters(workspaceRoot))
-    throw new Error(
-      "Workspace folders on SSH hosts must be absolute paths without control characters.",
-    );
+  assertWorkspaceModeSshRoot(workspaceRoot);
   return `${PRELUDE}
 real=$(cd -P -- ${quote(workspaceRoot)} 2>/dev/null && pwd -P) || verdict missing-folder
 rsha=$(printf '%s' "$real" | sha256sum | cut -d' ' -f1)
@@ -161,9 +161,16 @@ export function makeShellWorkspaceModeStore(run: WorkspaceModeShellRunner): Work
   };
 }
 
-/** Production runner: clean-posix wrapper over the target's verified SSH transport. */
-export const makeSshWorkspaceModeStore = (executionTargetId: string, timeoutMs = 15_000) =>
-  makeShellWorkspaceModeStore(async (script) => {
+/** Existing callers use verified clean-posix SSH; an explicitly selected owner is exclusive. */
+export function makeSshWorkspaceModeStore(
+  executionTargetId: string,
+  timeoutMs = 15_000,
+  selectedOwner?: WorkspaceModeSshOwnerSelection,
+): WorkspaceModeStore {
+  if (selectedOwner !== undefined) {
+    return makeOwnedSshWorkspaceModeStore(executionTargetId, timeoutMs, selectedOwner);
+  }
+  return makeShellWorkspaceModeStore(async (script) => {
     const result = await runSshCommand({
       executionTargetId,
       shellMode: "clean-posix",
@@ -174,3 +181,4 @@ export const makeSshWorkspaceModeStore = (executionTargetId: string, timeoutMs =
     });
     return result.stdout;
   });
+}

@@ -19,6 +19,12 @@ export const projectThreadPendingTurnStartEvent = Effect.fn("projectThreadPendin
     const current = existing.value.pendingTurnStart ?? null;
     const next = nextPendingTurnStart(current, event);
     if (next === undefined || next === current) return;
-    yield* repository.upsert({ ...existing.value, pendingTurnStart: next });
+    yield* repository.upsert({
+      ...existing.value,
+      pendingTurnStart: next,
+      ...(event.type === "thread.turn-start-requested" && event.payload.releaseEmptyQueueHold
+        ? { queueHold: false }
+        : {}),
+    });
   },
 );

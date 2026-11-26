@@ -1,6 +1,12 @@
-import { MessageId, type ServerReadDocumentUrlResult, type ThreadId } from "@bigbud/contracts";
+import {
+  MessageId,
+  PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
+  type ServerReadDocumentUrlResult,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
+import { page } from "vitest/browser";
 
 import { createSendControl, deferred, installSendApi } from "./ChatView.sendTurn.browser-helpers";
 import { QueueSendHarness } from "./ChatView.sendTurn.queue.browser-helpers";
@@ -27,6 +33,32 @@ afterEach(async () => {
   await mounted?.unmount();
   mounted = undefined;
   vi.restoreAllMocks();
+});
+
+it("offers normal chat Send alongside Stop while busy, but not while reconnecting", async () => {
+  const api = await installSendApi();
+  const control = createSendControl();
+  mounted = await render(
+    <QueueSendHarness threadId={recentId} control={control} overrides={{ isConnecting: true }} />,
+  );
+  const queue = page.getByRole("button", { name: "Queue message" });
+  await expect.element(queue).toBeDisabled();
+  await control.onSend();
+  expect(api.dispatchCommand).not.toHaveBeenCalled();
+  expect(draft()?.prompt).toBe("Original follow-up");
+  await mounted.rerender(<QueueSendHarness threadId={recentId} control={control} />);
+  await expect.element(page.getByRole("button", { name: "Stop generation" })).toBeVisible();
+  await queue.click();
+  await vi.waitFor(() =>
+    expect(api.dispatchCommand).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        type: "thread.message.submit",
+        threadId: recentId,
+        delivery: "auto",
+        message: expect.objectContaining({ text: "Original follow-up" }),
+      }),
+    ),
+  );
 });
 
 it("keeps a busy-thread /read submission bound to its owner while preparation awaits navigation", async () => {
@@ -113,6 +145,79 @@ it("deduplicates unchanged queue preparation without blocking a newer draft", as
   await first;
   expect(api.dispatchCommand).toHaveBeenCalledTimes(2);
 });
+
+it.each([false, true])(
+  "retains a refused document without losing a newer draft (at file limit: %s)",
+  async (atFileLimit) => {
+    const api = await installSendApi();
+    const ack = deferred<{ sequence: number }>();
+    api.dispatchCommand.mockReturnValueOnce(ack.promise);
+    const contents = "Source URL: https://example.com/report\n\nThe staged report";
+    const file = new File([contents], "Report.txt", { type: "text/plain" });
+    const store = useComposerDraftStore.getState();
+    store.setPrompt(recentId, "");
+    store.addFile(recentId, {
+      id: "staged-report",
+      type: "file",
+      attachmentMode: "upload",
+      readDocumentText: contents,
+      filePath: "",
+      name: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      file,
+    });
+    const control = createSendControl();
+    mounted = await render(<QueueSendHarness threadId={recentId} control={control} />);
+    const submitting = control.onSend();
+    await vi.waitFor(() => expect(api.dispatchCommand).toHaveBeenCalledOnce());
+    expect(api.dispatchCommand.mock.lastCall?.[0]).toMatchObject({
+      message: { text: "Use the attached files as context." },
+    });
+    store.setPrompt(recentId, "New draft text");
+    const extraIds = Array.from(
+      { length: atFileLimit ? PROVIDER_SEND_TURN_MAX_ATTACHMENTS : 0 },
+      (_, i) => `new-file-${i}`,
+    );
+    for (const id of extraIds) {
+      store.addFile(recentId, {
+        id,
+        type: "file",
+        name: `${id}.txt`,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        filePath: "",
+        file,
+      });
+    }
+    await vi.waitFor(() => expect(control.input!.promptRef.current).toBe("New draft text"));
+    ack.reject(new Error("Queue refused the document"));
+    await submitting;
+    expect(draft()?.prompt).toBe("New draft text");
+    expect(draft()?.files.find((entry) => entry.id === "staged-report")?.file).toBe(file);
+
+    if (atFileLimit) {
+      await vi.waitFor(() =>
+        expect(control.input?.composerFiles).toHaveLength(extraIds.length + 1),
+      );
+      await control.onSend();
+      expect(api.dispatchCommand).toHaveBeenCalledOnce();
+      expect(draft()?.files).toHaveLength(extraIds.length + 1);
+      for (const id of extraIds) store.removeFile(recentId, id);
+      await vi.waitFor(() => expect(control.input?.composerFiles).toHaveLength(1));
+    }
+    await control.onSend();
+    expect(api.dispatchCommand).toHaveBeenCalledTimes(2);
+    expect(api.dispatchCommand.mock.lastCall?.[0]).toMatchObject({
+      message: {
+        text: "New draft text",
+        attachments: [
+          { type: "file", name: "Report.txt", dataUrl: `data:text/plain;base64,${btoa(contents)}` },
+        ],
+      },
+    });
+  },
+);
 
 function fillQueue(threadId: ThreadId) {
   useStore.setState((state) => ({

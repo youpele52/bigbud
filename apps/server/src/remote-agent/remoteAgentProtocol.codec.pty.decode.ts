@@ -1,5 +1,10 @@
+import { decodeTerminalHostFrame } from "./remoteAgentProtocol.codec.terminalHost.ts";
 import { decodePtyInventoryFrame } from "./remoteAgentProtocol.codec.pty.inventory.ts";
 import { decodePtyInputReconcileFrame } from "./remoteAgentProtocol.codec.pty.input.ts";
+import {
+  decodePtyLifecycleFrame,
+  withPtyLifecycleFields,
+} from "./remoteAgentProtocol.codec.pty.lifecycle.ts";
 import { decodeMessage, requireWireType } from "./remoteAgentProtocol.codec.wire";
 import type { RemoteAgentFrame } from "./remoteAgentProtocol.ts";
 import { decodePtyRequest } from "./remoteAgentProtocol.codec.pty.decode.requests.ts";
@@ -18,9 +23,14 @@ export function decodePtyFrame(field: number, bytes: Uint8Array): RemoteAgentFra
     return { type: "ptyDetachRequest", value };
   }
   return (
-    decodePtyRequest(field, bytes) ??
-    decodePtyResponse(field, bytes) ??
-    decodePtyInventoryFrame(field, bytes) ??
-    decodePtyInputReconcileFrame(field, bytes)
+    withPtyLifecycleFields(
+      decodePtyRequest(field, bytes) ??
+        decodePtyResponse(field, bytes) ??
+        decodePtyInventoryFrame(field, bytes),
+      bytes,
+    ) ??
+    decodePtyInputReconcileFrame(field, bytes) ??
+    decodePtyLifecycleFrame(field, bytes) ??
+    decodeTerminalHostFrame(field, bytes)
   );
 }

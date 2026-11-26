@@ -46,6 +46,8 @@ describe("PiAdapter stream ingestion — turn deferral", () => {
     const session: ActivePiSession = {
       process: {
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
         stderrTail: () => "",
@@ -195,6 +197,8 @@ describe("PiAdapter stream ingestion — turn queuing", () => {
     const session: ActivePiSession = {
       process: {
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
         stderrTail: () => "",
@@ -310,6 +314,8 @@ describe("PiAdapter stream ingestion — plan tracking", () => {
     const session: ActivePiSession = {
       process: {
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
         stderrTail: () => "",

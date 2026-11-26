@@ -232,6 +232,20 @@ jobs:
           fi
           bun run verify:packaged-desktop-supervisor -- "${args[@]}"
 
+      # U4: every desktop cell (macOS arm64/x64, Linux x64, Windows x64) packages the owner, and the
+      # verified copy in release-publish becomes the standalone N asset (server-ssh-owner-*).
+      - name: Verify packaged SSH owner without activation
+        shell: bash
+        env:
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          set -euo pipefail
+          args=(release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish)
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
+            args+=(--require-code-signature)
+          fi
+          node scripts/verify-packaged-ssh-owner.ts "${args[@]}"
+
       - name: Smoke test Windows installer update over a running helper
         if: matrix.platform == 'win'
         shell: pwsh

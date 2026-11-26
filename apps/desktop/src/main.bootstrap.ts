@@ -15,6 +15,9 @@ import {
   startBackend,
   stopBackendAndWaitForExit,
 } from "./backend/backendManager";
+import { createPrepareForUpdateInstall } from "./main.bootstrap.updateInstall";
+import { createUpgradeDrain } from "./updater/upgradeDrain";
+import type { DesktopQuitTeardown } from "./main.quitTeardown";
 import { makeDesktopMobileRemoteAccess } from "./main.bootstrap.tailscale";
 import {
   getComputerUsePermissionsStatus,
@@ -23,8 +26,7 @@ import {
   requestComputerUsePermissions,
   runComputerUseDoctor,
 } from "./backend/cuaDriver";
-import { resolveComputerUseRuntime } from "./backend/cuaDriver.runtime";
-import { stopCuaDriverDaemon, stopCuaDriverDaemonAndWait } from "./backend/cuaDriver.daemon";
+import { stopCuaDriverDaemon } from "./backend/cuaDriver.daemon";
 import {
   makeCuaDriverLifecycle,
   requestCuaDriverPermissionsAfterHostPreflight,
@@ -38,7 +40,6 @@ import {
   installDownloadedUpdate,
   updaterConfigured,
 } from "./updater/autoUpdater";
-import { RestartRequiredUpdatePreparationError } from "./updater/autoUpdater.install";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import { registerCommandLineToolIpc } from "./commandLine/commandLineTool.ipc";
 import { registerShellPathIpc } from "./window/shellPathHandlers";
@@ -52,14 +53,6 @@ import type { desktopIpcChannels } from "./main.channels";
 import type { resolveDesktopMainConfig } from "./main.config";
 import { syncShellEnvironmentAsync } from "./backend/syncShellEnvironment";
 import { getBackendStartupState } from "./backend/backendStartupState";
-import {
-  beginInstalledProcessQuiescence,
-  getInstalledProcessTreeUncertainty,
-} from "./backend/installedProcessQuiescence";
-import { stopCuaDriverCommandsAndWait } from "./backend/cuaDriver.process";
-import { sweepWindowsCuaDriverProcesses } from "./backend/cuaDriver.windowsSweep";
-import { assertWindowsFilesReplaceable } from "./backend/windowsFileReplaceability";
-import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
 import { registerTerminalRenderingIpc } from "./main.terminalRendering";
 import { startDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
 import {
@@ -75,6 +68,10 @@ import {
 interface BootstrapDesktopOptions {
   /** Legacy Cua runtime base (`cuaDriverBaseDir` in main config); used only for Cua. */
   readonly baseDir: string;
+  /** The backend's state directory; the updater drains through its control socket. */
+  readonly backendStateDir: string;
+  /** The running backend's artifact id, `bigbud-server@<version>`. */
+  readonly backendArtifactId: string;
   readonly systemMonitor: SystemMonitorBridge;
   readonly channels: typeof desktopIpcChannels;
   readonly cuaDriverHostBundleId: string;
@@ -95,6 +92,8 @@ interface BootstrapDesktopOptions {
   readonly logHeader: (message: string) => void;
   readonly makeWindow: (searchParams?: Readonly<Record<string, string>>) => BrowserWindow;
   readonly prepareForAppQuit: (reason: string) => void;
+  /** The acknowledged quit handshake; the updater runs it with reason `update` (F7). */
+  readonly runQuitHandshake: DesktopQuitTeardown["runHandshake"];
   readonly registerFloatingAssistantIpc: () => void;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
   readonly resourcesPath: string;
@@ -108,6 +107,8 @@ interface BootstrapDesktopOptions {
 export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promise<void> {
   const {
     baseDir,
+    backendStateDir,
+    backendArtifactId,
     systemMonitor,
     channels,
     cuaDriverHostBundleId,
@@ -123,6 +124,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     logHeader,
     makeWindow,
     prepareForAppQuit,
+    runQuitHandshake,
     registerFloatingAssistantIpc,
     resolveIconPath,
     resourcesPath,
@@ -162,7 +164,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   });
   const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
     serverSettingsPath,
-    hostOverride: process.env.BIGBUD_HOST ?? process.env.T3CODE_HOST,
+    hostOverride: process.env.BIGBUD_HOST,
   });
   const port = await resolveDesktopBackendPort({
     host: desktopMobileRemoteNetwork.bindHost,
@@ -305,82 +307,25 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     setIsQuitting,
     // Preserve first: a failed copy must not fence CUA/backend process starts in the running app.
     beginUpdatePreparation: () => undefined,
-    prepareForUpdateInstall: async () => {
-      await preservePackagedCopilotRuntime(isPackaged, resourcesPath);
-      beginInstalledProcessQuiescence();
-      const errors: unknown[] = [];
-      let sweepError: unknown = null;
-      try {
-        await stopBackendAndWaitForExit();
-      } catch (error: unknown) {
-        errors.push(error);
-        console.error("[desktop-updater] Backend cleanup failed before install.", error);
-      }
-      try {
-        await stopCuaDriverDaemonAndWait();
-      } catch (error: unknown) {
-        errors.push(error);
-        console.error("[desktop-updater] CUA daemon cleanup failed before install.", error);
-      }
-      try {
-        await stopCuaDriverCommandsAndWait();
-      } catch (error: unknown) {
-        errors.push(error);
-        console.error("[desktop-updater] CUA command cleanup failed before install.", error);
-      }
-      if (process.platform === "win32") {
-        const cuaDriverPath = resolveComputerUseRuntime(baseDir).binaryPath;
-        try {
-          sweepWindowsCuaDriverProcesses({
-            executablePath: cuaDriverPath,
-          });
-        } catch (error: unknown) {
-          sweepError = error;
-          errors.push(error);
-          console.error(
-            "[desktop-updater] Windows CUA process sweep failed before install.",
-            error,
-          );
-        }
-        try {
-          assertWindowsFilesReplaceable({
-            targets: resolveWindowsUpdateTargets({
-              cuaDriverPath,
-              isPackaged,
-              platform: process.platform,
-              resourcesPath,
-            }),
-          });
-        } catch (error: unknown) {
-          errors.push(error);
-          console.error(
-            "[desktop-updater] Windows runtime lock probe failed before install.",
-            error,
-          );
-        }
-      }
-      const uncertainty = getInstalledProcessTreeUncertainty();
-      if (uncertainty) {
-        throw new RestartRequiredUpdatePreparationError(uncertainty.message);
-      }
-      if (sweepError) {
-        const message = sweepError instanceof Error ? sweepError.message : String(sweepError);
-        throw new RestartRequiredUpdatePreparationError(message);
-      }
-      if (errors.length > 0) {
-        const details = errors
-          .map((error) => (error instanceof Error ? error.message : String(error)))
-          .join("; ");
-        throw new AggregateError(errors, `Pre-install process cleanup failed: ${details}`);
-      }
-    },
+    // U5/U8: drain-with-consent first; Cancel aborts the upgrade and leaves this app running.
+    drainBeforeInstall: createUpgradeDrain({
+      stateDir: backendStateDir,
+      artifactId: backendArtifactId,
+      platform: process.platform,
+    }),
+    prepareForUpdateInstall: createPrepareForUpdateInstall({
+      cuaDriverBaseDir: baseDir,
+      isPackaged,
+      resourcesPath,
+      runQuitHandshake,
+    }),
     onBeforeQuitForUpdate: () => {
       prepareForAppQuit("before-quit-for-update");
     },
   });
   logHeader("bootstrap auto updater configured");
   logHeader("bootstrap login shell hydration started");
-  await syncShellEnvironmentAsync();
+  await syncShellEnvironmentAsync(process.env, { profile: isPackaged ? "D" : "V" });
   logHeader("bootstrap login shell hydration completed");
   await preservePackagedCopilotRuntime(isPackaged, resourcesPath).catch((error) =>
     console.error(

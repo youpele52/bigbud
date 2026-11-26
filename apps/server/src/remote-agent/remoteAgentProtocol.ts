@@ -1,16 +1,23 @@
 import type { RemoteAgentPtyFrame } from "./remoteAgentProtocol.pty.ts";
+import type { RemoteAgentTerminalHostFrame } from "./remoteAgentProtocol.terminalHost.ts";
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
 import type { RemoteAgentPasteStagingFrame } from "./remoteAgentProtocol.pasteStaging.ts";
 import type { RemoteAgentSearchFrame } from "./remoteAgentProtocol.search.ts";
+import type { RemoteAgentWriteReceiptFrame } from "./remoteAgentProtocol.writeReceipt.ts";
+import type { RemoteAgentEntryMutationFrame } from "./remoteAgentProtocol.entryMutation.ts";
 import type { RemoteAgentResourceCleanupFrame } from "./remoteAgentProtocol.resourceCleanup.ts";
 import type { RemoteAgentServiceLeaseFrame } from "./remoteAgentProtocol.serviceLease.ts";
 import type { RemoteAgentControlFrame } from "./remoteAgentProtocol.control.ts";
+import type {
+  RemoteAgentHelloProcessFields,
+  RemoteAgentPtyLifecycleFrame,
+} from "./remoteAgentProtocol.ptyLifecycle.ts";
 export type {
   RemoteAgentSupervisorShutdownRequest,
   RemoteAgentSupervisorShutdownResponse,
 } from "./remoteAgentProtocol.control.ts";
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
-export const REMOTE_AGENT_PROTOCOL_MINOR = 8;
+export const REMOTE_AGENT_PROTOCOL_MINOR = 10;
 export const REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
 export interface RemoteAgentClientHello {
   readonly protocolMajor: number;
@@ -27,7 +34,7 @@ export interface RemoteAgentCapability {
   readonly minor: number;
 }
 
-export interface RemoteAgentHello {
+export interface RemoteAgentHello extends RemoteAgentHelloProcessFields {
   readonly protocolMajor: number;
   readonly protocolMinor: number;
   readonly agentVersion: string;
@@ -314,6 +321,8 @@ export type RemoteAgentFrame =
   | RemoteAgentWorkspaceWatchFrame
   | RemoteAgentPasteStagingFrame
   | RemoteAgentSearchFrame
+  | RemoteAgentWriteReceiptFrame
+  | RemoteAgentEntryMutationFrame
   | { readonly type: "clientHello"; readonly value: RemoteAgentClientHello }
   | { readonly type: "agentHello"; readonly value: RemoteAgentHello }
   | { readonly type: "diagnosticRequest"; readonly value: RemoteAgentDiagnosticRequest }
@@ -365,7 +374,9 @@ export type RemoteAgentFrame =
   | { readonly type: "processOutputAck"; readonly value: RemoteAgentProcessOutputAck }
   | { readonly type: "processAckResponse"; readonly value: RemoteAgentProcessAckResponse }
   | { readonly type: "processAttachResponse"; readonly value: RemoteAgentProcessAttachResponse }
-  | RemoteAgentPtyFrame;
+  | RemoteAgentPtyFrame
+  | RemoteAgentPtyLifecycleFrame
+  | RemoteAgentTerminalHostFrame;
 
 export class RemoteAgentProtocolDecodeError extends Error {
   readonly _tag = "RemoteAgentProtocolDecodeError";

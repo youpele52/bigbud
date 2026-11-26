@@ -15,6 +15,7 @@ import { SettingResetButton } from "./settingsLayout";
 import { ProviderModelList } from "./ProviderCard.modelList";
 import { ProviderModelCatalog } from "./ProviderCard.modelCatalog";
 import { ProviderNativeTrust } from "./ProviderCard.nativeTrust";
+import { ProviderRemoteBinaryPath } from "./ProviderCard.remoteBinaryPath";
 import { ProviderThreadToolsSetup } from "./ProviderThreadToolsSetup";
 import { ProviderNativeStatus } from "./ProviderCard.nativeStatus";
 import { ClaudeSubagentCapsSettings } from "./ProviderCard.claudeSubagentCaps";
@@ -66,6 +67,8 @@ type ProviderCardProps = {
   onConfigPathChange: (value: string) => void;
   onOpenSetupGuide: () => void;
   onHomePathChange: (value: string) => void;
+  remoteBinaryPath?: string;
+  onRemoteBinaryPathChange?: (value: string) => void;
   connectionMode?: "shared" | "isolated";
   onConnectionModeChange?: (mode: "shared" | "isolated") => void;
   nativeServiceConsented?: boolean;
@@ -100,6 +103,8 @@ export function ProviderCard({
   onConfigPathChange,
   onOpenSetupGuide,
   onHomePathChange,
+  remoteBinaryPath = "",
+  onRemoteBinaryPathChange,
   connectionMode = "shared",
   onConnectionModeChange,
   nativeServiceConsented = false,
@@ -238,6 +243,12 @@ export function ProviderCard({
                 onConfigRootChange={onNativePluginConfigRootChange}
                 setupRequest={nativeSetupRequest}
                 threadId={setupThreadId}
+              />
+            ) : null}
+            {card.provider === "opencodeV2" && onRemoteBinaryPathChange ? (
+              <ProviderRemoteBinaryPath
+                value={remoteBinaryPath}
+                onChange={onRemoteBinaryPathChange}
               />
             ) : null}
             {card.provider !== "opencodeV2" ? (

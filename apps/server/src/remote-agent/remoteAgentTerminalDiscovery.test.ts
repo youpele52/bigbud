@@ -132,6 +132,28 @@ describe("terminal discovery after backend restart", () => {
       reason: "identity-conflict",
     });
   });
+  it("reports a 1.9 lost PTY as host-lost, never as running or an identity conflict", async () => {
+    const route = owner("a");
+    const discovery = new RemoteAgentTerminalDiscovery(
+      { listTerminalOwners: async () => ({ owners: [route], nextCursor: "" }) },
+      {
+        list: async () => [
+          {
+            ...observation(route),
+            requestDigest: new Uint8Array(),
+            state: "outcome-unknown",
+            pid: 0,
+            lost: true,
+            screenAvailable: true,
+          },
+        ],
+      },
+    );
+    expect((await discovery.list("ssh:host")).sessions[0]).toMatchObject({
+      status: "unknown",
+      reason: "host-lost",
+    });
+  });
   it("binds saved cwd to the durable request digest and permits legacy missing metadata", () => {
     const route = owner("a");
     expect(parseRemoteAgentOwner(JSON.stringify(route))).toEqual(route);

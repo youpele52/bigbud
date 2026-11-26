@@ -15,9 +15,9 @@ export function toMessage(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message.length > 0 ? cause.message : fallback;
 }
 
-/** False once the Pi RPC child process has exited or was killed by a signal. */
-export function isPiProcessAlive(process: Pick<ActivePiSession["process"], "child">): boolean {
-  return (process.child.exitCode ?? null) === null && (process.child.signalCode ?? null) === null;
+/** False once the Pi RPC transport has exited or was killed by a signal. */
+export function isPiProcessAlive(process: Pick<ActivePiSession["process"], "isAlive">): boolean {
+  return process.isAlive();
 }
 
 export function normalizeString(value: unknown): string | undefined {

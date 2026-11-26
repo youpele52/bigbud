@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import {
   formatCodexCliUpgradeMessage,
@@ -11,18 +11,35 @@ import {
   runSshLocalCommand,
   SSH_CONNECT_TIMEOUT_SECONDS,
 } from "../ssh/sshLocalCommand.ts";
+import { assertLegacySshLaunchAllowed } from "../ssh/sshOwnerSelection.ts";
+import { isProductionProviderOwnerSelected } from "../ssh/sshOwnerProductionProviderSource.ts";
+import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import {
-  assertSshExecutionTargetReady,
-  assertSshExecutionTargetReadyAsync,
-} from "../ssh/sshVerification.ts";
+  acquireOwnedCodexAppServer,
+  probeOwnedCodexVersion,
+  REMOTE_CODEX_ASYNC_PROBE_TIMEOUT_MS,
+  requireCodexSshOwner,
+  resolveCodexOwnerRuntime,
+  type CodexOwnerSelection,
+  type OwnedCodexAppServer,
+} from "./codexAppServerManager.process.remote.owner.ts";
 import { recordEarlySpawnError } from "./codexAppServerManager.process.spawnError.ts";
+import {
+  OwnedCodexAppServerProcess,
+  type CodexAppServerProcess,
+} from "./codexAppServerManager.processHandle.ts";
 import { bindCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 import { codexQuestionToolConfigArgs } from "./codexQuestionTool.ts";
 
-const SSH_VERSION_CHECK_TIMEOUT_MS = 8_000;
-/** Overall deadline for the async check: readiness probes plus `codex --version` over SSH. */
-const SSH_VERSION_CHECK_DEADLINE_MS = 20_000;
+/**
+ * Remote app-server launches are always asynchronous. There is no synchronous SSH or version
+ * probe on this path: it cannot be bounded without blocking the event loop, and the selected
+ * owner only exposes an asynchronous typed probe.
+ */
+export const REMOTE_CODEX_SYNC_LAUNCH_REFUSED =
+  "Remote Codex app-server requires the asynchronous launcher.";
+
 const VERSION_CHECK_TRANSPORT_ARGS = ["-o", `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SECONDS}`];
 
 export interface SshInvocation {
@@ -86,39 +103,23 @@ function acceptRemoteVersionCheck(result: VersionCheckOutcome): string | undefin
 }
 
 /**
- * Synchronous check, no longer on the session start path (`startSession` awaits
- * `startCodexAppServerProcessAsync`); it can block the event loop for up to
- * `SSH_VERSION_CHECK_TIMEOUT_MS` plus the readiness probes.
+ * Version check that never blocks the event loop, bounded by one overall deadline. The selected
+ * owner path runs only its typed `probeProvider` port.
  */
-export function assertSupportedRemoteCodexCliVersion(
-  input: CodexAppServerStartSessionInput,
-): string | undefined {
-  assertSshExecutionTargetReady(input.providerRuntimeExecutionTargetId ?? input.executionTargetId);
-  const invocation = buildRemoteCodexSshInvocation(
-    input,
-    ["--version"],
-    VERSION_CHECK_TRANSPORT_ARGS,
-  );
-  const result = spawnSync(invocation.command, invocation.args, {
-    encoding: "utf8",
-    shell: process.platform === "win32",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: SSH_VERSION_CHECK_TIMEOUT_MS,
-    maxBuffer: 1024 * 1024,
-  });
-  return acceptRemoteVersionCheck({
-    status: result.status,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-    error: result.error,
-  });
-}
-
-/** Version check that never blocks the event loop, bounded by one overall deadline. */
 export async function assertSupportedRemoteCodexCliVersionAsync(
   input: CodexAppServerStartSessionInput,
+  selection?: CodexOwnerSelection,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
-  const deadline = createSshDeadline(SSH_VERSION_CHECK_DEADLINE_MS);
+  if (selection !== undefined) {
+    signal?.throwIfAborted();
+    const owner = requireCodexSshOwner(selection);
+    return acceptRemoteVersionCheck(
+      await probeOwnedCodexVersion(owner, resolveCodexOwnerRuntime(input), signal),
+    );
+  }
+  assertLegacySshLaunchAllowed();
+  const deadline = createSshDeadline(REMOTE_CODEX_ASYNC_PROBE_TIMEOUT_MS);
   await assertSshExecutionTargetReadyAsync(
     input.providerRuntimeExecutionTargetId ?? input.executionTargetId,
     deadline,
@@ -152,11 +153,45 @@ function spawnRemoteCodexAppServer(
   );
 }
 
-/** An abort during the version check means the app-server is never spawned. */
+/**
+ * An abort during the version check means the app-server is never spawned. Under the production
+ * activation the session runs through the production owner as an owner lease process.
+ */
+export function startRemoteCodexAppServerProcessAsync(
+  input: CodexAppServerStartSessionInput,
+  signal?: AbortSignal,
+): Promise<CodexAppServerProcess>;
+/** Owner-selected callers receive a lease, never a synthetic local child or PID. */
+export function startRemoteCodexAppServerProcessAsync(
+  input: CodexAppServerStartSessionInput,
+  signal: AbortSignal | undefined,
+  selection: CodexOwnerSelection,
+): Promise<OwnedCodexAppServer>;
 export async function startRemoteCodexAppServerProcessAsync(
   input: CodexAppServerStartSessionInput,
   signal?: AbortSignal,
-): Promise<ChildProcessWithoutNullStreams> {
+  selection?: CodexOwnerSelection,
+): Promise<CodexAppServerProcess | OwnedCodexAppServer> {
+  if (selection !== undefined) {
+    signal?.throwIfAborted();
+    const owner = requireCodexSshOwner(selection);
+    // Never silently omit overrides or smuggle backend-built argv into the owner recipe.
+    if (input.configArgs?.length) {
+      throw new Error("Codex SSH owner app-server config requires a typed launch recipe.");
+    }
+    const runtime = resolveCodexOwnerRuntime(input);
+    const version = acceptRemoteVersionCheck(await probeOwnedCodexVersion(owner, runtime, signal));
+    // Keep one snapshot of the scope across probe and launch.
+    return acquireOwnedCodexAppServer(owner, runtime, version, signal);
+  }
+  if (isProductionProviderOwnerSelected()) {
+    const { resolveProductionCodexOwnerSelection } =
+      await import("./codexAppServerManager.process.remote.production.ts");
+    const runtime = resolveCodexOwnerRuntime(input);
+    const production = await resolveProductionCodexOwnerSelection(runtime.executionTargetId);
+    const lease = await startRemoteCodexAppServerProcessAsync(input, signal, production);
+    return bindCodexProcessVersion(new OwnedCodexAppServerProcess(lease), lease.version);
+  }
   const version = await assertSupportedRemoteCodexCliVersionAsync(input);
   signal?.throwIfAborted();
   return bindCodexProcessVersion(spawnRemoteCodexAppServer(input, version), version);
@@ -164,7 +199,9 @@ export async function startRemoteCodexAppServerProcessAsync(
 
 export function startRemoteCodexAppServerProcess(
   input: CodexAppServerStartSessionInput,
+  selection?: CodexOwnerSelection,
 ): ChildProcessWithoutNullStreams {
-  const version = assertSupportedRemoteCodexCliVersion(input);
-  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input, version), version);
+  void input;
+  void selection;
+  throw new Error(REMOTE_CODEX_SYNC_LAUNCH_REFUSED);
 }

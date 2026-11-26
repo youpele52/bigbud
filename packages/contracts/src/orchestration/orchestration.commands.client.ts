@@ -1,3 +1,7 @@
+import {
+  ThreadQueuedPromptClaimCommand,
+  ThreadRecoveredPromptCommand,
+} from "./orchestration.commands.client.queueRecovery";
 import { Schema } from "effect";
 import {
   ApprovalRequestId,
@@ -334,6 +338,8 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadTurnStartCommand,
   ThreadMessageSubmitCommand,
   ThreadQueuedPromptRemoveCommand,
+  ThreadQueuedPromptClaimCommand,
+  ThreadRecoveredPromptCommand,
   ThreadQueuedPromptFlushCommand,
   ThreadShellRunCommand,
   ThreadTurnInterruptCommand,
@@ -370,6 +376,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ClientThreadTurnStartCommand,
   ClientThreadMessageSubmitCommand,
   ThreadQueuedPromptRemoveCommand,
+  ThreadQueuedPromptClaimCommand,
+  ThreadRecoveredPromptCommand,
   ThreadQueuedPromptFlushCommand,
   ClientThreadShellRunCommand,
   ThreadTurnInterruptCommand,

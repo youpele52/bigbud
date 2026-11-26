@@ -100,7 +100,7 @@ export const FilePreview = memo(function FilePreview({
   });
 
   const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
-  const { draftKey, draft, eligible } = useFileEditDraft({
+  const { draftKey, draft, eligible, readOnlyReason } = useFileEditDraft({
     cwd,
     relativePath,
     executionTargetId,
@@ -236,6 +236,7 @@ export const FilePreview = memo(function FilePreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText,
@@ -251,7 +252,15 @@ export const FilePreview = memo(function FilePreview({
               },
       });
     },
-    [absolutePath, isMarkdownFile, markdownViewMode, onCreateAnnotation, relativePath, contents],
+    [
+      absolutePath,
+      executionTargetId,
+      isMarkdownFile,
+      markdownViewMode,
+      onCreateAnnotation,
+      relativePath,
+      contents,
+    ],
   );
 
   const handleHeaderContextMenu = useCallback(
@@ -261,13 +270,14 @@ export const FilePreview = memo(function FilePreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText: "",
         canSelectAll: false,
       });
     },
-    [absolutePath, relativePath],
+    [absolutePath, executionTargetId, relativePath],
   );
 
   return (
@@ -311,7 +321,7 @@ export const FilePreview = memo(function FilePreview({
               draft={draft}
               draftKey={draftKey}
               editing={editing}
-              executionTargetId={executionTargetId}
+              readOnlyReason={readOnlyReason}
               onRefresh={refreshPreview}
             />
             {isMarkdownFile && !editing ? (

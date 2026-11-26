@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { detectPiSettlementSupport, piVersionCapabilities } from "./RpcProcess.capabilities.ts";
+import { detectPiSettlementSupport } from "./RpcProcess.capabilities.ts";
+import { piVersionCapabilities } from "./RpcProcess.version.ts";
 import type { PiRpcProcessOptions } from "./RpcProcess.types.ts";
 
 it.each([

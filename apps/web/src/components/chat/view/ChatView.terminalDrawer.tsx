@@ -1,6 +1,7 @@
 import type { ResolvedKeybindingsConfig, ThreadId } from "@bigbud/contracts";
 import { useCallback, useEffect, useState } from "react";
 
+import { retainProjectDependency } from "~/lib/projectDependencies";
 import { cn } from "~/lib/utils";
 
 import { useThreadTerminalDrawer } from "../../terminal/useThreadTerminalDrawer";
@@ -42,10 +43,16 @@ export function PersistentThreadTerminalDrawer({
   onMinimize,
 }: PersistentThreadTerminalDrawerProps) {
   const drawer = useThreadTerminalDrawer(threadId, launchContext, visible);
-  const project = drawer.project;
-  const cwd = drawer.cwd;
+  const projectId = drawer.projectId;
+  const liveCwd = drawer.project ? drawer.cwd : null;
   const drawerOpen = drawer.terminalState.terminalOpen;
-  const canRenderDrawer = Boolean(project && cwd);
+  // No panes means no terminal: never render a body, even mid close animation.
+  const hasPanes = drawer.terminalState.terminalIds.length > 0;
+  // Bind the cwd once renderable: losing catalog data must never unmount mounted emulators.
+  const [boundCwd, setBoundCwd] = useState(liveCwd);
+  if (liveCwd !== null && liveCwd !== boundCwd) setBoundCwd(liveCwd);
+  const cwd = liveCwd ?? boundCwd;
+  const canRenderDrawer = cwd !== null;
   const animatedVisible = visible && drawerOpen;
   const terminalVisible = animatedVisible && presentation !== "hidden";
   const parked = presentation === "hidden" || (!visible && drawerOpen);
@@ -53,6 +60,12 @@ export function PersistentThreadTerminalDrawer({
   const [isTransitionVisible, setIsTransitionVisible] = useState(
     () => canRenderDrawer && drawerOpen,
   );
+
+  const retainsProject = drawerOpen || shouldRender;
+  useEffect(() => {
+    // Hidden drawers keep their dependency-only project out of release-time eviction.
+    if (projectId && retainsProject) return retainProjectDependency(projectId);
+  }, [projectId, retainsProject]);
 
   useEffect(() => {
     // Only logical open/close animates. Thread activation must not collapse or remount xterm.
@@ -66,7 +79,9 @@ export function PersistentThreadTerminalDrawer({
       };
     }
     setIsTransitionVisible(false);
-  }, [drawerOpen, canRenderDrawer]);
+    // Closing the last pane skips the exit animation, so release the render slot directly.
+    if (!hasPanes) setShouldRender(false);
+  }, [drawerOpen, canRenderDrawer, hasPanes]);
 
   const handleAddTerminalContext = useCallback(
     (selection: TerminalContextSelection) => {
@@ -78,7 +93,7 @@ export function PersistentThreadTerminalDrawer({
     [onAddTerminalContext, visible],
   );
 
-  if (!project || !cwd || !shouldRender) {
+  if (cwd === null || !shouldRender || !hasPanes) {
     return null;
   }
 

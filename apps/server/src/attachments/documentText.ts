@@ -1,10 +1,11 @@
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { isTextReadable } from "./fileMime.ts";
+import { escapeDocumentMarkup, escapeDocumentMarkupAttribute } from "./documentText.markup.ts";
 import {
   extractOcrTextFromBuffer,
   extractOcrTextFromFile,
@@ -24,7 +25,7 @@ import {
 export { extractDocxTextFromBuffer } from "./documentText.office.ts";
 export { EXTRACTED_DOCUMENT_MAX_CHARS } from "./documentText.shared.ts";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const PDF_MIME_TYPE = "application/pdf";
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -63,25 +64,34 @@ function isTextReadableFileName(fileName: string): boolean {
  * On macOS install via: brew install poppler
  * On Linux install via: apt install poppler-utils
  */
-async function extractPdfTextWithPdftotext(filePath: string): Promise<string | null> {
+async function extractPdfTextWithPdftotext(
+  filePath: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
   try {
-    const { stdout } = await execAsync(`pdftotext -enc UTF-8 -- ${JSON.stringify(filePath)} -`, {
+    signal?.throwIfAborted();
+    const { stdout } = await execFileAsync("pdftotext", ["-enc", "UTF-8", "--", filePath, "-"], {
       maxBuffer: 10 * 1024 * 1024,
       timeout: 15_000,
+      ...(signal ? { signal } : {}),
     });
     const normalized = normalizeExtractedText(stdout);
     return normalized.length > 0 ? normalized : null;
   } catch {
+    signal?.throwIfAborted();
     return null;
   }
 }
 
-async function extractPdfTextFromBuffer(bytes: Uint8Array): Promise<string | null> {
+async function extractPdfTextFromBuffer(
+  bytes: Uint8Array,
+  signal?: AbortSignal,
+): Promise<string | null> {
   const tempDir = await mkdtemp(join(tmpdir(), "bigbud-pdf-buffer-"));
   const tempPath = join(tempDir, "document.pdf");
   try {
-    await writeFile(tempPath, bytes);
-    return await extractPdfTextWithPdftotext(tempPath);
+    await writeFile(tempPath, bytes, signal ? { signal } : undefined);
+    return await extractPdfTextWithPdftotext(tempPath, signal);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -116,7 +126,9 @@ export async function extractPromptTextFromBuffer(input: {
   readonly bytes: Uint8Array;
   readonly mimeType: string;
   readonly fileName: string;
+  readonly signal?: AbortSignal;
 }): Promise<string | null> {
+  input.signal?.throwIfAborted();
   const mimeType = input.mimeType.toLowerCase();
   const fileName = input.fileName.toLowerCase();
 
@@ -126,7 +138,7 @@ export async function extractPromptTextFromBuffer(input: {
   }
 
   if (mimeType === PDF_MIME_TYPE || fileName.endsWith(".pdf")) {
-    const text = await extractPdfTextFromBuffer(input.bytes);
+    const text = await extractPdfTextFromBuffer(input.bytes, input.signal);
     if (text !== null) return truncateExtractedText(text);
 
     const ocrText = await extractOcrTextFromBuffer(input);
@@ -134,17 +146,17 @@ export async function extractPromptTextFromBuffer(input: {
   }
 
   if (mimeType === DOCX_MIME_TYPE || fileName.endsWith(".docx")) {
-    const text = extractDocxTextFromBuffer(input.bytes);
+    const text = await extractDocxTextFromBuffer(input.bytes, input.signal);
     return text.length > 0 ? truncateExtractedText(text) : null;
   }
 
   if (mimeType === PPTX_MIME_TYPE || fileName.endsWith(".pptx")) {
-    const text = extractPptxTextFromBuffer(input.bytes);
+    const text = await extractPptxTextFromBuffer(input.bytes, input.signal);
     return text.length > 0 ? truncateExtractedText(text) : null;
   }
 
   if (mimeType === XLSX_MIME_TYPE || fileName.endsWith(".xlsx")) {
-    const text = extractXlsxTextFromBuffer(input.bytes);
+    const text = await extractXlsxTextFromBuffer(input.bytes, input.signal);
     return text.length > 0 ? truncateExtractedText(text) : null;
   }
 
@@ -160,16 +172,25 @@ export async function extractPromptTextFromFile(input: {
   readonly filePath: string;
   readonly mimeType: string;
   readonly fileName: string;
+  readonly signal?: AbortSignal;
 }): Promise<string | null> {
+  input.signal?.throwIfAborted();
   const mimeType = input.mimeType.toLowerCase();
   const fileName = input.fileName.toLowerCase();
 
   if (isTextReadable(mimeType) || isTextReadableFileName(fileName)) {
-    return truncateExtractedText(normalizeExtractedText(await readFile(input.filePath, "utf8")));
+    return truncateExtractedText(
+      normalizeExtractedText(
+        await readFile(input.filePath, {
+          encoding: "utf8",
+          ...(input.signal ? { signal: input.signal } : {}),
+        }),
+      ),
+    );
   }
 
   if (mimeType === PDF_MIME_TYPE || fileName.endsWith(".pdf")) {
-    const text = await extractPdfTextWithPdftotext(input.filePath);
+    const text = await extractPdfTextWithPdftotext(input.filePath, input.signal);
     if (text !== null) return truncateExtractedText(text);
 
     const ocrText = await extractOcrTextFromFile(input);
@@ -184,7 +205,8 @@ export async function extractPromptTextFromFile(input: {
   }
 
   return extractPromptTextFromBuffer({
-    bytes: await readFile(input.filePath),
+    bytes: await readFile(input.filePath, input.signal ? { signal: input.signal } : undefined),
+    ...(input.signal ? { signal: input.signal } : {}),
     mimeType,
     fileName,
   });
@@ -194,7 +216,10 @@ export function formatAttachedFileContents(
   blocks: ReadonlyArray<{ readonly fileName: string; readonly text: string }>,
 ): string {
   return `<attached_file_contents>\n${blocks
-    .map((block) => `<file name="${block.fileName}">\n${block.text}\n</file>`)
+    .map(
+      (block) =>
+        `<file name="${escapeDocumentMarkupAttribute(block.fileName)}">\n${escapeDocumentMarkup(block.text)}\n</file>`,
+    )
     .join("\n")}\n</attached_file_contents>`;
 }
 
@@ -213,7 +238,7 @@ export function formatAttachedImageOcrContents(
   return `<attached_image_ocr>\n${blocks
     .map(
       (block) =>
-        `<image name="${block.fileName}">\nOCR text extracted from this image. May contain errors.\n${block.text}\n</image>`,
+        `<image name="${escapeDocumentMarkupAttribute(block.fileName)}">\nOCR text extracted from this image. May contain errors.\n${escapeDocumentMarkup(block.text)}\n</image>`,
     )
     .join("\n")}\n</attached_image_ocr>`;
 }
@@ -233,7 +258,7 @@ export function formatUnextractableFileNotice(
   return `<unreadable_attached_files>\n${files
     .map(
       (file) =>
-        `- ${file.fileName} (${file.mimeType}): text could not be extracted. Do not call file-reading tools on this attachment path; ask the user for a text-readable version or OCR if its contents are required.`,
+        `- ${escapeDocumentMarkup(file.fileName)} (${escapeDocumentMarkup(file.mimeType)}): text could not be extracted. Do not call file-reading tools on this attachment path; ask the user for a text-readable version or OCR if its contents are required.`,
     )
     .join("\n")}\n</unreadable_attached_files>`;
 }

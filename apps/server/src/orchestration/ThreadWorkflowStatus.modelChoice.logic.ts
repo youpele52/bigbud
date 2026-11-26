@@ -1,4 +1,5 @@
 import type {
+  DelegationEffortDecision,
   ModelChoiceOutcome,
   ModelChoiceResolvedBy,
   ModelChoiceUnusableReason,
@@ -9,6 +10,7 @@ import type { DelegatedModelChoiceRecord } from "@bigbud/shared/delegatedModelCh
 
 /** The `get_thread_status` view of a delegated model choice: requested vs used. */
 export interface ThreadModelChoiceStatus {
+  readonly effort?: DelegationEffortDecision | undefined;
   readonly status: "pending" | "resolved";
   readonly requested: RequestedModelSelection | null;
   /** The model the tributary runs with; while pending, the fallback it uses without a pick. */
@@ -23,8 +25,10 @@ export interface ThreadModelChoiceStatus {
 export function toThreadModelChoiceStatus(
   record: DelegatedModelChoiceRecord,
 ): ThreadModelChoiceStatus {
+  const effort = record.effort !== undefined ? { effort: record.effort } : {};
   if (record.status === "pending") {
     return {
+      ...effort,
       status: "pending",
       requested: record.requested,
       used: record.fallback,
@@ -35,6 +39,7 @@ export function toThreadModelChoiceStatus(
     };
   }
   return {
+    ...effort,
     status: "resolved",
     requested: record.requested,
     used: record.used,

@@ -143,7 +143,7 @@ try {
   assertOccurrenceCount(
     desktopBuildWorkflow,
     'steps.windows_signing.outputs.signed }}" == "true"',
-    3,
+    4,
     "Desktop build workflow must condition Windows signing and verification on the resolved mode.",
   );
   for (const credential of ["APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]) {

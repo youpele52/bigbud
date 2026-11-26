@@ -1,19 +1,11 @@
 import { useState } from "react";
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 
-import {
-  collapseExpandedComposerCursor,
-  detectComposerTrigger,
-} from "../../../../logic/composer/composer.logic";
 import { useComposerDraftStore } from "../../../../stores/composer/composer.store";
-import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { usePendingUserInputHandlers } from "../ChatView.composerHandlers.logic";
 import { createSendControl, useSendHarnessInput } from "../ChatView.sendTurn.browser-helpers";
 import { useOnSend } from "../ChatView.sendTurn.logic";
 import type { UseOnSendInput } from "../ChatView.sendTurn.types";
-import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
-import { usePendingUserInputComposerSync } from "./chat-view-effects.pendingInput.hooks";
-import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 
 import type { PendingUserInput } from "../../../../logic/session/session.logic";
 import {
@@ -24,7 +16,6 @@ import {
   type PendingUserInputDraftAnswer,
 } from "../../../../logic/user-input/pending.logic";
 import { PendingUserInputPanel } from "./PendingUserInputPanel";
-import { derivePendingComposerAction } from "./PendingUserInputPanel.logic";
 
 export type PendingDrafts = Record<string, Record<string, PendingUserInputDraftAnswer>>;
 
@@ -87,23 +78,19 @@ export function PendingQuestionHarness({
   );
 }
 
-const noop = () => {};
-
-/**
- * Production answer flow without the full ChatView: real pending handlers, question-switch sync,
- * panel, primary Next/Submit action, send hook and stores. The textarea stands in for the editor
- * and mirrors text exactly as the composer's prompt-change handler does.
- */
+/** Real question draft handlers, panel, and chat send in one form. */
 export function PendingAnswerFlowHarness({
   threadId,
   input,
   control,
   overrides,
+  onRespond,
 }: {
   threadId: ThreadId;
   input: PendingUserInput;
   control: ReturnType<typeof createSendControl>;
   overrides: Partial<UseOnSendInput>;
+  onRespond: (requestId: string, answers: Record<string, unknown>) => void;
 }) {
   const [drafts, setDrafts] = useState<PendingDrafts>({});
   const [indexes, setIndexes] = useState<Record<string, number>>({});
@@ -113,19 +100,12 @@ export function PendingAnswerFlowHarness({
     requestDrafts,
     indexes[input.requestId] ?? 0,
   );
+  const answers = buildPendingUserInputAnswers(input.questions, requestDrafts);
   const prompt = useComposerDraftStore((state) => state.draftsByThreadId[threadId]?.prompt ?? "");
-  const setPrompt = (text: string) => useComposerDraftStore.getState().setPrompt(threadId, text);
   const sendInput = useSendHarnessInput({
     threadId,
     control,
-    overrides: {
-      isOpencodePendingUserInputMode: true,
-      activePendingUserInputRequestId: input.requestId,
-      activePendingUserInput: input,
-      activePendingProgress: progress,
-      activePendingDraftAnswers: requestDrafts,
-      ...overrides,
-    },
+    overrides: { hasPendingProviderRequest: true, ...overrides },
   });
   const handlers = usePendingUserInputHandlers({
     activePendingUserInput: input,
@@ -133,25 +113,6 @@ export function PendingAnswerFlowHarness({
     setPendingUserInputAnswersByRequestId: setDrafts,
     setPendingUserInputQuestionIndexByRequestId: setIndexes,
   });
-  sendInput.setActivePendingUserInputQuestionIndex =
-    handlers.setActivePendingUserInputQuestionIndex;
-  usePendingUserInputComposerSync(
-    {
-      collapseExpandedComposerCursor,
-      detectComposerTrigger,
-      prompt,
-      promptRef: sendInput.promptRef,
-      setComposerCursor: noop,
-      setComposerHighlightedItemId: noop,
-      setComposerTrigger: noop,
-      setPendingUserInputAnswersByRequestId: setDrafts,
-      setPrompt,
-    } as unknown as ChatViewBaseState,
-    {
-      activePendingUserInput: input,
-      activePendingProgress: progress,
-    } as ChatViewThreadDerivedState,
-  );
   const onSend = useOnSend(sendInput);
   control.onSend = onSend;
   return (
@@ -161,38 +122,21 @@ export function PendingAnswerFlowHarness({
         progress={progress}
         onToggleOption={handlers.onToggleActivePendingUserInputOption}
         onSelectQuestion={handlers.setActivePendingUserInputQuestionIndex}
+        onChangeCustomAnswer={handlers.onChangeActivePendingUserInputCustomAnswer}
+        canSubmit={answers !== null}
+        onSubmit={() => {
+          if (answers) onRespond(input.requestId, answers);
+        }}
       />
       <textarea
         aria-label="Message"
         value={prompt}
         onChange={(event) => {
           sendInput.promptRef.current = event.target.value;
-          setPrompt(event.target.value);
-          if (progress.activeQuestion)
-            handlers.onChangeActivePendingUserInputCustomAnswer(
-              progress.activeQuestion.id,
-              event.target.value,
-            );
+          useComposerDraftStore.getState().setPrompt(threadId, event.target.value);
         }}
       />
-      <ComposerPrimaryActions
-        compact={false}
-        pendingAction={derivePendingComposerAction({
-          progress,
-          isResponding: false,
-          resolvedAnswers: buildPendingUserInputAnswers(input.questions, requestDrafts),
-        })}
-        isRunning={false}
-        showPlanFollowUpPrompt={false}
-        promptHasText={prompt.trim().length > 0}
-        isSendBusy={false}
-        isConnecting={false}
-        isPreparingWorktree={false}
-        hasSendableContent
-        onPreviousPendingQuestion={handlers.onPreviousActivePendingUserInputQuestion}
-        onInterrupt={noop}
-        onImplementPlanInNewThread={noop}
-      />
+      <button type="submit">Queue message</button>
     </form>
   );
 }

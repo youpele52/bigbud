@@ -1,0 +1,36 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+message ProofWorkspaceList {
+  string workspace_root = 1;
+  // Empty means the authorized workspace root, not a second path binding.
+  string relative_dir = 2;
+}
+
+message ProofWorkspaceSnapshotResult {
+  string digest = 1;
+}
+
+message ProofWorkspaceIndex {
+  string workspace_root = 1;
+}
+
+message ProofWorkspaceIndexedEntry {
+  string path = 1;
+  bool directory = 2;
+}
+
+message ProofWorkspaceIndexResult {
+  repeated ProofWorkspaceIndexedEntry entries = 1;
+  bool truncated = 2;
+}
+
+message ProofWorkspaceDirectory {
+  repeated ProofWorkspaceEntry entries = 1;
+  bool truncated = 2;
+}
+
+message ProofWorkspaceEntry {
+  string name = 1;
+  bool directory = 2;
+}

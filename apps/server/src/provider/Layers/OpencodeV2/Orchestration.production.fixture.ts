@@ -17,6 +17,7 @@ import { sharedV2FixtureOptions } from "./SharedService.binding.fixture.ts";
 import { V2ConsentAuthority } from "./Application.consent.ts";
 import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
+import { makeV2RuntimeAdapter } from "./Adapter.runtime.ts";
 import { makeV2NativeDelegationFixture } from "./Execution.delegation.fixture.ts";
 import { makeV2SyntheticNativeEligibility } from "./NativeCompatibility.runtime.fixture.ts";
 import type { V2ImplementationVersion } from "./Orchestration.implementation.ts";
@@ -50,6 +51,7 @@ export async function withV2ProductionThreadTools(
   runtimeCheckedVersion?: string,
   remoteWorkspace = false,
   exportArtifact?: typeof exportV2ThreadArtifact,
+  queuedProvider = false,
 ) {
   await withV2RuntimeFixture(async ({ runtime: baseline, http, directory, events }) => {
     const app = await makeV2ThreadPluginFixture(exportArtifact ? { exportArtifact } : {});
@@ -141,11 +143,19 @@ export async function withV2ProductionThreadTools(
               parent: threadId,
               runtimeMode: mode,
               consumeChildren: false,
+              queuedProvider,
             });
-            runtime = new OpencodeV2Runtime({
+            const runtimeOptions = {
               ...options,
               prepareSession: makeV2SharedTargetPreparation(options, app.root, canonical.port),
-            });
+            };
+            if (queuedProvider) {
+              const native = yield* makeV2RuntimeAdapter(runtimeOptions);
+              canonical.bind(native.adapter);
+              runtime = native.runtime;
+            } else {
+              runtime = new OpencodeV2Runtime(runtimeOptions);
+            }
             if (remoteWorkspace) {
               host.context.location.directory = yield* Effect.promise(() =>
                 resolveV2RemoteLocation(app.root, threadId, "ssh:vps", "/srv/project"),
@@ -257,7 +267,7 @@ export async function withV2ProductionThreadTools(
         ),
       );
     } finally {
-      await runtime?.close();
+      if (!queuedProvider) await runtime?.close();
       consent.close();
       await dispose();
       await infrastructure.close();

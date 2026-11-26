@@ -16,6 +16,7 @@ import {
   cellSource,
   detectNotebookLanguage,
   getNotebookFlatSource,
+  notebookSelectionLineRange,
   notebookSizerCellKey,
   parseNotebook,
   renderOutput,
@@ -159,23 +160,16 @@ export const IpynbPreview = memo(function IpynbPreview({
   const handleNotebookContextMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       const selectedText = window.getSelection()?.toString().trim() ?? "";
-      let annotationRange: LineRange | null = null;
-      if (onCreateAnnotation && selectedText.length >= 2) {
-        const startIndex = flatSource.indexOf(selectedText);
-        if (startIndex !== -1) {
-          const endIndex = startIndex + selectedText.length;
-          annotationRange = {
-            startLine: flatSource.slice(0, startIndex).split("\n").length,
-            endLine: flatSource.slice(0, endIndex).split("\n").length,
-          };
-        }
-      }
+      const annotationRange = onCreateAnnotation
+        ? notebookSelectionLineRange(flatSource, selectedText)
+        : null;
 
       event.preventDefault();
       event.stopPropagation();
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText,
@@ -191,7 +185,7 @@ export const IpynbPreview = memo(function IpynbPreview({
               },
       });
     },
-    [absolutePath, flatSource, onCreateAnnotation, relativePath],
+    [absolutePath, executionTargetId, flatSource, onCreateAnnotation, relativePath],
   );
 
   const handleHeaderContextMenu = useCallback(
@@ -201,13 +195,14 @@ export const IpynbPreview = memo(function IpynbPreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText: "",
         canSelectAll: false,
       });
     },
-    [absolutePath, relativePath],
+    [absolutePath, executionTargetId, relativePath],
   );
 
   const annotationComposer = useMemo(() => {

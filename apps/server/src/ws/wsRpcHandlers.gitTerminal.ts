@@ -16,6 +16,7 @@ import type { WsRpcContext } from "./wsRpcContext";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
 import { listWslDistributions } from "../terminal/Layers/Manager.wsl.process";
 import { TerminalWslDiscoveryError } from "@bigbud/contracts/workspace/terminal.wsl.ts";
+import type { GitDiscardSelection } from "@bigbud/contracts/workspace/git.inputs.ts";
 import {
   connectRemoteAgentEffect,
   getRemoteAgentUpdateStatusEffect,
@@ -239,6 +240,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
       readonly cwd: string;
       readonly executionTargetId?: string | undefined;
       readonly operationId?: string | undefined;
+      readonly selection?: GitDiscardSelection | undefined;
     }) =>
       observeRpcEffect(
         WS_METHODS.gitDiscardChanges,
@@ -247,6 +249,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
             input.cwd,
             input.executionTargetId,
             gitMutationOperationId(input.operationId, input.executionTargetId),
+            input.selection,
           )
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         {

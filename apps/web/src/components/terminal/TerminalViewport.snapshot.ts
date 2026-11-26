@@ -2,6 +2,21 @@ import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/termin
 import { isCurrentTerminalSnapshot, readTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { withTerminalViewDeadline } from "./terminalLifecycle.operations";
 
+/**
+ * Parking disposes the emulator, so only a running session whose host keeps an exact screen copy
+ * (it answers queries while no view is attached, plan §8.9) may be parked. Absent means no.
+ */
+export function isRestorableTerminalSnapshot(snapshot: TerminalSessionSnapshot): boolean {
+  return (
+    snapshot.restorable === true &&
+    snapshot.screenSource === "host" &&
+    // A trimmed history is a tail, never an exact copy of the screen.
+    snapshot.historyTrimmed !== true &&
+    snapshot.status === "running" &&
+    snapshot.pid !== null
+  );
+}
+
 export function hasCurrentTerminalBaseline(
   snapshot: TerminalSessionSnapshot,
   localUpdatedAt: string | null,

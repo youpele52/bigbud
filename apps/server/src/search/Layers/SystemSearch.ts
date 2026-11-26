@@ -13,13 +13,14 @@ import { RemoteAgentWorkspaceClient } from "../../remote-agent/remoteAgentWorksp
 import { remoteAgentRequestDigest } from "../../remote-agent/remoteAgentRequestDigest.ts";
 import { workspaceHandle } from "../../workspace-runtime/Layers/WorkspaceRuntime.remote.ts";
 import { LocalWorkspaceAgent } from "../../workspace-runtime/Services/LocalWorkspaceAgent.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { SearchAgentConnections } from "../Services/SearchAgentConnections.ts";
 import { SystemSearch } from "../Services/SystemSearch.ts";
 import { SearchAgentConnectionsLive } from "./SearchAgentConnections.ts";
 import { SystemSearchEmitter } from "../SystemSearch.emitter.ts";
-import { runOsIndexSearch } from "../SystemSearch.osIndex.ts";
+import { osIndexMaxResults, runOsIndexSearch } from "../SystemSearch.osIndex.ts";
 import { isThisComputerSearchAllowedByPolicy } from "../SystemSearch.policy.ts";
 import { planSearchRoots } from "../SystemSearch.roots.ts";
 import { makeSearchRootsQuery } from "../SystemSearch.rootsQuery.ts";
@@ -94,6 +95,7 @@ export const makeSystemSearchLayer = Layer.effect(
               (update) => Queue.offerUnsafe(queue, update),
               SYSTEM_SEARCH_MAX_ROWS * (page + 1),
               input.mode === "fileNames",
+              { thisComputer: osIndexMaxResults(page) },
             );
             const signal = controller.signal;
             yield* Effect.promise(() =>
@@ -116,6 +118,9 @@ export const makeSystemSearchLayer = Layer.effect(
                       },
                       localConnection: deps.localConnection,
                       home: homedir(),
+                      projectRoots: [...known.projects, ...known.worktrees]
+                        .filter((root) => isLocalExecutionTarget(root.executionTargetId))
+                        .map((root) => root.root),
                       query: input.query,
                       emitter,
                       signal,

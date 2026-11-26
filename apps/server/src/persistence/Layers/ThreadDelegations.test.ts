@@ -77,4 +77,39 @@ layer("ThreadDelegationRepository", (it) => {
       }
     }),
   );
+
+  it.effect("atomically returns the first claimed result to competing callers", () =>
+    Effect.gen(function* () {
+      const repository = yield* ThreadDelegationRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const input = {
+        ...reservation,
+        callerThreadId: ThreadId.makeUnsafe("competing-caller"),
+        delegationId: "competing-delegation",
+        rootDelegationId: "competing-delegation",
+        childThreadId: ThreadId.makeUnsafe("competing-child"),
+      };
+      yield* insertProjectionThreadParent({ sql, threadId: input.callerThreadId });
+      yield* repository.reserve(input);
+      const candidates = [
+        JSON.stringify({ inheritedModelSelection: "one" }),
+        JSON.stringify({ modelDecision: "two" }),
+      ];
+      const claimed = yield* Effect.forEach(
+        candidates,
+        (resultJson) =>
+          repository.claimResult({
+            delegationId: input.delegationId,
+            resultJson,
+            updatedAt: reservation.updatedAt,
+          }),
+        { concurrency: "unbounded" },
+      );
+      assert.include(candidates, claimed[0]);
+      assert.equal(claimed[0], claimed[1]);
+      const stored = yield* repository.getByInvocation(input);
+      assert(stored._tag === "Some");
+      assert.equal(stored.value.resultJson, claimed[0]);
+    }),
+  );
 });

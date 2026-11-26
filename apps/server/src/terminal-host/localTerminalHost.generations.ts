@@ -1,0 +1,227 @@
+/**
+ * Controls over every attached local host generation (plan §7.3 item 4, §14). The admitted
+ * generation takes new terminals, but a draining generation still runs managed PTYs: quit
+ * close-all, policy and inventory must reach it too. Nothing here launches or kills a host;
+ * "Close them" signals only a start-time-verified PID through the controller.
+ *
+ * @module localTerminalHost.generations
+ */
+import type {
+  RemoteAgentConnectionPool,
+  RemoteAgentRuntimeBinding,
+} from "../remote-agent/remoteAgentConnectionPool.ts";
+import { REMOTE_AGENT_TERMINAL_LIFECYCLE_CAPABILITY } from "../remote-agent/remoteAgentProtocol.ptyLifecycle.ts";
+import { RemoteAgentPtyInventory } from "../remote-agent/remoteAgentPtyInventory.ts";
+import { makeRemoteAgentHostControls } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
+import { requestRemoteAgentScreenSnapshot } from "../remote-agent/remoteAgentPtyClient.screen.ts";
+import {
+  reachableHostInventoryEntries,
+  type OwnedPtyHostGenerationInventory,
+  type OwnedPtyHostGenerationReplay,
+  type OwnedPtyHostGenerations,
+  type OwnedPtyHostInventoryEntry,
+} from "../terminal/Services/OwnedPtyRuntime.ts";
+import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
+import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
+
+type Pool = Pick<RemoteAgentConnectionPool, "getBound">;
+
+/** Live notices persist the cursor this long after the first unsaved one. */
+export const LIVE_NOTICE_PERSIST_DELAY_MS = 1_000;
+
+const connectionIdOf = (binding: RemoteAgentRuntimeBinding) =>
+  binding.connectionId ?? binding.runtime.generation;
+
+export function makeLocalTerminalHostGenerations(input: {
+  readonly controller: LocalTerminalHostController;
+  readonly pool: Pool;
+  readonly log?: (message: string, detail?: Record<string, unknown>) => void;
+}): OwnedPtyHostGenerations {
+  const { controller, pool } = input;
+  const connect = (binding: RemoteAgentRuntimeBinding) =>
+    pool.getBound(LOCAL_TERMINAL_HOST_TARGET_ID, binding, ["terminal.pty"]);
+  const controls = (binding: RemoteAgentRuntimeBinding) =>
+    makeRemoteAgentHostControls(() => connect(binding));
+  const lifecycleBindings = async () => {
+    const bindings = await controller.attachedBindings();
+    const capable: RemoteAgentRuntimeBinding[] = [];
+    for (const entry of bindings) {
+      const connection = await connect(entry.binding).catch(() => undefined);
+      if (connection?.supportsCapability?.(REMOTE_AGENT_TERMINAL_LIFECYCLE_CAPABILITY))
+        capable.push(entry.binding);
+    }
+    return capable;
+  };
+
+  const inventory: OwnedPtyHostGenerations["inventory"] = async (signal) => {
+    const reader = new RemoteAgentPtyInventory(pool);
+    const results: OwnedPtyHostGenerationInventory[] = [];
+    for (const { binding } of await controller.attachedBindings()) {
+      const connectionId = connectionIdOf(binding);
+      const { expectedEpoch } = binding;
+      let listed: Awaited<ReturnType<RemoteAgentPtyInventory["list"]>>;
+      try {
+        listed = await reader.list(LOCAL_TERMINAL_HOST_TARGET_ID, binding, signal);
+      } catch (cause) {
+        input.log?.("A terminal host generation's inventory is unavailable.", {
+          connectionId,
+          cause: String(cause),
+        });
+        results.push({ status: "unreachable", connectionId, expectedEpoch, cause: String(cause) });
+        continue;
+      }
+      const entries: OwnedPtyHostInventoryEntry[] = [];
+      for (const entry of listed)
+        entries.push({
+          ptyId: entry.ptyId,
+          connectionId,
+          state: entry.state,
+          lost: entry.lost === true,
+          ...(entry.activityState ? { activityState: entry.activityState } : {}),
+          ...(entry.lastUsedMs ? { lastUsedMs: entry.lastUsedMs } : {}),
+          lifecycleManaged: entry.lifecycleManaged === true,
+          ...(entry.verifiedExit ? { verifiedExit: true } : {}),
+        });
+      results.push({ status: "ok", connectionId, expectedEpoch, entries });
+    }
+    return results;
+  };
+
+  let seenNoticeId = 0;
+  let seenTimer: ReturnType<typeof setTimeout> | undefined;
+  const persistSeenNotice = async () => {
+    seenTimer = undefined;
+    const noticeId = seenNoticeId;
+    // Reset per flush: a later host epoch numbers its notices from 1 again.
+    seenNoticeId = 0;
+    const admitted = (await controller.attachedBindings()).find((entry) => entry.admitted);
+    if (!admitted) return;
+    const cursor = await controller.readNoticeCursor(admitted.generation);
+    // Without a cursor in this epoch the replay sets the baseline; never skip unseen notices.
+    if (cursor?.epoch !== admitted.binding.expectedEpoch || noticeId <= cursor.noticeId) return;
+    await controller.writeNoticeCursor(admitted.generation, { epoch: cursor.epoch, noticeId });
+  };
+
+  return {
+    recordSeenNotice: (noticeId) => {
+      if (!Number.isSafeInteger(noticeId) || noticeId <= 0) return;
+      seenNoticeId = Math.max(seenNoticeId, noticeId);
+      if (seenTimer) return;
+      seenTimer = setTimeout(() => {
+        void persistSeenNotice().catch((cause: unknown) =>
+          input.log?.("The terminal host notice cursor was not saved.", { cause: String(cause) }),
+        );
+      }, LIVE_NOTICE_PERSIST_DELAY_MS);
+      seenTimer.unref?.();
+    },
+    ready: async () => {
+      await controller.ready().catch(() => undefined);
+    },
+    admittedKey: async () => {
+      const binding = await controller.currentAdmittedBinding();
+      return binding ? `${connectionIdOf(binding)}:${binding.expectedEpoch}` : undefined;
+    },
+    inventory,
+    updatePolicy: async (policy, signal) => {
+      const results = await Promise.allSettled(
+        (await lifecycleBindings()).map((binding) =>
+          controls(binding).updatePolicy(policy, signal),
+        ),
+      );
+      for (const result of results)
+        if (result.status === "rejected")
+          input.log?.("A terminal host generation refused the lifecycle policy.", {
+            cause: String(result.reason),
+          });
+    },
+    closeAll: async (request, signal) => {
+      const bindings = await controller.attachedBindings();
+      const results = await Promise.allSettled(
+        bindings.map((entry) => controls(entry.binding).closeAll(request, signal)),
+      );
+      let closed = 0;
+      let unreachable = 0;
+      for (const result of results)
+        if (result.status === "fulfilled") closed += result.value;
+        else unreachable += 1;
+      return { closed, unreachable };
+    },
+    coldSnapshot: async (ptyId, request) => {
+      const owner = reachableHostInventoryEntries(await inventory(request.signal)).find(
+        (entry) => entry.ptyId === ptyId,
+      );
+      const bindings = await controller.attachedBindings();
+      const binding = bindings.find(
+        (entry) => owner && connectionIdOf(entry.binding) === owner.connectionId,
+      )?.binding;
+      if (!binding) throw new Error("No terminal host still knows this terminal.");
+      return requestRemoteAgentScreenSnapshot(await connect(binding), ptyId, request);
+    },
+    drainingNotices: () => controller.notices(),
+    replayNotices: async (signal) => {
+      const results: OwnedPtyHostGenerationReplay[] = [];
+      for (const { generation, binding } of await controller.attachedBindings()) {
+        try {
+          const cursor = await controller.readNoticeCursor(generation);
+          const sameEpoch = cursor?.epoch === binding.expectedEpoch;
+          const after = sameEpoch ? cursor.noticeId : 0;
+          const replay = await controls(binding).replayNotices(
+            { expectedEpoch: binding.expectedEpoch, afterNoticeId: after },
+            signal,
+          );
+          // A host on another epoch numbers notices afresh; its ids never compare with ours.
+          const epochChanged = replay.agentEpoch !== binding.expectedEpoch;
+          const notices = epochChanged
+            ? []
+            : replay.notices.filter((notice) => notice.noticeId > after);
+          const lastNoticeId = notices.reduce(
+            (newest, notice) => Math.max(newest, notice.noticeId),
+            epochChanged ? 0 : after,
+          );
+          if (!sameEpoch || lastNoticeId !== after || epochChanged)
+            await controller.writeNoticeCursor(generation, {
+              epoch: replay.agentEpoch,
+              noticeId: lastNoticeId,
+            });
+          results.push({
+            generation,
+            agentEpoch: replay.agentEpoch,
+            notices,
+            gap: replay.gap,
+            baseline: cursor === undefined,
+            lastNoticeId,
+          });
+        } catch (cause) {
+          // An old host (no terminal.lifecycle) or a refused replay: nothing to summarize.
+          input.log?.("A terminal host generation's notice replay is unavailable.", {
+            generation,
+            cause: String(cause),
+          });
+        }
+      }
+      return results;
+    },
+    closeDrainingHosts: async () => {
+      let closed = 0;
+      let remaining = 0;
+      for (const notice of controller.notices()) {
+        if (!notice.canClose) {
+          remaining += 1;
+          continue;
+        }
+        try {
+          await controller.closeDrainingHost(notice.generation);
+        } catch (cause) {
+          input.log?.("An old terminal host was left running.", {
+            generation: notice.generation,
+            cause: String(cause),
+          });
+        }
+        if (controller.notices().some((entry) => entry.generation === notice.generation))
+          remaining += 1;
+        else closed += 1;
+      }
+      return { closed, remaining };
+    },
+  };
+}

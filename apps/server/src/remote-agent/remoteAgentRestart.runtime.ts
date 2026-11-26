@@ -1,14 +1,8 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { retireRestartAdmissions } from "./remoteAgentRestart.registry.ts";
 import { remoteAgentRestartAttemptId } from "./remoteAgentRestart.identity.ts";
-import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
 
 import { openRemoteAgentControl } from "./remoteAgentControl.ts";
-import { buildRemoteAgentSupervisorRestartCommand } from "./remoteAgentSupervisor.ts";
-import {
-  buildManagedRemoteAgentReplacementLaunch,
-  buildRemoteAgentReplacementDeathEvidence,
-  buildRemoteAgentReplacementReadiness,
-} from "./remoteAgentRuntime.launch.ts";
 import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import type {
@@ -170,7 +164,12 @@ export async function restartRemoteAgentRuntime(
   const completeRestart = async (): Promise<RemoteAgentRuntimeRestartRecord> => {
     if (prior?.phase === "stopping" || prior?.phase === "starting") {
       const ready = (
-        await control.run(buildRemoteAgentReplacementReadiness(runtime, attemptId))
+        await runRemoteAgentControlOp(control, {
+          kind: "supervisorObserve",
+          mode: "replacementReadiness",
+          runtime,
+          attemptId,
+        })
       ).trim();
       const epoch =
         ready === "ready" && dependencies.verifyReadiness
@@ -232,10 +231,12 @@ export async function restartRemoteAgentRuntime(
         ),
       }));
       const observation = (
-        await control.run(`set -eu
-${buildRemoteAgentSupervisorObservation(runtime, previousAttempt)}
-observe_supervisor
-`)
+        await runRemoteAgentControlOp(control, {
+          kind: "supervisorObserve",
+          mode: "raw",
+          runtime,
+          attemptId: previousAttempt,
+        })
       ).trim();
       if (observation === "live" || observation === "ready") {
         if (dependencies.stopLiveSupervisor === false)
@@ -243,12 +244,7 @@ observe_supervisor
             "A live supervisor was not stopped during account boot; retry adoption or repair transport.",
           );
         try {
-          await control.run(
-            buildRemoteAgentSupervisorRestartCommand({
-              binaryPath: runtime.binaryPath,
-              statePath: runtime.statePath,
-            }),
-          );
+          await runRemoteAgentControlOp(control, { kind: "supervisorRestart", runtime });
         } catch {
           // A disconnected stop is safe only if the following independent proof confirms death.
         }
@@ -256,7 +252,12 @@ observe_supervisor
         throw new Error("The old supervisor has no verified live or dead identity.");
       }
       const deathEvidence = (
-        await control.run(buildRemoteAgentReplacementDeathEvidence(runtime, previousAttempt))
+        await runRemoteAgentControlOp(control, {
+          kind: "supervisorObserve",
+          mode: "replacementDeath",
+          runtime,
+          attemptId: previousAttempt,
+        })
       ).trim();
       if (deathEvidence !== "dead" && deathEvidence !== "prior-boot-dead")
         throw new Error("The old supervisor did not provide verified death evidence.");
@@ -294,14 +295,23 @@ observe_supervisor
     const launchResult = (
       await (dependencies.launchReplacement
         ? dependencies.launchReplacement(runtime, attemptId, oldEpoch, previousAttempt)
-        : control.run(
-            buildManagedRemoteAgentReplacementLaunch(runtime, attemptId, oldEpoch, previousAttempt),
-          ))
+        : runRemoteAgentControlOp(control, {
+            kind: "replacementLaunch",
+            runtime,
+            attemptId,
+            oldEpoch,
+            oldAttemptId: previousAttempt,
+          }))
     ).trim();
     if (launchResult !== "launch-reserved")
       throw new Error("Replacement launch reservation was not acquired.");
     const readiness = (
-      await control.run(buildRemoteAgentReplacementReadiness(runtime, attemptId))
+      await runRemoteAgentControlOp(control, {
+        kind: "supervisorObserve",
+        mode: "replacementReadiness",
+        runtime,
+        attemptId,
+      })
     ).trim();
     if (readiness !== "ready")
       throw new Error(`Replacement readiness was not verified (${readiness}).`);

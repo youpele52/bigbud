@@ -9,11 +9,13 @@ import { TerminalCwdError, TerminalSessionLookupError } from "../Services/Manage
 import {
   deleteAllHistoryForThread as ioDeleteAllHistoryForThread,
   deleteHistory as ioDeleteHistory,
+  listHistoryTerminalIds,
   readHistory as ioReadHistory,
   historyPath,
   legacyHistoryPath,
 } from "./Manager.history-io";
 import { toSessionKey } from "./Manager.shell";
+import { listHistoryFileNames, removeHistoryFile } from "./Manager.history.orphans";
 import { type TerminalManagerState, type TerminalSessionState } from "./Manager.types";
 
 export const makeManagerStateAccessors = (
@@ -101,8 +103,23 @@ export const makeHistoryAccessors = (input: {
     ioDeleteHistory(input.logsDir, threadId, terminalId).pipe(
       Effect.provideService(FileSystem.FileSystem, input.fileSystem),
     ),
-  deleteAllHistoryForThread: (threadId: string): Effect.Effect<void> =>
-    ioDeleteAllHistoryForThread(input.logsDir, threadId).pipe(
+  deleteAllHistoryForThread: (
+    threadId: string,
+    retainedTerminalIds?: ReadonlySet<string>,
+  ): Effect.Effect<void> =>
+    ioDeleteAllHistoryForThread(input.logsDir, threadId, retainedTerminalIds).pipe(
+      Effect.provideService(FileSystem.FileSystem, input.fileSystem),
+    ),
+  historyTerminalIdsForThread: (threadId: string) =>
+    listHistoryTerminalIds(input.logsDir, threadId).pipe(
+      Effect.provideService(FileSystem.FileSystem, input.fileSystem),
+    ),
+  historyFileNames: () =>
+    listHistoryFileNames(input.logsDir).pipe(
+      Effect.provideService(FileSystem.FileSystem, input.fileSystem),
+    ),
+  removeHistoryFile: (name: string) =>
+    removeHistoryFile(input.logsDir, name).pipe(
       Effect.provideService(FileSystem.FileSystem, input.fileSystem),
     ),
 });

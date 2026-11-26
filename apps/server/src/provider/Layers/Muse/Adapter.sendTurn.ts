@@ -1,3 +1,7 @@
+import {
+  holdUndispatchedInteraction,
+  refusePendingInteractions,
+} from "../../pendingInteractionAdmission.ts";
 import type { ProviderTurnAdmission } from "@bigbud/contracts/orchestration/providerTurnAdmission.ts";
 import type { TurnId } from "@bigbud/contracts";
 import { Effect, Option, Schema } from "effect";
@@ -79,8 +83,33 @@ export const makeMuseSendTurn = (ctx: MuseAdapterContext): MuseAdapterShape["sen
       });
       (session as { model: string }).model = requested.model;
     }
+    const pendingRefusal = () =>
+      refusePendingInteractions({
+        provider: "muse",
+        sessionEpoch: session.sessionEpoch,
+        approvals: session.pendingApprovals,
+        userInputs: session.pendingUserInputs,
+        nativeRequestIds: true,
+      });
+    const refusal = pendingRefusal();
+    if (refusal) return yield* refusal;
     const text = input.input;
-    const cid = session.transport.mintCommandId();
+    const existing =
+      ctx.deps.admissions && input.requestMessageId
+        ? yield* ctx.deps.admissions
+            .find({
+              namespace: "foreground",
+              ownerThreadId: input.threadId,
+              requestMessageId: input.requestMessageId,
+            })
+            .pipe(
+              Effect.mapError((e) => mapMuseRequestError("admissions.find", e, "unsafe-to-replay")),
+            )
+        : undefined;
+    const cid =
+      existing?.state === "reserved"
+        ? existing.nativeAdmissionId
+        : session.transport.mintCommandId();
     const lifecycle = {
       observed: new Map<string, "started" | "completed" | "failed" | "interrupted">(),
       overflow: false,
@@ -133,9 +162,12 @@ export const makeMuseSendTurn = (ctx: MuseAdapterContext): MuseAdapterShape["sen
           );
         session.journalTurns.set(cid, journalRow);
       }
+      let localRefusal: ReturnType<typeof pendingRefusal>;
       const ackResult = yield* Effect.tryPromise({
-        try: () =>
-          session.transport.command(
+        try: () => {
+          localRefusal = pendingRefusal();
+          if (localRefusal) return Promise.reject(localRefusal);
+          return session.transport.command(
             "turn/start",
             {
               commandId: cid,
@@ -144,10 +176,29 @@ export const makeMuseSendTurn = (ctx: MuseAdapterContext): MuseAdapterShape["sen
               ...(effort ? { reasoningEffort: effort } : {}),
             },
             cid,
-          ),
+          );
+        },
         catch: (error) => mapMuseRequestError("turn/start", error, "unsafe-to-replay"),
       }).pipe(Effect.result);
       if (ackResult._tag === "Failure") {
+        if (localRefusal) {
+          const journal = ctx.deps.admissions;
+          if (!journal || !journalRow) return yield* localRefusal;
+          if (!journal.reopenUndispatchedIntent) {
+            yield* advanceMuseJournal(journal, journalRow, "refused");
+            session.journalTurns.delete(cid);
+            return yield* holdUndispatchedInteraction("muse", session.sessionEpoch);
+          }
+          yield* journal
+            .reopenUndispatchedIntent(journalRow, new Date().toISOString())
+            .pipe(
+              Effect.mapError((e) =>
+                mapMuseRequestError("admissions.reopenUndispatchedIntent", e, "unsafe-to-replay"),
+              ),
+            );
+          session.journalTurns.delete(cid);
+          return yield* localRefusal;
+        }
         const error = getMuseFailureEvidence(ackResult.failure);
         const proven = isProvenNativeRefusal(error);
         if (proven && ctx.deps.admissions && journalRow) {

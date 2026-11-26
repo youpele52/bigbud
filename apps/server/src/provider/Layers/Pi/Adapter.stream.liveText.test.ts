@@ -173,6 +173,8 @@ describe("PiAdapter stream integration — live text projection", () => {
     const session: ActivePiSession = {
       process: {
         child: {} as never,
+        isAlive: () => true,
+        onExit: () => () => undefined,
         command: "pi",
         args: [],
         stderrTail: () => "",

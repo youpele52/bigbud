@@ -41,7 +41,7 @@ it.layer(NodeServices.layer)("terminal shell startup evidence", (it) => {
         expect(first.stateDir).toBe(stateDir);
         expect(first.terminalShellInstallEvidence).toBe("fresh");
         expect(yield* fs.exists(path.join(baseDir, "unused"))).toBe(false);
-        const second = yield* resolve({ T3CODE_HOME: baseDir });
+        const second = yield* resolve({ BIGBUD_HOME: baseDir });
         expect(second.stateDir).toBe(stateDir);
         expect(second.terminalShellInstallEvidence).toBe("existing-or-uncertain");
         expect(yield* fs.exists(first.settingsPath)).toBe(false);

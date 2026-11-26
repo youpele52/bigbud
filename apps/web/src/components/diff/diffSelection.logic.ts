@@ -13,7 +13,6 @@ import { resolveDiffSelectionFromPierreLineRange } from "./diffSelection.logic.p
 export { resolveDiffSelectionFromVisualLine } from "./diffSelection.logic.pierre";
 
 export {
-  DIFF_ANNOTATION_HEADER,
   normalizeDiffLineRange,
   parseDiffLineNumber,
   resolveDiffContextMenuTarget,
@@ -45,6 +44,7 @@ export function resolveDiffSelectionFromContextMenu(input: {
   if (selectedText.length > 0) {
     const fileDiff = input.fileDiffByPath.get(filePath);
     const fromDom = resolveDiffSelectionFromDom(input.selection, {
+      event: input.event,
       filePathHint: filePath,
       ...(fileDiff ? { fileDiff } : {}),
     });

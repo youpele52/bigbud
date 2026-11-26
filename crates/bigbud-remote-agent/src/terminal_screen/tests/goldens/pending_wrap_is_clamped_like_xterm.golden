@@ -1,0 +1,44 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [4,5],
+    "cursorHidden": false,
+    "screen": [
+      [["f",1,"default","default",0],["g",1,"default","default",0],["h",1,"default","default",0],["i",1,"default","default",0],["j",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["K",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["l",1,"default","default",0],["m",1,"default","default",0],["n",1,"default","default",0],["o",1,"default","default",0],["p",1,"default","default",0]],
+      [["Q",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["Z",1,"default","default",0]],
+      [["q",1,"default","default",0],["r",1,"default","default",0],["s",1,"default","default",0],["t",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": [
+      [["a",1,"default","default",0],["b",1,"default","default",0],["c",1,"default","default",0],["X",1,"default","default",0],["e",1,"default","default",0]]
+    ]
+  },
+  "fixture": "pending_wrap_is_clamped_like_xterm",
+  "geometry": {
+    "cols": 5,
+    "rows": 6,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcabcXe\r\nfghij\r\n\u001b[4CK\r\n\r\nlmnopQ\u001b[3X\u001b[3CZ\r\nqrst\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[5;5HZ\u001b[?25h",
+    "cols": 5,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 6,
+    "scrollbackRows": 1,
+    "sha256": "f2984ae2bacf58c5f04c189a07fa1bf0abd5156ec7a9a79bcfe7b832d58fd5be",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "abcde\bX\r\nfghij\nK\r\n\r\nlmnop\tQ\r\nqrstu\u001b[X\u001b[AZ"
+    }
+  ]
+}

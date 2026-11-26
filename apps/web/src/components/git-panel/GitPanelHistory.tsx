@@ -1,3 +1,4 @@
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import type {
   GitCommitSummary,
   GitGetCommitDetailsResult,
@@ -29,6 +30,9 @@ interface GitPanelHistoryProps {
   onSelectCommit: (sha: string) => void;
   selectedCommitSummary: GitCommitSummary | null;
   selectedCommitSha: string | null;
+  /** The repository folder commit patch paths are relative to. */
+  workspaceRoot: string;
+  executionTargetId?: ExecutionTargetId | undefined;
 }
 
 export function GitPanelHistory({
@@ -44,6 +48,8 @@ export function GitPanelHistory({
   onSelectCommit,
   selectedCommitSummary,
   selectedCommitSha,
+  workspaceRoot,
+  executionTargetId,
 }: GitPanelHistoryProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const detailContainerRef = useRef<HTMLDivElement>(null);
@@ -258,6 +264,8 @@ export function GitPanelHistory({
             <GitPatchViewer
               emptyLabel="No patch available for this commit."
               patch={commitDetails.diff}
+              workspaceRoot={workspaceRoot}
+              executionTargetId={executionTargetId}
             />
           </div>
         ) : (

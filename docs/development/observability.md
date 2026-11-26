@@ -104,8 +104,6 @@ export BIGBUD_OTLP_METRICS_URL=http://localhost:4318/v1/metrics
 export BIGBUD_OTLP_SERVICE_NAME=bigbud-local
 ```
 
-Legacy `T3CODE_OTLP_*` environment aliases remain supported.
-
 Optional:
 
 ```bash
@@ -508,8 +506,6 @@ OTLP export:
 - `BIGBUD_OTLP_METRICS_URL`: OTLP metric endpoint
 - `BIGBUD_OTLP_EXPORT_INTERVAL_MS`: export interval, default `10000`
 - `BIGBUD_OTLP_SERVICE_NAME`: service name, default `bigbud-server`
-
-Legacy `T3CODE_*` env vars remain supported during the compatibility migration.
 
 If the OTLP URLs are unset, local tracing still works and metrics stay in-process only.
 

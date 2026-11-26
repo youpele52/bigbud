@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 const root = fileURLToPath(new URL("../src/provider/Layers/OpencodeV2/", import.meta.url));
 const output = path.join(root, "Orchestration.implementation.manifest.generated.ts");
 const common = ["Orchestration.implementation.types.ts", "Orchestration.plugin.specs.ts"];
-const closures = {
+const retainedClosures = {
   v1: [...common, "Orchestration.implementation.v1.ts"],
   v2: [...common, "Orchestration.implementation.v1.ts", "Orchestration.implementation.v2.ts"],
   v3: [
@@ -36,6 +36,15 @@ const closures = {
     "Orchestration.plugin.specs.v5.ts",
   ],
 } as const;
+const closures = {
+  ...retainedClosures,
+  v6: [
+    ...retainedClosures.v5,
+    "Orchestration.implementation.types.v6.ts",
+    "Orchestration.implementation.v6.ts",
+    "Orchestration.plugin.specs.v6.ts",
+  ],
+} as const;
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const schemaDigest = sha(await readFile(path.join(root, "Orchestration.plugin.specs.ts"), "utf8"));
 const descriptor = {
@@ -48,16 +57,20 @@ const descriptor = {
 const entries: Record<string, unknown> = {};
 for (const [version, modules] of Object.entries(closures)) {
   const versionDescriptor =
-    version === "v5"
+    version === "v5" || version === "v6"
       ? {
           ...descriptor,
-          bootstrapAbi: "bigbud.thread.bootstrap.v5",
-          canonicalRequestAbi: "bigbud.thread.canonical.v3",
+          bootstrapAbi: `bigbud.thread.bootstrap.${version}`,
+          canonicalRequestAbi:
+            version === "v6" ? "bigbud.thread.canonical.v4" : "bigbud.thread.canonical.v3",
           schemaDigest: sha(
             JSON.stringify([
               schemaDigest,
               sha(await readFile(path.join(root, "Orchestration.plugin.specs.v4.ts"), "utf8")),
               sha(await readFile(path.join(root, "Orchestration.plugin.specs.v5.ts"), "utf8")),
+              ...(version === "v6"
+                ? [sha(await readFile(path.join(root, "Orchestration.plugin.specs.v6.ts"), "utf8"))]
+                : []),
             ]),
           ),
         }

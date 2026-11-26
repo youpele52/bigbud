@@ -88,8 +88,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       yield* manager.open(
         openInput({
           env: {
-            T3CODE_PROJECT_ROOT: "/repo",
-            T3CODE_WORKTREE_PATH: "/repo/worktree-a",
+            BIGBUD_PROJECT_ROOT: "/repo",
+            BIGBUD_WORKTREE_PATH: "/repo/worktree-a",
             CUSTOM_FLAG: "1",
           },
         }),
@@ -98,8 +98,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       expect(spawnInput).toBeDefined();
       if (!spawnInput) return;
 
-      assert.equal(spawnInput.env.T3CODE_PROJECT_ROOT, "/repo");
-      assert.equal(spawnInput.env.T3CODE_WORKTREE_PATH, "/repo/worktree-a");
+      assert.equal(spawnInput.env.BIGBUD_PROJECT_ROOT, "/repo");
+      assert.equal(spawnInput.env.BIGBUD_WORKTREE_PATH, "/repo/worktree-a");
       assert.equal(spawnInput.env.CUSTOM_FLAG, "1");
     }),
   );

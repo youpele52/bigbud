@@ -42,6 +42,14 @@ function appearanceRows(): SettingRow[] {
   return sections[0]!.props.children;
 }
 
+function sectionsOf(html: string) {
+  return [...html.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(([section]) => ({
+    markup: section,
+    title: section.match(/<h2\b[^>]*>(.*?)<\/h2>/)?.[1],
+    rows: [...section.matchAll(/<h3\b[^>]*>(.*?)<\/h3>/g)].map((match) => match[1]),
+  }));
+}
+
 describe("GeneralSettingsPanel terminal group", () => {
   beforeEach(() => {
     mock.settings = { ...DEFAULT_UNIFIED_SETTINGS };
@@ -51,12 +59,6 @@ describe("GeneralSettingsPanel terminal group", () => {
   it("keeps General free of terminal settings, which live on their own page", () => {
     const markup = renderToStaticMarkup(<GeneralSettingsPanel />);
     const terminalMarkup = renderToStaticMarkup(<TerminalSettingsPanel />);
-    const sectionsOf = (html: string) =>
-      [...html.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(([section]) => ({
-        markup: section,
-        title: section.match(/<h2\b[^>]*>(.*?)<\/h2>/)?.[1],
-        rows: [...section.matchAll(/<h3\b[^>]*>(.*?)<\/h3>/g)].map((match) => match[1]),
-      }));
     const sections = sectionsOf(markup);
     const terminalSections = sectionsOf(terminalMarkup);
 
@@ -70,6 +72,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(terminalSections.map(({ title }) => title)).toEqual([
       "Appearance",
       "Shell",
+      "Running terminals",
       "Scrolling",
       "Paste",
       "Agent activity",
@@ -91,7 +94,6 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Move older threads to Done",
       "Older than",
     ]);
-    expect(sections[3]?.rows).toEqual(["Default agent browser", "Default search engine"]);
     expect(terminalSections.map(({ rows }) => rows)).toEqual([
       [
         "Terminal font",
@@ -103,6 +105,7 @@ describe("GeneralSettingsPanel terminal group", () => {
         "Terminal GPU rendering",
       ],
       ["Default shell profile", "Terminal history suggestions"],
+      ["Run terminals in the background host (preview)", "Keep terminals running after quitting"],
       ["Terminal scroll speed", "Terminal fast scroll speed", "Full-screen app scroll speed"],
       ["Largest pasted file", "Clipboard requests from terminal programs"],
       ["Detect when terminal agents finish", "Terminal agent hooks"],
@@ -125,6 +128,16 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(mock.updateSettings).not.toHaveBeenCalled();
   });
 
+  it("shows the browser tab limit alongside the existing Browser settings in General", () => {
+    const markup = renderToStaticMarkup(<GeneralSettingsPanel />);
+    const browserSection = sectionsOf(markup).find(({ title }) => title === "Browser");
+    expect(browserSection?.rows).toEqual([
+      "Default agent browser",
+      "Default search engine",
+      "Maximum browser tabs",
+    ]);
+  });
+
   it("saves valid search engines and resets to DuckDuckGo", () => {
     const row = (BrowserSettingsSection().props.children as SettingRow[])[1]!;
     expect(row.props.control.props.value).toBe("duckduckgo");
@@ -140,6 +153,23 @@ describe("GeneralSettingsPanel terminal group", () => {
     const changedRow = (BrowserSettingsSection().props.children as SettingRow[])[1]!;
     changedRow.props.resetAction!.props.onClick();
     expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserSearchEngine: "duckduckgo" });
+  });
+
+  it("saves valid browser tab limits as numbers and resets to five", () => {
+    const row = (BrowserSettingsSection().props.children as SettingRow[])[2]!;
+    expect(row.props.control.props.value).toBe("5");
+    expect(row.props.resetAction).toBeNull();
+    for (const value of ["3", "20"]) {
+      row.props.control.props.onValueChange(value);
+      expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserTabLimit: Number(value) });
+    }
+    mock.updateSettings.mockClear();
+    for (const value of ["", "2", "5.5", "21"]) row.props.control.props.onValueChange(value);
+    expect(mock.updateSettings).not.toHaveBeenCalled();
+    mock.settings = { ...mock.settings, browserTabLimit: 20 };
+    const changedRow = (BrowserSettingsSection().props.children as SettingRow[])[2]!;
+    changedRow.props.resetAction!.props.onClick();
+    expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserTabLimit: 5 });
   });
 
   it("keeps the font defaults, accepted options, validation, and reset behavior", () => {

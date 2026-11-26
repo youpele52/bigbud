@@ -1,3 +1,4 @@
+import type { CloseTerminalHandler } from "./terminalCloseGuard";
 import {
   normalizeTerminalSplitLayout,
   terminalSplitBounds,
@@ -28,7 +29,7 @@ interface ThreadTerminalDrawerViewportProps {
   drawerHeight: number;
   keybindings: ResolvedKeybindingsConfig;
   onActiveTerminalChange: (terminalId: string) => void;
-  onCloseTerminal: (terminalId: string) => void;
+  onCloseTerminal: CloseTerminalHandler;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
 }
 
@@ -96,7 +97,7 @@ export function ThreadTerminalDrawerViewport({
                 <TerminalViewport
                   terminalId={terminalId}
                   terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
-                  onSessionExited={() => onCloseTerminal(terminalId)}
+                  onSessionExited={() => onCloseTerminal(terminalId, { exited: true })}
                   autoFocus={visible && terminalId === resolvedActiveTerminalId}
                   {...sharedProps}
                 />
@@ -117,7 +118,7 @@ export function ThreadTerminalDrawerViewport({
         <TerminalViewport
           terminalId={resolvedActiveTerminalId}
           terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
-          onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
+          onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId, { exited: true })}
           autoFocus={visible}
           {...sharedProps}
         />

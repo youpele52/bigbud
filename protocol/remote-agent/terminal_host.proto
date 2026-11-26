@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+// Build A X2 terminal-host retirement verbs (W3.3). A terminal host that
+// implements them advertises `terminal.host-retirement` v1. An older host does
+// not, and B must then require host exit instead of inferring retirement.
+//
+// The inventory is read-only and bounded. It names the host's exact PTY lease
+// (the `pty_id`) and never carries environment values, paths or secrets.
+
+message TerminalHostInventoryRequest {
+  string request_id = 1;
+  string expected_epoch = 2;
+  // 1..=64; larger values are refused, not clamped into an unbounded response.
+  uint32 max_panes = 3;
+}
+
+message TerminalHostPane {
+  string pty_id = 1;
+  // Application identity supplied by the host's creator; empty on a legacy create.
+  string thread_id = 2;
+  string pane_id = 3;
+  // "local" | "managed-ssh".
+  string kind = 4;
+  // The host's own artifact identity (agent version and build digest).
+  string owner_artifact_id = 5;
+  // The exact lease a retirement request must name; equal to pty_id today.
+  string lease_id = 6;
+  bool can_retire_ssh_spawn = 7;
+}
+
+message TerminalHostInventoryResponse {
+  string request_id = 1;
+  string agent_epoch = 2;
+  string agent_version = 3;
+  string build_digest = 4;
+  string owner_artifact_id = 5;
+  repeated TerminalHostPane panes = 6;
+  bool truncated = 7;
+  bool ssh_spawn_retirement_available = 8;
+  bool accepted = 9;
+  string error_code = 10;
+}
+
+// All-or-nothing: every listed lease must be an exact live managed-SSH pane of
+// this host. A foreign, tampered or non-SSH lease refuses the whole request.
+// After acceptance the host refuses to spawn any managed-SSH PTY but keeps
+// serving non-SSH panes.
+message TerminalHostRetireSshSpawnRequest {
+  string request_id = 1;
+  string expected_epoch = 2;
+  string expected_build_digest = 3;
+  repeated string lease_ids = 4;
+}
+
+message TerminalHostRetireSshSpawnResponse {
+  string request_id = 1;
+  string agent_epoch = 2;
+  bool accepted = 3;
+  repeated string retired_lease_ids = 4;
+  bool ssh_spawn_retired = 5;
+  string error_code = 6;
+  string error_message = 7;
+}

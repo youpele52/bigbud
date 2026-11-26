@@ -89,6 +89,7 @@
     "./server/threadRetention": "./src/server/threadRetention.ts",
     "./search/*": "./src/search/*",
     "./workspace/project": "./src/workspace/project.ts",
+    "./workspace/projectEntryMutation": "./src/workspace/projectEntryMutation.ts",
     "./workspace/*": "./src/workspace/*",
     "./server/*": "./src/server/*"
   },

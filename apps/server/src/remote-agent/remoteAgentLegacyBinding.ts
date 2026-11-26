@@ -1,3 +1,5 @@
+import { routeProductionRemoteAgentProxy } from "./remoteAgentConnection.owner.production.ts";
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { parseRemoteAgentCheckOutput } from "./remoteAgentIdentity.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
@@ -6,7 +8,6 @@ import {
   remoteAgentBuildId,
   remoteAgentRuntimeEqual,
 } from "./remoteAgentRuntime.ts";
-import { buildRemoteAgentRuntimeProbeCommand } from "./remoteAgentConnection.identity.ts";
 import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import { assertRemoteAgentRuntimeHello } from "./remoteAgentCompatibility.ts";
 import {
@@ -29,11 +30,14 @@ export async function observeLegacyRemoteAgentBinding(
   connect: (
     runtime: import("./remoteAgentRuntime.ts").RemoteAgentRuntime,
   ) => RemoteAgentConnection | Promise<RemoteAgentConnection> = (runtime) =>
-    RemoteAgentConnection.ssh({
-      executionTargetId: target,
-      runtime,
-      binaryPath: runtime.binaryPath,
-    }),
+    RemoteAgentConnection.ssh(
+      // U25: under production activation the owner proxies this pinned runtime.
+      routeProductionRemoteAgentProxy({
+        executionTargetId: target,
+        runtime,
+        binaryPath: runtime.binaryPath,
+      }),
+    ),
   historical:
     | {
         readonly artifact: RemoteAgentArtifact;
@@ -43,9 +47,10 @@ export async function observeLegacyRemoteAgentBinding(
   externalBinaryPath?: string,
 ): Promise<RemoteAgentRuntimeBinding | undefined> {
   if (historical) verifyRemoteAgentArtifactSignature(historical.artifact, historical.trustStore);
-  const output = await control.run(
-    buildRemoteAgentRuntimeProbeCommand(externalBinaryPath ?? "$HOME/.bigbud/agent/bin/current"),
-  );
+  const output = await runRemoteAgentControlOp(control, {
+    kind: "runtimeProbe",
+    binaryPath: externalBinaryPath ?? null,
+  });
   if (output.trim() === "missing") return undefined;
   const [binaryPath, sha256, ...checkLines] = output.trim().split("\n");
   const check = parseRemoteAgentCheckOutput(checkLines.join("\n"));

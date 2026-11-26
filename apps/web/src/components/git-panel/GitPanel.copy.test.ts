@@ -116,21 +116,53 @@ describe("GitPanel.copy", () => {
     expect(copyTextToClipboardMock).toHaveBeenCalledWith("Youpele Michael, Cursor");
   });
 
-  it("shows changed file copy actions and copies the filename", async () => {
+  it("shows discard actions, a divider, then copy actions and copies the filename", async () => {
     contextMenuShowMock.mockResolvedValue("copy-filename");
+    const onDiscard = vi.fn();
 
     await showGitChangedFileCopyMenu({
       path: "docs/CHANGELOG.md",
+      listedPaths: ["docs/CHANGELOG.md"],
       position: { x: 6, y: 9 },
+      onDiscard,
     });
 
     expect(contextMenuShowMock).toHaveBeenCalledWith(
       [
         { id: "copy-path", label: "Copy Path" },
         { id: "copy-filename", label: "Copy Filename" },
+        { id: "separator-discard", label: "", separator: true },
+        { id: "discard-file", label: "Discard changes" },
+        { id: "discard-all", label: "Discard all changes" },
       ],
       { x: 6, y: 9 },
     );
     expect(copyTextToClipboardMock).toHaveBeenCalledWith("CHANGELOG.md");
+    expect(onDiscard).not.toHaveBeenCalled();
+  });
+
+  it("hands discard actions to the confirmation callback without discarding", async () => {
+    const onDiscard = vi.fn();
+    const listedPaths = ["a.ts", "b.ts"];
+    contextMenuShowMock.mockResolvedValueOnce("discard-file");
+    await showGitChangedFileCopyMenu({
+      path: "b.ts",
+      listedPaths,
+      position: { x: 0, y: 0 },
+      onDiscard,
+    });
+    contextMenuShowMock.mockResolvedValueOnce("discard-all");
+    await showGitChangedFileCopyMenu({
+      path: "b.ts",
+      listedPaths,
+      position: { x: 0, y: 0 },
+      onDiscard,
+    });
+
+    expect(onDiscard.mock.calls).toEqual([
+      [{ scope: "paths", paths: ["b.ts"] }],
+      [{ scope: "all", paths: ["a.ts", "b.ts"] }],
+    ]);
+    expect(copyTextToClipboardMock).not.toHaveBeenCalled();
   });
 });

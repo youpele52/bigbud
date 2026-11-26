@@ -26,6 +26,40 @@ describe("wsNativeApi — project", () => {
     });
   });
 
+  it("forwards Files create-folder, delete and entry actions to the project RPCs", async () => {
+    rpcClientMock.projects.entryActions.mockResolvedValue({
+      createFile: { allowed: true },
+      createFolder: { allowed: true },
+      delete: { allowed: true, permanent: false },
+    });
+    rpcClientMock.projects.createDirectory.mockResolvedValue({ relativePath: "docs" });
+    rpcClientMock.projects.deleteEntry.mockResolvedValue({
+      relativePath: "docs",
+      disposition: "trashed",
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await api.projects.entryActions({ cwd: "/tmp/project" });
+    await api.projects.createDirectory({ cwd: "/tmp/project", relativePath: "docs" });
+    await api.projects.deleteEntry({
+      cwd: "/tmp/project",
+      relativePath: "docs",
+      expectedKind: "directory",
+    });
+
+    expect(rpcClientMock.projects.entryActions).toHaveBeenCalledWith({ cwd: "/tmp/project" });
+    expect(rpcClientMock.projects.createDirectory).toHaveBeenCalledWith({
+      cwd: "/tmp/project",
+      relativePath: "docs",
+    });
+    expect(rpcClientMock.projects.deleteEntry).toHaveBeenCalledWith({
+      cwd: "/tmp/project",
+      relativePath: "docs",
+      expectedKind: "directory",
+    });
+  });
+
   it("forwards workspace file previews to the project RPC", async () => {
     rpcClientMock.projects.readFilePreview.mockResolvedValue({
       relativePath: "plan.md",

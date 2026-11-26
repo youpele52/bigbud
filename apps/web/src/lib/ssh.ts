@@ -34,6 +34,44 @@ export function getSshAuthFailureToastTitle(authMode: SshAuthMode): string {
   if (authMode === "host-trust") return "SSH server verification failed";
   return authMode === "password" ? "SSH login failed" : "SSH key unlock failed";
 }
+
+/** U3: Windows ships key-only, so this is guidance, never a credential prompt. */
+export const SSH_WINDOWS_PASSWORD_UNSUPPORTED_COPY = "Use an SSH key for this host.";
+
+/** W1.3/S1: the previous owner's process could not be verified. */
+export const SSH_OWNER_RETIREMENT_UNVERIFIED_COPY =
+  "The previous SSH owner's process could not be verified. Stop bigbud and run `bigbud-ssh-owner --retirement-recover --lock <stateDir>/backend.lock --record <name>` only when the recorded process is provably gone or its PID is provably reused.";
+
+/** W3.6: Build A was not drained, so Build B fences SSH while local work continues. */
+export const SSH_LEGACY_ENTRY_FENCED_COPY =
+  "This backend cannot use SSH yet because the previous version did not record a completed drain. Local work continues; drain the identified SSH panes to continue.";
+
+/** Typed ownership refusals that are not credential prompts. */
+export function getSshOwnershipMessage(code: unknown): string | null {
+  switch (code) {
+    case "sshOwnerRetirementUnverified":
+      return SSH_OWNER_RETIREMENT_UNVERIFIED_COPY;
+    case "legacyEntryFenced":
+      return SSH_LEGACY_ENTRY_FENCED_COPY;
+    default:
+      return null;
+  }
+}
+
+/** Typed credential-capability refusals, which must never open a prompt. */
+export function getSshUnsupportedCredentialMessage(code: unknown): string | null {
+  switch (code) {
+    case "sshWindowsPasswordUnsupported":
+      return SSH_WINDOWS_PASSWORD_UNSUPPORTED_COPY;
+    case "sshKeyboardInteractiveUnsupported":
+      return "This host only offers keyboard-interactive login, which is not supported. Use SSH key authentication.";
+    case "sshSessionQuota":
+      return "The SSH server reached its session limit. Close another SSH session for this host and retry.";
+    default:
+      return null;
+  }
+}
+
 /** Host confirmation travels through the existing SSH setup-error flow, never as a credential. */
 export function getSshHostTrustChallenge(
   message: string | null | undefined,

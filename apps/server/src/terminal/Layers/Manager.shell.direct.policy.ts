@@ -4,6 +4,7 @@ import { directShellOwnerKey, type DirectShellLaunchOwnerStore } from "./DirectS
 import { isLocalExecutionTarget } from "../../executionTargets";
 import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault";
 import type { TerminalSessionState } from "./Manager.types";
+import { threadPaneKeyMatcher } from "./Manager.session.shellOwners";
 
 export const directShellLaunchUnavailable =
   "Exact SSH/WSL shell profiles are unavailable until safe shutdown is supported. Use Terminal actions → Open Automatic terminal for a new pane.";
@@ -43,10 +44,18 @@ export const assertDirectShellCloseAvailable = Effect.fn(
     );
 });
 
-/** Check the durable journal before any bulk-close side effect, including local sessions. */
+/**
+ * Check the durable journal before any bulk-close side effect, including local sessions.
+ * `knownTerminalIds` are the thread's live panes plus panes with retained history (the remote
+ * owner recovery marker); `"unknown"` when they could not be listed, which fails closed.
+ */
 export const assertDirectShellThreadCloseAvailable = Effect.fn(
   "terminal.assertDirectShellThreadCloseAvailable",
-)(function* (store: DirectShellLaunchOwnerStore | undefined, threadId: string) {
+)(function* (
+  store: DirectShellLaunchOwnerStore | undefined,
+  threadId: string,
+  knownTerminalIds: ReadonlyArray<string> | "unknown",
+) {
   if (!store) return;
   const failure = (detail: string) =>
     new TerminalExecutionTargetError({
@@ -60,8 +69,10 @@ export const assertDirectShellThreadCloseAvailable = Effect.fn(
     return yield* failure(
       "Could not verify thread-wide direct shell ownership. Nothing was closed.",
     );
+  const isThreadPaneKey =
+    knownTerminalIds === "unknown" ? undefined : threadPaneKeyMatcher(threadId, knownTerminalIds);
   const retained = yield* Effect.tryPromise({
-    try: () => hasOwnersForThread(threadId),
+    try: () => hasOwnersForThread(threadId, isThreadPaneKey),
     catch: () =>
       failure("Could not verify thread-wide direct shell ownership. Nothing was closed."),
   });

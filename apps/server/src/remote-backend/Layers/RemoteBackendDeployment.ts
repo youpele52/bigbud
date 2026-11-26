@@ -11,6 +11,12 @@ import { makeDeploymentApproval } from "../deployment.approval.ts";
 import { makePersistedRemoteBackendRelayProfiles } from "../deployment.profiles.store.ts";
 import { makeDeploymentGraphSourceResolver } from "../deployment.source.ts";
 import { runDeploymentSsh } from "../deployment.ssh.ts";
+import {
+  makeProductionDeploymentHostTrust,
+  makeProductionDeploymentRunner,
+} from "../deployment.ssh.owner.production.ts";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
+import { readSshOwnerProductionOwner } from "../../ssh/sshOwnerProductionRegistry.ts";
 import { makeRemoteBackendDeployment } from "../deployment.ts";
 import type { DeploymentProfileStore } from "../deployment.types.ts";
 import { RemoteBackendDeployment } from "../Services/RemoteBackendDeployment.ts";
@@ -28,6 +34,11 @@ const makeServices = Effect.fn("makeRemoteBackendDeploymentServices")(function* 
     insert: (record) => run(repository.insert(record)),
   };
   const sourceLoader = makeRemoteAgentInstallSourceLoader();
+  // W2 T-backend: production activation runs every step through the live owner's typed
+  // step leases and checks trust in the owner; no legacy SSH launch remains on that path.
+  const production = SSH_OWNER_PRODUCTION_ACTIVATION
+    ? { owner: readSshOwnerProductionOwner }
+    : undefined;
   const deployment = makeRemoteBackendDeployment({
     approval: makeDeploymentApproval({
       listSavedTargets: () =>
@@ -39,8 +50,10 @@ const makeServices = Effect.fn("makeRemoteBackendDeploymentServices")(function* 
         ),
       evidence: (target) => readRemoteAgentApprovalEvidence(target),
     }),
-    assertHostTrusted: (target) => inspectSshHostTrust(target),
-    run: runDeploymentSsh,
+    assertHostTrusted: production
+      ? makeProductionDeploymentHostTrust(production)
+      : (target) => inspectSshHostTrust(target),
+    run: production ? makeProductionDeploymentRunner(production) : runDeploymentSsh,
     resolveSource: makeDeploymentGraphSourceResolver({
       environment: process.env,
       loadRustSource: (signal) => sourceLoader(signal),

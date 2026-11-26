@@ -28,6 +28,11 @@ import { withRemoteReadReconnect } from "./WorkspaceRuntime.remote.reconnect.ts"
 import { makeRemoteWorkspaceContentSearch } from "./WorkspaceRuntime.remote.search.ts";
 import { makeRemoteWorkspaceEntrySearch } from "./WorkspaceRuntime.remote.searchEntries.ts";
 import { makeRemoteWorkspaceWriteFile } from "./WorkspaceRuntime.remote.write.ts";
+import { makeRemoteWorkspaceMutations } from "./WorkspaceRuntime.remote.mutations.ts";
+import type { WorkspaceMutationsShape } from "../Services/WorkspaceMutations.ts";
+import { guardedFileEdit, readOnlyFileEdit } from "../fileEditCapability.ts";
+
+const REMOTE_AGENT_WRITE_CAPABILITY = "workspace.write";
 import { remoteAgentRequestDigest } from "../../remote-agent/remoteAgentRequestDigest.ts";
 
 export interface RemoteAgentClientResolver {
@@ -39,6 +44,7 @@ export interface RemoteWorkspaceRuntimeShape {
   readonly files: WorkspaceFilesShape;
   readonly search: WorkspaceSearchShape;
   readonly watch: WorkspaceWatchShape;
+  readonly mutations: WorkspaceMutationsShape;
 }
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
@@ -125,6 +131,7 @@ export function makeRemoteWorkspaceRuntime(
   )(function* (input: ProjectReadFilePreviewInput) {
     const target = remoteTarget(input.executionTargetId);
     const id = operationId("read");
+    let canWrite = false;
     const response = yield* Effect.tryPromise({
       try: async () => {
         return withRemoteReadReconnect({
@@ -132,6 +139,7 @@ export function makeRemoteWorkspaceRuntime(
           target,
           operation: async (client) => {
             const handle = await open(client, target, input.cwd);
+            canWrite = client.connection.supportsCapability(REMOTE_AGENT_WRITE_CAPABILITY);
             return readRemoteFile({
               client,
               workspaceHandle: handle,
@@ -169,7 +177,7 @@ export function makeRemoteWorkspaceRuntime(
       });
     }
     const contents = yield* Effect.try({
-      try: () => new TextDecoder("utf-8", { fatal: true }).decode(response.bytes),
+      try: () => new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(response.bytes),
       catch: (cause) =>
         new WorkspaceFileSystemError({
           cwd: input.cwd,
@@ -185,6 +193,7 @@ export function makeRemoteWorkspaceRuntime(
       sizeBytes: response.totalBytes,
       truncated: false,
       sha256: createHash("sha256").update(response.bytes).digest("hex"),
+      edit: canWrite ? guardedFileEdit : readOnlyFileEdit("agentTooOld"),
     };
   });
 
@@ -269,6 +278,7 @@ export function makeRemoteWorkspaceRuntime(
     files: { writeFile, readFilePreview, readFileRange, listDirectory },
     search: { searchEntries, searchFileContents },
     watch: makeRemoteWorkspaceWatch({ resolve: resolver.resolveWatch ?? resolver.resolve }),
+    mutations: makeRemoteWorkspaceMutations({ resolve: resolver.resolve, remoteTarget, open }),
   };
 }
 

@@ -1,4 +1,4 @@
-import type { RunSshCommandInput } from "../ssh/sshProcess.ts";
+import type { RemoteAgentCommandRequest } from "./remoteAgentCommand.types.ts";
 
 /** Retained remote stderr per failed setup command (phases 1–6 implementation contract). */
 export const REMOTE_AGENT_STDERR_TAIL_BYTES = 8 * 1024;
@@ -95,9 +95,9 @@ interface RemoteCommandOutcome {
  * "SSH command failed". Results without exit metadata (test doubles) are treated as success.
  */
 export async function runRemoteAgentDiagnosedCommand(
-  run: (input: RunSshCommandInput) => Promise<unknown>,
+  run: (input: RemoteAgentCommandRequest) => Promise<unknown>,
   stage: RemoteAgentCommandStage,
-  input: RunSshCommandInput,
+  input: RemoteAgentCommandRequest,
 ): Promise<{ readonly stdout: string; readonly stderr: string }> {
   const result = (await run({
     ...input,

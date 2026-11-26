@@ -12,19 +12,28 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
+import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
+import { makeProductionSshTerminal } from "./Manager.sshOwnerProduction.ts";
+import { isProductionDirectSshTarget } from "../../ssh/sshOwnerProductionTerminal.ts";
 import { TerminalActivity } from "../Services/TerminalActivity.ts";
-import path from "node:path";
+import { AppQuitIntent } from "../../lifecycle/AppQuitIntent.ts";
 import {
   installShellIntegration,
   shellIntegrationEnv,
+  shellIntegrationRoot,
 } from "../shellIntegration/shellIntegration.ts";
 import { PtyAdapter } from "../Services/PTY";
 import { ShellLaunchPlanner } from "../Services/ShellLaunchPlanner";
-import { ShellProfiles } from "../Services/ShellProfiles";
+import { ShellProfileDiscoveryError, ShellProfiles } from "../Services/ShellProfiles";
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { preflightRemoteTerminalShellProfile } from "./Manager.shell.remote";
 import { makeDirectShellLaunchOwners } from "../../persistence/Layers/DirectShellLaunchOwners";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
 import { withTerminalPasteStaging } from "./Manager.pasteStaging.attach.ts";
+import {
+  projectionMissingThreadIds,
+  scheduleOrphanedHistorySweep,
+} from "./Manager.history.orphans.schedule.ts";
 import { makeRemotePasteAgentResolver } from "./Manager.pasteStaging.remote.ts";
 import { classifyTerminalRuntimeLeaseError } from "./Manager.leaseError.ts";
 import type { RuntimePathIdentity } from "./Manager.types";
@@ -43,11 +52,19 @@ export { makeTerminalManagerWithOptions } from "./Manager.process";
 const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   const { terminalLogsDir, stateDir } = yield* ServerConfig;
   const ptyAdapter = yield* PtyAdapter;
+  const devSshOwner = Option.getOrUndefined(
+    yield* Effect.serviceOption(DevSshOwnerRuntime),
+  )?.session;
   const shellLaunchPlanner = yield* ShellLaunchPlanner;
   const shellProfiles = yield* ShellProfiles;
   const settings = Option.getOrUndefined(yield* Effect.serviceOption(ServerSettingsService));
   const sql = yield* SqlClient.SqlClient;
+  // W2 T-term: production direct-SSH terminals over the live owner (dev fixture first).
+  const production = devSshOwner ? undefined : yield* makeProductionSshTerminal(sql);
+  const sshTerminal = devSshOwner ? devSshOwner.terminal : production;
+  const ownerShells = production?.shellProfiles;
   const activity = Option.getOrUndefined(yield* Effect.serviceOption(TerminalActivity));
+  const quitIntent = Option.getOrUndefined(yield* Effect.serviceOption(AppQuitIntent));
   yield* reconcileWorktreeRuntimeLeases(sql, "terminal");
   const acquireWorktreeLease = Effect.fn("terminal.acquireWorktreeLease")(function* (input: {
     runtimePathIdentity?: RuntimePathIdentity | undefined;
@@ -133,7 +150,7 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     process.platform === "win32"
       ? undefined
       : yield* Effect.tryPromise(() =>
-          installShellIntegration(path.join(stateDir, "shell-integration")),
+          installShellIntegration(shellIntegrationRoot(stateDir)),
         ).pipe(
           Effect.tapError((cause) =>
             Effect.logWarning("terminal shell integration unavailable", { cause }),
@@ -156,12 +173,27 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
         ? settings?.currentSnapshot?.()?.settings.terminalShells.hostDefaults.local
         : undefined,
     listLocalShellProfiles: () => shellProfiles.revalidate({ executionTargetId: "local" }),
-    ptyAdapter,
+    ptyAdapter: sshTerminal?.wrapPtyAdapter(ptyAdapter) ?? ptyAdapter,
+    directSshCwdOwner: sshTerminal?.cwdOwner,
     directShellOwners: yield* makeDirectShellLaunchOwners(),
-    listShellProfiles: shellProfiles.list,
-    preflightRemoteShellProfile: preflightRemoteTerminalShellProfile,
+    listShellProfiles: (target) =>
+      ownerShells && isProductionDirectSshTarget(target.executionTargetId)
+        ? ownerShells.list(target)
+        : devSshOwner && parseSshExecutionTarget(target.executionTargetId)
+          ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+          : shellProfiles.list(target),
+    preflightRemoteShellProfile: (executionTargetId) =>
+      ownerShells && isProductionDirectSshTarget(executionTargetId)
+        ? Effect.void
+        : devSshOwner && parseSshExecutionTarget(executionTargetId)
+          ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+          : preflightRemoteTerminalShellProfile(executionTargetId),
     resolveShellProfile: (selection, target) =>
-      shellLaunchPlanner.resolveProfile({ target, selection }),
+      ownerShells && isProductionDirectSshTarget(target.executionTargetId)
+        ? ownerShells.resolve(selection, target)
+        : devSshOwner && parseSshExecutionTarget(target.executionTargetId)
+          ? Effect.fail(new ShellProfileDiscoveryError({ reason: "unsupported-target" }))
+          : shellLaunchPlanner.resolveProfile({ target, selection }),
     resolveRuntimePathIdentity: (cwd) =>
       Effect.tryPromise({
         try: () => captureLocalRuntimePathIdentity(cwd),
@@ -170,7 +202,14 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     acquireWorktreeLease,
     markWorktreeLeaseStarted,
     releaseWorktreeLease,
+    keepRunningAfterQuit: () =>
+      settings?.currentSnapshot?.()?.settings.terminalsKeepRunningAfterQuit === true,
+    ...(settings?.onSnapshotChange
+      ? { onSettingsChange: (listener: () => void) => settings.onSnapshotChange!(listener) }
+      : {}),
+    ...(quitIntent ? { resolveQuitIntent: quitIntent.resolve } : {}),
   });
+  yield* scheduleOrphanedHistorySweep(manager, projectionMissingThreadIds(sql));
   return yield* withTerminalPasteStaging(manager, {
     stateDir,
     maxFileMb: () => settings?.currentSnapshot?.()?.settings.terminalPasteMaxFileMb,

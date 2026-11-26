@@ -2,10 +2,37 @@
  * Pure path helpers for workspace entry search. Ranking lives in `@bigbud/shared/search/nameRank`,
  * shared with the Rust engine through common fixtures so local and remote results rank alike.
  */
-import { nameRankFields, type NameRankCandidate } from "@bigbud/shared/search/nameRank";
+import {
+  insertRankedName,
+  nameRankFields,
+  normalizeNameRankQuery,
+  scoreNameRankCandidate,
+  type NameRankCandidate,
+  type RankedName,
+} from "@bigbud/shared/search/nameRank";
 
 export interface SearchableWorkspaceEntry extends NameRankCandidate {
   readonly parentPath?: string | undefined;
+}
+
+export function rankWorkspaceIndex(
+  index: { readonly entries: readonly SearchableWorkspaceEntry[]; readonly truncated: boolean },
+  input: { readonly query: string; readonly limit: number },
+) {
+  const query = normalizeNameRankQuery(input.query);
+  const limit = Math.max(0, Math.floor(input.limit));
+  const ranked: RankedName<SearchableWorkspaceEntry>[] = [];
+  let matched = 0;
+  for (const entry of index.entries) {
+    const score = scoreNameRankCandidate(entry, query);
+    if (score === null) continue;
+    matched++;
+    insertRankedName(ranked, { entry, score }, limit);
+  }
+  return {
+    entries: ranked.map(({ entry }) => entry),
+    truncated: index.truncated || matched > limit,
+  };
 }
 
 // ── Path helpers ─────────────────────────────────────────────────────

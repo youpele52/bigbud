@@ -35,10 +35,13 @@ type ThreadStateHydrator<HydrationError> = {
  * holds only operational threads and their projects, so a settled thread, an idle project, or
  * the threads a project-wide invariant scans are hydrated from durable projections here.
  */
-export function makePrepareCommandState<HydrationError>(input: {
+export function makePrepareCommandState<HydrationError, RecoveryError = never>(input: {
+  readonly recoveredSourceThreadId?: (
+    command: Extract<OrchestrationCommand, { type: "thread.queued-prompt.recovered" }>,
+  ) => Effect.Effect<ThreadId | undefined, RecoveryError>;
   readonly threadStateHydrator: ThreadStateHydrator<HydrationError> | null;
 }) {
-  return (command: OrchestrationCommand): Effect.Effect<void, HydrationError> => {
+  return (command: OrchestrationCommand): Effect.Effect<void, HydrationError | RecoveryError> => {
     const hydrator = input.threadStateHydrator;
     if (hydrator === null) return Effect.void;
     const project = (projectId: ProjectId): Effect.Effect<void, HydrationError> =>
@@ -114,8 +117,10 @@ export function makePrepareCommandState<HydrationError>(input: {
       (command.type === "thread.meta.update" &&
         (command.title !== undefined || command.elevatorSummary !== undefined)) ||
       command.type === "thread.turn.start" ||
+      (command.type === "thread.queued-prompt.recovered" && command.action === "send") ||
       (command.type === "thread.message.submit" &&
-        command.message.replyToMessageId !== undefined) ||
+        (command.message.replyToMessageId !== undefined ||
+          command.pendingInteractionGate !== undefined)) ||
       sourceThreadId === targetThreadId ||
       command.type === "thread.checkpoint.revert" ||
       command.type === "thread.revert.complete" ||
@@ -125,8 +130,14 @@ export function makePrepareCommandState<HydrationError>(input: {
       command.type === "thread.delegation.model-choice.pick";
     return Effect.gen(function* () {
       yield* hydrator.load(targetThreadId, historyRequired ? "history" : "operational");
-      if (sourceThreadId !== undefined && sourceThreadId !== targetThreadId) {
-        yield* hydrator.load(sourceThreadId, "history");
+      const source =
+        command.type === "thread.queued-prompt.recovered" &&
+        command.action === "send" &&
+        input.recoveredSourceThreadId
+          ? yield* input.recoveredSourceThreadId(command)
+          : sourceThreadId;
+      if (source !== undefined && source !== targetThreadId) {
+        yield* hydrator.load(source, "history");
       }
     });
   };

@@ -69,3 +69,64 @@ it("keeps uncertain intents and terminal anti-replay evidence after SQLite close
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it.each(["muse", "opencodeV2"] as const)(
+  "reopens only the exact locally undispatched %s intent across SQLite restart",
+  async (provider) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "bigbud-local-refusal-"));
+    const filename = path.join(root, "fixture.sqlite");
+    const threadId = ThreadId.makeUnsafe("foreground");
+    const input = {
+      namespace: "foreground" as const,
+      ownerThreadId: threadId,
+      requestMessageId: MessageId.makeUnsafe("same-message"),
+      fingerprint: "digest",
+      nativeAdmissionId: "native-id",
+      turnId: TurnId.makeUnsafe("canonical-turn"),
+      createdAt: "2026-11-23T00:00:00.000Z",
+      binding: {
+        provider,
+        threadId,
+        nativeSessionId: "ses_fixture",
+        location: "/synthetic",
+        runtimeTargetId: "local",
+        workspaceTargetId: "local",
+        storageIdentity: "isolated",
+      },
+    };
+    const repositoryLayer = () =>
+      ProviderTurnAdmissionsLive.pipe(Layer.provide(sqliteLayer({ filename })));
+    try {
+      await Effect.runPromise(runMigrations().pipe(Effect.provide(sqliteLayer({ filename }))));
+      const intent = await Effect.runPromise(
+        Effect.gen(function* () {
+          const journal = yield* ProviderTurnAdmissions;
+          const row = yield* journal.reserve(input);
+          const intent = yield* journal.transition(row, "dispatch-intent", input.createdAt);
+          const reopened = yield* journal.reopenUndispatchedIntent!(intent, input.createdAt);
+          expect(reopened).toMatchObject({
+            state: "reserved",
+            revision: 2,
+            nativeAdmissionId: input.nativeAdmissionId,
+          });
+          return intent;
+        }).pipe(Effect.provide(repositoryLayer())),
+      );
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const journal = yield* ProviderTurnAdmissions;
+          const row = yield* journal.reserve(input);
+          expect(row).toMatchObject({ state: "reserved", revision: 2 });
+          const retry = yield* journal.transition(row, "dispatch-intent", input.createdAt);
+          const stale = yield* Effect.result(
+            journal.reopenUndispatchedIntent!(intent, input.createdAt),
+          );
+          expect(stale._tag).toBe("Failure");
+          expect(yield* journal.find(input)).toEqual(retry);
+        }).pipe(Effect.provide(repositoryLayer())),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

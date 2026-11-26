@@ -1,10 +1,39 @@
 import type { ApprovalRequestId, EventId } from "@bigbud/contracts";
 import { Deferred, Effect } from "effect";
 
+import { ProviderAdapterValidationError } from "../../Errors.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
+import { claudeInteractionGeneration } from "./Adapter.interactionIdentity.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { asRuntimeRequestId, nativeProviderRefs } from "./Adapter.utils.ts";
+
+/** The SDK has not received this message; the live turn, if identified, is safe to wait on. */
+export function pendingClaudeInteractionTurnRefusal(context: ClaudeSessionContext) {
+  const turn = context.turnState;
+  const liveTurn = turn && !turn.synthetic && context.session.activeTurnId === turn.turnId;
+  return new ProviderAdapterValidationError({
+    provider: PROVIDER,
+    operation: "sendTurn",
+    issue: "Resolve or cancel the pending approval or user-input request first.",
+    failureClass: liveTurn ? "busy" : "invalid-request",
+    turnStartRefusal: {
+      kind: "pending-interaction",
+      gate: {
+        provider: PROVIDER,
+        sessionEpoch: context.sessionEpoch,
+        approvalRequests: [...context.pendingApprovals].map(([requestId, request]) => ({
+          requestId,
+          generation: claudeInteractionGeneration(request.decision),
+        })),
+        userInputRequests: [...context.pendingUserInputs].map(([requestId, request]) => ({
+          requestId,
+          generation: claudeInteractionGeneration(request.answers),
+        })),
+      },
+    },
+  });
+}
 
 /** Finalize an owner that failed/interrupted before writing its resolved ledger entry. */
 export const cancelAbandonedClaudeRequest = Effect.fn("cancelAbandonedClaudeRequest")(function* (
@@ -54,6 +83,7 @@ export const cancelAbandonedClaudeRequest = Effect.fn("cancelAbandonedClaudeRequ
       provider: PROVIDER,
       threadId: context.session.threadId,
       requestId: asRuntimeRequestId(requestId),
+      requestGeneration: claudeInteractionGeneration(entry.decision),
       payload: { requestType: entry.requestType, decision: "cancel" },
       providerRefs: nativeProviderRefs(context, identity),
     });
@@ -80,6 +110,7 @@ export const cancelAbandonedClaudeRequest = Effect.fn("cancelAbandonedClaudeRequ
       provider: PROVIDER,
       threadId: context.session.threadId,
       requestId: asRuntimeRequestId(requestId),
+      requestGeneration: claudeInteractionGeneration(entry.answers),
       payload: { answers: {} },
       providerRefs: nativeProviderRefs(context, identity),
     });

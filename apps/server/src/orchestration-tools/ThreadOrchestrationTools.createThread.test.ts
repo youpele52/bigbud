@@ -7,6 +7,7 @@ import {
   callerProjectId,
   callerThread,
   callerThreadId,
+  makeRemoteProjectEffortSystem,
   makeSystem,
   sourceMessageId,
   targetProjectId,
@@ -141,7 +142,7 @@ describe("createThreadViaOrchestration", () => {
   });
 
   it("asks before creating in another project, reserving nothing until the user allows", async () => {
-    const system = makeSystem();
+    const { system, modelSources } = makeRemoteProjectEffortSystem();
     const reserve = vi.spyOn(system.repository, "reserve");
     const { coordination, log } = makeTestCoordination();
     const create = () =>
@@ -157,6 +158,8 @@ describe("createThreadViaOrchestration", () => {
         task: "Do the work",
         projectId: targetProjectId,
         watchForCompletion: true,
+        modelSelection: { provider: "codex", model: "gpt-5.4", effort: "high" },
+        modelSources,
       });
     const challenge = await create();
     if (!("status" in challenge) || challenge.status !== "confirmation_required") {
@@ -166,7 +169,19 @@ describe("createThreadViaOrchestration", () => {
     expect(reserve).not.toHaveBeenCalled();
     expect(system.dispatch).not.toHaveBeenCalled();
     pushClientAnswer(log, { callerThreadId, question: challenge.question, answer: "Allow" });
-    await expect(create()).resolves.toMatchObject({ accepted: true, replayed: false });
+    await expect(create()).resolves.toMatchObject({
+      accepted: true,
+      replayed: false,
+      modelChoice: {
+        outcome: "requested",
+        effort: { requested: "high", reason: "capabilities-unknown" },
+      },
+    });
+    expect(system.dispatch.mock.calls.at(-1)?.[0]).toMatchObject({
+      type: "thread.turn.start",
+      modelSelection: { provider: "codex", model: "gpt-5.4" },
+    });
+    expect(system.dispatch.mock.calls.at(-1)?.[0]).not.toHaveProperty("modelSelection.options");
     expect(reserve).toHaveBeenCalledTimes(1);
     const createCommand = system.dispatch.mock.calls[0]?.[0];
     expect(createCommand).toMatchObject({ projectId: targetProjectId });

@@ -1,4 +1,8 @@
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
+import {
+  deriveDelegatedModelChoiceRecord,
+  modelSelectionKey,
+} from "@bigbud/shared/delegatedModelChoice";
 import { Effect } from "effect";
 
 import { BIGBUD_CAPABILITY_CATALOG } from "../../capabilities/BigbudCapabilityTracks.ts";
@@ -30,6 +34,7 @@ import type {
 } from "./ProviderCommandReactorSessionOps.types.ts";
 import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
 import { isLiveProviderSessionIdle } from "../../provider/liveProviderSessionIdle.ts";
+import { ExactDelegatedAcpEffort } from "../../provider/acp/acpSessionEffort.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import type { TurnStartRecoveryAttempt } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
 import type { TurnStartDispatchPhase } from "./ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts";
@@ -100,13 +105,34 @@ export const sendTurnAttempt = (
         attachments: normalizedAttachments,
       });
 
+    const selection = input.modelSelection;
+    const exactAcpEffort =
+      thread.parentThread &&
+      (selection.provider === "cursor" || selection.provider === "devin") &&
+      selection.options?.reasoning &&
+      thread.messages
+        .find(({ id }) => id === input.requestMessageId)
+        ?.originSegments?.some(
+          (segment) => segment.kind === "initialDelegation" && segment.verified,
+        )
+        ? deriveDelegatedModelChoiceRecord(thread.activities)
+        : null;
+    const delegatedEffort =
+      exactAcpEffort?.status === "resolved" &&
+      !exactAcpEffort.cancelled &&
+      (selection.provider === "cursor" || selection.provider === "devin") &&
+      exactAcpEffort.effort?.configured === selection.options?.reasoning &&
+      modelSelectionKey(exactAcpEffort.used) === modelSelectionKey(selection)
+        ? exactAcpEffort.effort?.configured
+        : undefined;
+
     yield* ensureSession(input.threadId, input.createdAt, {
       ...(input.modelSelectionWasCaptured ? { modelSelection: input.modelSelection } : {}),
       runtimeMode: input.runtimeMode,
       requireExactModel: input.modelSelectionWasCaptured,
       restartFreshIfInactive: shouldBootstrapFromTranscript || input.recovery?.mode === "fresh",
       ...(input.recovery?.mode === "revive" ? { resumeCursor: input.recovery.resumeCursor } : {}),
-    });
+    }).pipe(Effect.provideService(ExactDelegatedAcpEffort, delegatedEffort));
     activeSession = yield* providerService
       .listSessions()
       .pipe(
@@ -215,15 +241,19 @@ export const sendTurnAttempt = (
         (modelForTurn.provider === "opencodeV2" && attachment.type === "path"),
     );
     if (input.dispatch) input.dispatch.dispatched = true;
-    const turn = yield* providerService.sendTurn({
-      threadId: input.threadId,
-      ...(input.requestMessageId !== undefined ? { requestMessageId: input.requestMessageId } : {}),
-      ...(normalizedInput ? { input: normalizedInput } : {}),
-      ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
-      modelSelection: modelForTurn,
-      interactionMode: input.interactionMode,
-      sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
-    });
+    const turn = yield* providerService
+      .sendTurn({
+        threadId: input.threadId,
+        ...(input.requestMessageId !== undefined
+          ? { requestMessageId: input.requestMessageId }
+          : {}),
+        ...(normalizedInput ? { input: normalizedInput } : {}),
+        ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
+        modelSelection: modelForTurn,
+        interactionMode: input.interactionMode,
+        sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
+      })
+      .pipe(Effect.provideService(ExactDelegatedAcpEffort, delegatedEffort));
 
     resourceState.resourceContext = resourceContext.next;
     const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;

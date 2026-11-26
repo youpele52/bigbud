@@ -2,18 +2,24 @@ import { randomUUID } from "node:crypto";
 
 import { type TerminalSessionState } from "./Manager.types";
 
-export function resetSessionRuntimeState(session: TerminalSessionState): void {
-  session.recoveryModel?.dispose("runtime-reset");
-  session.recoveryModel = undefined;
+export function resetSessionHistory(session: TerminalSessionState): void {
   session.modeTracker = undefined;
   session.history = "";
   session.historyTruncated = false;
   session.historyUnavailable = false;
+  session.historyTrimmed = false;
+  session.historyRetention = undefined;
   session.historyBytes = 0;
   session.historyNewlines = 0;
   session.historyTail = "";
   session.pendingHistoryBytes = 0;
   session.pendingHistoryControlSequence = "";
+}
+
+export function resetSessionRuntimeState(session: TerminalSessionState): void {
+  session.recoveryModel?.dispose("runtime-reset");
+  session.recoveryModel = undefined;
+  resetSessionHistory(session);
   session.pendingProcessEvents = [];
   session.pendingProcessEventIndex = 0;
   session.processEventDrainRunning = false;

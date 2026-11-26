@@ -43,10 +43,13 @@ export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud threa
 export const CREATE_THREAD_TOOL_DESCRIPTION =
   "Create a standalone bigbud thread in a project and optionally watch it for completion.";
 
-export const CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION = `${CREATE_THREAD_TOOL_DESCRIPTION} Optionally request a provider and model for the new thread with modelSelection, chosen from list_available_models. bigbud uses it only when the user can use that model; otherwise the thread uses this thread's model, and the user may pick another within about 10 seconds. modelSelection never makes this call fail or wait; the result reports the model requested and the model used.`;
+export const MODEL_EFFORT_DESCRIPTION =
+  "Optional exact native effort ID listed for this model and target; omit to keep its normal effort.";
+
+export const CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION = `${CREATE_THREAD_TOOL_DESCRIPTION} Optionally request a provider and model for the new thread with modelSelection, chosen from list_available_models. bigbud uses it only when the user can use that model; otherwise the thread uses this thread's model, and the user may pick another within about 10 seconds. modelSelection never makes this call fail or wait; the result reports the model requested and the model used. Set modelSelection.effort only to an exact ID listed for that model. The result reports the requested and configured effort or why it was not configured; it does not confirm provider execution.`;
 
 export const LIST_AVAILABLE_MODELS_TOOL_DESCRIPTION =
-  "List the providers and models the user can use right now for a delegated thread's modelSelection, most recently used first, with this thread's model flagged. Read-only. An empty list means agent model choice is off; then omit modelSelection.";
+  "List the providers and models the user can use right now for a delegated thread's modelSelection, most recently used first, with this thread's model flagged. Read-only. Each model reports native effort choices, any known default, or unsupported/unknown. Check scope: another project may have different capabilities. When agentModelChoice is parent, omit modelSelection.";
 
 export const LIST_AVAILABLE_MODELS_DEFAULT_LIMIT = 50;
 export const LIST_AVAILABLE_MODELS_MAX_LIMIT = 200;
@@ -65,6 +68,7 @@ const MODEL_SELECTION_PARAMETER = {
     provider: { type: "string", description: "Provider ID, for example codex or claudeAgent" },
     model: { type: "string", description: "Model ID; omit to use the provider's recent model" },
     subProviderID: { type: "string", description: "Sub-provider ID, when listed" },
+    effort: { type: "string", description: MODEL_EFFORT_DESCRIPTION },
   },
 } as const;
 
@@ -106,7 +110,7 @@ export const LIST_AVAILABLE_MODELS_PARAMETERS = {
   additionalProperties: false,
 } as const;
 
-/** OpenCode V2's frozen bootstrap ABI has no model choice yet (plan Phase 5). */
+/** OpenCode V2 tool descriptions are negotiated by the installed bootstrap, not by provider kind. */
 export function providerSupportsDelegatedModelChoice(provider: string): boolean {
   return provider !== "opencodeV2";
 }

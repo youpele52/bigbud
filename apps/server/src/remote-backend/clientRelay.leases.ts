@@ -199,6 +199,12 @@ export function makeRemoteBackendRelayLeases(input: {
       const selected = [...entries].filter(([, entry]) => entry.profileId === profileId);
       await settle(selected);
     },
+    /** Upgrade drain: closes every live lease without closing caller admission. */
+    async closeAll() {
+      const selected = [...entries];
+      await settle(selected);
+      return selected.length;
+    },
     async dispose() {
       const pending = callers.closeAll();
       await settle([...entries]);

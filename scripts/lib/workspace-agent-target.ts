@@ -79,6 +79,14 @@ export function assertWorkspaceAgentArtifactTarget(
   path: string,
   target: WorkspaceAgentTarget,
 ): void {
+  assertNativeArtifactTarget(path, target, "Workspace watcher");
+}
+
+export function assertNativeArtifactTarget(
+  path: string,
+  target: WorkspaceAgentTarget,
+  label: string,
+): void {
   const bytes = readFileSync(path);
   let matches = false;
   if (target.platform === "linux") {
@@ -100,8 +108,6 @@ export function assertWorkspaceAgentArtifactTarget(
       bytes.readUInt16LE(peOffset + 4) === (target.arch === "arm64" ? 0xaa64 : 0x8664);
   }
   if (!matches) {
-    throw new Error(
-      `Workspace watcher artifact target mismatch: ${target.platform}/${target.arch}`,
-    );
+    throw new Error(`${label} artifact target mismatch: ${target.platform}/${target.arch}`);
   }
 }

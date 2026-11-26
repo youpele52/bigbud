@@ -3,9 +3,10 @@ import type { MessageId, ThreadId } from "@bigbud/contracts";
 import { isSessionHealthUnconfirmed } from "~/logic/session";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
-import type { usePendingUserInputHandlers } from "../ChatView.composerHandlers.logic";
 import type { usePlanHandlers } from "../ChatView.planHandlers.logic";
+import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
 import { usePromptQueue } from "../ChatView.promptQueue.logic";
+import { canQueueComposerPrompt } from "../ChatView.sendTurn.admission.logic";
 import { useOnSend } from "../ChatView.sendTurn.logic";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -21,10 +22,6 @@ interface UseChatViewPromptQueueInput {
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
   onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   planHandlers: Pick<ReturnType<typeof usePlanHandlers>, "onSubmitPlanFollowUp">;
-  pendingUserInputHandlers: Pick<
-    ReturnType<typeof usePendingUserInputHandlers>,
-    "setActivePendingUserInputQuestionIndex"
-  >;
   transformPromptForSend?: ((prompt: string) => string) | undefined;
 }
 
@@ -62,7 +59,6 @@ export function useChatViewPromptQueue({
   onOptimisticUserMessage,
   onThreadMaterialized,
   planHandlers,
-  pendingUserInputHandlers,
   transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
   const activeTurnInProgress = isPromptQueueTurnInProgress({
@@ -74,13 +70,15 @@ export function useChatViewPromptQueue({
   });
   const nativeSteer = composer.activeProviderStatus?.turnControl?.nativeSteer === true;
   const shouldQueuePrompts = shouldQueuePromptWhileWorking({
-    isWorking: activeTurnInProgress,
+    isWorking:
+      activeTurnInProgress || describeThreadBackgroundWork(base.activeThread).hasBackgroundWork,
     forceSendQueuedPrompt: false,
   });
 
   const promptQueue = usePromptQueue({
     threadId: base.threadId,
     projectedPrompts: base.activeThread?.queuedPrompts ?? [],
+    queueHold: base.activeThread?.queueHold,
     activeTurnInProgress,
     activeTurnId: base.activeThread?.session?.activeTurnId,
     sessionEpoch: base.activeThread?.session?.sessionEpoch,
@@ -98,7 +96,7 @@ export function useChatViewPromptQueue({
     },
   });
 
-  const onSend = useOnSend({
+  const sendInput = {
     activeThread: base.activeThread,
     activeProject: base.activeProject,
     activeThreadId: base.activeThreadId,
@@ -129,13 +127,8 @@ export function useChatViewPromptQueue({
     envMode,
     showPlanFollowUpPrompt: thread.showPlanFollowUpPrompt,
     activeProposedPlan: thread.activeProposedPlan,
-    isOpencodePendingUserInputMode: thread.isOpencodePendingUserInputMode,
-    activePendingUserInputRequestId: thread.activePendingUserInput?.requestId ?? null,
-    activePendingUserInput: thread.activePendingUserInput,
-    activePendingProgress: thread.activePendingProgress,
-    activePendingDraftAnswers: thread.activePendingDraftAnswers,
-    setActivePendingUserInputQuestionIndex:
-      pendingUserInputHandlers.setActivePendingUserInputQuestionIndex,
+    hasPendingProviderRequest:
+      thread.isComposerApprovalState || thread.isOpencodePendingUserInputMode,
     shouldAutoScrollRef: runtime.scrollBehavior.shouldAutoScrollRef,
     setOptimisticUserMessages: base.setOptimisticUserMessages,
     setPrompt: base.setPrompt,
@@ -161,16 +154,21 @@ export function useChatViewPromptQueue({
     persistThreadSettingsForNextTurn: runtime.persistThreadSettingsForNextTurn,
     onSubmitPlanFollowUp: planHandlers.onSubmitPlanFollowUp,
     handleInteractionModeChange: runtime.handleInteractionModeChange,
-    onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
     onOptimisticUserMessage,
     onThreadMaterialized,
     // The send snapshots this thread-bound callback before async prompt/attachment preparation.
     submitQueuedComposerPrompt: promptQueue.submitQueuedPrompt,
     transformPromptForSend,
-  });
+  } satisfies Parameters<typeof useOnSend>[0];
+  const onSend = useOnSend(sendInput);
 
   return {
     onSend,
+    canQueueChat: canQueueComposerPrompt({
+      ...sendInput,
+      shouldQueuePrompt: shouldQueuePrompts,
+      planFollowUp: thread.showPlanFollowUpPrompt,
+    }),
     promptQueue,
     activeTurnInProgress,
   };

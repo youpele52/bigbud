@@ -57,7 +57,7 @@ export async function handleChatSendFailure(input: {
     promptRef: sendInput.promptRef,
     replyTarget: sendInput.replyTarget,
     composerImages: input.images,
-    composerFiles: input.files,
+    composerFiles: input.turnStartSucceeded ? [] : input.files,
     composerAnnotations: input.annotations,
     composerTerminalContexts: input.terminalContexts,
     setOptimisticUserMessages: sendInput.setOptimisticUserMessages,

@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openGameBrowserTab } from "./gameBrowser.actions";
-import { openNewBrowserTab } from "./browserPanel.actions";
+import { confirmBrowserClose, openNewBrowserTab } from "./browserPanel.actions";
 import { useBrowserPanelStore } from "./browser.store";
 import { useBrowserCloseConfirmationStore } from "./browserCloseConfirmation.store";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { GAMES } from "@bigbud/shared/games";
+import { ClientSettingsSchema, DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import { removeLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import { CLIENT_SETTINGS_STORAGE_KEY } from "~/hooks/useSettings.storage";
+import { toastManager } from "~/components/ui/toast";
 
 const game = () => ({ name: "Snake", url: "https://playsnake.org/", onOpened: vi.fn() });
 function fillTabs() {
@@ -15,6 +19,7 @@ function fillTabs() {
 }
 
 afterEach(() => {
+  removeLocalStorageItem(CLIENT_SETTINGS_STORAGE_KEY);
   useBrowserPanelStore.setState({ open: false, tabsById: {} });
   useRightPanelTabsStore.setState({
     openTabs: [],
@@ -86,12 +91,103 @@ describe("game browser launch", () => {
     const selected = game();
     expect(openGameBrowserTab(selected)).toBe(false);
     expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
-    expect(useBrowserCloseConfirmationStore.getState().tabIds).toHaveLength(0);
+    expect(useBrowserCloseConfirmationStore.getState().current).toBeNull();
     useRightPanelTabsStore.getState().closeTabById(ids[4]!);
     useBrowserPanelStore.getState().removeTab(ids[4]!);
     expect(openGameBrowserTab(selected)).toBe(true);
     expect(useBrowserPanelStore.getState().tabsById[ids[0]!]?.agentLease?.leaseId).toBe("lease");
     expect(selected.onOpened).toHaveBeenCalledOnce();
+  });
+
+  it("makes enough room after lowering the cap without skipping or evicting leased tabs", () => {
+    const ids = fillTabs();
+    setLocalStorageItem(
+      CLIENT_SETTINGS_STORAGE_KEY,
+      { ...DEFAULT_CLIENT_SETTINGS, browserTabLimit: 3 },
+      ClientSettingsSchema,
+    );
+    useBrowserPanelStore
+      .getState()
+      .setAgentLease(ids[1]!, { leaseId: "lease", threadId: "thread", turnId: "turn" });
+
+    expect(openGameBrowserTab(game())).toBe(false);
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+    expect(useBrowserCloseConfirmationStore.getState().current).toBeNull();
+
+    useBrowserPanelStore.getState().clearAgentLease(ids[1]!);
+    expect(openGameBrowserTab(game())).toBe(true);
+    const { activeTabId, openTabs } = useRightPanelTabsStore.getState();
+    expect(openTabs).toEqual([...ids.slice(3), activeTabId]);
+  });
+
+  it("does not evict tabs through the Retry toast after an agent releases a lease", () => {
+    const ids = fillTabs();
+    setLocalStorageItem(
+      CLIENT_SETTINGS_STORAGE_KEY,
+      { ...DEFAULT_CLIENT_SETTINGS, browserTabLimit: 3 },
+      ClientSettingsSchema,
+    );
+    const browser = useBrowserPanelStore.getState();
+    browser.setAgentLease(ids[0]!, { leaseId: "lease", threadId: "thread", turnId: "turn" });
+    const toast = vi.spyOn(toastManager, "add");
+    const selected = game();
+    try {
+      expect(openGameBrowserTab(selected)).toBe(false);
+      const retry = toast.mock.lastCall?.[0]?.actionProps?.onClick;
+      expect(retry).toBeDefined();
+      const click = {} as Parameters<NonNullable<typeof retry>>[0];
+      browser.clearAgentLease(ids[0]!);
+      retry?.(click);
+
+      expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+      expect(toast.mock.lastCall?.[0]?.description).toBe(
+        "Close 3 browser tabs manually, then retry.",
+      );
+      for (const id of ids.slice(0, 3)) useRightPanelTabsStore.getState().closeTabById(id);
+      retry?.(click);
+      const { openTabs, activeTabId } = useRightPanelTabsStore.getState();
+      expect(openTabs).toEqual([...ids.slice(3), activeTabId]);
+      expect(selected.onOpened).toHaveBeenCalledOnce();
+    } finally {
+      toast.mockRestore();
+    }
+  });
+
+  it("offers manual retry if a late lease leaves Games without an unleased replacement", async () => {
+    const ids = fillTabs();
+    useRightPanelTabsStore.setState({ browserCreationOrder: ids.slice(1) });
+    const selected = game();
+    expect(openGameBrowserTab(selected)).toBe(false);
+    const request = useBrowserCloseConfirmationStore.getState().current!;
+    expect(request).toMatchObject({ kind: "overflow", tabIds: [ids[0]], unknownOrder: true });
+    for (const id of ids) {
+      useBrowserPanelStore.getState().setAgentLease(id, {
+        leaseId: `lease:${id}`,
+        threadId: "thread",
+        turnId: "turn",
+      });
+    }
+    const revokeLease = vi.fn();
+    const toast = vi.spyOn(toastManager, "add");
+    try {
+      await confirmBrowserClose(request, new Set([`lease:${ids[0]}`]), revokeLease);
+      expect(revokeLease).not.toHaveBeenCalled();
+      expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+      expect(useBrowserPanelStore.getState().tabsById[ids[0]!]?.agentLease?.leaseId).toBe(
+        `lease:${ids[0]}`,
+      );
+      expect(useBrowserCloseConfirmationStore.getState().current).toBeNull();
+      expect(selected.onOpened).not.toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "warning",
+          description: expect.stringContaining("Close browser tabs manually, then retry."),
+          actionProps: expect.objectContaining({ children: "Retry" }),
+        }),
+      );
+    } finally {
+      toast.mockRestore();
+    }
   });
 
   it("rejects a concurrent launch without opening a second tab", () => {

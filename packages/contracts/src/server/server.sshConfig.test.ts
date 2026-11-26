@@ -15,6 +15,8 @@ describe("ServerListSshConfigHostsResult", () => {
           hostName: "10.0.4.7",
           user: "deploy",
           port: "2222",
+          hostKeyAlias: "work-trust",
+          route: "via 1 hop",
         },
         { alias: "gpu-box", sourcePath: "~/.ssh/config.d/lab", line: 3 },
       ],

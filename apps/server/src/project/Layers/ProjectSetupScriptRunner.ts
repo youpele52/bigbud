@@ -2,7 +2,10 @@ import { projectScriptRuntimeEnv, setupProjectScript } from "@bigbud/shared/proj
 import { assertTerminalCommandContext } from "@bigbud/shared/terminalCommand";
 import { ProjectId } from "@bigbud/contracts";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
+import { TerminalLimitError } from "@bigbud/contracts/workspace/terminal.limit.ts";
+import type { TerminalLifecycleNotice } from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
 
 import {
@@ -13,13 +16,42 @@ import {
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 import {
+  type ProjectSetupScriptRunnerInput,
   type ProjectSetupScriptRunnerShape,
   ProjectSetupScriptRunner,
 } from "../Services/ProjectSetupScriptRunner.ts";
+import { PendingProjectSetups } from "./ProjectSetupScriptRunner.pending.ts";
+
+const SETUP_INPUTS_GONE =
+  "The setup inputs are no longer available. Run the setup script again from the project menu.";
+
+/** The amber setup toast with "Close oldest and run setup" (plan §8.8, §11.3). */
+function setupBlockedNotice(
+  input: { readonly threadId: string },
+  error: TerminalLimitError,
+): TerminalLifecycleNotice {
+  return {
+    type: "lifecycleNotice",
+    noticeId: `setup-limit:${input.threadId}:${Date.now()}`.slice(0, 128),
+    kind: "setupBlockedByLimit",
+    threadId: input.threadId,
+    ...(error.candidate ? { candidate: error.candidate } : {}),
+    limit: error.limit,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+const isTerminalLimitError = Schema.is(TerminalLimitError);
+
+function withoutEvict(input: ProjectSetupScriptRunnerInput): ProjectSetupScriptRunnerInput {
+  const { evict: _evict, ...rest } = input;
+  return rest;
+}
 
 const makeProjectSetupScriptRunner = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const terminalManager = yield* TerminalManager;
+  const pending = new PendingProjectSetups();
 
   const runForThread: ProjectSetupScriptRunnerShape["runForThread"] = (input) =>
     Effect.gen(function* () {
@@ -71,7 +103,26 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
         worktreePath: input.worktreePath,
         env,
       };
-      const opened = yield* terminalManager.open(openInput);
+      const opened = yield* terminalManager
+        .open({ ...openInput, ...(input.evict ? { evict: input.evict } : {}) })
+        .pipe(
+          Effect.tapError((error) =>
+            isTerminalLimitError(error)
+              ? Effect.andThen(
+                  Effect.sync(() =>
+                    pending.remember(input.threadId, {
+                      input: withoutEvict(input),
+                      cwd,
+                      env,
+                      scriptId: script.id,
+                    }),
+                  ),
+                  terminalManager.publishLifecycleNotice?.(setupBlockedNotice(input, error)) ??
+                    Effect.void,
+                )
+              : Effect.void,
+          ),
+        );
       yield* Effect.try({
         try: () => assertTerminalCommandContext(opened, openInput),
         catch: (error) =>
@@ -101,8 +152,27 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
       } as const;
     });
 
+  const retryBlockedSetup: NonNullable<ProjectSetupScriptRunnerShape["retryBlockedSetup"]> = (
+    input,
+  ) =>
+    Effect.gen(function* () {
+      const stored = pending.take(input.threadId);
+      if (stored) return yield* runForThread({ ...stored.input, evict: input.evict });
+      // Backend restarted or the entry expired: the thread's worktree and project still say it.
+      const readModel = yield* orchestrationEngine.getReadModel();
+      const thread = readModel.threads.find((entry) => entry.id === input.threadId);
+      if (!thread?.worktreePath) return yield* Effect.fail(new Error(SETUP_INPUTS_GONE));
+      return yield* runForThread({
+        threadId: input.threadId,
+        projectId: thread.projectId,
+        worktreePath: thread.worktreePath,
+        evict: input.evict,
+      });
+    });
+
   return {
     runForThread,
+    retryBlockedSetup,
   } satisfies ProjectSetupScriptRunnerShape;
 });
 

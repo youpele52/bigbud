@@ -2,6 +2,7 @@ import { Effect } from "effect";
 
 import { runProcess } from "../../utils/processRunner.ts";
 import { buildSshTransportArgs } from "../../ssh/sshCommand.ts";
+import { assertLegacySshLaunchAllowed } from "../../ssh/sshOwnerSelection.ts";
 import { buildPasswordSessionControlPath } from "../../ssh/sshSession.ts";
 import { formatSshDestination, parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { validSshMonitorTarget } from "../../ssh/sshMonitor.target.ts";
@@ -29,6 +30,7 @@ export function remoteInspectionInvocation(executionTargetId: string) {
 
 /** Noninteractive SSH transport shared by read-only inspections; never triggers agent admission. */
 export function remoteReadOnlyInvocation(executionTargetId: string, command: string) {
+  assertLegacySshLaunchAllowed();
   // The password branch bypasses `buildSshTransportArgs`, so it needs its own guard.
   assertSshTargetConnected(executionTargetId);
   if (!validSshMonitorTarget(executionTargetId)) throw new Error("Invalid SSH inspection target.");
@@ -98,3 +100,45 @@ export const inspectRemoteTerminalProcesses: RemoteTerminalProcessInspector = (e
         cause,
       }),
   });
+
+/** Plan §8.5 shell set: a foreground leader with one of these names is a prompt, not a program. */
+const OWNER_HINT_SHELLS = new Set([
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "dash",
+  "ksh",
+  "tcsh",
+  "csh",
+  "nu",
+  "pwsh",
+  "xonsh",
+]);
+
+function commandName(command: string): string {
+  const first = command.trim().split(/\s+/, 1)[0] ?? "";
+  // A login shell shows as `-zsh`.
+  return (first.split("/").pop() ?? "").replace(/^-/, "");
+}
+
+/**
+ * The Direct SSH owner hint (plan §8.5, M7) for one remote shell: `busy` while a program owns
+ * its terminal's foreground group, `idle` at a prompt (including a nested shell's prompt), and
+ * `unknown` when the snapshot cannot tell (no shell, no terminal facts, an unreadable leader).
+ * Background jobs never count. The host treats `unknown` as busy.
+ */
+export function remoteOwnerBusyHint(
+  shellPid: number,
+  processes: ReadonlyArray<AgentProcess>,
+): "busy" | "idle" | "unknown" {
+  const shell = processes.find((process) => process.pid === shellPid);
+  const foreground = shell?.foregroundGroupId;
+  if (!shell || shell.groupId === null || foreground === null || foreground === undefined)
+    return "unknown";
+  if (foreground <= 0) return "unknown";
+  if (foreground === shell.groupId) return "idle";
+  const leader = processes.find((process) => process.pid === foreground);
+  if (!leader) return "busy";
+  return OWNER_HINT_SHELLS.has(commandName(leader.command)) ? "idle" : "busy";
+}

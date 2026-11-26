@@ -1,4 +1,4 @@
-import { type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { CodexAppServerProcess } from "./codexAppServerManager.processHandle.ts";
 import readline from "node:readline";
 
 import {
@@ -105,7 +105,8 @@ export interface CodexUserInputAnswer {
 export interface CodexSessionContext {
   session: ProviderSession;
   account: CodexAccountSnapshot;
-  child: ChildProcessWithoutNullStreams;
+  /** A local child or an SSH owner lease (see `codexAppServerManager.processHandle`). */
+  child: CodexAppServerProcess;
   output: readline.Interface;
   pending: Map<PendingRequestKey, PendingRequest>;
   pendingApprovals: Map<ApprovalRequestId, PendingApprovalRequest>;

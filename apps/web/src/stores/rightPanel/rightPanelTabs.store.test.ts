@@ -1,10 +1,7 @@
+import { DEFAULT_BROWSER_TAB_LIMIT } from "@bigbud/contracts/constants/browser.constant.ts";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  countRightPanelTabsByKind,
-  MAX_RIGHT_PANEL_BROWSER_TABS,
-  useRightPanelTabsStore,
-} from "./rightPanelTabs.store";
+import { countRightPanelTabsByKind, useRightPanelTabsStore } from "./rightPanelTabs.store";
 
 describe("rightPanelTabs.store", () => {
   afterEach(() => {
@@ -145,7 +142,7 @@ describe("rightPanelTabs.store", () => {
   it("opens up to five browser tabs and then rejects more", () => {
     const createdTabIds = [] as string[];
 
-    for (let index = 0; index < MAX_RIGHT_PANEL_BROWSER_TABS; index += 1) {
+    for (let index = 0; index < DEFAULT_BROWSER_TAB_LIMIT; index += 1) {
       const result = useRightPanelTabsStore.getState().openBrowserTab();
       expect(result.status).toBe("created");
       expect(result.tabId).toBeTruthy();
@@ -156,9 +153,9 @@ describe("rightPanelTabs.store", () => {
 
     expect(limitResult.status).toBe("limit_reached");
     expect(countRightPanelTabsByKind(useRightPanelTabsStore.getState().openTabs, "browser")).toBe(
-      MAX_RIGHT_PANEL_BROWSER_TABS,
+      DEFAULT_BROWSER_TAB_LIMIT,
     );
-    expect(new Set(createdTabIds).size).toBe(MAX_RIGHT_PANEL_BROWSER_TABS);
+    expect(new Set(createdTabIds).size).toBe(DEFAULT_BROWSER_TAB_LIMIT);
   });
 
   it("closes one browser tab without removing other browser tabs", () => {

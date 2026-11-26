@@ -29,7 +29,7 @@ for done_file in "$home"/.bigbud/backend-services/*/setup-complete-v1; do
 done
 `;
 export const SSH_HOST_KEY_DIR = "/etc/ssh";
-const READ_COMPLETION_SCRIPT = `set -eu
+export const READ_COMPLETION_SCRIPT = `set -eu
 home=$(getent passwd "$(id -u)" | cut -d: -f6)
 case "$home" in /*) ;; *) exit 70 ;; esac
 exec head -c 16384 "$home/.bigbud/backend-services/$1/setup-complete-v1"
@@ -209,15 +209,24 @@ export async function readRemoteSetupCompletion(input: {
   readonly requestId: string;
   readonly signal: AbortSignal;
 }) {
-  const result = await input.run(
-    input.executionTargetId,
-    {
-      command: "/bin/sh",
-      args: ["-c", READ_COMPLETION_SCRIPT, "sh", input.authorityId],
-      timeoutMs: 30_000,
-    },
-    input.signal,
-  );
+  const result = input.run.readCompletion
+    ? await input.run.readCompletion(
+        {
+          executionTargetId: input.executionTargetId,
+          authorityId: input.authorityId,
+          requestId: input.requestId,
+        },
+        input.signal,
+      )
+    : await input.run(
+        input.executionTargetId,
+        {
+          command: "/bin/sh",
+          args: ["-c", READ_COMPLETION_SCRIPT, "sh", input.authorityId],
+          timeoutMs: 30_000,
+        },
+        input.signal,
+      );
   let record: typeof Completion.Type;
   try {
     if (result.code !== 0) throw new Error("unreadable");

@@ -12,12 +12,13 @@ import {
   recordTerminalProfileSnapshot,
   terminalProfileOpenOptions,
 } from "../../components/terminal/TerminalViewport.profile";
-import { createDefaultThreadTerminalState } from "./helpers.store";
+import { createSingleThreadTerminalState } from "./helpers.store";
 import { useTerminalStateStore } from "./terminal.store";
 import { terminalPersistenceOptions } from "./terminal.store.persistence";
 
 const threadId = ThreadId.makeUnsafe("profile-launch-test");
-const pane = createDefaultThreadTerminalState().activeTerminalId;
+// Threads have no implicit pane: each case starts from one existing source pane per surface.
+const pane = "source-pane";
 const host = { kind: "ssh", hostId: "ssh:remote" } as const;
 const snapshot: TerminalSessionSnapshot = {
   threadId,
@@ -46,8 +47,8 @@ const options = (id: string) =>
 beforeEach(() =>
   useTerminalStateStore.setState({
     terminalProfileLaunches: {},
-    terminalStateByThreadId: { [threadId]: createDefaultThreadTerminalState() },
-    panelTerminalStateByThreadId: {},
+    terminalStateByThreadId: { [threadId]: createSingleThreadTerminalState(pane) },
+    panelTerminalStateByThreadId: { [threadId]: createSingleThreadTerminalState(pane) },
   }),
 );
 afterEach(() => {
@@ -219,7 +220,7 @@ describe("per-pane profile launch requests", () => {
   it("supports both panel actions and cleans requests on close", () => {
     recordTerminalLaunch(snapshot);
     useTerminalStateStore.setState({
-      panelTerminalStateByThreadId: { [threadId]: createDefaultThreadTerminalState() },
+      panelTerminalStateByThreadId: { [threadId]: createSingleThreadTerminalState(pane) },
     });
     useTerminalStateStore.getState().splitPanelTerminal(threadId, "panel");
     expect(options("panel")?.host).toEqual(host);

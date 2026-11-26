@@ -140,7 +140,18 @@ function remapEvent(event: ProviderRuntimeEvent): ProviderRuntimeEvent {
 export function remapError(error: ProviderAdapterError): ProviderAdapterError {
   switch (error._tag) {
     case "ProviderAdapterValidationError":
-      return new ProviderAdapterValidationError({ ...error, provider: PROVIDER });
+      return new ProviderAdapterValidationError({
+        ...error,
+        provider: PROVIDER,
+        ...(error.turnStartRefusal
+          ? {
+              turnStartRefusal: {
+                ...error.turnStartRefusal,
+                gate: { ...error.turnStartRefusal.gate, provider: PROVIDER },
+              },
+            }
+          : {}),
+      });
     case "ProviderAdapterSessionNotFoundError":
       return new ProviderAdapterSessionNotFoundError({ ...error, provider: PROVIDER });
     case "ProviderAdapterSessionClosedError":

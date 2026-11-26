@@ -74,7 +74,10 @@ export function SidebarUnlockSshKeyDialog({
                 </div>
               </dl>
               <p className="text-xs text-muted-foreground">
-                Trust will be saved in your SSH known_hosts file, shared with Terminal and VS Code.
+                {hostTrust.challengeId.startsWith("rust-dev:") ||
+                hostTrust.challengeId.startsWith("rust-dev-jump:")
+                  ? "Trust is saved only in the disposable Rust SSH owner profile."
+                  : "Trust will be saved in your SSH known_hosts file, shared with Terminal and VS Code."}
               </p>
               {error ? (
                 <p role="alert" className="text-destructive text-xs">

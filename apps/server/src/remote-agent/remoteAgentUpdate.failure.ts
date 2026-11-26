@@ -1,15 +1,13 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import type { RemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentUpdateCoordinatorDependencies } from "./remoteAgentUpdate.coordinator.ts";
 import { remoteAgentFailureDetail } from "./remoteAgentFailure.ts";
-import {
-  isDefinitiveRemoteAgentUpdateFailure,
-  buildRemoteAgentCandidateExitWaitCommand,
-} from "./remoteAgentUpdate.prepare.ts";
+import { isDefinitiveRemoteAgentUpdateFailure } from "./remoteAgentUpdate.prepare.ts";
+import { launchAttemptId } from "./remoteAgentUpdate.prepare.scripts.ts";
 import { markRemoteAgentUpdate } from "./remoteAgentUpdate.state.ts";
 import { quarantineRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.ts";
-import { buildRemoteAgentSupervisorShutdownCommand } from "./remoteAgentSupervisor.ts";
 import { reconcileRemoteAgentLaunchExits } from "./remoteAgentInstall.reconcile.ts";
 
 export function markUpdateFailure(
@@ -51,11 +49,17 @@ export async function bestEffortFailedCandidateCleanup(
   const launch = state.launches.find((entry) => entry.buildId === buildId);
   if (launch && launch.phase !== "proven-dead") {
     try {
-      const result = await control.run(buildRemoteAgentSupervisorShutdownCommand(build.runtime));
+      const result = await runRemoteAgentControlOp(control, {
+        kind: "supervisorShutdown",
+        runtime: build.runtime,
+      });
       if (result.trim() === "shutdown-accepted") {
-        const exited = await control.run(
-          buildRemoteAgentCandidateExitWaitCommand(build.runtime, launch.attemptId),
-        );
+        const exited = await runRemoteAgentControlOp(control, {
+          kind: "supervisorObserve",
+          mode: "candidateExit",
+          runtime: build.runtime,
+          attemptId: launch.attemptId ?? launchAttemptId(build.runtime),
+        });
         if (exited.trim() === "exited" || exited.trim() === "prior-boot-dead")
           await reconcileRemoteAgentLaunchExits(control, { buildId });
       }

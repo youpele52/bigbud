@@ -85,7 +85,7 @@ function autoResolveConfirm(deps: {
       return;
     }
     pending.responding = true;
-    yield* Effect.tryPromise({
+    const response = yield* Effect.tryPromise({
       try: () =>
         deps.session.process.write({
           type: "extension_ui_response",
@@ -99,7 +99,10 @@ function autoResolveConfirm(deps: {
           detail: toMessage(cause, "Failed to auto-respond to Pi confirm request."),
           cause,
         }),
-    }).pipe(Effect.orElseSucceed(() => undefined));
+    }).pipe(Effect.result);
+
+    // A failed transport write is not a terminal answer. Keep the local guard active.
+    if (response._tag === "Failure") return;
 
     if (!deps.session.pendingUserInputs.has(deps.requestId)) {
       return;

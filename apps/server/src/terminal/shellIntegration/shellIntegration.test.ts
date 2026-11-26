@@ -4,7 +4,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { fishScript } from "./shellIntegration.fish.ts";
 import { bashScript, zshEnvScript } from "./shellIntegration.posix.ts";
-import { installShellIntegration, shellIntegrationEnv } from "./shellIntegration.ts";
+import {
+  installShellIntegration,
+  shellIntegrationEnv,
+  shellIntegrationEnvIsStable,
+  shellIntegrationRoot,
+} from "./shellIntegration.ts";
 
 const scripts = {
   zsh: zshEnvScript(),
@@ -81,6 +86,29 @@ describe("installShellIntegration and shellIntegrationEnv", () => {
       expect(off.PROMPT_COMMAND).toBe(files.bootstrap);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("hook paths live under <stateDir> and stay identical when a later backend reinstalls", async () => {
+    const stateDir = await mkdtemp(path.join(tmpdir(), "bigbud-si-state-"));
+    try {
+      const files = await installShellIntegration(shellIntegrationRoot(stateDir));
+      const env = shellIntegrationEnv(files, {}, true);
+      expect(shellIntegrationEnvIsStable(env, stateDir)).toBe(true);
+      // A restarted backend installs the same content-addressed version at the same path.
+      const again = shellIntegrationEnv(
+        await installShellIntegration(shellIntegrationRoot(stateDir)),
+        {},
+        true,
+      );
+      expect(again).toEqual(env);
+      expect(shellIntegrationEnvIsStable(env, path.join(stateDir, "other"))).toBe(false);
+      expect(shellIntegrationEnvIsStable({}, stateDir)).toBe(true);
+      expect(
+        shellIntegrationEnvIsStable({ ...env, BIGBUD_CLAUDE_HOOKS: "/tmp/x.json" }, stateDir),
+      ).toBe(false);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
     }
   });
 });

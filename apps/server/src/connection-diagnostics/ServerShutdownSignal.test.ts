@@ -121,7 +121,7 @@ describe("server shutdown signal", () => {
 
     expect(application).toContain("HttpRouter.serve(makeRoutesLayer");
     expect(local).toMatch(
-      /return withServerShutdownSignal\(serverApplicationLayer\)\.pipe\(\s*(?:\/\/[^\n]*\n\s*)*Layer\.provideMerge\(RuntimeServicesLive\)/,
+      /return withServerShutdownSignal\(serverApplicationLayer\)\.pipe\(\s*(?:\/\/[^\n]*\n\s*)*(?:Layer\.provideMerge\(DevSshOwnerLayer\),\s*)?Layer\.provideMerge\(RuntimeServicesLive\)/,
     );
     // The remote application (all listeners) is the signal's only input, and the pair sits
     // inside runtime services. A plain `Layer.provide` of one named layer (e.g. runtime

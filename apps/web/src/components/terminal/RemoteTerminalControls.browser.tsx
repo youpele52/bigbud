@@ -153,6 +153,12 @@ it("attaches only the discovered resource and restores its pane after confirmati
     resourceId: "pty",
     cwd: "/work",
   });
+  // The attached pane is restored: its view only reattaches and never respawns a shell.
+  expect(mocks.ensure).toHaveBeenCalledWith("thread", "terminal", {
+    open: true,
+    active: true,
+    restored: true,
+  });
   expect(mocks.record).toHaveBeenCalledOnce();
   expect(mocks.stop).not.toHaveBeenCalled();
 });

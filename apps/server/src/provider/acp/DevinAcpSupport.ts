@@ -14,6 +14,8 @@ import {
   type AcpSpawnInput,
 } from "./AcpSessionRuntime.ts";
 
+import { applyExactDelegatedAcpEffort, ExactDelegatedAcpEffort } from "./acpSessionEffort.ts";
+
 type DevinAcpRuntimeDevinSettings = Pick<DevinSettings, "binaryPath">;
 
 export interface DevinAcpRuntimeInput extends Omit<AcpSessionRuntimeOptions, "spawn"> {
@@ -78,6 +80,7 @@ export function applyDevinAcpModelSelection<E>(input: {
     const configOptions = yield* input.runtime.getConfigOptions;
     const modelOption = configOptions.find((opt) => opt.category === "model");
     const resolvedModel = resolveDevinAcpBaseModelId(input.model);
+    let selectedModel = false;
 
     // Devin's ACP only exposes the currently selected model in config options.
     // If the requested model isn't available, skip model selection to avoid "invalid params" errors.
@@ -100,13 +103,25 @@ export function applyDevinAcpModelSelection<E>(input: {
             }),
           ),
         );
+        selectedModel = true;
       }
     } else {
       // No model config option available, skip model selection
       yield* Effect.logWarning("Devin ACP has no model config option, skipping model selection");
     }
 
-    const configUpdates = resolveDevinAcpConfigUpdates(configOptions, input.modelOptions);
+    const exactEffort = yield* ExactDelegatedAcpEffort;
+    const options = input.modelOptions;
+    // The effort control belongs to the selected model, not the model we just left.
+    const requestedReasoning = options?.reasoning !== undefined;
+    const currentOptions =
+      selectedModel && requestedReasoning ? yield* input.runtime.getConfigOptions : configOptions;
+    const configUpdates = resolveDevinAcpConfigUpdates(
+      currentOptions,
+      (exactEffort !== undefined || !selectedModel) && requestedReasoning && options
+        ? { ...options, reasoning: undefined }
+        : options,
+    );
     for (const update of configUpdates) {
       yield* input.runtime.setConfigOption(update.configId, update.value).pipe(
         Effect.mapError((cause) =>
@@ -116,6 +131,11 @@ export function applyDevinAcpModelSelection<E>(input: {
             configId: update.configId,
           }),
         ),
+      );
+    }
+    if (exactEffort !== undefined) {
+      yield* applyExactDelegatedAcpEffort(input.runtime, exactEffort, selectedModel).pipe(
+        Effect.mapError((cause) => input.mapError({ cause, step: "set-config-option" })),
       );
     }
   });

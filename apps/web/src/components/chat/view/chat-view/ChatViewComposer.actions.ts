@@ -1,5 +1,7 @@
 import { getRoutableModelSelection } from "../../../../models/provider/selection-helpers.models";
-import { useCallback } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import { readNativeApi } from "../../../../rpc/nativeApi";
+import { MAX_STAGED_DOCUMENT_CHARS } from "../../../../stores/composer/readDocuments.store";
 import {
   collapseExpandedComposerCursor,
   detectComposerTrigger,
@@ -66,27 +68,42 @@ export function useChatViewComposerActions(input: UseChatViewComposerActionsInpu
     input.base.setReadDocumentDialogOpen(true);
   }, [input.base]);
 
-  const onSubmitReadUrl = useCallback(
-    async (url: string) => {
-      setPromptAndCursor(`/read ${url}`);
-      input.interactions.onSend();
-    },
-    [input.interactions, setPromptAndCursor],
-  );
+  const { addComposerFiles } = input.interactions;
+  const latestAddFiles = useRef(addComposerFiles);
+  useLayoutEffect(() => {
+    latestAddFiles.current = addComposerFiles;
+  }, [addComposerFiles]);
+
+  const onSubmitReadUrl = useCallback(async (url: string, signal: AbortSignal) => {
+    const api = readNativeApi();
+    if (!api) throw new Error("Connect to the server before reading a document URL.");
+    const result = await api.server.readDocumentUrl({ url }, { signal });
+    if (signal.aborted) return;
+    const name =
+      (result.title || new URL(result.resolvedUrl).hostname)
+        .replace(/[^\p{L}\p{N} ._-]+/gu, " ")
+        .slice(0, 96)
+        .trim() || "URL document";
+    const contents = [
+      `Source URL: ${result.sourceUrl}`,
+      `Resolved URL: ${result.resolvedUrl.slice(0, 2048)}`,
+      ...(result.title ? [`Title: ${result.title.slice(0, 1024)}`] : []),
+      "",
+      result.text,
+    ];
+    const readDocumentText = contents.join("\n");
+    if (readDocumentText.length > MAX_STAGED_DOCUMENT_CHARS) {
+      throw new Error("The extracted document is too large to keep in this draft.");
+    }
+    const file = new File([readDocumentText], `${name}.txt`, { type: "text/plain" });
+    if (!latestAddFiles.current([file], { readDocumentText })) {
+      throw new Error("Could not attach this document. Check the attachment limits and try again.");
+    }
+  }, []);
 
   const onSubmitReadFiles = useCallback(
-    async (files: File[]) => {
-      if (!input.interactions.addComposerFiles(files)) return;
-      const nextPrompt =
-        input.base.promptRef.current.trim().length > 0
-          ? input.base.promptRef.current
-          : "Read the attached documents and use them as context.";
-      setPromptAndCursor(nextPrompt);
-      window.requestAnimationFrame(() => {
-        input.interactions.onSend();
-      });
-    },
-    [input.base.promptRef, input.interactions, setPromptAndCursor],
+    (files: File[]) => addComposerFiles(files, "atomic"),
+    [addComposerFiles],
   );
 
   const onUseHandoffFromMeter = useCallback(() => {

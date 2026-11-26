@@ -1,3 +1,4 @@
+import { interactionGeneration } from "../../pendingInteractionAdmission.ts";
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 import { Option } from "effect";
 
@@ -41,6 +42,8 @@ export function resolveMuseApproval(
   if (!pending || !state.pendingApprovals.delete(requestId)) return undefined;
   return {
     ...museEventBase(state.threadId, pending.turnId),
+    sessionEpoch: state.sessionEpoch,
+    requestGeneration: interactionGeneration(pending),
     requestId,
     type: "request.resolved",
     payload: { requestType: "unknown", decision },
@@ -52,9 +55,12 @@ export function resolveMuseUserInput(
   requestId: string,
   answers: unknown,
 ): ProviderRuntimeEvent | undefined {
-  if (!state.pendingUserInputs.delete(requestId)) return undefined;
+  const pending = state.pendingUserInputs.get(requestId);
+  if (!pending || !state.pendingUserInputs.delete(requestId)) return undefined;
   return {
     ...museEventBase(state.threadId),
+    sessionEpoch: state.sessionEpoch,
+    requestGeneration: interactionGeneration(pending),
     requestId,
     type: "user-input.resolved",
     payload: { answers },

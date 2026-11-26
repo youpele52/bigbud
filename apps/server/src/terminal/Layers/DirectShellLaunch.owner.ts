@@ -9,6 +9,7 @@ import {
 } from "./ShellProfiles.launch.metadata";
 import { remoteShellHost } from "./ShellProfiles.remote.identity";
 
+import type { HostedDirectShellOwnerStore } from "./DirectShellLaunch.hosted";
 import {
   DirectShellLifecycleBinding,
   directShellLifecycleDigestFields,
@@ -94,9 +95,34 @@ export function parseDirectShellLaunchOwner(input: unknown): DirectShellLaunchOw
   return structuredClone(owner);
 }
 
-export interface DirectShellLaunchOwnerStore {
-  /** Missing legacy pane metadata blocks bulk cleanup conservatively; never infer ownership. */
-  readonly hasOwnersForThread?: (threadId: string) => Promise<boolean>;
+/**
+ * The legacy members below read and write version 1 owners only; Direct SSH panes in the local
+ * terminal host (M7) use the optional hosted members, which legacy and test stores may omit.
+ */
+export interface DirectShellLaunchOwnerStore extends Partial<HostedDirectShellOwnerStore> {
+  /**
+   * Pane-scoped owners match by their validated pane. Legacy owners without pane metadata are
+   * never assigned to a thread by guesswork: they match only when `isThreadPaneKey` recognises
+   * their key as one of this thread's known panes. Omitting it keeps the conservative default
+   * (every legacy owner blocks every thread).
+   */
+  readonly hasOwnersForThread?: (
+    threadId: string,
+    isThreadPaneKey?: (ownerKey: string) => boolean,
+  ) => Promise<boolean>;
+  /** The owners `hasOwnersForThread` would match, for an explicit user decision. */
+  readonly listForThread?: (
+    threadId: string,
+    isThreadPaneKey: (ownerKey: string) => boolean,
+  ) => Promise<ReadonlyArray<DirectShellLaunchOwner>>;
+  /**
+   * Explicit user recovery only: forgets exactly the owners `listForThread` returns (unchanged
+   * since they were read), never another thread's. The remote shell is not stopped.
+   */
+  readonly forgetForThread?: (
+    threadId: string,
+    isThreadPaneKey: (ownerKey: string) => boolean,
+  ) => Promise<number>;
   readonly get: (ownerKey: string) => Promise<DirectShellLaunchOwner | undefined>;
   readonly reserve: (owner: DirectShellLaunchOwner) => Promise<{
     readonly created: boolean;

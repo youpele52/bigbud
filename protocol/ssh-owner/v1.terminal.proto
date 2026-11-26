@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package bigbud.ssh_owner.v1;
+
+// Fixture-only lease records. The caller can send bounded terminal data and
+// dimensions to its own lease, but cannot select the command or executable.
+message ProofTerminalLease {
+  bytes lease = 1;
+}
+
+message ProofTerminal {
+  bytes lease = 1;
+  uint32 pid = 2;
+  bool live = 3;
+  bytes sample = 4;
+  // Supervised disposable owner only. Birth generation is invariant across reattachment.
+  optional bytes birth_generation = 5;
+  // Absent once a write could not be confirmed. Never replay an uncertain write.
+  optional uint64 next_input_sequence = 6;
+}
+
+// An empty lease is reserved for older fixed fixture cases with no workspace binding.
+message ProofTerminalOpen {
+  bytes lease = 1;
+}
+
+message ProofPrepareTerminal {
+  string cwd = 1;
+  string thread_id = 2;
+  string terminal_id = 3;
+  uint32 cols = 4;
+  uint32 rows = 5;
+  // U16 typed shell profile (production only). An absolute shell path from the
+  // target's own `/etc/shells` (see `TerminalShells`); the owner re-checks it
+  // against `/etc/shells` at launch. Absent: the account's login `$SHELL`.
+  optional string shell = 6;
+}
+
+message ProofTerminalReservation {
+  bytes lease = 1;
+  bool cancelled = 2;
+}
+
+// Proof-only physical working-directory probe within the authorized workspace.
+message ProofTerminalCwd {
+  string cwd = 1;
+}
+
+message ProofTerminalReplayRequest {
+  bytes lease = 1;
+  uint64 after_sequence = 2;
+}
+
+message ProofTerminalReplayChunk {
+  uint64 sequence = 1;
+  bytes data = 2;
+}
+
+// An exact bounded cut. A gap never carries partial data disguised as replay.
+message ProofTerminalReplay {
+  bytes lease = 1;
+  uint64 first_retained_sequence = 2;
+  uint64 next_sequence = 3;
+  repeated ProofTerminalReplayChunk chunks = 4;
+  bool gap = 5;
+}
+
+message ProofTerminalInput {
+  bytes lease = 1;
+  uint64 sequence = 2;
+  bytes data = 3;
+}
+
+message ProofTerminalResize {
+  bytes lease = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+// W2 T-term `terminal_inspect` (Request 120). Names the caller's own lease only.
+message TerminalInspect {
+  bytes lease = 1;
+}
+
+// One process in the lease's remote shell tree. Group ids are absent when the
+// target's `ps` reports none (no controlling terminal).
+message TerminalProcess {
+  uint32 pid = 1;
+  uint32 parent_pid = 2;
+  optional uint32 group_id = 3;
+  optional uint32 foreground_group_id = 4;
+  // Bounded command line, as `ps -ww -o command=` printed it.
+  string command = 5;
+}
+
+// Reply 71: the exact lease's login-shell PID and that shell plus its
+// descendants from one fixed, bounded `ps` over the target's verified master.
+message TerminalProcesses {
+  bytes lease = 1;
+  uint32 shell_pid = 2;
+  repeated TerminalProcess processes = 3;
+  // More processes or bytes than the owner bound; the list is a prefix.
+  bool truncated = 4;
+}
+
+// Reply 72 (U16, Request 121 `list_terminal_shells`): absolute shell paths from
+// the target's `/etc/shells`, in file order, each an existing executable.
+message TerminalShells {
+  repeated string paths = 1;
+}

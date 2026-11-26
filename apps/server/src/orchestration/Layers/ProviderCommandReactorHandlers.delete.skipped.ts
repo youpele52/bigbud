@@ -15,7 +15,7 @@ import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 
 export const THREAD_DELETE_SKIPPED_ACTIVITY_KIND = "thread.delete.skipped";
 
-const SKIPPED_ACTIVE_SUMMARY: Record<ThreadDeletionSkippedActiveReason, string> = {
+export const SKIPPED_ACTIVE_SUMMARY: Record<ThreadDeletionSkippedActiveReason, string> = {
   "active-runtime": "Thread deletion was cancelled because the thread is running",
   "subtree-changed": "Thread deletion was cancelled because its threads changed while deleting",
 };

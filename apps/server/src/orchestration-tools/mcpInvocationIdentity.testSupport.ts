@@ -40,8 +40,19 @@ export function remoteToolRequest(id: string | number, marker: string): JsonObje
   };
 }
 
-export function spawnBridge(source: string): BridgeProcess {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", source]);
+export function spawnBridge(
+  source:
+    | string
+    | {
+        readonly command: string;
+        readonly args?: readonly string[];
+        readonly env?: Readonly<Record<string, string>>;
+      },
+): BridgeProcess {
+  const child =
+    typeof source === "string"
+      ? spawn(process.execPath, ["--input-type=module", "-e", source])
+      : spawn(source.command, source.args ?? [], { env: { ...process.env, ...source.env } });
   const queued: JsonObject[] = [];
   const waiters: Array<(message: JsonObject) => void> = [];
   let buffer = "";

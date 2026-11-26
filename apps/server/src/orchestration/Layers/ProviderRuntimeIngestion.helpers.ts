@@ -25,8 +25,7 @@ export const BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY = 10_000;
 export const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
 export const STREAMING_ASSISTANT_COALESCE_CHARS = 256;
 export const STRICT_PROVIDER_LIFECYCLE_GUARD =
-  (process.env.BIGBUD_STRICT_PROVIDER_LIFECYCLE_GUARD ??
-    process.env.T3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD) !== "0";
+  process.env.BIGBUD_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
 
 export type TurnStartRequestedDomainEvent = Extract<
   OrchestrationEvent,

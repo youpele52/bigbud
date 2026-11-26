@@ -1,6 +1,5 @@
 import { type ThreadId } from "@bigbud/contracts";
 import { useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import { BACKEND_SCOPED_STORAGE_OPTIONS, useLocalStorage } from "~/hooks/useLocalStorage";
 
@@ -15,6 +14,7 @@ import {
 import { useStore } from "../../../../stores/main";
 import { selectThreadTerminalState, useTerminalStateStore } from "../../../../stores/terminal";
 import { type ExpandedImagePreview } from "../../common/ExpandedImagePreview";
+import { useComposerReadDialogState } from "../../composer/ComposerReadDialog.state";
 import {
   LAST_INVOKED_SCRIPT_BY_PROJECT_KEY,
   LastInvokedScriptByProjectSchema,
@@ -74,7 +74,8 @@ export function useChatViewBaseEphemeralState(input: {
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
-  const [readDocumentDialogOpen, setReadDocumentDialogOpen] = useState(false);
+  const { readDocumentDialogOpen, setReadDocumentDialogOpen } =
+    useComposerReadDialogState(threadId);
   const [terminalLaunchContext, setTerminalLaunchContext] = useState<TerminalLaunchContext | null>(
     null,
   );
@@ -109,13 +110,6 @@ export function useChatViewBaseEphemeralState(input: {
     () => selectThreadTerminalState(terminalStateByThreadId, threadId),
     [terminalStateByThreadId, threadId],
   );
-  const openTerminalThreadIds = useTerminalStateStore(
-    useShallow((state) =>
-      Object.entries(state.terminalStateByThreadId).flatMap(([nextThreadId, nextTerminalState]) =>
-        nextTerminalState.terminalOpen ? [nextThreadId as ThreadId] : [],
-      ),
-    ),
-  );
   const storeSetTerminalOpen = useTerminalStateStore((s) => s.setTerminalOpen);
   const storeSplitTerminal = useTerminalStateStore((s) => s.splitTerminal);
   const storeNewTerminal = useTerminalStateStore((s) => s.newTerminal);
@@ -129,12 +123,7 @@ export function useChatViewBaseEphemeralState(input: {
   );
 
   const threads = useStore((state) => state.threads);
-  const serverThreadIds = useStore(useShallow((state) => state.threads.map((thread) => thread.id)));
   const draftThreadsByThreadId = useComposerDraftStore((store) => store.draftThreadsByThreadId);
-  const draftThreadIds = useComposerDraftStore(
-    useShallow((store) => Object.keys(store.draftThreadsByThreadId) as ThreadId[]),
-  );
-  const [mountedTerminalThreadIds, setMountedTerminalThreadIds] = useState<ThreadId[]>([]);
 
   return {
     promptRef,
@@ -195,7 +184,6 @@ export function useChatViewBaseEphemeralState(input: {
     terminalOpenByThreadRef,
     terminalStateByThreadId,
     terminalState,
-    openTerminalThreadIds,
     storeSetTerminalOpen,
     storeSplitTerminal,
     storeNewTerminal,
@@ -204,10 +192,6 @@ export function useChatViewBaseEphemeralState(input: {
     storeServerTerminalLaunchContext,
     storeClearTerminalLaunchContext,
     threads,
-    serverThreadIds,
     draftThreadsByThreadId,
-    draftThreadIds,
-    mountedTerminalThreadIds,
-    setMountedTerminalThreadIds,
   };
 }

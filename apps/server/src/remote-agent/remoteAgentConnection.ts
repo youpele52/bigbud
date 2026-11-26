@@ -4,6 +4,14 @@ import {
   finishRemoteAgentGracefulClose,
 } from "./remoteAgentConnection.process.ts";
 import { requestRemoteFrame, type FrameWaiter } from "./remoteAgentConnection.request";
+import {
+  openOwnedRemoteAgentProxy,
+  REMOTE_AGENT_PROXY_CLOSE_TIMEOUT_MS,
+  trackOwnedRemoteAgentProxy,
+  type RemoteAgentOwnedSshInput,
+  type RemoteAgentProxyLease,
+  type RemoteAgentProxyPipes,
+} from "./remoteAgentConnection.owner.ts";
 import { RemoteAgentFrameInbox, type FrameListener } from "./remoteAgentConnection.inbox.ts";
 import { randomUUID } from "node:crypto";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
@@ -71,14 +79,25 @@ export interface RemoteAgentSshProcessInput {
   readonly executionTargetId: string;
   readonly binaryPath: string;
   readonly maxFrameBytes?: number;
+  readonly signal?: never;
+  readonly timeoutMs?: never;
 }
+
+type RemoteAgentConnectionTransport =
+  | { readonly ownerLease: RemoteAgentProxyLease }
+  | ChildProcessWithoutNullStreams;
 
 export { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.identity.ts";
 
 export class RemoteAgentConnection {
   private readonly maxFrameBytes: number;
-  private readonly child: ChildProcessWithoutNullStreams;
-  private readonly processLifecycle: ReturnType<typeof trackRemoteAgentProcess>;
+  private readonly stdin: RemoteAgentProxyPipes["stdin"];
+  private readonly lifecycle:
+    | ReturnType<typeof trackOwnedRemoteAgentProxy>
+    | {
+        child: ChildProcessWithoutNullStreams;
+        process: ReturnType<typeof trackRemoteAgentProcess>;
+      };
   private stderrTail = "";
   private readBuffer = Buffer.alloc(0);
   private readonly inbox: RemoteAgentFrameInbox;
@@ -94,33 +113,41 @@ export class RemoteAgentConnection {
   }
 
   private constructor(
-    child: ChildProcessWithoutNullStreams,
+    transport: RemoteAgentConnectionTransport,
     maxFrameBytes: number,
     maxUnclaimedFrames?: number,
   ) {
     this.inbox = new RemoteAgentFrameInbox(maxUnclaimedFrames);
-    this.child = child;
-    this.processLifecycle = trackRemoteAgentProcess(child);
     this.maxFrameBytes = maxFrameBytes;
-    child.stdout.on("data", (chunk: Buffer) => this.consume(chunk));
-    child.stdout.on("error", (error) => this.fail(error));
-    // A child can exit while a cleanup request is still writing. Streams emit an
-    // `error` event in that case; without this listener Node treats it as fatal.
-    child.stdin.on("error", (error) => this.fail(error));
-    child.stderr.on("data", (chunk: Buffer | string) => {
+    const pipes = "ownerLease" in transport ? transport.ownerLease.pipes : transport;
+    this.stdin = pipes.stdin;
+    pipes.stdout.on("data", (chunk: Buffer) => this.consume(chunk));
+    // A proxy can exit while a cleanup request is still writing.
+    for (const pipe of [pipes.stdin, pipes.stdout]) pipe.on("error", (error) => this.fail(error));
+    pipes.stderr.on("data", (chunk: Buffer | string) => {
       this.stderrTail = `${this.stderrTail}${chunk.toString()}`.slice(-4_096);
     });
-    child.on("error", (error) => this.fail(error));
-    child.on("close", (code, signal) => {
-      if (!this.closed && !this.failure) {
-        const detail = this.stderrTail.trim();
-        this.fail(
-          new RemoteAgentConnectionError(
-            `Remote agent exited before the request completed (code=${code ?? "null"}, signal=${signal ?? "null"})${detail ? `: ${detail}` : "."}`,
-          ),
-        );
-      }
-    });
+    const onExit = (code: number | null, signal: string | null) => {
+      if (this.closed || this.failure) return;
+      const detail = this.stderrTail.trim();
+      this.fail(
+        new RemoteAgentConnectionError(
+          `Remote agent exited before the request completed (code=${code ?? "null"}, signal=${signal ?? "null"})${detail ? `: ${detail}` : "."}`,
+        ),
+      );
+    };
+    if ("ownerLease" in transport) {
+      this.lifecycle = trackOwnedRemoteAgentProxy(transport.ownerLease);
+      pipes.stderr.on("error", (error) => this.fail(error));
+      void transport.ownerLease.exit.then(
+        ({ code, signal }) => onExit(code, signal),
+        (error) => this.fail(error),
+      );
+    } else {
+      this.lifecycle = { child: transport, process: trackRemoteAgentProcess(transport) };
+      transport.on("error", (error) => this.fail(error));
+      transport.on("close", onExit);
+    }
   }
 
   static local(input: RemoteAgentLocalProcessInput): RemoteAgentConnection {
@@ -135,21 +162,27 @@ export class RemoteAgentConnection {
   }
 
   get processId(): number | undefined {
-    return this.child.pid;
+    return typeof this.lifecycle === "function" ? undefined : this.lifecycle.child.pid;
   }
 
-  static async ssh(input: RemoteAgentSshProcessInput): Promise<RemoteAgentConnection> {
-    await assertSshExecutionTargetReadyAsync(input.executionTargetId);
+  static async ssh(
+    input: RemoteAgentSshProcessInput | RemoteAgentOwnedSshInput,
+  ): Promise<RemoteAgentConnection> {
     const maxFrameBytes = input.maxFrameBytes ?? REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES;
+    if ("owner" in input) {
+      return openOwnedRemoteAgentProxy(
+        input,
+        (ownerLease) => new RemoteAgentConnection({ ownerLease }, maxFrameBytes),
+      );
+    }
+    await assertSshExecutionTargetReadyAsync(input.executionTargetId);
+    const proxyCommand = input.runtime
+      ? buildPinnedRemoteAgentProxy(input.runtime)
+      : buildRemoteAgentProxyCommand(input.binaryPath);
     const invocation = buildSshCommandInvocation({
       executionTargetId: input.executionTargetId,
       command: "sh",
-      args: [
-        "-lc",
-        input.runtime
-          ? buildPinnedRemoteAgentProxy(input.runtime)
-          : buildRemoteAgentProxyCommand(input.binaryPath),
-      ],
+      args: ["-lc", proxyCommand],
     });
     return new RemoteAgentConnection(
       spawn(invocation.command, invocation.args, { stdio: ["pipe", "pipe", "pipe"] }),
@@ -175,13 +208,7 @@ export class RemoteAgentConnection {
         maxFrameBytes: this.maxFrameBytes,
       },
     });
-    const frame = await this.nextFrame();
-    if (frame.type === "protocolError") {
-      throw new RemoteAgentConnectionError(
-        `${frame.value.code}: ${frame.value.message}`,
-        frame.value.code,
-      );
-    }
+    const frame = this.assertRequestResponse(await this.nextFrame());
     if (frame.type !== "agentHello") {
       throw new RemoteAgentConnectionError(`Expected agent hello, received ${frame.type}.`);
     }
@@ -213,11 +240,11 @@ export class RemoteAgentConnection {
       throw new RemoteAgentConnectionError("Encoded remote agent frame has an invalid length.");
     }
     await new Promise<void>((resolve, reject) => {
-      const writable = this.child.stdin.write(Buffer.from(encoded), (error) => {
+      const writable = this.stdin.write(Buffer.from(encoded), (error) => {
         if (error) reject(error);
         else resolve();
       });
-      if (!writable) this.child.stdin.once("drain", resolve);
+      if (!writable) this.stdin.once("drain", resolve);
     });
   }
 
@@ -269,9 +296,10 @@ export class RemoteAgentConnection {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    closeRemoteAgentProcess(this.child);
-    const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
-    this.inbox.rejectWaiters(error);
+    if (typeof this.lifecycle === "function") {
+      void this.lifecycle("terminate", REMOTE_AGENT_PROXY_CLOSE_TIMEOUT_MS).catch(() => {});
+    } else closeRemoteAgentProcess(this.lifecycle.child);
+    this.rejectClosedWaiters();
   }
 
   /**
@@ -283,18 +311,31 @@ export class RemoteAgentConnection {
     this.close();
   }
 
-  async gracefulClose(timeoutMs = 2_000): Promise<void> {
+  async gracefulClose(timeoutMs = REMOTE_AGENT_PROXY_CLOSE_TIMEOUT_MS): Promise<void> {
+    if (typeof this.lifecycle === "function") {
+      const confirmed = this.lifecycle("graceful", timeoutMs);
+      this.closed = true;
+      return confirmed.finally(() => this.rejectClosedWaiters());
+    }
     if (this.closed) return;
     this.closed = true;
-    await finishRemoteAgentGracefulClose(this.child, timeoutMs, () =>
-      closeRemoteAgentProcess(this.child),
-    );
-    const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
-    this.inbox.rejectWaiters(error);
+    const { child } = this.lifecycle;
+    await finishRemoteAgentGracefulClose(child, timeoutMs, () => closeRemoteAgentProcess(child));
+    this.rejectClosedWaiters();
   }
 
-  closeConfirmed(timeoutMs = 2_000): Promise<void> {
-    return closeAndConfirmRemoteAgentProcess(() => this.close(), this.processLifecycle, timeoutMs);
+  async closeConfirmed(timeoutMs = REMOTE_AGENT_PROXY_CLOSE_TIMEOUT_MS): Promise<void> {
+    if (typeof this.lifecycle === "function") {
+      const confirmed = this.lifecycle("terminate", timeoutMs);
+      if (!this.closed) this.rejectClosedWaiters();
+      this.closed = true;
+      return confirmed;
+    }
+    return closeAndConfirmRemoteAgentProcess(() => this.close(), this.lifecycle.process, timeoutMs);
+  }
+
+  private rejectClosedWaiters(): void {
+    this.inbox.rejectWaiters(new RemoteAgentConnectionError("Remote agent connection is closed."));
   }
 
   onFailure(listener: (error: Error) => void): () => void {

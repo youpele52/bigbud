@@ -180,7 +180,35 @@ fn damaged_lists_fail_closed() {
             "{json}"
         );
     }
-    let valid = Exclusions::parse(r#"{"pathSegments": [".ssh"], "fileNames": ["*.pem"]}"#)
-        .expect("minimal list parses");
+    let valid = Exclusions::parse(
+        r#"{"pathSegments": [".ssh"], "fileNames": ["*.pem"], "clutterFolders": ["dist"]}"#,
+    )
+    .expect("minimal list parses");
     assert!(valid.excludes(Path::new("/h/.ssh/x"), Path::new("x")));
+    assert!(
+        Exclusions::parse(
+            r#"{"pathSegments": [".ssh"], "fileNames": ["*.pem"], "clutterFolders": ["../x"]}"#
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn clutter_folders_match_only_below_the_scope() {
+    let list = embedded();
+    for below in [
+        "app/node_modules/x.js",
+        "repo/.git/HEAD",
+        "crate/target/debug/x",
+        "a/__pycache__/m.pyc",
+        "Library/Caches/x",
+    ] {
+        assert!(list.is_clutter(Path::new(below)), "{below}");
+    }
+    // A folder named like clutter above the scope (a user or volume) hides nothing.
+    assert!(!list.is_clutter(Path::new("taxes/target-2026.pdf")));
+    assert!(!list.excludes(
+        Path::new("/Users/me/Documents/repo/.git/HEAD"),
+        Path::new("repo/.git/HEAD")
+    ));
 }

@@ -118,7 +118,12 @@ export const discoverCursorModelCapabilitiesViaAcp = (
                   ? probeConfigOptions
                   : yield* probeAcp
                       .setConfigOption(probeModelOption?.id ?? modelOption.id, modelSlug)
-                      .pipe(Effect.map((response) => response.configOptions ?? probeConfigOptions));
+                      .pipe(Effect.map((response) => response.configOptions ?? []));
+              const selected = findCursorModelConfigOption(nextConfigOptions);
+              if (selected?.type !== "select" || selected.currentValue?.trim() !== modelSlug) {
+                // The agent did not prove the switch. Never attribute the old model's effort to this one.
+                return undefined;
+              }
               return [
                 modelSlug,
                 buildCursorCapabilitiesFromConfigOptions(nextConfigOptions),

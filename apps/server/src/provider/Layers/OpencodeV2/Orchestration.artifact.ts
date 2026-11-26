@@ -11,6 +11,9 @@ import { renderV2LegacyCleanup } from "./Orchestration.plugin.legacy.ts";
 import {
   V2_BOOTSTRAP_COMPATIBILITY,
   V2_COMPATIBILITY_DIGEST,
+  V2_SUMMARY_BOOTSTRAP_COMPATIBILITY,
+  V2_SUMMARY_COMPATIBILITY_DIGEST,
+  type V2BootstrapCompatibility,
 } from "./Orchestration.compatibility.ts";
 import { V2_THREAD_RPC } from "./Orchestration.protocol.ts";
 import {
@@ -26,7 +29,11 @@ import { publishV2WindowsArtifact } from "./Orchestration.artifact.windows.ts";
 const digest = (content: string) => createHash("sha256").update(content).digest("hex");
 
 /** Digest final module bytes only; nominal runtime URL identity is not byte attestation. */
-export async function exportV2ThreadArtifact(stateDir: string) {
+export async function exportV2ThreadArtifact(stateDir: string, version: "v5" | "v6" = "v6") {
+  const compatibility: V2BootstrapCompatibility =
+    version === "v5" ? V2_SUMMARY_BOOTSTRAP_COMPATIBILITY : V2_BOOTSTRAP_COMPATIBILITY;
+  const compatibilityDigest =
+    version === "v5" ? V2_SUMMARY_COMPATIBILITY_DIGEST : V2_COMPATIBILITY_DIGEST;
   const signer = await openV2ThreadIssuer(stateDir);
   const root = await ensureV2ThreadPrivateChild(signer.root, "artifacts");
   const modules: Record<string, string> = {
@@ -37,11 +44,11 @@ export async function exportV2ThreadArtifact(stateDir: string) {
       version: "1.0.0",
       type: "module",
     }),
-    "identity.mjs": renderV2ThreadIdentity(signer.publicKey),
+    "identity.mjs": renderV2ThreadIdentity(signer.publicKey, version),
     "crypto.mjs": renderV2ThreadCrypto(signer.encryptionPublicKey),
     "registry.mjs": renderV2ThreadRegistry(),
     "legacy.mjs": renderV2LegacyCleanup(signer.publicKey),
-    "index.mjs": renderV2ThreadPlugin(),
+    "index.mjs": renderV2ThreadPlugin(version),
   };
   const hashes = Object.entries(modules)
     .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
@@ -53,8 +60,8 @@ export async function exportV2ThreadArtifact(stateDir: string) {
     issuer: signer.issuer,
     artifactDigest,
     bootstrapDigest: artifactDigest,
-    compatibility: V2_BOOTSTRAP_COMPATIBILITY,
-    compatibilityDigest: V2_COMPATIBILITY_DIGEST,
+    compatibility,
+    compatibilityDigest,
     encryptionKeyId: digest(signer.encryptionPublicKey),
     hashes,
   };
@@ -121,10 +128,9 @@ export async function exportV2ThreadArtifact(stateDir: string) {
       directory,
       artifactDigest,
       bootstrapDigest: artifactDigest,
-      bootstrapAbi: V2_BOOTSTRAP_COMPATIBILITY.bootstrapAbi as string,
-      compatibility:
-        V2_BOOTSTRAP_COMPATIBILITY as import("./Orchestration.compatibility.ts").V2BootstrapCompatibility,
-      compatibilityDigest: V2_COMPATIBILITY_DIGEST,
+      bootstrapAbi: compatibility.bootstrapAbi as string,
+      compatibility: compatibility as V2BootstrapCompatibility,
+      compatibilityDigest,
       entryUri: pathToFileURL(path.join(directory, "index.mjs")).href,
       pluginUri: pathToFileURL(directory).href,
       verify,

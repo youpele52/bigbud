@@ -164,8 +164,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })(
               cwd: origin,
               worktreePath: mismatch === "worktree" ? null : worktree,
               env: {
-                T3CODE_PROJECT_ROOT: mismatch === "environment" ? "/old-project" : base,
-                T3CODE_WORKTREE_PATH: worktree,
+                BIGBUD_PROJECT_ROOT: mismatch === "environment" ? "/old-project" : base,
+                BIGBUD_WORKTREE_PATH: worktree,
               },
             });
             const runner = yield* makeRunner(

@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
+import { V2_FINAL_RESULT_MAX_BYTES } from "./Orchestration.implementation.v6.ts";
 import { ThreadToolRequest } from "../../../ws/http.threadTools.schema.ts";
-import type { V2CanonicalBody, V2PureAction } from "./Orchestration.implementation.types.v5.ts";
+import type { V2CanonicalBody, V2PureAction } from "./Orchestration.implementation.types.v6.ts";
 import type { V2PureJson } from "./Orchestration.implementation.types.ts";
 
 /** Own/freeze plain JSON before pure code runs; reject accessors, prototypes and unbounded structures. */
@@ -70,9 +71,18 @@ export function validateV2PreparedBody(
   action: V2PureAction,
   body: V2CanonicalBody,
   callerThreadId: string,
+  supportsModelChoice = false,
 ): V2CanonicalBody {
   const allowed: Readonly<Record<V2PureAction, readonly string[]>> = {
-    create_thread: ["action", "title", "task", "projectId", "watchForCompletion"],
+    create_thread: [
+      "action",
+      "title",
+      "task",
+      "projectId",
+      "watchForCompletion",
+      ...(supportsModelChoice ? ["modelSelection"] : []),
+    ],
+    list_available_models: supportsModelChoice ? ["action", "limit"] : [],
     send_thread_message: ["action", "threadId", "message", "delivery"],
     get_thread_status: ["action", "threadId"],
     list_threads: ["action", "projectId", "status", "limit", "includeExcerpt"],
@@ -102,7 +112,7 @@ export function validateV2PreparedBody(
 
 export function encodeV2FinalResult(value: V2PureJson) {
   const content = JSON.stringify(v2ImmutableJson(value));
-  if (Buffer.byteLength(content) > 90000)
+  if (Buffer.byteLength(content) > V2_FINAL_RESULT_MAX_BYTES)
     throw new Error(
       "V2 final interpreted callback result exceeds bound; dispatch remains uncertain.",
     );

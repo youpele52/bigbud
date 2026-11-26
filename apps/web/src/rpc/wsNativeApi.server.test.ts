@@ -175,12 +175,12 @@ describe("wsNativeApi — server", () => {
 
     const api = createWsNativeApi();
 
-    await expect(
-      api.server.readDocumentUrl({ url: "https://example.com/report" }),
-    ).resolves.toEqual(result);
-    expect(rpcClientMock.server.readDocumentUrl).toHaveBeenCalledWith({
-      url: "https://example.com/report",
-    });
+    const input = { url: "https://example.com/report" };
+    const options = { signal: new AbortController().signal };
+    await expect(api.server.readDocumentUrl(input)).resolves.toEqual(result);
+    await expect(api.server.readDocumentUrl(input, options)).resolves.toEqual(result);
+    expect(rpcClientMock.server.readDocumentUrl).toHaveBeenNthCalledWith(1, input);
+    expect(rpcClientMock.server.readDocumentUrl).toHaveBeenNthCalledWith(2, input, options);
   });
 
   it("forwards handoff document writes directly to the RPC client", async () => {

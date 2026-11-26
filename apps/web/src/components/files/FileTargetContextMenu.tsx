@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import { openPathInPreferredApp } from "../../models/editor";
 import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
-import type { ThreadId } from "@bigbud/contracts";
+import { isRemoteExecutionTargetId, type ThreadId } from "@bigbud/contracts";
 import {
   canOpenDirectoryInFilesPanel,
   canOpenPathInBrowserPanel,
@@ -14,13 +14,19 @@ import {
   resolveWorkspaceRelativeEntryPath,
 } from "../../stores/files/filesPanel.open";
 import { copyTextToClipboard } from "~/lib/clipboard/copyText";
-import { createSharedFileActionItems, type SharedFileActionId } from "./FileActionsMenu.shared";
+import type { SharedFileActionId } from "./FileActionsMenu.shared";
+import {
+  buildFileTargetMenuGroups,
+  type FileTargetMenuItemId,
+} from "./FileTargetContextMenu.logic";
+import { useFileOpenTarget } from "./fileOpenTarget.context";
 import { dispatchPathCheckpointAction } from "./pathCheckpoint.action";
 import { toastManager } from "../ui/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/menu";
 
@@ -38,6 +44,9 @@ interface FileTargetContextMenuProps {
   position: ContextMenuPosition | null;
   onClose: () => void;
   threadId?: ThreadId | null | undefined;
+  /** Shows Delete… (Files panel only); `deleteDisabledReason` null means it is allowed. */
+  onDelete?: ((target: { relativePath: string; kind: MenuTargetKind }) => void) | undefined;
+  deleteDisabledReason?: string | null | undefined;
 }
 
 function createVirtualAnchor(position: ContextMenuPosition) {
@@ -63,8 +72,11 @@ export function FileTargetContextMenu({
   position,
   onClose,
   threadId,
+  onDelete,
+  deleteDisabledReason,
 }: FileTargetContextMenuProps) {
   const [open, setOpen] = useState(false);
+  const fileOpenTarget = useFileOpenTarget();
 
   useEffect(() => {
     setOpen(Boolean(targetPath && kind && position));
@@ -101,18 +113,18 @@ export function FileTargetContextMenu({
 
   const handleOpenInBrowser = useCallback(() => {
     if (!targetPath) return;
-    openPathInBrowserPanelIfSupported(targetPath, workspaceRoot);
-  }, [targetPath, workspaceRoot]);
+    openPathInBrowserPanelIfSupported(targetPath, workspaceRoot, fileOpenTarget);
+  }, [fileOpenTarget, targetPath, workspaceRoot]);
 
   const handleOpenInFileViewer = useCallback(() => {
     if (!targetPath) return;
-    openPathInFilesPanelIfSupported(targetPath, workspaceRoot);
-  }, [targetPath, workspaceRoot]);
+    openPathInFilesPanelIfSupported(targetPath, workspaceRoot, fileOpenTarget);
+  }, [fileOpenTarget, targetPath, workspaceRoot]);
 
   const handleOpenDirectoryInternally = useCallback(() => {
     if (!targetPath) return;
-    openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot);
-  }, [targetPath, workspaceRoot]);
+    openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot, fileOpenTarget);
+  }, [fileOpenTarget, targetPath, workspaceRoot]);
 
   const handleSharedAction = useCallback(
     (action: SharedFileActionId) => {
@@ -168,15 +180,45 @@ export function FileTargetContextMenu({
     },
     [menuOptions.relativePath, threadId],
   );
-  const sharedActions = useMemo(
+  const menuGroups = useMemo(
     () =>
-      createSharedFileActionItems({
-        canSelectAll: false,
-        canOpenExternally: kind === "file" || kind === "directory",
+      buildFileTargetMenuGroups({
+        ...menuOptions,
+        // A remote path only exists on its host, never in an app on this computer.
+        canOpenExternally:
+          (kind === "file" || kind === "directory") && !isRemoteExecutionTargetId(fileOpenTarget),
         canCopyRelativePath: Boolean(menuOptions.relativePath),
         canCopyPath: true,
+        canUsePathCheckpoints: Boolean(threadId && menuOptions.relativePath),
+        deleteDisabledReason:
+          onDelete && menuOptions.relativePath ? (deleteDisabledReason ?? null) : undefined,
       }),
-    [kind, menuOptions.relativePath],
+    [deleteDisabledReason, fileOpenTarget, kind, menuOptions, onDelete, threadId],
+  );
+  const handleItem = useCallback(
+    (id: FileTargetMenuItemId) => {
+      if (id === "open-in-browser") return handleOpenInBrowser();
+      if (id === "open-in-file-viewer") return handleOpenInFileViewer();
+      if (id === "open-internally") return handleOpenDirectoryInternally();
+      if (id === "capture-checkpoint") return void handlePathCheckpoint("capture");
+      if (id === "restore-checkpoint") return void handlePathCheckpoint("restore");
+      if (id === "delete") {
+        if (menuOptions.relativePath && kind)
+          onDelete?.({ relativePath: menuOptions.relativePath, kind });
+        return;
+      }
+      handleSharedAction(id);
+    },
+    [
+      handleOpenDirectoryInternally,
+      handleOpenInBrowser,
+      handleOpenInFileViewer,
+      handlePathCheckpoint,
+      handleSharedAction,
+      kind,
+      menuOptions.relativePath,
+      onDelete,
+    ],
   );
 
   return (
@@ -195,37 +237,26 @@ export function FileTargetContextMenu({
       />
       {anchor && targetPath ? (
         <DropdownMenuContent align="start" anchor={anchor} side="bottom" sideOffset={2}>
-          {menuOptions.canOpenInBrowser ? (
-            <DropdownMenuItem onClick={handleOpenInBrowser}>Open in browser</DropdownMenuItem>
-          ) : null}
-          {menuOptions.canOpenInFileViewer ? (
-            <DropdownMenuItem onClick={handleOpenInFileViewer}>
-              Open in file viewer
-            </DropdownMenuItem>
-          ) : null}
-          {menuOptions.canOpenDirectoryInternally ? (
-            <DropdownMenuItem onClick={handleOpenDirectoryInternally}>
-              Open internally
-            </DropdownMenuItem>
-          ) : null}
-          {sharedActions.map((item) => (
-            <DropdownMenuItem key={item.id} onClick={() => handleSharedAction(item.id)}>
-              {item.label}
-            </DropdownMenuItem>
+          {menuGroups.map((group, index) => (
+            <Fragment key={group[0]?.id ?? index}>
+              {index > 0 ? <DropdownMenuSeparator /> : null}
+              {group.map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  data-file-menu-item={item.id}
+                  variant={item.destructive ? "destructive" : "default"}
+                  className={
+                    item.destructive ? "text-destructive focus:text-destructive" : undefined
+                  }
+                  disabled={item.disabledReason !== undefined}
+                  title={item.disabledReason}
+                  onClick={() => handleItem(item.id)}
+                >
+                  {item.label}
+                </DropdownMenuItem>
+              ))}
+            </Fragment>
           ))}
-          {threadId && menuOptions.relativePath ? (
-            <>
-              <DropdownMenuItem onClick={() => void handlePathCheckpoint("capture")}>
-                Capture path checkpoint
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => void handlePathCheckpoint("restore")}
-              >
-                Restore path checkpoint
-              </DropdownMenuItem>
-            </>
-          ) : null}
         </DropdownMenuContent>
       ) : null}
     </DropdownMenu>

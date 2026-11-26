@@ -104,7 +104,13 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
   OrchestrationCommandInvariantError
 > {
   switch (command.type) {
+    case "thread.queued-prompt.recovered":
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: "Recovered drafts require canonical storage admission.",
+      });
     case "thread.message.submit":
+    case "thread.queued-prompt.claim":
     case "thread.queued-prompt.remove":
     case "thread.queued-prompt.flush":
     case "thread.queued-prompt.flush-cancel":

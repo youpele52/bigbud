@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ServerListRemoteFoldersResult } from "@bigbud/contracts/server/server.remoteFolders";
+import { getSshOwnershipMessage, getSshUnsupportedCredentialMessage } from "../../lib/ssh";
 import { readNativeApi } from "../../rpc/nativeApi";
 import type { RequestRemoteWorkspaceUnlock } from "./Sidebar.remoteWorkspaces.logic";
 
@@ -53,10 +54,16 @@ export function useRemoteFolderBrowser({
         },
         (error: unknown) => {
           if (requestId !== requestIdRef.current) return;
+          const code =
+            error instanceof Error && "code" in error
+              ? (error as { readonly code?: unknown }).code
+              : undefined;
           const message =
-            error instanceof Error && error.message.trim()
+            getSshUnsupportedCredentialMessage(code) ??
+            getSshOwnershipMessage(code) ??
+            (error instanceof Error && error.message.trim()
               ? error.message
-              : "Failed to list remote folders.";
+              : "Failed to list remote folders.");
           if (requestUnlock(message, () => load(path))) {
             setState({ status: "error", message: LOCKED_MESSAGE, path });
             return;

@@ -19,11 +19,7 @@ import { useProjectById, useStore, useThreadById } from "../../../../stores/main
 import { useUiStateStore } from "../../../../stores/ui";
 import { parseDiffRouteSearch } from "../../../../utils/diff";
 import { type ComposerPromptEditorHandle } from "../../composer/ComposerPromptEditor";
-import {
-  buildLocalDraftThread,
-  deriveComposerSendState,
-  reconcileMountedTerminalThreadIds,
-} from "../ChatView.logic";
+import { buildLocalDraftThread, deriveComposerSendState } from "../ChatView.logic";
 
 import { useServerProviders } from "../../../../rpc/serverState";
 import { getRoutableModelSelection } from "../../../../models/provider/selection-helpers.models";
@@ -219,19 +215,6 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
   const activeThreadId = activeThread?.id ?? null;
-  const existingOpenTerminalThreadIds = useMemo(() => {
-    const existingThreadIds = new Set<ThreadId>([
-      ...ephemeralState.serverThreadIds,
-      ...ephemeralState.draftThreadIds,
-    ]);
-    return ephemeralState.openTerminalThreadIds.filter((nextThreadId) =>
-      existingThreadIds.has(nextThreadId),
-    );
-  }, [
-    ephemeralState.draftThreadIds,
-    ephemeralState.openTerminalThreadIds,
-    ephemeralState.serverThreadIds,
-  ]);
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const activeProject = useProjectById(activeThread?.projectId);
   const activeProjectCwd = activeProject?.cwd ?? null;
@@ -311,13 +294,11 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     canCheckoutPullRequestIntoThread,
     diffOpen,
     activeThreadId,
-    existingOpenTerminalThreadIds,
     activeLatestTurn,
     activeProject,
     activeProjectCwd,
     activeThreadWorktreePath,
     activeTerminalLaunchContext,
-    reconcileMountedTerminalThreadIds,
     clampCollapsedComposerCursor,
     collapseExpandedComposerCursor,
     detectComposerTrigger,

@@ -131,6 +131,9 @@ export function deriveThreadRecoveryNotice(input: {
     return { notice: notice("reconnecting", description), nextChangeInMs: null };
   }
   const retried = request?.outcome === "started" && request.messageId === failure?.pendingMessageId;
+  // A dead remote target is not a dead session: the remote-target notice offers Reconnect.
+  if (failure?.remoteTarget !== undefined && !retried)
+    return { notice: null, nextChangeInMs: null };
   if ((failure !== null && !retried) || request?.outcome === "failed") {
     const failureClass = retried ? "" : (failure?.failureClass ?? "");
     const shown =

@@ -1,3 +1,4 @@
+import { refusePendingInteractions } from "../../pendingInteractionAdmission.ts";
 /**
  * CopilotAdapter.session — session lifecycle operations.
  *
@@ -38,6 +39,13 @@ export const makeSendTurn =
   (input) =>
     Effect.gen(function* () {
       const record = yield* deps.requireSession(input.threadId);
+      const initialRefusal = refusePendingInteractions({
+        provider: PROVIDER,
+        sessionEpoch: record.sessionEpoch,
+        approvals: record.pendingApprovals,
+        userInputs: record.pendingUserInputs,
+      });
+      if (initialRefusal) return yield* initialRefusal;
       if (record.activeTurnId) {
         // Same busy refusal as other adapters; the orchestrator re-queues the message.
         return yield* new ProviderAdapterValidationError({
@@ -114,6 +122,13 @@ export const makeSendTurn =
         });
       }
 
+      const refusal = refusePendingInteractions({
+        provider: PROVIDER,
+        sessionEpoch: record.sessionEpoch,
+        approvals: record.pendingApprovals,
+        userInputs: record.pendingUserInputs,
+      });
+      if (refusal) return yield* refusal;
       const turnId = TurnId.makeUnsafe(`copilot-turn-${randomUUID()}`);
       record.activeTurnId = turnId;
       record.planTrackingToolCallIds.clear();

@@ -1,3 +1,4 @@
+import type { PendingInteractionGate } from "@bigbud/contracts/orchestration/orchestration.pendingInteractionGate.ts";
 import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 import {
   CommandId,
@@ -6,9 +7,13 @@ import {
   type OrchestrationMessage,
   type ThreadId,
 } from "@bigbud/contracts";
-import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
-import { Cause, Effect } from "effect";
+import type {
+  TurnStartFailureClass,
+  TurnStartRemoteTargetFailure,
+} from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
+import { Cause, Effect, Schema } from "effect";
 
+import { ProviderAdapterValidationError } from "../../provider/Errors.ts";
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
 import {
@@ -18,6 +23,7 @@ import {
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
+import { describeRemoteTargetTurnStartFailure } from "./ProviderTurnFailureClassification.remoteTarget.ts";
 
 type TurnStartRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -32,6 +38,7 @@ type RecordTurnStartFailure = (input: {
   readonly createdAt: string;
   readonly messageId?: MessageId;
   readonly activityId?: EventId;
+  readonly remoteTarget?: TurnStartRemoteTargetFailure;
 }) => Effect.Effect<void, OrchestrationDispatchError>;
 
 type RequestAutomaticFork = (input: {
@@ -50,6 +57,7 @@ function canQueueTurnStart(input: {
 
 function queueTurnStart(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
+  readonly pendingInteractionGate?: PendingInteractionGate;
   readonly event: TurnStartRequestedEvent;
   readonly message: OrchestrationMessage;
 }): Effect.Effect<{ sequence: number }, OrchestrationDispatchError> {
@@ -91,6 +99,9 @@ function queueTurnStart(input: {
     ...(message.originSegments ? { originSegments: message.originSegments } : {}),
     // The message is already in the transcript; the flush redelivers it under the same ID.
     redeliverSentMessage: true,
+    ...(input.pendingInteractionGate
+      ? { pendingInteractionGate: input.pendingInteractionGate }
+      : {}),
     delivery: "queue",
     createdAt: event.payload.createdAt,
   });
@@ -135,8 +146,20 @@ export function makeHandleTurnStartFailure(input: {
   }) => {
     const detail = formatProviderServiceCauseDetail(failure.cause);
     const failureClass = classifyTurnStartFailure(failure.cause);
+    const [reason] = failure.cause.reasons;
+    const error =
+      failure.cause.reasons.length === 1 && reason && Cause.isFailReason(reason)
+        ? reason.error
+        : undefined;
+    const pendingInteractionGate =
+      Schema.is(ProviderAdapterValidationError)(error) &&
+      error.operation === "sendTurn" &&
+      error.turnStartRefusal?.gate.provider === error.provider
+        ? error.turnStartRefusal?.gate
+        : undefined;
+    const remoteTarget = describeRemoteTargetTurnStartFailure(failure.cause);
     if (
-      failureClass !== "busy" ||
+      pendingInteractionGate === undefined ||
       !canQueueTurnStart({ event: failure.event, message: failure.message })
     ) {
       const threadId = failure.event.payload.threadId;
@@ -149,6 +172,7 @@ export function makeHandleTurnStartFailure(input: {
         createdAt: failure.event.payload.createdAt,
         messageId: failure.message.id,
         activityId,
+        ...(remoteTarget !== undefined ? { remoteTarget } : {}),
       });
       // Bounded in-place recovery already ran; still session-dead means it cannot resume (D16).
       const requestAutomaticFork = input.requestAutomaticFork;
@@ -169,14 +193,18 @@ export function makeHandleTurnStartFailure(input: {
       orchestrationEngine: input.orchestrationEngine,
       event: failure.event,
       message: failure.message,
+      ...(pendingInteractionGate ? { pendingInteractionGate } : {}),
     }).pipe(
       Effect.tap(() =>
-        Effect.logWarning("provider turn was busy; queued the follow-up prompt", {
-          threadId: failure.event.payload.threadId,
-          messageId: failure.message.id,
-          eventId: failure.event.eventId,
-          detail,
-        }),
+        Effect.logWarning(
+          "provider refused before accepting the turn; queued the follow-up prompt",
+          {
+            threadId: failure.event.payload.threadId,
+            messageId: failure.message.id,
+            eventId: failure.event.eventId,
+            detail,
+          },
+        ),
       ),
       Effect.catchCause((queueCause) =>
         input

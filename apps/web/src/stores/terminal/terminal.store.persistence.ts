@@ -4,7 +4,16 @@ import {
   type DismissedTerminalPanes,
 } from "./terminal.store.dismiss";
 import { ThreadId } from "@bigbud/contracts";
-import { createDefaultThreadTerminalState } from "./helpers.store";
+import {
+  createDefaultThreadTerminalState,
+  isDefaultThreadTerminalState,
+  normalizeThreadTerminalState,
+  type ThreadTerminalState,
+} from "./helpers.store";
+import {
+  pruneRestoredPanesForInventory,
+  readLatestTerminalInventory,
+} from "./terminal.store.inventory";
 import { createJSONStorage } from "zustand/middleware";
 import * as Schema from "effect/Schema";
 import { ShellHostScope, ShellSelection } from "@bigbud/contracts/workspace/terminalShell.ts";
@@ -62,6 +71,61 @@ function hydrateTerminalLayouts(value: unknown): Record<string, TerminalLayoutMo
   );
 }
 
+/** One surface's saved panes, every one `restored`; unusable entries are dropped. */
+function restoredSurfaces(saved: unknown): Record<string, ThreadTerminalState> {
+  const surfaces: Record<string, ThreadTerminalState> = {};
+  if (!saved || typeof saved !== "object") return surfaces;
+  for (const [id, value] of Object.entries(saved)) {
+    if (!value || typeof value !== "object") continue;
+    const pane = value as Partial<ThreadTerminalState>;
+    if (!Array.isArray(pane.terminalIds)) continue;
+    const defaults = createDefaultThreadTerminalState();
+    const normalized = normalizeThreadTerminalState({
+      ...defaults,
+      ...pane,
+      runningTerminalIds: Array.isArray(pane.runningTerminalIds) ? pane.runningTerminalIds : [],
+      terminalGroups: Array.isArray(pane.terminalGroups) ? pane.terminalGroups : [],
+      restoredTerminalIds: [...pane.terminalIds],
+    });
+    if (isDefaultThreadTerminalState(normalized)) continue;
+    surfaces[id] = normalized;
+  }
+  return surfaces;
+}
+
+/**
+ * Every pane loaded from storage, drawer and right panel alike, is `restored`: it may reattach
+ * but is never respawned. The first authoritative inventory (or one already received) drops
+ * restored panes the host lacks.
+ */
+function markHydratedPanesRestored(
+  state: TerminalStateStoreState,
+  hydrated: { readonly drawer: boolean; readonly panel: boolean },
+): TerminalStateStoreState {
+  if (!hydrated.drawer && !hydrated.panel) return state;
+  const terminalStateByThreadId = hydrated.drawer
+    ? restoredSurfaces(state.terminalStateByThreadId)
+    : state.terminalStateByThreadId;
+  const panelTerminalStateByThreadId = hydrated.panel
+    ? restoredSurfaces(state.panelTerminalStateByThreadId)
+    : state.panelTerminalStateByThreadId;
+  const restored = [terminalStateByThreadId, panelTerminalStateByThreadId].some((surfaces) =>
+    Object.values(surfaces).some((surface) => (surface.restoredTerminalIds?.length ?? 0) > 0),
+  );
+  const next: TerminalStateStoreState = {
+    ...state,
+    terminalStateByThreadId:
+      terminalStateByThreadId as TerminalStateStoreState["terminalStateByThreadId"],
+    panelTerminalStateByThreadId:
+      panelTerminalStateByThreadId as TerminalStateStoreState["panelTerminalStateByThreadId"],
+    restoredPanesAwaitingInventory: restored,
+  };
+  const inventory = readLatestTerminalInventory();
+  return restored && inventory
+    ? { ...next, ...pruneRestoredPanesForInventory(next, inventory) }
+    : next;
+}
+
 type PersistedTerminalState = Pick<
   TerminalStateStoreState,
   | "dismissedTerminalPanes"
@@ -69,13 +133,16 @@ type PersistedTerminalState = Pick<
   | "terminalLayoutByThreadId"
   | "terminalWslDistributionByThreadId"
   | "terminalStateByThreadId"
+  | "panelTerminalStateByThreadId"
   | "terminalLabelOverridesByThreadId"
 >;
 
 export const terminalPersistenceOptions = {
   name: STORAGE_KEY,
-  // Additive optional field: retain v1 data, including legacy-key migration.
-  version: 1,
+  // v2 (plan W1): no implicit "default" pane; hydrated panes are restored, never respawned.
+  version: 2,
+  // Shapes are unchanged; `merge` marks every hydrated pane restored, so v1 data is kept.
+  migrate: (persisted: unknown) => persisted as PersistedTerminalState,
   // Output events update only non-persisted slices; do not re-serialize per terminal batch.
   storage: skipUnchangedPersistWrites(
     createJSONStorage<PersistedTerminalState>(createTerminalStateStorage),
@@ -86,10 +153,16 @@ export const terminalPersistenceOptions = {
     terminalLayoutByThreadId: state.terminalLayoutByThreadId,
     terminalWslDistributionByThreadId: state.terminalWslDistributionByThreadId,
     terminalStateByThreadId: state.terminalStateByThreadId,
+    // Right-panel panes survive a reload too (restored, like the drawer's).
+    panelTerminalStateByThreadId: state.panelTerminalStateByThreadId,
     terminalLabelOverridesByThreadId: state.terminalLabelOverridesByThreadId,
   }),
   merge: (persisted: unknown, current: TerminalStateStoreState): TerminalStateStoreState => {
     const saved = persisted && typeof persisted === "object" ? persisted : {};
+    const hydratedPanes = {
+      drawer: "terminalStateByThreadId" in saved,
+      panel: "panelTerminalStateByThreadId" in saved,
+    };
     const merged = {
       ...current,
       ...saved,
@@ -105,7 +178,6 @@ export const terminalPersistenceOptions = {
       Schema.Struct({
         threadId: Schema.String,
         terminalId: Schema.String,
-        replacementId: Schema.String,
       }),
     );
     let dismissedTerminalPanes: DismissedTerminalPanes = {};
@@ -121,13 +193,11 @@ export const terminalPersistenceOptions = {
         ([key, entry]) =>
           entry.threadId.length > 0 &&
           entry.terminalId.length > 0 &&
-          entry.replacementId.length > 0 &&
-          entry.replacementId !== entry.terminalId &&
           key === dismissedPaneKey(entry.threadId, entry.terminalId),
       ),
     );
     if (Object.keys(dismissedTerminalPanes).length === 0)
-      return { ...merged, dismissedTerminalPanes };
+      return markHydratedPanesRestored({ ...merged, dismissedTerminalPanes }, hydratedPanes);
     const next = {
       ...merged,
       dismissedTerminalPanes,
@@ -144,6 +214,6 @@ export const terminalPersistenceOptions = {
         );
       }
     }
-    return next;
+    return markHydratedPanesRestored(next, hydratedPanes);
   },
 };

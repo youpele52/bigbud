@@ -95,6 +95,13 @@ import Migration0177Arm from "./Migrations/177_DirectResourceCleanupLinuxArm64.t
 import Migration0178 from "./Migrations/178_PeerPairings.ts";
 import Migration0179 from "./Migrations/179_PeerChildStart.ts";
 import Migration0180 from "./Migrations/180_TerminalActivity.ts";
+import Migration0181 from "./Migrations/181_SshOwnerTransitions.ts";
+import Migration0182 from "./Migrations/182_RecoveredQueueDrafts.ts";
+import Migration0183 from "./Migrations/183_SshAliasDescriptorBindings.ts";
+import Migration0184 from "./Migrations/184_SshOwnerRetirement.ts";
+import Migration0185 from "./Migrations/185_SshLegacyRetirement.ts";
+import Migration0186 from "./Migrations/186_OrganizationAgeBackfillRepair.ts";
+import Migration0187 from "./Migrations/187_SshOwnerGuardedWriteJournal.ts";
 
 export const migrationEntries = [
   ...baseMigrationEntries,
@@ -178,6 +185,13 @@ export const migrationEntries = [
   [178, "PeerPairings", Migration0178],
   [179, "PeerChildStart", Migration0179],
   [180, "TerminalActivity", Migration0180],
+  [181, "SshOwnerTransitions", Migration0181],
+  [182, "RecoveredQueueDrafts", Migration0182],
+  [183, "SshAliasDescriptorBindings", Migration0183],
+  [184, "SshOwnerRetirement", Migration0184],
+  [185, "SshLegacyRetirement", Migration0185],
+  [186, "OrganizationAgeBackfillRepair", Migration0186],
+  [187, "SshOwnerGuardedWriteJournal", Migration0187],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

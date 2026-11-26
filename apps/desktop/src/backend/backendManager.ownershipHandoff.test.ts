@@ -43,6 +43,7 @@ vi.mock("../env/pathResolver", () => ({
   resolvePackagedOpencodeBinaryDir: () => null,
   resolvePackagedWorkspaceAgentBinary: () => null,
   resolvePackagedDesktopSupervisorBinary: () => null,
+  resolvePackagedSshOwnerBinary: () => null,
 }));
 vi.mock("./backendProcess", () => ({ killBackendProcess: mocks.kill }));
 vi.mock("./backendModulesStartup", () => ({

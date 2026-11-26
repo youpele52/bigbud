@@ -21,7 +21,7 @@ import { ChatAgentActivityFeed } from "../../agents/ChatAgentActivityFeed";
 import { makeSubagentStopHandler } from "../../agents/SubagentRow.stop";
 import { isFreshActiveProviderAgent } from "../../agents/agentActivity.presentation";
 import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
-import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
+import { FloatingPlanCardLayer } from "../../plan/FloatingPlanCardLayer";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
 import { ActivityStatusIndicator } from "../../common/ActivityStatusIndicator";
@@ -179,7 +179,7 @@ export function ChatViewChatBody({
 
         <div className="flex min-h-0 min-w-0 flex-1">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="relative flex min-h-0 flex-1 flex-col">
+            <div className="relative flex min-h-0 flex-1 flex-col" data-chat-floating-panel-anchor>
               <div className="relative min-h-0 flex-1">
                 <div
                   ref={runtime.scrollBehavior.setMessagesScrollContainerRef}
@@ -314,20 +314,16 @@ export function ChatViewChatBody({
               ) : null}
 
               {base.planCardOpen ? (
-                <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30 sm:inset-x-auto sm:top-3 sm:right-3 sm:bottom-auto">
-                  <div className="pointer-events-auto w-full sm:w-[22rem]">
-                    <FloatingPlanCard
-                      activePlan={thread.activePlan}
-                      activeProposedPlan={thread.cardProposedPlan}
-                      label={thread.planCardLabel}
-                      markdownCwd={composer.gitCwd ?? undefined}
-                      workspaceRoot={workspaceRoot}
-                      workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
-                      timestampFormat={base.timestampFormat}
-                      onClose={handleClosePlanCard}
-                    />
-                  </div>
-                </div>
+                <FloatingPlanCardLayer
+                  activePlan={thread.activePlan}
+                  activeProposedPlan={thread.cardProposedPlan}
+                  label={thread.planCardLabel}
+                  markdownCwd={composer.gitCwd ?? undefined}
+                  workspaceRoot={workspaceRoot}
+                  workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
+                  timestampFormat={base.timestampFormat}
+                  onClose={handleClosePlanCard}
+                />
               ) : null}
 
               {runtime.scrollBehavior.showScrollToBottom ? (

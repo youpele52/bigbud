@@ -27,12 +27,26 @@ describe("refuseLiveDatabase", () => {
     expect(refuseLiveDatabase(join(home, ".bigbud", "dev", "state.sqlite"), roots)).not.toBeNull();
   });
 
-  it("refuses a configured BIGBUD_HOME or legacy T3CODE_HOME", () => {
+  it("refuses a configured BIGBUD_HOME without using legacy T3CODE_HOME", () => {
     const custom = tempDir();
     const legacy = tempDir();
     const roots = bigbudStateRoots({ BIGBUD_HOME: custom, T3CODE_HOME: legacy }, tempDir());
     expect(refuseLiveDatabase(join(custom, "state.sqlite"), roots)).not.toBeNull();
-    expect(refuseLiveDatabase(join(legacy, "userdata", "state.sqlite"), roots)).not.toBeNull();
+    expect(refuseLiveDatabase(join(legacy, "userdata", "state.sqlite"), roots)).toBeNull();
+  });
+
+  it("uses BIGBUD_HOME from the process environment by default", () => {
+    const custom = tempDir();
+    const previous = process.env.BIGBUD_HOME;
+    try {
+      process.env.BIGBUD_HOME = custom;
+      expect(refuseLiveDatabase(join(custom, "userdata", "state.sqlite"))).toMatch(
+        /inside the bigbud state directory/,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.BIGBUD_HOME;
+      else process.env.BIGBUD_HOME = previous;
+    }
   });
 
   it("refuses a symlink that resolves into a bigbud home", () => {

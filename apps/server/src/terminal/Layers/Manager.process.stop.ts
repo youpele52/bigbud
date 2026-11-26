@@ -5,11 +5,40 @@ import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/termin
 import type { TerminalSessionState } from "./Manager.types";
 import { prepareTerminalRestart } from "./Manager.session.restart";
 
+/** Why a terminal closes, recorded on close and stop spans. */
+export type TerminalCloseReason =
+  | "user-close"
+  | "archive"
+  | "delete"
+  | "remote-disconnect"
+  | "idle"
+  | "memory"
+  | "limit"
+  | "quit"
+  | "orphan"
+  | "shutdown";
+
+/** Callers that do not yet know their reason close as an explicit user Close. */
+export const DEFAULT_TERMINAL_CLOSE_REASON: TerminalCloseReason = "user-close";
+
+export const annotateTerminalCloseSpan = (
+  threadId: string,
+  terminalId: string,
+  reason: TerminalCloseReason,
+) =>
+  Effect.annotateCurrentSpan({
+    "terminal.thread_id": threadId,
+    "terminal.terminal_id": terminalId,
+    "terminal.close_reason": reason,
+  });
+
 /** Observe exit before signaling; a successful signal is not a stopped process. */
 export const confirmTerminalProcessStopped = Effect.fn("terminal.confirmStopped")(function* (
   session: TerminalSessionState,
   graceMs: number,
+  reason: TerminalCloseReason = DEFAULT_TERMINAL_CLOSE_REASON,
 ) {
+  yield* annotateTerminalCloseSpan(session.threadId, session.terminalId, reason);
   session.stopPending = true;
   return yield* Effect.gen(function* () {
     // Remote owners require definitive exit AND durable owner release, including retries.

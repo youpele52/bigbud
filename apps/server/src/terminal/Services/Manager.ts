@@ -42,10 +42,23 @@ import type {
 } from "@bigbud/contracts/workspace/terminal.shellProfiles.ts";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
 import type {
+  TerminalForgetRetainedShellOwnersResult,
+  TerminalRetainedShellOwners,
+  TerminalRetainedShellOwnersInput,
+} from "@bigbud/contracts/workspace/terminal.shellOwners.ts";
+import type {
   TerminalRecoveryInput,
   TerminalRecoveryResult,
 } from "@bigbud/contracts/workspace/terminal.recovery.ts";
-import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalScreenItem,
+  TerminalSessionInventory,
+} from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalCloseDrainingHostsResult,
+  TerminalKeepOpenInput,
+  TerminalLifecycleNotice,
+} from "@bigbud/contracts/workspace/terminal.lifecycle.ts";
 import type {
   TerminalPasteStageError,
   TerminalPasteStageInput,
@@ -95,6 +108,21 @@ export interface TerminalStartInput extends TerminalOpenInput {
   rows: number;
 }
 
+/** Receives one session stream's items; `screen` comes first when the subscriber accepts it. */
+export interface TerminalSessionStreamSink {
+  readonly screen: (item: TerminalScreenItem) => void;
+  readonly event: (event: TerminalEvent) => void;
+  /** The subscriber fell too far behind while its screen was fetched; end its stream. */
+  readonly overflow: () => void;
+}
+
+export interface TerminalSessionStreamHandle {
+  /** Call after the `subscribed` item: the screen (if any) and then live events follow. */
+  readonly start: () => void;
+  /** `acknowledgedChars`: output the view parsed, for the host's query cut on detach (§8.9). */
+  readonly unsubscribe: (acknowledgedChars: number) => void;
+}
+
 export interface TerminalSubscribeOptions {
   /** `legacyDetection` keeps output only for sessions whose agent detection runs in the client. */
   readonly outputScope?: "all" | "legacyDetection";
@@ -110,6 +138,14 @@ export interface TerminalIdleWork {
   readonly quietSince: number | null;
 }
 
+export interface TerminalDrainPane {
+  readonly threadId: string;
+  readonly terminalId: string;
+  readonly executionTargetId: string;
+  readonly surface: "local" | "direct-ssh" | "remote-agent";
+  readonly keepMode: boolean;
+}
+
 export interface TerminalManagerShape {
   readonly remoteInventory?: (
     input: TerminalRemoteInventoryInput,
@@ -119,6 +155,28 @@ export interface TerminalManagerShape {
   ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
   readonly remoteDetach?: (input: TerminalRemoteDetachInput) => Effect.Effect<void, TerminalError>;
   readonly remoteStop?: (input: TerminalRemoteAttachInput) => Effect.Effect<void, TerminalError>;
+  /** Unverifiable direct-shell records that block this thread's deletion. */
+  readonly retainedShellOwners?: (
+    input: TerminalRetainedShellOwnersInput,
+  ) => Effect.Effect<TerminalRetainedShellOwners, TerminalError>;
+  /** Explicit user recovery: forgets only this thread's records; remote shells keep running. */
+  readonly forgetRetainedShellOwners?: (
+    input: TerminalRetainedShellOwnersInput,
+  ) => Effect.Effect<TerminalForgetRetainedShellOwnersResult, TerminalError>;
+  /**
+   * Panes of a thread whose history files must survive deletion (plan Q1, N8): they still have a
+   * direct-shell owner record or a host PTY. `"unknown"` when a source cannot be read.
+   */
+  readonly retainedHistoryTerminalIds?: (
+    threadId: string,
+  ) => Effect.Effect<ReadonlySet<string> | "unknown">;
+  /**
+   * Removes history files of threads `missingThreadIds` reports gone from the projection, unless
+   * the retained-pane rule still holds the pane (plan Q1, N8).
+   */
+  readonly sweepOrphanedHistory?: (
+    missingThreadIds: (threadIds: ReadonlyArray<string>) => Effect.Effect<ReadonlySet<string>>,
+  ) => Effect.Effect<{ readonly removed: number; readonly kept: number }>;
   readonly listShellProfiles: (
     input: TerminalShellProfilesInput,
   ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;
@@ -131,6 +189,8 @@ export interface TerminalManagerShape {
     input: TerminalRecoveryInput,
   ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;
   readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
+  /** Live panes for the W3.2 drain; classification is exact and session-scoped. */
+  readonly listDrainPanes?: () => Effect.Effect<ReadonlyArray<TerminalDrainPane>>;
   /** Terminal sessions currently tracked for one execution target, for targeted shutdown. */
   readonly listExecutionTargetSessions?: (
     executionTargetId: string,
@@ -207,6 +267,35 @@ export interface TerminalManagerShape {
    * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
    * by delivery overflow instead.
    */
+  /**
+   * One terminal's events for a mounted view: with `acceptScreen`, the host screen first and
+   * live output cut at its sequence; the renderer counts as attached until `unsubscribe`.
+   */
+  readonly subscribeSession?: (
+    input: {
+      readonly threadId: string;
+      readonly terminalId: string;
+      readonly acceptScreen: boolean;
+    },
+    sink: TerminalSessionStreamSink,
+  ) => Effect.Effect<TerminalSessionStreamHandle>;
+
+  /** Restart one host terminal's idle timer; terminals without idle close are unchanged. */
+  readonly keepOpen?: (input: TerminalKeepOpenInput) => Effect.Effect<void, TerminalError>;
+
+  /** Lifecycle notices (`includeLifecycle`): idle warnings, host closes, limit refusals. */
+  readonly subscribeLifecycle?: (
+    listener: (notice: TerminalLifecycleNotice) => Effect.Effect<void>,
+  ) => Effect.Effect<() => void>;
+
+  readonly publishLifecycleNotice?: (notice: TerminalLifecycleNotice) => Effect.Effect<void>;
+
+  /** "Close them": stop old-version hosts that can't be reconnected. */
+  readonly closeDrainingHosts?: () => Effect.Effect<
+    TerminalCloseDrainingHostsResult,
+    TerminalError
+  >;
+
   readonly setOutputHold?: (input: {
     readonly threadId: string;
     readonly terminalId: string;

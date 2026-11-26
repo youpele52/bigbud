@@ -1,0 +1,40 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,0],
+    "cursorHidden": false,
+    "screen": [
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default",1,0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "scroll_up_discards_and_scroll_down_is_not_bce",
+  "geometry": {
+    "cols": 8,
+    "rows": 4,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc\r\n\u001b[7C\u001b[0;41m\u001b[1X\u001b[m\r\n\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[2;1H\u001b[?25h",
+    "cols": 8,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 4,
+    "scrollbackRows": 0,
+    "sha256": "98e809fb034125fe97da557b257ab09f3abb2c464a5889cb12f2c9a13543b9ff",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "a\r\nb\r\nc\r\nd\u001b[3S\u001b[41m\u001b[T\u001b[2;1H\u001b[P\u001b[m"
+    }
+  ]
+}

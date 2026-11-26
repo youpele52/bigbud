@@ -47,7 +47,7 @@ describe("Copilot thread tools: delegated model choice", () => {
     const tool = makeTools({ createThread }).find(
       (candidate) => candidate.name === "create_thread",
     );
-    const modelSelection = { provider: "claudeAgent", model: "claude-sonnet" };
+    const modelSelection = { provider: "claudeAgent", model: "claude-sonnet", effort: "high" };
     await tool?.handler?.(
       { title: "Side", task: "Do it", modelSelection },
       invocation("call-1", "create_thread"),

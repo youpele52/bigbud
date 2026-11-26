@@ -313,6 +313,15 @@ export function ProvidersSettingsSection({
                 },
               })
             }
+            remoteBinaryPath={settings.providers.opencodeV2.remoteBinaryPath ?? ""}
+            onRemoteBinaryPathChange={(value) =>
+              updateSettings({
+                providers: {
+                  ...settings.providers,
+                  opencodeV2: { ...settings.providers.opencodeV2, remoteBinaryPath: value },
+                },
+              })
+            }
             onConfigPathChange={(value) =>
               updateSettings({
                 providers: {

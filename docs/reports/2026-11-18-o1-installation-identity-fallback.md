@@ -15,7 +15,7 @@ unconfirmed". A boot-id fallback was rejected because it would stay stuck after 
 
 - **Installation id** (`packages/shared/src/machineIdentity.installation.ts`): 256 random bits,
   stored as 64 lowercase hex characters and a newline in `<bigbud home>/identity/installation-v1`.
-  The bigbud home is `BIGBUD_HOME` (or `T3CODE_HOME`), otherwise `~/.bigbud`. The directory is a
+  The bigbud home is `BIGBUD_HOME`, otherwise `~/.bigbud`. The directory is a
   real 0700 directory and the file is a real 0600 regular file, both owned by the user. It is
   created once: an `O_EXCL|O_NOFOLLOW` temp file is written and synced, then hard-linked into place.
   Unlike `rename`, a link never replaces an id that another process published first, so

@@ -1,89 +1,10 @@
 use super::*;
 
-const MAX_ENVIRONMENT_ENTRIES: usize = 64;
-const MAX_ENVIRONMENT_VALUE_BYTES: usize = 16 * 1024;
-const MAX_ENVIRONMENT_BYTES: usize = 256 * 1024;
-const ALLOWED_ENVIRONMENT_NAMES: [&str; 22] = [
-    "BIGBUD_TEST",
-    "CI",
-    "COLUMNS",
-    "GIT_AUTHOR_DATE",
-    "GIT_AUTHOR_EMAIL",
-    "GIT_AUTHOR_NAME",
-    "GIT_COMMITTER_DATE",
-    "GIT_COMMITTER_EMAIL",
-    "GIT_COMMITTER_NAME",
-    "GIT_CONFIG",
-    "GIT_CONFIG_GLOBAL",
-    "GIT_CONFIG_NOSYSTEM",
-    "GIT_ASKPASS",
-    "GIT_SSH_COMMAND",
-    "GIT_TERMINAL_PROMPT",
-    "LANG",
-    "COLORTERM",
-    "LC_ALL",
-    "LC_CTYPE",
-    "TERM",
-    "TMPDIR",
-    "TZ",
-];
-
-pub(super) fn process_environment(
-    request: &v1::ProcessRequest,
-) -> Result<Vec<(String, String)>, SessionError> {
-    process_environment_from_entries(&request.environment)
-}
-
-pub(super) fn process_environment_from_entries(
-    entries: &[v1::ProcessEnvironment],
-) -> Result<Vec<(String, String)>, SessionError> {
-    if entries.len() > MAX_ENVIRONMENT_ENTRIES {
-        return Err(SessionError::Process(
-            "process environment contains too many entries".to_owned(),
-        ));
-    }
-    let mut total_bytes = 0usize;
-    entries
-        .iter()
-        .map(|entry| {
-            let valid_name = !entry.name.is_empty()
-                && entry.name.bytes().enumerate().all(|(index, byte)| {
-                    (index == 0 && (byte == b'_' || byte.is_ascii_uppercase()))
-                        || (index > 0
-                            && (byte == b'_' || byte.is_ascii_uppercase() || byte.is_ascii_digit()))
-                });
-            let allowed_name = is_allowed_environment_name(&entry.name);
-            total_bytes = total_bytes.saturating_add(entry.name.len() + entry.value.len());
-            if !valid_name
-                || !allowed_name
-                || entry.value.contains('\0')
-                || entry.value.len() > MAX_ENVIRONMENT_VALUE_BYTES
-                || total_bytes > MAX_ENVIRONMENT_BYTES
-            {
-                return Err(SessionError::Process(format!(
-                    "environment entry '{}' is not permitted by the remote-agent policy",
-                    entry.name
-                )));
-            }
-            Ok((entry.name.clone(), entry.value.clone()))
-        })
-        .collect()
-}
-
-fn is_allowed_environment_name(name: &str) -> bool {
-    ALLOWED_ENVIRONMENT_NAMES.contains(&name)
-        || name.starts_with("LC_")
-        || (name.starts_with("GIT_CONFIG_")
-            && (name == "GIT_CONFIG_COUNT"
-                || name.strip_prefix("GIT_CONFIG_KEY_").is_some_and(|suffix| {
-                    !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
-                })
-                || name
-                    .strip_prefix("GIT_CONFIG_VALUE_")
-                    .is_some_and(|suffix| {
-                        !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
-                    })))
-}
+#[path = "protocol_helpers.environment.rs"]
+mod environment;
+pub(super) use environment::{
+    process_environment, process_environment_from_entries, validate_local_launch_environment,
+};
 
 pub fn protocol_error_frame(error: &SessionError) -> v1::Frame {
     let code = match error {
@@ -198,6 +119,7 @@ pub(super) fn pty_create_response_frame(
                 error_code: String::new(),
                 error_message: String::new(),
                 launch_status: pty_launch_status(handle.launch_outcome()).to_owned(),
+                ..Default::default()
             },
         )),
     }
@@ -343,10 +265,17 @@ pub(super) fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::DirectoryLimitExceeded => "DIRECTORY_LIMIT_EXCEEDED",
         WorkspaceError::WriteLimitExceeded => "WRITE_LIMIT_EXCEEDED",
         WorkspaceError::WriteConflict { .. } => "WRITE_CONFLICT",
+        WorkspaceError::WriteLockTimeout => "WRITE_LOCK_TIMEOUT",
+        WorkspaceError::WriteVerificationFailed => "WRITE_VERIFICATION_FAILED",
+        WorkspaceError::UnknownOutcome(_) => "UNKNOWN_OUTCOME",
         WorkspaceError::AlreadyExists => "ALREADY_EXISTS",
         WorkspaceError::ConditionalCreate => "INVALID_ARGUMENT",
         WorkspaceError::EmptySearchQuery => "EMPTY_SEARCH_QUERY",
         WorkspaceError::SearchLimitExceeded => "SEARCH_LIMIT_EXCEEDED",
+        WorkspaceError::RootEntry => "ROOT_ENTRY",
+        WorkspaceError::KindMismatch => "KIND_MISMATCH",
+        WorkspaceError::DeleteLimitExceeded => "DELETE_LIMIT_EXCEEDED",
+        WorkspaceError::DeleteCrossesMount => "DELETE_CROSSES_MOUNT",
         WorkspaceError::Io(_) => "IO_ERROR",
     }
 }

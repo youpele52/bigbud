@@ -1,6 +1,5 @@
-import { GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
+import { GitPullRequestIcon, Trash2Icon } from "lucide-react";
 import { useCallback, type MouseEvent } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import {
   BIGBUD_THREAD_CONTEXT_DRAG_MIME,
@@ -9,8 +8,6 @@ import {
 
 import { useSidebarThreadSummaryById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
-import { selectThreadTerminalState } from "../../stores/terminal";
-import { useTerminalStateStore } from "../../stores/terminal";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { resolveThreadStatusPill, resolveThreadRowClassName } from "./Sidebar.logic";
 import { formatRelativeTimeLabel } from "../../utils/timestamp";
@@ -22,6 +19,7 @@ import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndic
 import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
 import { SidebarThreadSnoozeIcon } from "./SidebarThreadSnoozeIcon";
 import { SidebarThreadTerminalProviderIcon } from "./SidebarThreadTerminalProviderIcon";
+import { SidebarThreadTerminalIndicator } from "./SidebarThreadTerminalIndicator";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
@@ -30,14 +28,12 @@ import { SidebarThreadRowContent } from "./SidebarThreadRow.content";
 import { SidebarThreadRowHover } from "./SidebarThreadRow.hover";
 import {
   isProviderIconWorking,
-  mergeRunningTerminalIds,
   prStatusIndicator,
   providerIconPresentationClass,
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
   shouldShowThreadStatusLabel,
   terminalStatusFromFinished,
-  terminalStatusFromRunningIds,
   type ThreadPr,
 } from "./SidebarThreadRow.status";
 import { type SidebarThreadRowProps } from "./SidebarThreadRow.types";
@@ -48,20 +44,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const thread = useSidebarThreadSummaryById(props.threadId);
   const effectiveThreadId = thread?.id ?? props.threadId;
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[props.threadId]);
-  const runningTerminalIds = useTerminalStateStore(
-    useShallow((state) => {
-      const drawerRunningTerminalIds = selectThreadTerminalState(
-        state.terminalStateByThreadId,
-        props.threadId,
-      ).runningTerminalIds;
-      const panelRunningTerminalIds = selectThreadTerminalState(
-        state.panelTerminalStateByThreadId,
-        props.threadId,
-      ).runningTerminalIds;
-
-      return mergeRunningTerminalIds(drawerRunningTerminalIds, panelRunningTerminalIds);
-    }),
-  );
   const swipeReveal = useSwipeRevealAction<HTMLAnchorElement>({
     itemId: effectiveThreadId,
     disabled: props.renamingThreadId === effectiveThreadId,
@@ -79,11 +61,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     : null;
   const visibleThreadStatus = shouldShowThreadStatusLabel(threadStatus) ? threadStatus : null;
   const prStatus = prStatusIndicator(props.pr);
-  // Finished terminal work in Needs you takes the terminal icon's place (red on failure).
-  const terminalStatus =
-    (thread?.organization?.state === "needs-you"
+  // Finished terminal work in Needs you takes the live terminals' place (red on failure).
+  const terminalFinishedStatus =
+    thread?.organization?.state === "needs-you"
       ? terminalStatusFromFinished(thread.terminalFinished)
-      : null) ?? terminalStatusFromRunningIds(runningTerminalIds);
+      : null;
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
   const isAutomationThread = props.automationThreadIds?.has(effectiveThreadId) ?? false;
   // `h-4` matches the title's text-xs line: the taller jump-hint pill overflows it centered
@@ -214,16 +196,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
           />
         ) : null}
         {isAutomationThread ? <SidebarAutomationThreadIcon /> : null}
-        {terminalStatus && (
-          <span
-            role="img"
-            aria-label={terminalStatus.label}
-            title={terminalStatus.label}
-            className={`inline-flex items-center justify-center ${terminalStatus.colorClass}`}
-          >
-            <TerminalIcon className={`size-3 ${terminalStatus.pulse ? "animate-pulse" : ""}`} />
-          </span>
-        )}
+        <SidebarThreadTerminalIndicator threadId={thread.id} finished={terminalFinishedStatus} />
         <div className="flex min-w-12 justify-end">
           <SidebarThreadRowActions
             threadId={thread.id}

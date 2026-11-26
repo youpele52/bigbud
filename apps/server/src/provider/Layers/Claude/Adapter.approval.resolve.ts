@@ -36,11 +36,14 @@ export function resolveClaudeRequest<A>(
         Effect.sync(() => {
           // No grant or cached allow exists before publication completes. A late
           // cancellation overrides the UI decision, and publication failure denies.
-          const completed = finish(Exit.isFailure(exit) || cancelled());
-          context.requestLedger.set(requestId, completed.entry);
-          trimRequestLedger(context.requestLedger);
-          result = completed.result;
-          Deferred.doneUnsafe(pending.completion, Effect.void);
+          try {
+            const completed = finish(Exit.isFailure(exit) || cancelled());
+            context.requestLedger.set(requestId, completed.entry);
+            trimRequestLedger(context.requestLedger);
+            result = completed.result;
+          } finally {
+            Deferred.doneUnsafe(pending.completion, Effect.void);
+          }
         }),
       ),
       Effect.map(() => result),

@@ -88,6 +88,8 @@ function native(
   return Command.make(name, {
     authorityId: authority(),
     confirmStartup: Flag.boolean("confirm-startup"),
+    forUpgrade: Flag.boolean("for-upgrade"),
+    savedWork: Flag.boolean("i-have-saved-my-work"),
   }).pipe(
     Command.withDescription(description),
     Command.withHandler((input) =>
@@ -95,21 +97,38 @@ function native(
         ? confirmationRequired("--confirm-startup")
         : (action === "start" || action === "stop") && input.confirmStartup
           ? startupConsentRefused
-          : report(name, runBackendNativeCli({ ...input, action }), (result) => {
-              if (action === "status")
-                process.stdout.write(
-                  `${result.output.trim()}\nBackend readiness is not assessed by unit status.\n`,
+          : action !== "stop" && (input.forUpgrade || input.savedWork)
+            ? Effect.sync(() => {
+                process.stderr.write(
+                  "bigbud backend: --for-upgrade and --i-have-saved-my-work apply only to stop.\n",
                 );
-              // The native launcher reports observed unit states and what was preserved.
-              else if (action === "start" || action === "stop")
-                process.stdout.write(`${result.output.trim()}\n`);
-              else
-                process.stdout.write(
-                  action === "enable"
-                    ? "Backend startup requested. Inspect status to confirm its state.\n"
-                    : "Automatic startup disabled. Running work continues.\n",
-                );
-            }),
+                process.exitCode = 1;
+              })
+            : report(
+                name,
+                runBackendNativeCli({
+                  authorityId: input.authorityId,
+                  confirmStartup: input.confirmStartup,
+                  action,
+                  ...(input.forUpgrade ? { forUpgrade: true } : {}),
+                  ...(input.savedWork ? { savedWork: true } : {}),
+                }),
+                (result) => {
+                  if (action === "status")
+                    process.stdout.write(
+                      `${result.output.trim()}\nBackend readiness is not assessed by unit status.\n`,
+                    );
+                  // The native launcher reports observed unit states and what was preserved.
+                  else if (action === "start" || action === "stop")
+                    process.stdout.write(`${result.output.trim()}\n`);
+                  else
+                    process.stdout.write(
+                      action === "enable"
+                        ? "Backend startup requested. Inspect status to confirm its state.\n"
+                        : "Automatic startup disabled. Running work continues.\n",
+                    );
+                },
+              ),
     ),
   );
 }

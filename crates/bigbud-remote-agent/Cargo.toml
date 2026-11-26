@@ -18,6 +18,9 @@ sha2.workspace = true
 serde_json.workspace = true
 serde_core.workspace = true
 thiserror.workspace = true
+# Terminal screen model for host-side screen copies; pinned exactly because serialized snapshots
+# are part of the fidelity contract (see the terminal lifecycle plan, R0/R1).
+vt100 = "=0.18.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -71,6 +74,11 @@ windows = { version = "0.62.2", default-features = false, features = [
   "Win32_System_Search",
   "Win32_System_Variant",
 ] }
+
+[dev-dependencies]
+# M0/R1 prototype comparison only (terminal lifecycle plan): runs the screen fidelity corpus
+# against the documented fallback engine. A dev-dependency, so never linked into the agent.
+alacritty_terminal = { version = "=0.26.0", default-features = false }
 
 [lints]
 workspace = true

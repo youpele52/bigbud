@@ -10,9 +10,7 @@ import pkg from "./package.json" with { type: "json" };
 import { mobileDiscoveryPlugin } from "./src/dev/mobileDiscoveryPlugin";
 
 const port = Number(process.env.PORT ?? DEFAULT_WEB_PORT);
-const sourcemapEnv = (process.env.BIGBUD_WEB_SOURCEMAP ?? process.env.T3CODE_WEB_SOURCEMAP)
-  ?.trim()
-  .toLowerCase();
+const sourcemapEnv = process.env.BIGBUD_WEB_SOURCEMAP?.trim().toLowerCase();
 
 const buildSourcemap =
   sourcemapEnv === "0" || sourcemapEnv === "false"

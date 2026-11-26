@@ -17,6 +17,7 @@ import * as AcpSchema from "./_generated/schema.gen.ts";
 import { CLIENT_METHODS } from "./_generated/meta.gen.ts";
 import * as AcpError from "./errors.ts";
 import { makeProtocolRouting } from "./protocol.routing.ts";
+import { makeAcpRequestIdMap } from "./_internal/requestIds.ts";
 
 export interface AcpProtocolLogEvent {
   readonly direction: "incoming" | "outgoing";
@@ -72,6 +73,8 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
   options: AcpPatchedProtocolOptions,
 ): Effect.fn.Return<AcpPatchedProtocol, never, Scope.Scope> {
   const parser = parserFactory.makeUnsafe();
+  // String JSON-RPC ids from the agent (e.g. UUIDs) are mapped for Effect RPC and restored.
+  const requestIds = makeAcpRequestIdMap();
   const serverQueue = yield* Queue.unbounded<RpcMessage.FromClientEncoded>();
   const clientQueue = yield* Queue.unbounded<RpcMessage.FromServerEncoded>();
   const notificationQueue = yield* Queue.unbounded<AcpIncomingNotification>();
@@ -106,7 +109,12 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
     });
 
     const encoded = yield* Effect.try({
-      try: () => parser.encode(message),
+      try: () => {
+        const raw = parser.encode(message);
+        const original = requestIds.originalFor(message);
+        requestIds.settle(message);
+        return raw && original !== undefined ? requestIds.restore(raw, original) : raw;
+      },
       catch: (cause) =>
         new AcpError.AcpProtocolParseError({
           detail: "Failed to encode ACP message",
@@ -177,7 +185,7 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
           }),
         ),
         Effect.flatMap((messages) =>
-          Effect.forEach(messages, routeDecodedMessage, {
+          Effect.forEach(messages, (message) => routeDecodedMessage(requestIds.incoming(message)), {
             discard: true,
           }),
         ),

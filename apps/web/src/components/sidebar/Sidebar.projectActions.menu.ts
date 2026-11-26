@@ -1,5 +1,6 @@
 import { isElectron } from "../../config/env";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { buildRemoteTargetMenuItems } from "../../lib/remoteTargetMenu";
 import type { Project } from "../../models/types";
 import {
   isRemoteExecutionTargetId,
@@ -30,17 +31,12 @@ export function buildProjectContextMenuItems(input: {
           },
         ]
       : []),
-    ...(isSshWorkspace && !input.disconnected
-      ? [{ id: "reconnect", label: "Reconnect", disabled: input.reconnectDisabled }]
-      : []),
-    // Connection controls sit together directly above Remove: Reconnect then Disconnect, or Connect alone.
-    ...(isSshWorkspace
-      ? [
-          input.disconnected
-            ? { id: "connect", label: "Connect" }
-            : { id: "disconnect", label: "Disconnect" },
-        ]
-      : []),
+    // Connection controls sit together directly above Remove (shared with the thread menu).
+    ...buildRemoteTargetMenuItems({
+      executionTargetId: target,
+      disconnected: input.disconnected,
+      reconnectPending: input.reconnectDisabled,
+    }),
     {
       id: "delete",
       label: isRemoteWorkspace ? "Remove remote workspace" : "Remove project",

@@ -6,31 +6,37 @@ import {
 import { createRemotePtyResizeControl } from "./remoteAgentPtyClient.controls";
 import { confirmRemotePtyAttachment } from "./remoteAgentPtyClient.confirm.ts";
 import { attachRemotePty } from "./remoteAgentPtyClient.attach";
-import { RemoteAgentPtyOutput } from "./remoteAgentPtyClient.output";
+import { RemoteAgentPtyOutput, remotePtyExitEvent } from "./remoteAgentPtyClient.output";
 import { RemoteAgentPtyInput } from "./remoteAgentPtyClient.input.ts";
 import { detachRemotePty } from "./remoteAgentPtyClient.detach";
-import { sendRemotePtyRequest, signalRemotePty } from "./remoteAgentPtyClient.request";
-import { randomUUID } from "node:crypto";
+import {
+  closeRemotePty,
+  sendRemotePtyRequest,
+  signalRemotePty,
+} from "./remoteAgentPtyClient.request";
+import { RemoteAgentPtyLifecycle } from "./remoteAgentPtyClient.lifecycle.ts";
+import { requestRemoteAgentScreenSnapshot } from "./remoteAgentPtyClient.screen.ts";
 import { type RemoteAgentReconnectEpisodeResult } from "./remoteAgentReconnectPolicy.ts";
-
-/** Test seam for reconnect delays; production uses the contract's real timers. */
-export const remoteAgentPtyReconnectTiming: { delay?: (ms: number) => Promise<void> } = {};
-
+import type {
+  PtyScreenSnapshot,
+  PtyScreenSnapshotInput,
+  PtySequencedData,
+} from "../terminal/Services/PTY.ts";
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
-import type { RemoteAgentPtyExited } from "./remoteAgentProtocol.ts";
-import { remoteAgentPtyTerminalEvidence } from "./remoteAgentTerminalEvidence.ts";
-export { RemoteAgentPtyClient } from "./remoteAgentPtyClient.create.ts";
-
 import {
   RemoteAgentPtyError,
   type RemoteAgentPtyProcessLike,
   type RemoteAgentPtyDurability,
   type RemoteAgentPtyExitListener,
 } from "./remoteAgentPtyClient.types.ts";
+export { RemoteAgentPtyClient } from "./remoteAgentPtyClient.create.ts";
 export {
   RemoteAgentPtyError,
   type RemoteAgentPtyProcessLike,
 } from "./remoteAgentPtyClient.types.ts";
+
+/** Test seam for reconnect delays; production uses the contract's real timers. */
+export const remoteAgentPtyReconnectTiming: { delay?: (ms: number) => Promise<void> } = {};
 
 type Reconnect = (() => Promise<RemoteAgentConnection>) | undefined;
 
@@ -39,12 +45,13 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   private attachmentRevision = 0;
   private removeFrameListener: (() => void) | undefined;
   private removeFailureListener: (() => void) | undefined;
-  private readonly dataListeners = new Set<(data: string) => void>();
   private readonly exitListeners = new Set<RemoteAgentPtyExitListener>();
   private readonly errorListeners = new Set<(error: Error) => void>();
   private readonly output: RemoteAgentPtyOutput;
   private readonly resizeControl: ReturnType<typeof createRemotePtyResizeControl>;
   private readonly input: RemoteAgentPtyInput;
+  /** Protocol 1.9 view state, keep-open, activity and notices; refuses on older hosts. */
+  readonly lifecycle: RemoteAgentPtyLifecycle;
 
   private didExit = false;
   private _launchStatus: "unconfirmed" | undefined;
@@ -62,6 +69,11 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     private _pid = 0,
   ) {
     this.currentConnection = connection;
+    this.lifecycle = new RemoteAgentPtyLifecycle(
+      ptyId,
+      () => this.currentConnection,
+      this.controlRequests.signal,
+    );
     this.input = new RemoteAgentPtyInput({
       ptyId,
       available: () =>
@@ -126,6 +138,7 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     this.controlRequests.abort();
     this.output.stop();
     this.resizeControl.stop();
+    this.lifecycle.unbind();
     this.removeFrameListener?.();
     this.removeFailureListener?.();
   }
@@ -179,8 +192,24 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   }
 
   onData(callback: (data: string) => void): () => void {
-    this.dataListeners.add(callback);
-    return () => this.dataListeners.delete(callback);
+    this.output.dataListeners.add(callback);
+    return () => this.output.dataListeners.delete(callback);
+  }
+
+  /** Each applied output sequence with its decoded text (possibly empty), for the screen splice. */
+  onSequencedData(callback: (event: PtySequencedData) => void): () => void {
+    this.output.sequencedListeners.add(callback);
+    return () => this.output.sequencedListeners.delete(callback);
+  }
+
+  /** One verified host screen copy over the current connection (terminal.screen). */
+  screenSnapshot(input: PtyScreenSnapshotInput): Promise<PtyScreenSnapshot> {
+    return requestRemoteAgentScreenSnapshot(
+      this.currentConnection,
+      this.ptyId,
+      input,
+      this.controlRequests.signal,
+    );
   }
 
   onExit(callback: (event: { exitCode: number; signal: number | null }) => void): () => void {
@@ -228,12 +257,11 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     if (this.didExit) return;
     this.closing = true;
     try {
-      await this.sendRequest(
-        {
-          type: "ptyCloseRequest",
-          value: { requestId: randomUUID(), ptyId: this.ptyId, terminate },
-        },
-        (frame) => frame.type === "ptyCloseResponse" && frame.value.ptyId === this.ptyId,
+      await closeRemotePty(
+        this.currentConnection,
+        this.ptyId,
+        terminate,
+        this.controlRequests.signal,
       );
     } catch (cause) {
       this.closing = false;
@@ -246,53 +274,22 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     this.removeFrameListener?.();
     this.removeFailureListener?.();
     this.currentConnection = connection;
+    this.lifecycle.bind(connection);
     this.removeFailureListener = connection.onFailure((error) => {
       void this.recover(error);
     });
     this.removeFrameListener = connection.onFrame((frame) => {
       if (frame.type === "ptyOutput" && frame.value.ptyId === this.ptyId) {
-        this.handleOutput(frame.value.sequence, frame.value.bytes);
+        const gap = this.output.apply(frame.value.sequence, frame.value.bytes);
+        if (gap) this.report(gap);
         return true;
       } else if (frame.type === "ptyExited" && frame.value.ptyId === this.ptyId) {
-        this.handleExit(frame.value);
+        const exit = remotePtyExitEvent(frame.value);
+        if (exit instanceof RemoteAgentPtyError) this.report(exit);
+        else this.finish(exit);
         return true;
       }
       return false;
-    });
-  }
-
-  private handleOutput(sequence: number, bytes: Uint8Array): void {
-    if (sequence <= this.output.sequence) return;
-    if (sequence !== this.output.sequence + 1) {
-      this.report(
-        new RemoteAgentPtyError(
-          "PTY_OUTPUT_GAP",
-          `Expected PTY output sequence ${this.output.sequence + 1}, received ${sequence}.`,
-        ),
-      );
-      return;
-    }
-    this.output.sequence = sequence;
-    const text = this.output.decode(bytes);
-    if (text.length > 0) {
-      for (const listener of this.dataListeners) listener(text);
-    }
-    this.output.acknowledge(sequence);
-  }
-
-  private handleExit(value: RemoteAgentPtyExited): void {
-    if (remoteAgentPtyTerminalEvidence(value) !== "verified-terminal") {
-      this.report(
-        new RemoteAgentPtyError(
-          "PTY_OUTCOME_UNKNOWN",
-          "PTY control ended without a verified child exit. Recovery ownership was retained.",
-        ),
-      );
-      return;
-    }
-    this.finish({
-      exitCode: value.hasExitCode ? value.exitCode : 0,
-      signal: value.hasSignal ? value.signal : null,
     });
   }
 
@@ -385,14 +382,12 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     if (this.didExit) return;
     this.didExit = true;
     this.resizeControl.stop();
+    this.lifecycle.unbind();
     this.removeFrameListener?.();
     this.removeFailureListener?.();
     this.removeFrameListener = undefined;
     this.removeFailureListener = undefined;
-    const remainder = this.output.finish();
-    if (remainder.length > 0) {
-      for (const listener of this.dataListeners) listener(remainder);
-    }
+    this.output.finish();
     for (const listener of this.exitListeners) listener(event);
   }
 }

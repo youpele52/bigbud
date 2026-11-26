@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ChildProcess } from "effect/unstable/process";
 
 import type { DesktopReleaseIdentity } from "@bigbud/shared/desktopReleaseIdentity";
+import { findDesktopSshOwnerTarget, sshOwnerServerRelativePath } from "../packaged-ssh-owner.ts";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import {
   BuildScriptError,
@@ -11,6 +12,7 @@ import {
   ProductionWindowsIconSource,
   commandOutputOptions,
   runCommand,
+  type BuildArch,
   type BuildPlatform,
 } from "./shared.ts";
 
@@ -181,7 +183,6 @@ function resolveGitHubPublishConfig():
   | undefined {
   const rawRepo =
     process.env.BIGBUD_DESKTOP_UPDATE_REPOSITORY?.trim() ||
-    process.env.T3CODE_DESKTOP_UPDATE_REPOSITORY?.trim() ||
     process.env.GITHUB_REPOSITORY?.trim() ||
     "";
   if (!rawRepo) return undefined;
@@ -195,6 +196,7 @@ function resolveGitHubPublishConfig():
 export const createBuildConfig = Effect.fn("createBuildConfig")(
   (
     platform: typeof BuildPlatform.Type,
+    arch: typeof BuildArch.Type,
     target: string,
     identity: DesktopReleaseIdentity,
     signed: boolean,
@@ -272,6 +274,12 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
               "bigbud uses your microphone for voice input and browser sites you explicitly allow.",
             NSLocationWhenInUseUsageDescription:
               "bigbud shares your location only with browser sites you explicitly allow.",
+            NSDocumentsFolderUsageDescription:
+              "bigbud searches and opens files in Documents only when your File Access setting includes it.",
+            NSDownloadsFolderUsageDescription:
+              "bigbud searches and opens files in Downloads only when your File Access setting includes it.",
+            NSDesktopFolderUsageDescription:
+              "bigbud searches and opens files on the Desktop only when your File Access setting includes it.",
           },
         };
         // Only pass entitlements for signed builds. Ad-hoc codesign (used when
@@ -283,10 +291,17 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
           // binaries (e.g. .node files), so a relative path fails to resolve.
           macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
           macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
-          macConfig.binaries = [
+          const binaries = [
             "Contents/Resources/server/workspace-agent/bin/bigbud-remote-agent",
             "Contents/Resources/server/delivery-supervisor/bin/bigbud-desktop-supervisor",
           ];
+          const sshOwner = findDesktopSshOwnerTarget(platform, arch);
+          if (sshOwner) {
+            binaries.push(
+              `Contents/Resources/server/${sshOwnerServerRelativePath(sshOwner.platform)}`,
+            );
+          }
+          macConfig.binaries = binaries;
           // afterSign is a root-level electron-builder property, not mac-specific.
           buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
         } else {

@@ -1,4 +1,5 @@
 import type { TerminalEvent } from "@bigbud/contracts/workspace/terminal.ts";
+import type { TerminalScreenItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalStreamDiagnostics } from "./TerminalDiagnostics";
 import { subscribeTerminalOutput, type TerminalOutputSubscription } from "./TerminalOutputStream";
 import type { TerminalLifecycleObserver } from "./TerminalLifecycleDiagnostics";
@@ -8,6 +9,8 @@ export function createTerminalViewportOutput(input: {
   readonly threadId: string;
   readonly terminalId: string;
   readonly receive: (event: TerminalEvent) => void;
+  /** The host screen copy sent first after each `subscribed` (the stream opts in). */
+  readonly receiveScreen?: (screen: TerminalScreenItem) => void;
   readonly outstanding: () => number;
   readonly onResync: () => void;
   readonly lifecycle?: TerminalLifecycleObserver;
@@ -19,6 +22,7 @@ export function createTerminalViewportOutput(input: {
       if (!subscription) input.lifecycle?.record({ type: "subscribeRequested" });
       subscription ??= subscribeTerminalOutput(input.threadId, input.terminalId, {
         onEvent: input.receive,
+        ...(input.receiveScreen ? { onScreen: input.receiveScreen } : {}),
         outstanding: input.outstanding,
         onResync: () => {
           input.lifecycle?.record({ type: "resync" });

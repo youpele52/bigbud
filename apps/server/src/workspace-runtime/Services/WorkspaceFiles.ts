@@ -5,8 +5,7 @@
  * remain a separate WorkspaceWatch capability because their lossy
  * replay and rescan semantics differ from bounded file reads.
  */
-import { ServiceMap } from "effect";
-import type { Effect } from "effect";
+import { Effect, ServiceMap } from "effect";
 
 import type {
   ProjectListDirectoryInput,
@@ -26,6 +25,7 @@ import type {
   WorkspaceFileRangeResult,
   WorkspaceFileSystemShape,
 } from "../../workspace/Services/WorkspaceFileSystem.ts";
+import { localBackendFileEdit } from "../fileEditCapability.ts";
 import type { WorkspacePathOutsideRootError } from "../../workspace/Services/WorkspacePaths.ts";
 
 export interface WorkspaceFilesShape {
@@ -57,7 +57,14 @@ export const workspaceFilesFromExistingServices = (input: {
   readonly entries: WorkspaceEntriesShape;
 }): WorkspaceFilesShape => ({
   writeFile: input.fileSystem.writeFile,
-  readFilePreview: input.fileSystem.readFilePreview,
+  readFilePreview: (value) =>
+    input.fileSystem
+      .readFilePreview(value)
+      .pipe(
+        Effect.map((result) =>
+          Object.assign({}, result, { edit: localBackendFileEdit(value.executionTargetId) }),
+        ),
+      ),
   readFileRange: input.fileSystem.readFileRange,
   listDirectory: input.entries.listDirectory,
 });

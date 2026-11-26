@@ -23,11 +23,11 @@ export const makeRemoteGitOps = Effect.fn("makeRemoteGitOps")(function* (
             executionTargetId: input.executionTargetId ?? executionTargetId,
           }),
         );
-        const statusOps = yield* makeGitStatusOps(helpers, path);
+        const statusOps = yield* makeGitStatusOps(helpers, path, "target");
         return {
           statusOps,
           branchOps: makeGitBranchOps(helpers, statusOps),
-          worktreeOps: makeGitWorktreeOps(helpers, statusOps, path, worktreesDir),
+          worktreeOps: makeGitWorktreeOps(helpers, statusOps, path, worktreesDir, "target"),
           historyOps: makeGitHistoryOps(helpers),
         };
       }),

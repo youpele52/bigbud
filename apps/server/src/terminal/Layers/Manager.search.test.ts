@@ -5,6 +5,11 @@ import { describe, expect } from "vitest";
 
 import { TerminalSearchIndex, type SearchableTerminal } from "./Manager.search";
 import { createManager, openInput, waitFor } from "./Manager.test.helpers";
+import { createTerminalSessionState } from "./Manager.session.state";
+import {
+  retainTerminalHistory,
+  TERMINAL_HISTORY_CONTROL_BYTE_LIMIT,
+} from "./Manager.history.retention";
 
 const terminal = (overrides: Partial<SearchableTerminal>): SearchableTerminal => ({
   threadId: "thread-1",
@@ -68,6 +73,32 @@ describe("TerminalSearchIndex", () => {
     expect(hit!.lineText.startsWith("…")).toBe(true);
     expect(hit!.lineText.endsWith("…")).toBe(true);
     expect(hit!.lineText.slice(hit!.matchStart, hit!.matchStart + 6)).toBe("NEEDLE");
+  });
+
+  it("searches the retained text tail after the replay history was trimmed or lost", () => {
+    const index = new TerminalSearchIndex();
+    const session = createTerminalSessionState({
+      threadId: "thread-1",
+      terminalId: "default",
+      executionTargetId: "local",
+      dropPathMode: "posix",
+      cwd: "/",
+      worktreePath: null,
+      history: "",
+      cols: 80,
+      rows: 24,
+      runtimeEnv: null,
+    });
+    retainTerminalHistory(session, "\x1b[31mearly needle\x1b[0m\r\n", 5);
+    for (let i = 0; i < 10; i++) retainTerminalHistory(session, `line ${i}\r\n`, 5);
+    expect(session.historyTrimmed).toBe(true);
+    expect(session.history).not.toContain("early needle");
+    const hits = () => index.search([session], { query: "needle" }).hits.map((hit) => hit.lineText);
+    expect(hits()).toEqual(["early needle"]);
+    retainTerminalHistory(session, "\x1b]0;" + "t".repeat(TERMINAL_HISTORY_CONTROL_BYTE_LIMIT), 5);
+    expect(session.historyTruncated).toBe(true);
+    retainTerminalHistory(session, "late needle\r\n", 5);
+    expect(hits()).toEqual(["late needle", "early needle"]);
   });
 
   it("rebuilds a terminal's lines only after its history changed", () => {

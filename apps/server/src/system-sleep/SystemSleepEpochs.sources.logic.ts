@@ -3,11 +3,30 @@
  *
  * @module SystemSleepEpochs.sources.logic
  */
-import type { DesktopLifecycleHint } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
+import type {
+  DesktopLifecycleHint,
+  DesktopLifecycleHintLine,
+  DesktopQuitHint,
+} from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
 import { SLEEP_EPOCH_MERGE_WINDOW_MS, type SleepEvidence } from "./SystemSleepEpochs.logic.ts";
 
 // ── Desktop hints (fd 5) ─────────────────────────────────────────────
+
+/**
+ * Where one fd 5 line goes. Power and network hints feed the sleep epochs; a `quit` line is
+ * the desktop's quit intent and never touches them. Both share one sequence counter, so a
+ * skipped quit sequence never makes a later power hint look out of order.
+ */
+export type DesktopHintRoute =
+  | { readonly target: "sleep-epochs"; readonly hint: DesktopLifecycleHint }
+  | { readonly target: "quit-intent"; readonly hint: DesktopQuitHint };
+
+export function routeDesktopHintLine(line: DesktopLifecycleHintLine): DesktopHintRoute {
+  return line.kind === "quit"
+    ? { target: "quit-intent", hint: line }
+    : { target: "sleep-epochs", hint: line };
+}
 
 export interface DesktopHintState {
   readonly lastSequence: number | null;

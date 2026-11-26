@@ -1,0 +1,39 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,5],
+    "cursorHidden": false,
+    "screen": [
+      [["a",1,"default","default",0],["b",1,"default","default",0],["c",1,"default","default",0],["d",1,"default","default",0],["e",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "pending_wrap_at_last_column",
+  "geometry": {
+    "cols": 5,
+    "rows": 3,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcabcde\r\n\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;5He\u001b[?25h",
+    "cols": 5,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "f25fe4ddce77bf138095e9c79a76df0e68af1b0ee6b5452bd0456284cc6ab788",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "abcde"
+    }
+  ]
+}

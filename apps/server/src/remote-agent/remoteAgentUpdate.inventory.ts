@@ -1,3 +1,4 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import { REMOTE_AGENT_INVENTORY_PATH_CLASSIFIER } from "./remoteAgentUpdate.inventory.paths.ts";
 
@@ -273,7 +274,5 @@ export function parseRemoteAgentInventory(text: string): RemoteAgentInventory {
 export async function inspectRemoteAgentInventory(
   control: Pick<RemoteAgentControl, "root" | "run">,
 ): Promise<RemoteAgentInventory> {
-  return parseRemoteAgentInventory(
-    await control.run(buildRemoteAgentInventoryCommand(control.root)),
-  );
+  return parseRemoteAgentInventory(await runRemoteAgentControlOp(control, { kind: "inventory" }));
 }

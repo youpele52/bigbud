@@ -1,0 +1,41 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [4,2],
+    "cursorHidden": false,
+    "screen": [
+      [["中",2,"default","default",0],["",0,"default","default",0],["文",2,"default","default",0],["",0,"default","default",0],["字",2,"default","default",0],["",0,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["😀",2,"default","default",0],["",0,"default","default",0],["x",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["é",1,"default","default",0],["a",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["1",1,"default","default",0],["2",1,"default","default",0],["3",1,"default","default",0],["4",1,"default","default",0],["5",1,"default","default",0],["6",1,"default","default",0],["7",1,"default","default",0],["8",1,"default","default",0],["9",1,"default","default",0],["0",1,"default","default",0],["",1,"default","default",0]],
+      [["中",2,"default","default",0],["",0,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "wide_cjk_emoji_combining",
+  "geometry": {
+    "cols": 11,
+    "rows": 5,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc中文字\r\n😀x\r\néa\r\n1234567890 \r\n中\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[5;3H\u001b[?25h",
+    "cols": 11,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 5,
+    "scrollbackRows": 0,
+    "sha256": "5d74567010a19674c6927cb45153f5a5585e94a1373dcc97cc8756f03f9120f8",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "中文字\r\n😀x\r\néa\r\n1234567890中"
+    }
+  ]
+}

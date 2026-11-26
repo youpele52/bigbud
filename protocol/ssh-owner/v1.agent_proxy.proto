@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package bigbud.ssh_owner.v1;
+
+// This proof opens one preapproved local loopback artifact. Data is carried
+// only on inherited byte pipes, not on this control channel.
+//
+// Production per-target proxies reuse the same message with both fields empty:
+// the owner selects the installed agent and opens one private mux session over
+// that target's verified master. Any non-empty value is refused in production.
+message ProofAgentProxyOpen {
+  string binary_path = 1;
+  string sha256 = 2;
+}
+
+message ProofAgentProxyClose {
+  bytes lease = 1;
+  bool terminate = 2;
+  uint32 timeout_ms = 3;
+}
+
+message ProofAgentProxyStatus {
+  bytes lease = 1;
+  uint32 pid = 2;
+  bool closed = 3;
+  optional int32 code = 4;
+  optional int32 signal = 5;
+}
+
+// Append-only proof: match the immutable installation bound at owner startup.
+// Relay data remains on the inherited duplex byte channels.
+message ProofClientRelayOpen {
+  string node_binary = 1;
+  string node_sha256 = 2;
+  string helper_entry = 3;
+  string helper_sha256 = 4;
+  string authority_id = 5;
+}
+
+// Private proof only. The worker pin and dedicated identity are startup-bound.
+message ProofPeerRelayOpen {
+  string pairing_id = 1;
+  string grant_id = 2;
+  string worker_authority_id = 3;
+  string host_key_fingerprint = 4;
+  string coordinator_key_fingerprint = 5;
+}
+
+// Opens only the read-only receive-pack advertisement, never a push session.
+message ProofGitAdvertisementOpen {
+  string repository_path = 1;
+  string source_ref = 2;
+  string destination_ref = 3;
+  string source_oid = 4;
+}
+
+// Scoped v2 upload-pack negotiation against an empty bare fixture only.
+message ProofGitUploadOpen { string repository_path = 1; }
+
+// Owner-compiled agent management verbs. The caller names only an enum value;
+// the owner selects the program, arguments, working directory and environment,
+// so no command, argument, cwd or env can be supplied over the wire.
+enum AgentActionKind {
+  AGENT_ACTION_KIND_UNSPECIFIED = 0;
+  AGENT_ACTION_KIND_PLATFORM_PROBE = 1;
+  AGENT_ACTION_KIND_INSTALL = 2;
+  AGENT_ACTION_KIND_UPDATE = 3;
+  AGENT_ACTION_KIND_REMOVE = 4;
+  AGENT_ACTION_KIND_STATUS = 5;
+  AGENT_ACTION_KIND_START = 6;
+  AGENT_ACTION_KIND_STOP = 7;
+  AGENT_ACTION_KIND_WAKE = 8;
+}
+
+// One accepted remote operation. Only INSTALL and UPDATE carry artifact bytes,
+// and those bytes reach the remote child's stdin, never a command line.
+message AgentAction {
+  AgentActionKind action = 1;
+  // Stable identity for this remote operation. Re-sending a known id returns
+  // the recorded outcome and never replays the operation; an unknown id that
+  // this owner never accepted is a typed refusal.
+  bytes operation_id = 2;
+  // INSTALL and UPDATE only: the exact verified artifact identity.
+  optional string artifact_version = 3;
+  optional string artifact_sha256 = 4;
+  optional uint64 artifact_size = 5;
+  optional string artifact_target_triple = 6;
+  // INSTALL and UPDATE only: bounded artifact bytes for the remote stdin.
+  optional bytes artifact = 7;
+  // Ask to read the recorded outcome of this operation id only. An id this
+  // owner never accepted is a typed refusal, never a new operation.
+  bool reattach = 8;
+}
+
+message AgentActionResult {
+  AgentActionKind action = 1;
+  bytes operation_id = 2;
+  // Absent when no exit status could be confirmed.
+  optional int32 exit_code = 3;
+  bytes stdout = 4;
+  bytes stderr = 5;
+  bool truncated = 6;
+  // A partial install or a lost acknowledgement. Reattach by operation id; the
+  // operation is never replayed.
+  bool outcome_unknown = 7;
+  // True when these fields are the recorded outcome of an earlier operation.
+  bool reattached = 8;
+}

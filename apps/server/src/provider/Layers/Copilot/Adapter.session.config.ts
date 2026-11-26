@@ -139,7 +139,7 @@ export function buildSessionConfig(input: {
                 requestId,
               },
             );
-            yield* input.emit([event]);
+            yield* input.emit([{ ...event, requestGeneration: requestId }]);
           })
             .pipe(Effect.runPromise)
             .catch(() => undefined);

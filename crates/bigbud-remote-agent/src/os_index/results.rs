@@ -75,6 +75,9 @@ pub fn finish_hits(
             excluded += 1;
             continue;
         }
+        if exclusions.is_clutter(below) {
+            continue;
+        }
         if !seen.insert(row.path.clone()) {
             continue;
         }
@@ -125,6 +128,45 @@ pub fn finish_hits(
         excluded,
         out_of_scope,
     }
+}
+
+/// Path-first selection for adapters that can read paths cheaply (Spotlight's value-list cache):
+/// drops paths outside every scope or on the exclusion list, ranks the rest by name like
+/// [`finish_hits`], and returns the indices of at most `limit` of them, best first. Ties keep the
+/// index's own order, which is the OS index's recency order. Only these rows have their other
+/// attributes read. Only Spotlight (macOS) reads paths first, so other targets omit it.
+#[cfg(any(target_os = "macos", test))]
+pub fn select_top_paths(
+    request: &OsIndexRequest,
+    exclusions: &Exclusions,
+    paths: &[Option<String>],
+    limit: usize,
+) -> Vec<usize> {
+    let query = rank::normalize_query(request.query());
+    let mut ranked: Vec<(u32, usize)> = paths
+        .iter()
+        .enumerate()
+        .filter_map(|(index, path)| {
+            let path = Path::new(path.as_deref()?);
+            let (scope, below) = split_by_scope(path, request.scopes())?;
+            if exclusions.excludes(path, below) || exclusions.is_clutter(below) {
+                return None;
+            }
+            let entry = DirectoryEntry {
+                path: ranking_path(scope, below),
+                is_directory: false,
+                is_file: true,
+                size_bytes: 0,
+                modified_unix_ms: 0,
+            };
+            let score = rank::score_entry(&entry, &query)
+                .map_or(u32::MAX, |score| u32::try_from(score).unwrap_or(u32::MAX));
+            Some((score, index))
+        })
+        .collect();
+    ranked.sort_unstable();
+    ranked.truncate(limit);
+    ranked.into_iter().map(|(_, index)| index).collect()
 }
 
 /// The path the name ranking sees: the scope folder's name plus the part below it, with `/`

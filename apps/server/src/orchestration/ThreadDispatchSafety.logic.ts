@@ -1,6 +1,7 @@
 import type { OrchestrationThread } from "@bigbud/contracts";
 import { isReadOnlyProviderThread } from "@bigbud/shared/providerLifecycle";
 
+import { hasPendingInteractionGate } from "./PendingInteractionGate.logic.ts";
 import { hasPendingTurnStart } from "./PendingTurnStart.logic.ts";
 import { resolveThreadWorkflowStatus } from "./ThreadWorkflowStatus.logic.ts";
 
@@ -16,7 +17,7 @@ export function isThreadTurnDispatchBlocked(thread: OrchestrationThread): boolea
   if (isReadOnlyProviderThread(thread)) return true;
   if (hasActiveThreadTurnOrSession(thread)) return true;
   // A requested turn stays busy until it binds or fails; its session may already say `ready`.
-  if (hasPendingTurnStart(thread)) return true;
+  if (hasPendingTurnStart(thread) || hasPendingInteractionGate(thread)) return true;
   const workflow = resolveThreadWorkflowStatus(thread);
   // A pending delegated model choice holds the first turn exactly like a pending approval.
   return (
@@ -29,7 +30,11 @@ export function isThreadTurnDispatchBlocked(thread: OrchestrationThread): boolea
 /** The thread's turn waits for the user: a pending approval or user-input request. */
 export function isThreadWaitingForUser(thread: OrchestrationThread): boolean {
   const workflow = resolveThreadWorkflowStatus(thread);
-  return workflow.hasPendingApprovals || workflow.hasPendingUserInput;
+  return (
+    hasPendingInteractionGate(thread) ||
+    workflow.hasPendingApprovals ||
+    workflow.hasPendingUserInput
+  );
 }
 
 /** Every queued-prompt flush and direct turn start passes this check in the decider. */

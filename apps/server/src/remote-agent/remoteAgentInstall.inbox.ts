@@ -1,5 +1,5 @@
-import type { RunSshCommandInput } from "../ssh/sshProcess.ts";
 import type { RemoteAgentArtifact, RemoteAgentTargetTriple } from "./remoteAgentArtifact.ts";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import {
   buildRemoteAgentDirectoryGuard,
@@ -124,11 +124,9 @@ ${buildRemoteAgentInboxPromotionBody(input.artifact)}
   return { command, paths };
 }
 
-type RemoteCommandRunner = (input: RunSshCommandInput) => Promise<unknown>;
-
 /** Inspect managed and inbox placement before downloading; never mutates the remote host. */
 export async function probeRemoteAgentPlacedArtifact(
-  run: RemoteCommandRunner,
+  run: RemoteAgentCommandRunner,
   executionTargetId: string,
   artifact: RemoteAgentArtifact,
 ): Promise<RemoteAgentPlacedState> {
@@ -144,7 +142,7 @@ export async function probeRemoteAgentPlacedArtifact(
 
 /** Promote already-placed bytes without uploading; the caller holds the staging reservation. */
 export async function adoptRemoteAgentPlacedArtifact(
-  run: RemoteCommandRunner,
+  run: RemoteAgentCommandRunner,
   input: {
     readonly executionTargetId: string;
     readonly artifact: RemoteAgentArtifact;

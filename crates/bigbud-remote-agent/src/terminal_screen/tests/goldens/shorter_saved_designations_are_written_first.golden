@@ -1,0 +1,39 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,4],
+    "cursorHidden": false,
+    "screen": [
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["o",1,"default","default",0],["k",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "shorter_saved_designations_are_written_first",
+  "geometry": {
+    "cols": 10,
+    "rows": 3,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc\r\n\u001b[2Cok\r\n\u001b[m\u001b[?47h\u001b[m\u001b[2;3H\u001b7\u001b[m\u001b[?47l\u001b[m\u001b[2;3H\u001b(0\u001b7\u001b[m\u001b(B\u001b[m\u001b[2;5H\u001b[?25h",
+    "cols": 10,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "bee78d675652beda8cade8200d9453b3d2a33a5e427ec6638615ea741fce2d73",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b[?47h\u001b[2;3H\u001b7\u001b[?47l\u001b(0\u001b7\u001b(Bok"
+    }
+  ]
+}

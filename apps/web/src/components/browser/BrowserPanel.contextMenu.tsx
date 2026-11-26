@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef } from "react";
 import { cn } from "~/lib/utils";
+import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
 
 import type { BrowserContextMenuAnchor } from "./BrowserPanel.contextMenu.hook";
 
@@ -81,7 +82,10 @@ export const BrowserContextMenu = memo(function BrowserContextMenu({
   return (
     <div
       ref={menuRef}
-      className="pointer-events-auto absolute z-[60] max-h-[calc(100%-0.5rem)] min-w-[12rem] overflow-y-auto rounded-sm border border-border bg-card p-1 text-foreground shadow-lg"
+      className={cn(
+        "pointer-events-auto absolute z-[60] max-h-[calc(100%-0.5rem)] min-w-[12rem] overflow-y-auto rounded-sm border border-border p-1 text-foreground shadow-lg",
+        SOLID_FLOATING_SURFACE_CLASS_NAME,
+      )}
       style={{ left: 0, top: 0 }}
       tabIndex={-1}
       role="menu"

@@ -96,6 +96,13 @@ export interface PackagedDesktopSupervisorPlan {
   readonly binaryPath: string;
 }
 
+export interface PackagedSshOwnerPlan {
+  readonly serverDir: string;
+  readonly binDir: string;
+  readonly binaryName: string;
+  readonly binaryPath: string;
+}
+
 // ---------------------------------------------------------------------------
 // Pure resolver (no I/O, fully testable)
 // ---------------------------------------------------------------------------
@@ -172,6 +179,17 @@ export function resolvePackagedDesktopSupervisorPlan(
   const binDir = Path.join(serverDir, "delivery-supervisor", "bin");
   const binaryName =
     platform === "win32" ? "bigbud-desktop-supervisor.exe" : "bigbud-desktop-supervisor";
+  return { serverDir, binDir, binaryName, binaryPath: Path.join(binDir, binaryName) };
+}
+
+/** The packaged Rust SSH owner staged under `<resources>/server/ssh-owner/bin`. */
+export function resolvePackagedSshOwnerPlan(
+  platform: string,
+  resourcesPath: string,
+): PackagedSshOwnerPlan {
+  const serverDir = Path.join(resourcesPath, "server");
+  const binDir = Path.join(serverDir, "ssh-owner", "bin");
+  const binaryName = platform === "win32" ? "bigbud-ssh-owner.exe" : "bigbud-ssh-owner";
   return { serverDir, binDir, binaryName, binaryPath: Path.join(binDir, binaryName) };
 }
 

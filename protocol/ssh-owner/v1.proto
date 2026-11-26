@@ -1,0 +1,855 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+import "v1.jump_failure.proto";
+import "v1.terminal.proto";
+import "v1.agent_proxy.proto";
+import "v1.workspace_git.proto";
+import "v1.deployment.proto";
+import "v1.provider.proto";
+import "v1.workspace_directory.proto";
+import "v1.workspace_write.proto";
+import "v1.shell.proto";
+import "v1.peer.proto";
+import "v1.transfer.proto";
+import "v1.provider_lease.proto";
+import "v1.remote_backend.proto";
+import "v1.agent_control.proto";
+
+// Private local owner proof; no caller-supplied SSH argv, env, auth flags or forwarding.
+//
+// Frame is a protobuf payload with a four-byte unsigned big-endian length. Enforce a 64 KiB
+// client-to-owner and an 8 MiB owner-to-client payload ceiling. Choose the
+// ceiling from the local endpoint direction, not an untrusted variant. Reject
+// empty, oversized, truncated, and malformed frames; validate the declared
+// length before allocating or reading a payload, and bound pending work.
+// Validate payload, operation, outcome and enum values at the boundary;
+// protobuf decode success alone does not authorize absent or unknown variants.
+message Frame {
+  // Permanent unknown-variant sentinel used by the TS/Rust wire fixtures.
+  reserved 127;
+  oneof payload {
+    Hello hello = 1;
+    HelloAccepted hello_accepted = 2;
+    Request request = 3;
+    Reply reply = 4;
+    // Reserved for the inherited-pipe S1 proof, not a public dispatcher API.
+    Request proof_grant_request = 5;
+    ProofGrantReply proof_grant_reply = 6;
+    ProofStorageHydrate proof_storage_hydrate = 7;
+    ProofStorageSnapshot proof_storage_snapshot = 8;
+    ProofStorageTransition proof_storage_transition = 9;
+    ProofStorageResult proof_storage_result = 10;
+    ProofAttachProbe proof_attach_probe = 11;
+    ProofAttachChallenge proof_attach_challenge = 12;
+    ProofAttachHello proof_attach_hello = 13;
+    // Owner-initiated restart reconciliation. The owner asks before it accepts
+    // the session; the backend answers from durable storage only.
+    ProofReconcileHydrate proof_reconcile_hydrate = 18;
+    ProofReconcileSnapshot proof_reconcile_snapshot = 19;
+  }
+}
+
+// Client Hello precedes requests; the owner sends HelloAccepted only after
+// authenticating the peer, checking the profile and negotiating compatibility.
+// Version/profile/peer failures must not reach SSH. The profile binding is not
+// peer authentication or an attachment credential. Bootstrap uses inherited
+// private handles; attachment uses a protected local endpoint, verified OS
+// peer identity and mutual proof of an inherited capability. An exclusive
+// ownership-domain lock remains outside the wire.
+message Hello {
+  uint32 major = 1;
+  uint32 minor = 2;
+  bytes profile_binding = 3;
+  // Exactly 32 bytes on inherited bootstrap handles only, if attach mode is enabled.
+  // Never send this reusable capability during Unix socket attachment.
+  bytes proof_attachment_capability = 4;
+}
+
+// Negotiated version and current owner epoch, not a storage writer epoch.
+message HelloAccepted {
+  uint32 major = 1;
+  uint32 minor = 2;
+  bytes owner_epoch = 3;
+  bytes proof_target_generation = 4;
+  // SHA-256 of the owner-resolved alias route/trust descriptor (destination,
+  // port, login, host-key name, trust sources, jump route), or empty when the
+  // owner was not started from an alias. Opaque to the backend: compared only
+  // against the profile-scoped binding recorded when the alias was saved.
+  bytes proof_alias_descriptor = 5;
+  // Echo of the client's startup profile binding (Hello.profile_binding). The
+  // production client refuses a session whose echo differs, and the owner
+  // refuses a Hello whose binding differs from its startup profile.
+  bytes profile_binding = 6;
+  // W3.7: the owner was started without a pinned target and resolves every
+  // target-scoped request from its `TargetDescriptor`. When set,
+  // `proof_target_generation` describes no target and must be empty; the
+  // generation of each target is reported per request. Absent or false keeps
+  // the single pinned fixture target and its handshake generation.
+  bool multi_target = 7;
+  // W3.7 restart reconciliation. A multi-target owner admits only after it
+  // validated the backend's unresolved retirement mirror and direct pane
+  // bindings. `reconciliation_id` echoes ProofReconcileHydrate.request_id and
+  // `reconciliation_digest` echoes ProofReconcileSnapshot.digest, so an
+  // acknowledgement is bound to one exact set. A refused set keeps admission
+  // closed with `reconciliation_error` (retirement or pane) and the session
+  // must not be used.
+  bool reconciled = 8;
+  bytes reconciliation_id = 9;
+  bytes reconciliation_digest = 10;
+  uint32 retirement_count = 11;
+  uint32 pane_count = 12;
+  ErrorCode reconciliation_error = 13;
+}
+
+// The owner validates the stable request ID, current epoch and target
+// generation, and checks the opaque grant before any transport work. Only an
+// authenticated backend authorization dispatcher may request grants; grant
+// issuance in this proof uses its private bootstrap lane. The owner binds a grant to profile, adapter
+// class, target, generation, resource, allowed verb, expiry and, for a one-shot
+// launch, a normalized operand digest. Derive activity origin and rights from
+// authenticated session/grant state (background by default), not caller labels.
+// Canonical operand bytes/digests require shared TS/Rust vectors; hashing raw
+// protobuf frames is not a substitute for a specified canonical encoding.
+message Request {
+  // Do not allocate: both wire verifiers use this to exercise unknown operations.
+  reserved 127;
+  bytes request_id = 1;
+  bytes owner_epoch = 2;
+  bytes target_generation = 3;
+  string target_id = 4;
+  bytes grant = 5;
+  // W3.7 per-target admission. Target-scoped requests name their exact target
+  // here; the owner resolves policy, trust, identity, connector rules and the
+  // target generation from it and refuses an unsupported or changed target
+  // before any dial. Absent for the single pinned fixture target, and refused
+  // in production, where the owner starts without a target. `target_id` and
+  // `target_generation` must equal the descriptor's own fields when present.
+  TargetDescriptor target_descriptor = 6;
+
+  // Frozen production verb names (engineering decision; W1.1). Field numbers and
+  // the existing `proof_*` names stay unchanged; promotion of any variant into
+  // product dispatch lands only with W7. This table is the single naming record
+  // and is checked against `v1.golden.verbs`:
+  //
+  //   proof_open_terminal                  -> open_terminal
+  //   proof_terminal_status                -> terminal_status
+  //   proof_close_terminal                 -> close_terminal
+  //   proof_workspace_read                 -> workspace_read
+  //   proof_workspace_list                 -> workspace_list
+  //   proof_workspace_snapshot             -> workspace_snapshot
+  //   proof_workspace_index                -> workspace_index
+  //   proof_workspace_write                -> workspace_write
+  //   proof_workspace_content_search       -> workspace_content_search
+  //   proof_sample_health                  -> sample_health
+  //   proof_workspace_git                  -> workspace_git
+  //   proof_terminal_input                 -> terminal_input
+  //   proof_terminal_resize                -> terminal_resize
+  //   proof_prepare_terminal               -> prepare_terminal
+  //   proof_agent_proxy_open               -> agent_proxy_open
+  //   proof_agent_proxy_status             -> agent_proxy_status
+  //   proof_agent_proxy_close              -> agent_proxy_close
+  //   proof_cancel_terminal_reservation    -> cancel_terminal_reservation
+  //   proof_terminal_replay                -> terminal_replay
+  //   proof_terminal_cwd                   -> terminal_cwd
+  //   proof_deployment_host_probe          -> deployment_host_probe
+  //   proof_deployment_completion          -> deployment_completion
+  //   proof_client_relay_open              -> client_relay_open
+  //   proof_codex_probe                    -> codex_probe
+  //   proof_codex_open                     -> codex_open
+  //   proof_pi_probe                       -> pi_probe
+  //   proof_pi_open                        -> pi_open
+  //   proof_peer_relay_open                -> peer_relay_open
+  //   proof_git_advertisement_open         -> git_advertisement_open
+  //   proof_deployment_stage_begin         -> deployment_stage_begin
+  //   proof_git_upload_open                -> git_upload_open
+  //   proof_deployment_manifest_put        -> deployment_manifest_put
+  //   proof_workspace_mode_inspect         -> workspace_mode_inspect
+  //   proof_workspace_mode_publish         -> workspace_mode_publish
+  //   proof_git_tracked_push               -> git_tracked_push
+  //   proof_opencode_open                  -> opencode_open
+  //   proof_opencode_status                -> opencode_status
+  //   proof_opencode_close                 -> opencode_close
+  //   proof_unlock_synthetic_posix_password -> unlock_posix_password
+  //   proof_workspace_readiness            -> workspace_readiness
+  //   proof_workspace_guarded_write_begin  -> workspace_guarded_write_begin
+  //   proof_workspace_guarded_write_chunk  -> workspace_guarded_write_chunk
+  //   proof_workspace_guarded_write_commit -> workspace_guarded_write_commit
+  //   proof_workspace_guarded_write_abort  -> workspace_guarded_write_abort
+  //   proof_workspace_guarded_write_apply  -> workspace_guarded_write_apply
+  //   proof_workspace_create               -> workspace_create
+  //   proof_workspace_create_directory     -> workspace_create_directory
+  //   proof_workspace_delete_entry         -> workspace_delete_entry
+  //   proof_workspace_write_begin          -> workspace_write_begin
+  //   proof_workspace_write_chunk          -> workspace_write_chunk
+  //   proof_workspace_write_commit         -> workspace_write_commit
+  //   proof_workspace_write_abort          -> workspace_write_abort
+  //   proof_run_thread_shell               -> run_thread_shell
+  //   proof_run_provider_workspace_shell   -> run_provider_workspace_shell
+  //   proof_run_acp_command                -> run_acp_command
+  //   proof_agent_action                   -> agent_action
+  //   proof_ensure_peer_coordinator_key    -> ensure_peer_coordinator_key
+  //   proof_inspect_peer_host_key          -> inspect_peer_host_key
+  //   proof_deployment_action              -> deployment_action
+  //   proof_transfer_stream                -> transfer_stream
+  //   proof_packaged_rsync                 -> packaged_rsync
+  //
+  // Reserved future production names (no field allocated yet; additive only):
+  //   subscribe_status, git_remote_transport. (`probe_provider` is allocated
+  //   as field 80, W2 T-prov; `terminal_inspect` as field 120, W2 T-term.)
+  //
+  // The two transfer names above are frozen but **not enabled for real
+  // transfers in S1-S4**: the owner dispatcher denies both verbs and only the
+  // disposable native fixture (`owner/transfer_fixture*.rs`, cfg(test))
+  // exercises them. See v1.transfer.proto.
+  oneof operation {
+    Empty inspect_trust = 10;
+    ApproveTrust approve_trust = 11;
+    Empty connect = 12;
+    Empty disconnect = 13;
+    ListFolders list_folders = 14;
+    // These three fixture-only operations exercise one native PTY lease. The
+    // child command and dimensions are fixed; the client cannot supply input.
+    ProofTerminalOpen proof_open_terminal = 15;
+    ProofTerminalLease proof_terminal_status = 16;
+    ProofTerminalLease proof_close_terminal = 17;
+    ProofWorkspaceRead proof_workspace_read = 18;
+    ProofWorkspaceList proof_workspace_list = 19;
+    ProofWorkspaceList proof_workspace_snapshot = 20;
+    ProofWorkspaceIndex proof_workspace_index = 21;
+    ProofWorkspaceWrite proof_workspace_write = 22;
+    ProofWorkspaceContentSearch proof_workspace_content_search = 23;
+    Empty proof_sample_health = 24;
+    ProofWorkspaceGit proof_workspace_git = 25;
+    ProofTerminalInput proof_terminal_input = 26;
+    ProofTerminalResize proof_terminal_resize = 27;
+    ProofPrepareTerminal proof_prepare_terminal = 28;
+    ProofAgentProxyOpen proof_agent_proxy_open = 29;
+    ProofTerminalLease proof_agent_proxy_status = 30;
+    ProofAgentProxyClose proof_agent_proxy_close = 31;
+    ProofTerminalLease proof_cancel_terminal_reservation = 32;
+    ProofTerminalReplayRequest proof_terminal_replay = 33;
+    ProofTerminalCwd proof_terminal_cwd = 34;
+    ProofDeploymentHostProbe proof_deployment_host_probe = 35;
+    ProofDeploymentCompletion proof_deployment_completion = 36;
+    ProofClientRelayOpen proof_client_relay_open = 37;
+    ProofProviderScope proof_codex_probe = 38;
+    ProofProviderScope proof_codex_open = 39;
+    ProofProviderScope proof_pi_probe = 40;
+    ProofProviderScope proof_pi_open = 41;
+    ProofPeerRelayOpen proof_peer_relay_open = 42;
+    ProofGitAdvertisementOpen proof_git_advertisement_open = 43;
+    ProofDeploymentStageBegin proof_deployment_stage_begin = 44;
+    ProofGitUploadOpen proof_git_upload_open = 45;
+    ProofDeploymentManifestPut proof_deployment_manifest_put = 46;
+    ProofWorkspaceModeInspect proof_workspace_mode_inspect = 47;
+    ProofWorkspaceModePublish proof_workspace_mode_publish = 48;
+    ProofGitTrackedPush proof_git_tracked_push = 49;
+    ProofOpencodeOpen proof_opencode_open = 50;
+    ProofOpencodeLease proof_opencode_status = 51;
+    ProofOpencodeLease proof_opencode_close = 52;
+    Empty proof_unlock_synthetic_posix_password = 53;
+    ProofWorkspaceReadiness proof_workspace_readiness = 54;
+    ProofWorkspaceGuardedWriteBegin proof_workspace_guarded_write_begin = 55;
+    ProofWorkspaceGuardedWriteChunk proof_workspace_guarded_write_chunk = 56;
+    ProofWorkspaceGuardedWriteCommit proof_workspace_guarded_write_commit = 57;
+    ProofWorkspaceGuardedWriteAbort proof_workspace_guarded_write_abort = 58;
+    ProofWorkspaceGuardedWriteApply proof_workspace_guarded_write_apply = 59;
+    ProofWorkspaceCreate proof_workspace_create = 60;
+    ProofWorkspaceCreateDirectory proof_workspace_create_directory = 61;
+    ProofWorkspaceDeleteEntry proof_workspace_delete_entry = 62;
+    ProofWorkspaceWriteBegin proof_workspace_write_begin = 63;
+    ProofWorkspaceWriteChunk proof_workspace_write_chunk = 64;
+    ProofWorkspaceWriteCommit proof_workspace_write_commit = 65;
+    ProofWorkspaceWriteAbort proof_workspace_write_abort = 66;
+    // Exec-class owner verbs. Distinct grants; none shares the ACP authority.
+    ProofRunThreadShell proof_run_thread_shell = 67;
+    ProofRunProviderWorkspaceShell proof_run_provider_workspace_shell = 68;
+    ProofRunAcpCommand proof_run_acp_command = 69;
+    // W2 T-shell production exec leases (see v1.shell.proto). Per target and
+    // generation; each open is its own grant and no role answers another.
+    RunThreadShell run_thread_shell = 90;
+    RunProviderWorkspaceShell run_provider_workspace_shell = 91;
+    RunAcpCommand run_acp_command = 92;
+    ShellStatus shell_status = 93;
+    ShellClose shell_close = 94;
+    // U21: approved ACP terminal/create command (its own grant; see v1.shell.proto).
+    RunAcpShell run_acp_shell = 95;
+    // Owner-compiled agent management. Enum-only verbs; the owner selects every
+    // program, argument, cwd and environment.
+    AgentAction proof_agent_action = 70;
+    // Peer enrollment (T-peer, dev-selected only). The owner provisions the
+    // profile-bound coordinator identity and inspects one exact worker host.
+    // Neither verb accepts a path, algorithm, identity, credential or pin write.
+    Empty proof_ensure_peer_coordinator_key = 71;
+    ProofInspectPeerHostKey proof_inspect_peer_host_key = 72;
+    // Typed deployment steps: bounded archive upload, reset, fetch, publish,
+    // backend start, operation-only cancellation and reattach by request id.
+    ProofDeploymentAction proof_deployment_action = 73;
+    // Reservation only: C15 / W2 T-xfer. Not enabled for real transfers in
+    // S1-S4. The dispatcher denies both verbs typed; the disposable native
+    // fixture is the only consumer. No recursive transfer, rsync packaging or
+    // publication is implemented behind these fields.
+    ProofTransferStream proof_transfer_stream = 74;
+    ProofPackagedRsync proof_packaged_rsync = 75;
+    // Read-only discovery of the aliases declared in the owner's own config
+    // scope. Metadata only: no dial, DNS, credential path, raw config value or
+    // `Match exec` evaluation. Connection UI only; the monitor never lists.
+    ListAliases list_aliases = 76;
+    // U15 production Git upload lease (see v1.workspace_git.proto). Per target
+    // and generation; one live lease per target.
+    GitUploadOpen git_upload_open = 77;
+    GitUploadLease git_upload_status = 78;
+    GitUploadLease git_upload_close = 79;
+    // W2 T-prov production Pi/Codex provider leases (see
+    // v1.provider_lease.proto). Per target and generation; the owner discovers
+    // the executable and compiles the argv.
+    ProviderProbe probe_provider = 80;
+    ProviderLeaseOpen provider_lease_open = 81;
+    ProviderLeaseHandle provider_lease_status = 82;
+    ProviderLeaseHandle provider_lease_close = 83;
+    // W2 T-backend production verbs (see v1.remote_backend.proto). Per target
+    // and generation: one live deployment step lease per target and a bounded
+    // set of client relay channels per target.
+    DeploymentStepOpen deployment_step_open = 100;
+    DeploymentStepLease deployment_step_status = 101;
+    DeploymentStepLease deployment_step_cancel = 102;
+    ClientRelayLeaseOpen client_relay_lease_open = 103;
+    ClientRelayLease client_relay_lease_status = 104;
+    ClientRelayLease client_relay_lease_close = 105;
+    // U15 production Git receive lease (push; see v1.workspace_git.proto).
+    // Per target and generation; one live lease per target.
+    GitReceiveOpen git_receive_open = 110;
+    GitReceiveLease git_receive_status = 111;
+    GitReceiveLease git_receive_close = 112;
+    // W2 T-term production terminal verbs (see v1.terminal.proto): a bounded
+    // process snapshot of the exact lease's shell, and the U16 shell inventory.
+    TerminalInspect terminal_inspect = 120;
+    Empty list_terminal_shells = 121;
+    // W2 T-files session-FS verbs (see v1.workspace_write.proto).
+    WorkspaceEntryInfoRequest workspace_entry_info = 122;
+    WorkspaceRenameRequest workspace_rename = 123;
+    WorkspaceAppendRequest workspace_append = 124;
+    // U24 production peer enrollment and relay (see v1.peer.proto). Owner-wide:
+    // no target is bound. Pairing authority is the owner's own pin store.
+    Empty ensure_peer_coordinator_key = 130;
+    InspectPeerHostKey inspect_peer_host_key = 131;
+    ApprovePeerPin approve_peer_pin = 132;
+    RevokePeerPin revoke_peer_pin = 133;
+    PeerRelayOpen peer_relay_open = 134;
+    PeerRelayLease peer_relay_status = 135;
+    PeerRelayLease peer_relay_close = 136;
+    // U25 remote-agent control parity (see v1.agent_control.proto). Per target
+    // and generation; the owner compiles every remote script from its template.
+    AgentControlOpen agent_control_open = 140;
+    AgentControlLease agent_control_status = 141;
+    AgentControlLease agent_control_cancel = 142;
+    AgentProxyLeaseOpen agent_proxy_lease_open = 143;
+    ClientRelayLease agent_proxy_lease_status = 144;
+    ClientRelayLease agent_proxy_lease_close = 145;
+  }
+}
+
+// Explicit approval of the exact presented key. The owner binds the opaque
+// challenge to the target, key type/fingerprint, effective trust policy,
+// generation and epoch. Revalidate at approval and at live admission; reject
+// stale approval, changed or revoked keys before supplying credentials.
+message ApproveTrust {
+  bytes challenge = 1;
+}
+
+// Authorized picker scope only. Pass path as data to the fixed owner script;
+// omitted or empty selects the remote home as in the existing picker. Preserve
+// the 10 s deadline, 1 MiB output truncation and 1,000-entry limit. Read
+// retries must be bounded and cancellable; explicit cancellation is not
+// encoded here.
+message ListFolders {
+  optional string path = 1;
+}
+
+// Empty operand: the owner reads only its own bound config scope.
+message ListAliases {}
+
+// Where the target came from. `ALIAS` means `target_id` names an alias in the
+// owner's own alias config scope and the owner re-resolves it; `STRUCTURED`
+// means the explicit fields win and no alias policy is consulted.
+enum TargetKind {
+  TARGET_KIND_UNSPECIFIED = 0;
+  TARGET_KIND_ALIAS = 1;
+  TARGET_KIND_STRUCTURED = 2;
+}
+
+// Authentication mode offered for this target. v1 admits key mode only; agent
+// and password are typed as unsupported policy before any dial. This is a mode,
+// never credential material.
+enum TargetAuthMode {
+  TARGET_AUTH_MODE_UNSPECIFIED = 0;
+  TARGET_AUTH_MODE_KEY = 1;
+  TARGET_AUTH_MODE_AGENT = 2;
+  TARGET_AUTH_MODE_PASSWORD = 3;
+}
+
+// Additive target descriptor (W3.7). It carries exactly the facts the owner
+// needs to resolve one target and nothing else: no credential bytes, no raw
+// config text and no caller-chosen transport options. Bounds, enforced by both
+// the owner and the TypeScript client before use:
+//
+//   encoded descriptor             <= 4 KiB
+//   target_id                     1..1024 bytes
+//   host                          1..45 bytes, IP literal only
+//   user                          1..64 bytes, [A-Za-z0-9._-]
+//   identity_reference            1..1024 bytes, absolute literal path
+//   trust_reference               1..1024 bytes, absolute literal path
+//   host_key_alias                0..255 bytes
+//   generation                    0 or 32 bytes; empty requests first use
+//
+// `generation` is the target generation the caller last observed. The owner
+// mints it on first use, binds it to every grant and reports it in each Reply;
+// a request that names a stale generation is refused before any transport work.
+message TargetDescriptor {
+  string target_id = 1;
+  TargetKind kind = 2;
+  // An IP literal or an RFC 1123 DNS name (at most 253 bytes). The owner
+  // resolves a name itself on every resolution of this target and keeps the
+  // address only as long as the registry entry; the server never resolves it.
+  string host = 3;
+  uint32 port = 4;
+  string user = 5;
+  TargetAuthMode auth_mode = 6;
+  string identity_reference = 7;
+  string host_key_alias = 8;
+  string trust_reference = 9;
+  bytes generation = 10;
+}
+
+// The route kind is a fact, not a display string. `jump_hops` is meaningful
+// only for `ALIAS_ROUTE_KIND_JUMP`.
+enum AliasRouteKind {
+  ALIAS_ROUTE_KIND_UNSPECIFIED = 0;
+  ALIAS_ROUTE_KIND_DIRECT = 1;
+  ALIAS_ROUTE_KIND_RESTRICTED_CONNECTOR = 2;
+  ALIAS_ROUTE_KIND_JUMP = 3;
+}
+
+// A per-alias policy refusal. `reason` is a parser-owned identifier and
+// `remedy` is the shared redacted remedy text; neither echoes a raw value.
+message ProofAliasUnsupported {
+  string reason = 1;
+  string remedy = 2;
+  // Declaring source class: "user_config", "user_include", "system_config"
+  // or "system_include". Never a filesystem path.
+  string source = 3;
+  uint32 line = 4;
+}
+
+// Metadata for one concrete alias. Absent `unsupported` means the owner could
+// resolve a supported policy for it. This is discovery data, not approval.
+message ProofAliasEntry {
+  string alias = 1;
+  // Resolved destination, login and effective port (including the port 22
+  // default). Empty `user` means no config or local-account default applied.
+  string host_name = 2;
+  uint32 port = 3;
+  string user = 4;
+  string host_key_alias = 5;
+  AliasRouteKind route_kind = 6;
+  uint32 jump_hops = 7;
+  string source = 8;
+  uint32 line = 9;
+  ProofAliasUnsupported unsupported = 10;
+}
+
+// Bounded alias list. `truncated` reports that discovery stopped adding entries
+// at `max_entries`; the remainder of the config was still parsed and validated.
+// Owner bounds: at most 256 entries, alias names at most 64 bytes and every
+// metadata field at most 255 bytes. Longer metadata refuses the whole list.
+message ProofAliases {
+  repeated ProofAliasEntry entries = 1;
+  bool truncated = 2;
+  uint32 max_entries = 3;
+}
+
+// Correlate by request ID and fence results by owner epoch/target generation.
+// Connect and Disconnect require explicit intent and durable commit before a
+// transition is acknowledged. The privileged SQLite hydration/writer proof
+// messages below are not picker operations. Disconnect revokes the old generation and
+// blocks network work across restart until explicit Connect. Never replay an
+// accepted mutation with an ambiguous outcome or fall back to TS SSH.
+message Reply {
+  // Permanent unknown-outcome sentinel used by the TS/Rust wire fixtures.
+  reserved 127;
+  bytes request_id = 1;
+  bytes owner_epoch = 2;
+  bytes target_generation = 3;
+
+  oneof outcome {
+    Error error = 10;
+    Trust trust = 11;
+    Connection connection = 12;
+    Folders folders = 13;
+    ProofTerminal proof_terminal = 14;
+    ProofWorkspaceFile proof_workspace_file = 15;
+    ProofWorkspaceDirectory proof_workspace_directory = 16;
+    ProofWorkspaceSnapshotResult proof_workspace_snapshot = 17;
+    ProofWorkspaceIndexResult proof_workspace_index = 18;
+    Empty proof_workspace_written = 19;
+    ProofWorkspaceContentMatches proof_workspace_content_matches = 20;
+    ProofHealth proof_health = 21;
+    ProofWorkspaceGitResult proof_workspace_git = 22;
+    ProofTerminalReservation proof_terminal_reservation = 23;
+    ProofAgentProxyStatus proof_agent_proxy = 24;
+    ProofTerminalReplay proof_terminal_replay = 25;
+    ProofTerminalCwd proof_terminal_cwd = 26;
+    ProofDeploymentHostResult proof_deployment_host_result = 27;
+    ProofProviderVersion proof_codex_version = 28;
+    ProofProviderVersion proof_pi_version = 29;
+    ProofWorkspaceModeInspection proof_workspace_mode_inspection = 30;
+    ProofWorkspaceModePublication proof_workspace_mode_publication = 31;
+    ProofGitTrackedPushReceipt proof_git_tracked_push = 32;
+    ProofOpencodeState proof_opencode = 33;
+    Empty proof_synthetic_posix_password_unlocked = 34;
+    ProofWorkspaceReadinessResult proof_workspace_readiness = 35;
+    ProofWorkspaceGuardedWriteStage proof_workspace_guarded_write_stage = 36;
+    ProofWorkspaceGuardedWriteResult proof_workspace_guarded_write_result = 37;
+    ProofWorkspaceCreateResult proof_workspace_create_result = 38;
+    ProofWorkspaceEntryMutation proof_workspace_entry_mutation = 39;
+    ProofWorkspaceWriteStage proof_workspace_write_stage = 40;
+    ProofShellResult proof_thread_shell = 41;
+    ProofShellResult proof_provider_workspace_shell = 42;
+    ProofAcpCommandResult proof_acp_command = 43;
+    ShellState shell = 56;
+    AgentActionResult proof_agent_action = 44;
+    // Peer enrollment metadata only. Never private key material, credentials or
+    // a stored pin; a host-key reply carries only the presented key type and
+    // OpenSSH fingerprint (no pin, no relay authorization).
+    ProofPeerCoordinatorKey proof_peer_coordinator_key = 45;
+    ProofPeerHostKey proof_peer_host_key = 46;
+    // Reservation only: C15 / W2 T-xfer. Counters and exit metadata; never
+    // content bytes and never a replay of an unknown outcome.
+    ProofTransferStreamState proof_transfer_stream_state = 47;
+    ProofTransferChildState proof_transfer_child_state = 48;
+    // Read-only alias discovery metadata; never a credential path or raw value.
+    ProofAliases proof_aliases = 49;
+    GitUploadState git_upload = 50;
+    // W2 T-prov production provider probe and lease state.
+    ProviderVersion provider_version = 51;
+    ProviderLeaseState provider_lease = 52;
+    // W2 T-backend production lease states (v1.remote_backend.proto).
+    DeploymentStepState deployment_step = 61;
+    ClientRelayLeaseState client_relay_lease = 62;
+    GitReceiveState git_receive = 66;
+    // W2 T-term production terminal replies (v1.terminal.proto).
+    TerminalProcesses terminal_processes = 71;
+    TerminalShells terminal_shells = 72;
+    WorkspaceEntryInfo workspace_entry_info = 73;
+    WorkspaceEntryChange workspace_entry_change = 74;
+    // U24 production peer replies (v1.peer.proto).
+    PeerCoordinatorKey peer_coordinator_key = 76;
+    PeerHostKey peer_host_key = 77;
+    PeerPin peer_pin = 78;
+    PeerRelayState peer_relay = 79;
+    // U25 remote-agent control lease state (v1.agent_control.proto).
+    AgentControlState agent_control = 81;
+    ClientRelayLeaseState agent_proxy_lease = 82;
+  }
+}
+
+// Errors carry only typed, redacted details. Preserve assigned field numbers.
+message Error {
+  ErrorCode code = 1;
+  JumpFailure jump_failure = 2;
+}
+
+enum ErrorCode {
+  // Permanent unknown error value used by the TS/Rust wire fixtures.
+  reserved 127;
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_OWNER_UNAVAILABLE = 1;
+  ERROR_CODE_OPERATION_DENIED = 2;
+  ERROR_CODE_INVALID_OPERANDS = 3;
+  ERROR_CODE_TARGET_DISCONNECTED = 4;
+  ERROR_CODE_CONFIG_UNSUPPORTED = 5;
+  ERROR_CODE_TRUST_REQUIRED = 6;
+  ERROR_CODE_HOST_KEY_CHANGED = 7;
+  ERROR_CODE_TRUST_STORE_READ_ONLY = 8;
+  ERROR_CODE_AUTH_REQUIRED = 9;
+  ERROR_CODE_TRANSPORT_LOST = 10;
+  ERROR_CODE_LIST_FAILED = 11;
+  ERROR_CODE_STALE_GENERATION = 12;
+  ERROR_CODE_STORAGE_UNAVAILABLE = 13;
+  ERROR_CODE_OUTCOME_UNKNOWN = 14;
+  ERROR_CODE_LIST_TIMED_OUT = 15;
+  ERROR_CODE_LIST_PATH_UNAVAILABLE = 16;
+  ERROR_CODE_LIST_INVALID_OUTPUT = 17;
+  ERROR_CODE_WORKSPACE_PATH_DENIED = 18;
+  ERROR_CODE_WORKSPACE_READ_FAILED = 19;
+  ERROR_CODE_WORKSPACE_FILE_TOO_LARGE = 20;
+  ERROR_CODE_WORKSPACE_WRITE_FAILED = 21;
+  ERROR_CODE_PROOF_RIPGREP_UNAVAILABLE = 22;
+  ERROR_CODE_PROOF_DEPLOYMENT_TIMEOUT = 23;
+  ERROR_CODE_PROOF_DEPLOYMENT_OUTPUT_LIMIT = 24;
+  ERROR_CODE_LIST_CANCELLED = 25;
+  ERROR_CODE_HEALTH_CANCELLED = 26;
+  // The selected route helper is missing, substituted or not qualified.
+  // Returned before DNS, network, helper execution or master lookup.
+  ERROR_CODE_ROUTE_UNAVAILABLE = 27;
+  // The owner's session budget is full. Distinct from authentication and from
+  // OWNER_UNAVAILABLE: an sshd MaxSessions refusal maps here, never to auth.
+  ERROR_CODE_SESSION_QUOTA = 28;
+  // Windows ships key-only. Returned before any credential prompt or collection.
+  ERROR_CODE_WINDOWS_PASSWORD_UNSUPPORTED = 29;
+  // Keyboard-interactive is unqualified. Decided from OpenSSH method
+  // configuration only, never from prompt or diagnostic text.
+  ERROR_CODE_KEYBOARD_INTERACTIVE_UNSUPPORTED = 30;
+  // The previous owner's retirement record could not be verified. Distinct
+  // from an unavailable owner; an operator must inspect the record and use
+  // the explicit recovery path only for provably absent/reused instances.
+  ERROR_CODE_OWNER_RETIREMENT_UNVERIFIED = 31;
+  // The owner-executed shell exceeded its bound. Typed and never replayed.
+  ERROR_CODE_SHELL_TIMED_OUT = 32;
+  // Cancellation targeted this operation lease only. Never replay.
+  ERROR_CODE_SHELL_CANCELLED = 33;
+  // The request named no descriptor and no pinned target, or named a target the
+  // owner has not resolved in this epoch. Refused before any transport work.
+  ERROR_CODE_TARGET_UNKNOWN = 34;
+  // The descriptor, grant or request disagree about the exact target (or its
+  // resolved policy digest). A grant for one target never satisfies another.
+  ERROR_CODE_TARGET_MISMATCH = 35;
+  // A retained direct pane binding cannot be reconciled: its reservation
+  // identity is malformed or names an unknown state. Distinct from a retirement
+  // refusal; an uncertain but well-formed reservation is retained, not refused.
+  ERROR_CODE_PANE_UNRECOVERABLE = 36;
+  // A descriptor named its host by DNS name and the owner could not resolve it
+  // (no address, lookup failure or lookup deadline) at resolution time.
+  // Refused before any dial; distinct from a policy refusal.
+  ERROR_CODE_TARGET_HOST_UNRESOLVED = 37;
+  // The provider service's executable was not found on the target (configured
+  // path or owner discovery), or no candidate passed the owner's executable
+  // guard. Refused before any provider process starts; carries no path.
+  ERROR_CODE_PROVIDER_EXECUTABLE_UNAVAILABLE = 38;
+  // U16: the requested shell is not listed in the target's `/etc/shells` (or is
+  // not an executable) at launch. Refused before the PTY starts; carries no path.
+  ERROR_CODE_TERMINAL_SHELL_UNAVAILABLE = 55;
+  // U24: the owner's coordinator key or a stored pairing pin is corrupt,
+  // foreign or has unsafe permissions. Refused; never regenerated silently.
+  ERROR_CODE_PEER_KEY_CORRUPT = 59;
+  // U24: no owner pin exists for the pairing (never approved, revoked) or the
+  // inspection challenge is unknown, used or expired.
+  ERROR_CODE_PEER_PIN_UNKNOWN = 60;
+  // U24: the worker presented a host key other than the owner's pin. No
+  // credential was offered.
+  ERROR_CODE_PEER_PIN_MISMATCH = 61;
+  // U24: the coordinator key no longer matches the one bound at approval, or
+  // the worker refused it.
+  ERROR_CODE_PEER_AUTH_REFUSED = 62;
+}
+
+message Trust {
+  TrustState state = 1;
+  bytes challenge = 2;
+  string key_type = 3;
+  string fingerprint = 4;
+  uint32 jump_leg = 5; // Zero for direct inspection, otherwise one through five.
+}
+
+enum TrustState {
+  TRUST_STATE_UNSPECIFIED = 0;
+  TRUST_STATE_VERIFIED = 1;
+  TRUST_STATE_APPROVAL_REQUIRED = 2;
+}
+
+message Connection {
+  ConnectionState state = 1;
+}
+
+enum ConnectionState {
+  CONNECTION_STATE_UNSPECIFIED = 0;
+  CONNECTION_STATE_CONNECTED = 1;
+  CONNECTION_STATE_DISCONNECTED = 2;
+}
+
+// Resolved path and bounded entries. The S1 adapter must reject a reply with
+// missing picker metadata. Presence of `truncated = false` is meaningful.
+message Folders {
+  string path = 1;
+  repeated Folder entries = 2;
+  optional string home_path = 3;
+  optional bool truncated = 4;
+}
+
+message Folder {
+  string name = 1;
+  bool has_git = 2;
+}
+
+// Fixture-only, workspace-bound file operations. No script, executable,
+// transport flags, environment or remote shell text can cross this boundary.
+message ProofWorkspaceRead {
+  string workspace_root = 1;
+  string relative_path = 2;
+  oneof read {
+    Empty preview = 3;
+    ProofFileRange range = 4;
+  }
+}
+
+message ProofFileRange {
+  uint64 offset = 1;
+  uint32 max_bytes = 2;
+}
+
+message ProofWorkspaceFile {
+  bytes data = 1;
+  uint64 size_bytes = 2;
+  bool truncated = 3;
+  // SHA-256 of the complete raw preview payload. Never set for a range.
+  optional bytes sha256 = 4;
+}
+
+// Exact bound workspace root; the private direct fixture runs its fixed read-only probe.
+message ProofWorkspaceReadiness {
+  string workspace_root = 1;
+}
+
+// Known POSIX host facts, validated by the owner and returned in lowercase.
+message ProofWorkspaceReadinessResult {
+  string os = 1;
+  string architecture = 2;
+}
+
+message ProofWorkspaceContentSearch {
+  string workspace_root = 1;
+  string query = 2;
+  uint32 limit = 3;
+}
+
+message ProofWorkspaceMatch {
+  string path = 1;
+  uint64 line = 2;
+  optional uint32 column = 3;
+  string line_text = 4;
+}
+
+message ProofWorkspaceContentMatches {
+  repeated ProofWorkspaceMatch matches = 1;
+  bool truncated = 2;
+}
+
+// An observed failure is different from no sample (reported as a typed error).
+message ProofHealth {
+  bool reachable = 1;
+}
+
+// Direct-workspace Git reads; initiating-side fetch/push authority is separate.
+// Isolated executable proof only. The trusted backend dispatcher exchanges
+// these messages over inherited private handles. They cannot arrive from a
+// renderer, provider, or remote agent. Only an authenticated private Unix
+// attachment can rebind an already running owner to a replacement client.
+message ProofGrantReply {
+  bytes request_id = 1;
+  bytes grant = 2;
+  ErrorCode error = 3;
+}
+
+message ProofStorageHydrate {
+  string target_id = 1;
+}
+
+message ProofStorageSnapshot {
+  string target_id = 1;
+  string writer_epoch = 2;
+  uint64 seq = 3;
+  bool disconnected = 4;
+  ErrorCode error = 5;
+}
+
+message ProofStorageTransition {
+  bytes request_id = 1;
+  string target_id = 2;
+  string writer_epoch = 3;
+  uint64 expected_seq = 4;
+  bool disconnected = 5;
+}
+
+message ProofStorageResult {
+  bytes request_id = 1;
+  uint64 seq = 2;
+  bool committed = 3;
+  ErrorCode error = 4;
+}
+
+// Owner-initiated restart reconciliation (W3.7). A production owner sends this
+// before HelloAccepted, and again after every writer rebind or generation
+// rotation. `request_id` correlates this exact round; the backend echoes it in
+// the snapshot and the owner echoes it in HelloAccepted, so a previous round's
+// acknowledgement is never accepted.
+message ProofReconcileHydrate {
+  bytes request_id = 1;
+  // This owner epoch and the generation the round applies to (empty for the
+  // multi-target at-rest state, exactly like HelloAccepted.multi_target).
+  bytes owner_epoch = 2;
+  bytes generation = 3;
+}
+
+// One unresolved backend retirement-mirror row. Read-only evidence: the owner
+// verifies the exact instance and never signals, adopts or clears it here.
+message ProofRetirementEntry {
+  string target_id = 1;
+  // "owner" for the pre-spawn owner intent; "master" or "connector" when the
+  // backend recorded an exact child instance.
+  string kind = 2;
+  // "intent" (unresolved) or "bound" (exact identity recorded).
+  string state = 3;
+  string owner_epoch = 4;
+  uint32 pid = 5;
+  uint64 start = 6;
+  // Linux PID-namespace dev/ino; absent where the platform has no namespaces.
+  optional uint64 namespace = 7;
+  // Bounded operator-facing detail; never used to infer process identity.
+  string detail = 8;
+}
+
+// One retained direct pane binding. The owner classifies it without spawning:
+// a live reservation is attach-only, unprovable ownership is host-lost, and a
+// verified-gone recorded shell is closed. Uncertain reservations are retained.
+message ProofPaneBinding {
+  string owner_key = 1;
+  string thread_id = 2;
+  string terminal_id = 3;
+  string owner_epoch = 4;
+  string target_id = 5;
+  string generation = 6;
+  string lease_id = 7;
+  // "prepared", "may-have-been-sent" or "outcome-unknown".
+  string state = 8;
+  // Recorded remote login shell PID, when the backend journal has it.
+  optional uint32 remote_shell_pid = 9;
+  // A trusted lifecycle receipt recorded confirmed termination for this exact
+  // reservation. Never inferred from a missing socket, lock or process.
+  bool terminated = 10;
+}
+
+message ProofReconcileSnapshot {
+  bytes request_id = 1;
+  // SHA-256 over the canonical reconciliation rows below. The owner echoes it
+  // in HelloAccepted so the backend proves the owner acknowledged this exact set.
+  bytes digest = 2;
+  repeated ProofRetirementEntry retirements = 3;
+  repeated ProofPaneBinding panes = 4;
+  ErrorCode error = 5;
+}
+
+// The private Unix socket requires OS peer identification and mutual proof
+// of the inherited capability; neither nonce nor a profile ID grants access.
+message ProofAttachProbe {
+  bytes client_nonce = 1;
+}
+
+message ProofAttachChallenge {
+  bytes server_nonce = 1;
+  bytes proof = 2;
+}
+
+message ProofAttachHello {
+  Hello hello = 1;
+  bytes proof = 2;
+}

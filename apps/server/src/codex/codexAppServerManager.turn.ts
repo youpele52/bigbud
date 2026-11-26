@@ -1,3 +1,4 @@
+import { assertCodexInteractionAdmission } from "./codexAppServerManager.interactionAdmission.ts";
 /**
  * Turn and interaction operations for CodexAppServerManager — send turns,
  * interrupt, read, rollback, and respond to requests/user-input.
@@ -172,6 +173,7 @@ export async function sendTurn(
     turnStartParams.collaborationMode = collaborationMode;
   }
 
+  assertCodexInteractionAdmission(context);
   const response = await ops.sendRequest(context, "turn/start", turnStartParams);
 
   const turn = readObject(readObject(response), "turn");

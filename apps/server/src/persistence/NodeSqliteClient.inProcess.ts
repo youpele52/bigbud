@@ -10,6 +10,7 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
 import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { identity } from "effect/Function";
 import * as Scope from "effect/Scope";
 import * as ServiceMap from "effect/ServiceMap";
@@ -45,9 +46,12 @@ export const makeInProcessConnection = Effect.fn("makeInProcessConnection")(func
     return value;
   };
 
-  const prepareCache = yield* Cache.make({
+  const prepareCacheTTL = options.prepareCacheTTL ?? Duration.minutes(10);
+  // Only successful prepares are cached. A failed prepare (e.g. a column added later by a
+  // migration or repair on this connection) must be retried on the next execution, not replayed.
+  const prepareCache = yield* Cache.makeWith({
     capacity: options.prepareCacheSize ?? 200,
-    timeToLive: options.prepareCacheTTL ?? Duration.minutes(10),
+    timeToLive: (exit) => (Exit.isSuccess(exit) ? prepareCacheTTL : Duration.zero),
     lookup: (sql: string) =>
       Effect.try({
         try: () => db.prepare(sql),

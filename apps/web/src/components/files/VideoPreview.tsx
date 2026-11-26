@@ -1,3 +1,4 @@
+import { isRemoteExecutionTargetId } from "@bigbud/contracts";
 import { AlertCircleIcon } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 
@@ -82,13 +83,14 @@ export const VideoPreview = memo(function VideoPreview({
 
       void showFilePreviewContextMenu({
         position: { x: event.clientX, y: event.clientY },
+        executionTargetId,
         absolutePath,
         relativePath,
         selectedText: "",
         canSelectAll: false,
       });
     },
-    [absolutePath, relativePath],
+    [absolutePath, executionTargetId, relativePath],
   );
 
   return (
@@ -115,9 +117,11 @@ export const VideoPreview = memo(function VideoPreview({
                 Failed to load video preview. The codec may not be supported in this browser.
               </span>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={handleOpenExternally}>
-              Open in default app
-            </Button>
+            {isRemoteExecutionTargetId(executionTargetId) ? null : (
+              <Button type="button" variant="outline" size="sm" onClick={handleOpenExternally}>
+                Open in default app
+              </Button>
+            )}
           </div>
         ) : (
           <>

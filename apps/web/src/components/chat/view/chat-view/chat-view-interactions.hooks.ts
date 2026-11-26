@@ -131,9 +131,6 @@ export function useChatViewInteractions({
     setPrompt: base.setPrompt,
     setComposerCursor: base.setComposerCursor,
     setComposerTrigger: base.setComposerTrigger,
-    activePendingProgress: thread.activePendingProgress,
-    activePendingUserInput: thread.activePendingUserInput,
-    setPendingUserInputAnswersByRequestId: base.setPendingUserInputAnswersByRequestId,
     composerEditorRef: base.composerEditorRef,
   });
 
@@ -170,14 +167,13 @@ export function useChatViewInteractions({
     forceStickToBottom: runtime.scrollBehavior.forceStickToBottom,
     persistThreadSettingsForNextTurn: runtime.persistThreadSettingsForNextTurn,
   });
-  const { onSend, promptQueue, activeTurnInProgress } = useChatViewPromptQueue({
+  const { onSend, canQueueChat, promptQueue, activeTurnInProgress } = useChatViewPromptQueue({
     base,
     composer,
     thread,
     runtime,
     envMode,
     planHandlers,
-    pendingUserInputHandlers,
     onOptimisticUserMessage,
     onThreadMaterialized,
     transformPromptForSend,
@@ -195,7 +191,6 @@ export function useChatViewInteractions({
     onFileInputChange,
   } = useChatViewInteractionFiles({
     base,
-    thread,
     runtime,
     provider: composer.selectedProvider,
   });
@@ -213,8 +208,6 @@ export function useChatViewInteractions({
     composerHighlightedItemId: base.composerHighlightedItemId,
     isComposerShellMode: base.composerDraft.shellMode,
     interactionMode: base.interactionMode,
-    activePendingProgress: thread.activePendingProgress,
-    activePendingUserInput: thread.activePendingUserInput,
     setComposerCursor: base.setComposerCursor,
     setComposerTrigger: base.setComposerTrigger,
     setComposerHighlightedItemId: base.setComposerHighlightedItemId,
@@ -222,15 +215,12 @@ export function useChatViewInteractions({
     setComposerDraftTerminalContexts: base.setComposerDraftTerminalContexts,
     threadId: base.threadId,
     setPrompt: base.setPrompt,
-    setPendingUserInputAnswersByRequestId: base.setPendingUserInputAnswersByRequestId,
     applyPromptReplacement,
     onProviderModelSelect,
     handleInteractionModeChange: runtime.handleInteractionModeChange,
     toggleInteractionMode: runtime.toggleInteractionMode,
     onOpenReadDialog: () => base.setReadDocumentDialogOpen(true),
     onSend,
-    onChangeActivePendingUserInputCustomAnswer:
-      pendingUserInputHandlers.onChangeActivePendingUserInputCustomAnswer,
   });
 
   useChatKeybindings({
@@ -323,6 +313,7 @@ export function useChatViewInteractions({
     pendingUserInputHandlers,
     composerCommandHandlers,
     onSend,
+    canQueueChat,
     promptQueue,
     onProviderModelSelect,
     addComposerFiles,
@@ -336,6 +327,13 @@ export function useChatViewInteractions({
     onFileInputChange,
     isComposerMenuLoading,
     pendingAction,
+    pendingAnswerDisabled: base.isConnecting || runtime.activePendingIsResponding,
+    onSubmitPendingAnswer: () => {
+      const request = thread.activePendingUserInput;
+      const answers = thread.activePendingResolvedAnswers;
+      if (!request || !answers || runtime.activePendingIsResponding || base.isConnecting) return;
+      void runtime.turnActions.onRespondToUserInput(request.requestId, answers);
+    },
     closeExpandedImage,
     navigateExpandedImage,
     onOpenTurnDiff,

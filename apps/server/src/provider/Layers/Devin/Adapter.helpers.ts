@@ -66,6 +66,7 @@ import { applyDevinAcpModelSelection, makeDevinAcpRuntime } from "../../acp/Devi
 import { DevinAdapter } from "../../Services/Devin/Adapter.ts";
 import { resolveDevinAcpBaseModelId } from "./Provider.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
+import type { SessionFsOwnerWorkspace } from "../../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.owner.ts";
 import type { RemoteAgentPtyResolver } from "../../../remote-agent/remoteAgentPtyAdapter.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 
@@ -79,6 +80,7 @@ export interface DevinAdapterLiveOptions {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
   readonly remoteAgentPtyResolver?: RemoteAgentPtyResolver;
+  readonly sessionFsOwner?: SessionFsOwnerWorkspace;
   readonly remoteWorkspaceReadinessProbe?: RemoteWorkspaceReadinessProbe;
 }
 

@@ -1,0 +1,42 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [0,0],
+    "cursorHidden": false,
+    "screen": [
+      [["",1,"default",5,0],["",1,"default",5,0],["b",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["c",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default",4,0],["E",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0],["",1,"default",4,0]],
+      [["",1,"default",2,0],["",1,"default",2,0],["",1,"default",2,0],["",1,"default",2,0],["",1,"default",2,0],["",1,"default",2,0],["",1,"default",2,0],["",1,"default",2,0]]
+    ],
+    "scrollback": [
+      [["a",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ]
+  },
+  "fixture": "background_colour_erase",
+  "geometry": {
+    "cols": 8,
+    "rows": 4,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bca\r\n\u001b[0;45m\u001b[2X\u001b[2C\u001b[0mb\r\nc\r\n\u001b[0;44m\u001b[1X\u001b[1CE\u001b[6X\u001b[m\r\n\u001b[0;42m\u001b[8X\u001b[m\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[1;1H\u001b[?25h",
+    "cols": 8,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 4,
+    "scrollbackRows": 1,
+    "sha256": "a8eccd0cedea637da9361d009261c4bf5bb47a340e6c5c5c1482dc052730a967",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "a\r\nb\r\nc\r\nd\u001b[44m\nE\u001b[3;1H\u001b[42m\u001b[M\u001b[1;1H\u001b[45m\u001b[2@\u001b[m"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+#[path = "jobs.backpressure.rs"]
+mod backpressure;
 #[path = "jobs.output.rs"]
 mod output;
 
@@ -16,23 +18,38 @@ pub(super) fn spawn_pty_job(
     let pty_id = job.handle.id.clone();
     std::thread::spawn(move || {
         let _completion = completion;
-        crate::pty::run_events(job.reader, &job.handle, |event| match event {
+        // Resolved once; lifecycle work runs after the session lock is released (plan §14).
+        let lifecycle = sessions
+            .lock()
+            .ok()
+            .and_then(|mut session| session.pty_lifecycle(&pty_id).ok());
+        let mut gate = backpressure::Gate::new(&pty_id, &subscribers, lifecycle.clone());
+        let ready = move || gate.ready();
+        crate::pty::run_events_gated(job.reader, &job.handle, ready, |event| match event {
             crate::pty::PtyEvent::Output(bytes) => {
-                let response = sessions
+                let recorded = sessions
                     .lock()
                     .ok()
                     .and_then(|mut session| session.record_pty_output(&pty_id, bytes).ok());
-                if let Some(response) = response {
-                    let _ = broadcast_response(&subscribers, &pty_id, response);
+                if let Some((response, chunk)) = recorded {
+                    // Delivery first: the screen feed may wait up to 45 ms for actor space.
+                    backpressure::broadcast_paced(&subscribers, &pty_id, &response);
+                    drop(response);
+                    if let Some(lifecycle) = &lifecycle {
+                        lifecycle.on_output(chunk.sequence, chunk.bytes);
+                    }
                 }
             }
             crate::pty::PtyEvent::Exited { exit_code, signal } => {
+                if let Some(lifecycle) = &lifecycle {
+                    lifecycle.on_exit();
+                }
                 let response = sessions
                     .lock()
                     .ok()
                     .and_then(|mut session| session.complete_pty(&pty_id, exit_code, signal).ok());
                 if let Some(response) = response {
-                    let _ = broadcast_response(&subscribers, &pty_id, response);
+                    backpressure::broadcast_paced(&subscribers, &pty_id, &response);
                 }
                 remove_all_subscribers(&subscribers, &pty_id);
             }

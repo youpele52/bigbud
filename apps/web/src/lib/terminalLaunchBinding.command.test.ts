@@ -20,7 +20,7 @@ const desired: TerminalOpenInput = {
   cwd: "/project/worktree",
   worktreePath: "/project/worktree",
   executionTargetId: "ssh:project",
-  env: { T3CODE_PROJECT_ROOT: "/project", T3CODE_WORKTREE_PATH: "/project/worktree" },
+  env: { BIGBUD_PROJECT_ROOT: "/project", BIGBUD_WORKTREE_PATH: "/project/worktree" },
 };
 
 function snapshot(input: TerminalOpenInput): TerminalSessionSnapshot {
@@ -78,7 +78,7 @@ describe("project command terminal selection and verified writes", () => {
   it.each([
     {
       name: "first-send worktree",
-      origin: { cwd: "/project", worktreePath: null, env: { T3CODE_PROJECT_ROOT: "/project" } },
+      origin: { cwd: "/project", worktreePath: null, env: { BIGBUD_PROJECT_ROOT: "/project" } },
     },
     { name: "target", origin: { executionTargetId: "local" } },
     { name: "worktree identity", origin: { worktreePath: "/another/worktree" } },
@@ -153,7 +153,7 @@ describe("project command terminal selection and verified writes", () => {
     { cwd: "/old/project" },
     { executionTargetId: "local" },
     { worktreePath: null },
-    { runtimeEnv: { T3CODE_PROJECT_ROOT: "/old/project" } },
+    { runtimeEnv: { BIGBUD_PROJECT_ROOT: "/old/project" } },
     { runtimeEnv: undefined },
   ])(
     "rejects a returned reattachment mismatch without writing into either terminal: %j",

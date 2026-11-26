@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { ExecutionTargetId, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 
 export const ServerListSshConfigHostsInput = Schema.Struct({});
 export type ServerListSshConfigHostsInput = typeof ServerListSshConfigHostsInput.Type;
@@ -13,6 +13,14 @@ export const ServerSshConfigHost = Schema.Struct({
   hostName: Schema.optional(TrimmedNonEmptyString),
   user: Schema.optional(TrimmedNonEmptyString),
   port: Schema.optional(TrimmedNonEmptyString),
+  /** Effective host-key name from `HostKeyAlias`, for display only. */
+  hostKeyAlias: Schema.optional(TrimmedNonEmptyString),
+  /** Route kind such as `direct` or `via bastion`; never a credential path. */
+  route: Schema.optional(TrimmedNonEmptyString),
+  /** Owner-reported admission state; absent on legacy discovery. */
+  supported: Schema.optional(Schema.Boolean),
+  /** Redacted owner remedy when `supported` is false; never a raw config value. */
+  unsupportedReason: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerSshConfigHost = typeof ServerSshConfigHost.Type;
 
@@ -29,6 +37,11 @@ export const ServerListSshConfigHostsResult = Schema.Struct({
   machineName: TrimmedNonEmptyString,
   hosts: Schema.Array(ServerSshConfigHost),
   sources: Schema.Array(ServerSshConfigSource),
+  /** Only an isolated normal dev profile advertises this bounded target. */
+  developmentOwnerTargetId: Schema.optional(ExecutionTargetId),
+  developmentOwnerTerminalUnsupported: Schema.optional(Schema.Boolean),
+  developmentOwnerBrowseOnly: Schema.optional(Schema.Boolean),
+  developmentOwnerPrePinnedJump: Schema.optional(Schema.Boolean),
 });
 export type ServerListSshConfigHostsResult = typeof ServerListSshConfigHostsResult.Type;
 

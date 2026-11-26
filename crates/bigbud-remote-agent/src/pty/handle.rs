@@ -129,7 +129,8 @@ impl PtyHandle {
     }
 
     #[cfg(unix)]
-    pub fn append_output(&self, bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
+    pub fn append_output(&self, bytes: impl Into<OutputBytes>) -> Result<PtyOutputChunk, PtyError> {
+        let bytes = bytes.into();
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         if state.state == PtyState::Closed {
             return Err(PtyError::Unknown);
@@ -142,7 +143,7 @@ impl PtyHandle {
         state.retained_bytes += bytes.len();
         let chunk = PtyOutputChunk { sequence, bytes };
         state.output.push_back(chunk.clone());
-        while state.retained_bytes > MAX_OUTPUT_BYTES || state.output.len() > 4096 {
+        while state.retained_bytes > state.retention_bytes || state.output.len() > 4096 {
             let Some(oldest) = state.output.pop_front() else {
                 break;
             };
@@ -153,7 +154,10 @@ impl PtyHandle {
     }
 
     #[cfg(not(unix))]
-    pub fn append_output(&self, _bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
+    pub fn append_output(
+        &self,
+        _bytes: impl Into<OutputBytes>,
+    ) -> Result<PtyOutputChunk, PtyError> {
         Err(PtyError::Unsupported)
     }
 
@@ -255,7 +259,7 @@ impl PtyHandle {
     #[cfg(unix)]
     pub fn close(&self, terminate: bool) -> Result<(), PtyError> {
         if terminate {
-            self.signal("SIGTERM")?;
+            return self.terminate();
         }
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         state.state = PtyState::Closed;

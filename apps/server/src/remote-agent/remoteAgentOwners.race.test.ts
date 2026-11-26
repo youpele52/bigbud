@@ -46,6 +46,31 @@ function owner(ownerKey: string, resourceId: string): RemoteAgentOwner {
 }
 
 describe("durable remote owner reservation races", () => {
+  it("fences a terminal replacement against a different or missing retained resource", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "bigbud-owner-exact-reuse-"));
+    directories.push(directory);
+    const runtime = ManagedRuntime.make(
+      NodeSqlite.layer({ filename: join(directory, "owners.sqlite") }),
+    );
+    try {
+      await runtime.runPromise(Migration);
+      const store = await runtime.runPromise(makeRemoteAgentRuntimeBindings);
+      const first = owner("terminal:exact", "first");
+      const second = owner("terminal:exact", "second");
+      await expect(store.reserve(first, true, first.target, first)).rejects.toThrow("changed");
+      await store.reserve(first);
+      await store.update(first.ownerKey, (current) => ({ ...current, state: "terminal" }));
+      await store.reserve(second, true, first.target, first);
+      await store.update(first.ownerKey, (current) => ({ ...current, state: "terminal" }));
+      await expect(store.reserve(first, true, first.target, first)).rejects.toThrow("changed");
+      expect((await store.get(first.ownerKey))?.resourceId).toBe("second");
+      await expect(
+        store.reserve(first, true, first.target, { ...second, epoch: "stale-epoch" }),
+      ).rejects.toThrow("changed");
+    } finally {
+      await runtime.dispose();
+    }
+  });
   it("rejects an old invocation after a terminal owner slot is reused", async () => {
     const directory = mkdtempSync(join(tmpdir(), "bigbud-owner-reuse-"));
     directories.push(directory);

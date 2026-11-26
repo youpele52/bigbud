@@ -28,10 +28,7 @@ const defaultDependencies: UpdaterFeedDependencies = {
 
 function githubToken(environment: NodeJS.ProcessEnv): string {
   return (
-    environment.BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() ||
-    environment.T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() ||
-    environment.GH_TOKEN?.trim() ||
-    ""
+    environment.BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN?.trim() || environment.GH_TOKEN?.trim() || ""
   );
 }
 
@@ -105,10 +102,10 @@ export function configureUpdaterFeed(
   environment: NodeJS.ProcessEnv = process.env,
   dependencies: UpdaterFeedDependencies = defaultDependencies,
 ): () => Promise<void> {
-  if (environment.BIGBUD_DESKTOP_MOCK_UPDATES || environment.T3CODE_DESKTOP_MOCK_UPDATES) {
+  if (environment.BIGBUD_DESKTOP_MOCK_UPDATES) {
     updater.setFeedURL({
       provider: "generic",
-      url: `http://localhost:${environment.BIGBUD_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? environment.T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? 3000}`,
+      url: `http://localhost:${environment.BIGBUD_DESKTOP_MOCK_UPDATE_SERVER_PORT ?? 3000}`,
     });
     return async () => {};
   }

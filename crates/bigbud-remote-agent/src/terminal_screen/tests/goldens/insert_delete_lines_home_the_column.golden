@@ -1,0 +1,42 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,1],
+    "cursorHidden": false,
+    "screen": [
+      [["X",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["W",1,"default","default",0],["w",1,"default","default",0],["o",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["Y",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["Z",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": [
+      [["o",1,"default","default",0],["n",1,"default","default",0],["e",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ]
+  },
+  "fixture": "insert_delete_lines_home_the_column",
+  "geometry": {
+    "cols": 10,
+    "rows": 4,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bcone\r\nX\r\nWwo\r\nY\r\n\u001b[1CZ\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[2;2H\u001b[?25h",
+    "cols": 10,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 4,
+    "scrollbackRows": 1,
+    "sha256": "92790288335fa52b764ba69274506b1ac8346d21ca016d8210d50fa2669c4449",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "one\r\ntwo\r\nthree\u001b[2;3H\u001b[LX\u001b[4;5H\u001b[MY\u001bDZ\u001b[1;4H\u001bEW"
+    }
+  ]
+}

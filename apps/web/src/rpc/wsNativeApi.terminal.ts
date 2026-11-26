@@ -21,6 +21,8 @@ export function createNativeTerminalApi(terminal: TerminalRpcClient): NativeApi[
         terminalId: input.terminalId ?? DEFAULT_TERMINAL_ID,
       }),
 
+    retainedShellOwners: (input) => terminal.retainedShellOwners(input),
+    forgetRetainedShellOwners: (input) => terminal.forgetRetainedShellOwners(input),
     shellProfiles: (input) => terminal.shellProfiles(input),
     wslDistributions: () => terminal.wslDistributions(),
     snapshot: (input) => terminal.snapshot(input as never),
@@ -38,5 +40,8 @@ export function createNativeTerminalApi(terminal: TerminalRpcClient): NativeApi[
     search: (input) => terminal.search(input),
     view: (input) => terminal.view(input as never),
     stagePasteFile: (input) => terminal.stagePasteFile(input as never),
+    keepOpen: (input) => terminal.keepOpen(input),
+    retrySetup: (input) => terminal.retrySetup(input),
+    closeDrainingHosts: () => terminal.closeDrainingHosts(),
   };
 }

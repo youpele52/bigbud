@@ -9,7 +9,6 @@ import { useChatViewInteractionFiles } from "./chat-view-interactions.files.hook
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import type { ChatViewInteractionsState } from "./chat-view-interactions.hooks";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
-import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { BIGBUD_FILES_PANEL_DRAG_MIME } from "../../../files/filesPanel.dnd";
 import { BIGBUD_THREAD_CONTEXT_DRAG_MIME } from "../../../sidebar/threadPanel.dnd";
@@ -22,14 +21,11 @@ function AttachmentHarness(props: {
   runtime: ChatViewRuntimeState;
   capture: (
     files: ReturnType<typeof useChatViewInteractionFiles> & {
-      submitReadFiles: (files: File[]) => Promise<void>;
+      submitReadFiles: (files: File[]) => boolean;
     },
   ) => void;
 }) {
-  const files = useChatViewInteractionFiles({
-    ...props,
-    thread: { pendingUserInputs: [] } as unknown as ChatViewThreadDerivedState,
-  });
+  const files = useChatViewInteractionFiles(props);
   const actions = useChatViewComposerActions({
     base: props.base,
     runtime: props.runtime,
@@ -83,7 +79,7 @@ it("V2 attachment controls accept paste/drop/files without a default warning and
     focusComposer: focus,
   } as unknown as ChatViewRuntimeState;
   let handlers!: ReturnType<typeof useChatViewInteractionFiles> & {
-    submitReadFiles: (files: File[]) => Promise<void>;
+    submitReadFiles: (files: File[]) => boolean;
   };
   const capture = (value: typeof handlers) => {
     handlers = value;
@@ -97,6 +93,9 @@ it("V2 attachment controls accept paste/drop/files without a default warning and
     await page.getByRole("button", { name: "Add attachments, agents, or skills" }).click();
     await expect
       .element(page.getByRole("menuitem", { name: "Add photos and files" }))
+      .toBeInTheDocument();
+    await expect
+      .element(page.getByRole("menuitem", { name: "Read document or URL" }))
       .toBeInTheDocument();
     await expect.element(page.getByRole("menuitem", { name: "Call agent" })).toBeInTheDocument();
     await expect.element(page.getByRole("menuitem", { name: "Use skill" })).toBeInTheDocument();
@@ -144,7 +143,11 @@ it("V2 attachment controls accept paste/drop/files without a default warning and
     handlers.addComposerFiles([oversizedMetadata]);
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({ type: "error" }));
     focus.mockClear();
-    await handlers.submitReadFiles([oversizedMetadata]);
+    add.mockClear();
+    expect(handlers.submitReadFiles([file, oversizedMetadata])).toBe(false);
+    expect(add).not.toHaveBeenCalled();
+    expect(handlers.submitReadFiles([file])).toBe(true);
+    expect(add).toHaveBeenCalledOnce();
     expect(focus).not.toHaveBeenCalled();
     expect(base.composerFilesRef.current).toBe(draft);
     expect(prevented).toHaveBeenCalledTimes(5);

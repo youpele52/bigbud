@@ -17,8 +17,8 @@ export function recordEarlySpawnError<T extends ChildProcess>(child: T): T {
   return child;
 }
 
-export function takeEarlySpawnError(child: ChildProcess): Error | undefined {
-  const error = earlySpawnErrors.get(child);
-  earlySpawnErrors.delete(child);
+export function takeEarlySpawnError(child: object): Error | undefined {
+  const error = earlySpawnErrors.get(child as ChildProcess);
+  earlySpawnErrors.delete(child as ChildProcess);
   return error;
 }

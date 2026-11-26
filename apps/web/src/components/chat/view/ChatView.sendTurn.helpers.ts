@@ -290,6 +290,10 @@ export function restoreMessageComposerDraftAfterFailure(input: {
   readonly setComposerTrigger: (trigger: ReturnType<typeof detectComposerTrigger>) => void;
 }) {
   if (!input.currentDraftEmpty) {
+    // Keep fetched documents visible and removable, even if the newer draft is full.
+    // Send admission blocks over-limit drafts rather than silently dropping any files.
+    const readDocuments = input.composerFiles.filter((file) => file.readDocumentText !== undefined);
+    if (readDocuments.length > 0) input.addComposerFilesToDraft(readDocuments);
     return;
   }
 

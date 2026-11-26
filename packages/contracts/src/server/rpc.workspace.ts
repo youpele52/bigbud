@@ -56,6 +56,15 @@ import {
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "../workspace/project";
+import {
+  ProjectCreateDirectoryInput,
+  ProjectCreateDirectoryResult,
+  ProjectDeleteEntryInput,
+  ProjectDeleteEntryResult,
+  ProjectEntryActions,
+  ProjectEntryActionsInput,
+  ProjectEntryMutationError,
+} from "../workspace/projectEntryMutation";
 
 export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
   payload: ProjectSearchEntriesInput,
@@ -95,6 +104,23 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   payload: ProjectWriteFileInput,
   success: ProjectWriteFileResult,
   error: ProjectWriteFileError,
+});
+
+export const WsProjectsEntryActionsRpc = Rpc.make(WS_METHODS.projectsEntryActions, {
+  payload: ProjectEntryActionsInput,
+  success: ProjectEntryActions,
+});
+
+export const WsProjectsCreateDirectoryRpc = Rpc.make(WS_METHODS.projectsCreateDirectory, {
+  payload: ProjectCreateDirectoryInput,
+  success: ProjectCreateDirectoryResult,
+  error: ProjectEntryMutationError,
+});
+
+export const WsProjectsDeleteEntryRpc = Rpc.make(WS_METHODS.projectsDeleteEntry, {
+  payload: ProjectDeleteEntryInput,
+  success: ProjectDeleteEntryResult,
+  error: ProjectEntryMutationError,
 });
 
 export const WsNotesListRpc = Rpc.make(WS_METHODS.notesList, {

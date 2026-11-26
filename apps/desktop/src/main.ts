@@ -3,7 +3,7 @@ import { SystemMonitorBridge } from "./system-monitor/bridge";
 import { getDesktopMonitorRoots } from "./system-monitor/ownership";
 import { stopDesktopResourceAwareness } from "./main.systemMonitor";
 
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, powerMonitor } from "electron";
 
 import {
   clearUpdatePollTimer,
@@ -12,17 +12,10 @@ import {
   getUpdateState,
 } from "./updater/autoUpdater";
 import { initBackendManager, stopBackend } from "./backend/backendManager";
+import { writeBackendQuitHint } from "./backend/backendLifecycleHintPipe";
 import { stopCuaDriverDaemon } from "./backend/cuaDriver.daemon";
-import {
-  configureBackendStartupState,
-  getBackendStartupState,
-  recordBackendStartupDevelopmentDiagnostics,
-  recordBackendStartupFailure,
-} from "./backend/backendStartupState";
-import {
-  createBackendStartupDiagnostics,
-  createDevelopmentBackendDiagnostics,
-} from "./backend/backendStartupDiagnostics";
+import { configureBackendStartupState } from "./backend/backendStartupState";
+import { recordMainProcessCrash as recordCrash } from "./main.mainProcessCrash";
 import {
   formatErrorMessage,
   formatErrorDiagnostics,
@@ -54,6 +47,12 @@ import { bootstrapDesktop } from "./main.bootstrap";
 import { registerFloatingAssistantIpc } from "./main.floatingAssistant";
 import { registerDesktopShutdownSignals } from "./main.shutdownSignals";
 import { stopDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
+import {
+  createDesktopQuitTeardown,
+  registerQuitTeardownAppHandlers,
+  registerQuitTeardownPowerMonitor,
+  withQuitIntentReason,
+} from "./main.quitTeardown";
 
 const channels = desktopIpcChannels;
 
@@ -82,7 +81,6 @@ const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
-let quitTeardownComplete = false;
 let desktopProtocolRegistered = false;
 let desktopLogSink: QueuedLogSink | null = null;
 let backendLogSink: QueuedLogSink | null = null;
@@ -108,13 +106,41 @@ const desktopAppIdentity = {
 // Electron user-data location (including legacy-profile migration).
 app.setPath(
   "userData",
-  resolveUserDataPath({
-    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
-    userDataDirName: USER_DATA_DIR_NAME,
-  }),
+  mainConfig.isolatedUserDataPath ??
+    resolveUserDataPath({
+      legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+      userDataDirName: USER_DATA_DIR_NAME,
+    }),
 );
 desktopPreferences = new DesktopPreferencesStore(app.getPath("userData"), logHeader);
-const appQuitActions = createAppQuitActions({ appInstance: app, isDevelopment, prepareForAppQuit });
+// Quit teardown stops the backend and every main-process service, once (see main.quitTeardown).
+const quitTeardown = createDesktopQuitTeardown({
+  appInstance: app,
+  log: logHeader,
+  markQuitting: () => (isQuitting = true),
+  stopRuntime: () => {
+    systemMonitor.stop();
+    stopDesktopConnectivitySignals();
+    stopDesktopResourceAwareness();
+    floatingAssistantWindows.destroyForQuit();
+    clearUpdatePollTimer();
+    stopBackend();
+    stopCuaDriverDaemon();
+    restoreStdIoCapture?.();
+    flushDiagnosticLogs();
+  },
+  sendQuitHint: writeBackendQuitHint,
+});
+const { prepareForAppQuit } = quitTeardown;
+// Quit and Restart only begin the quit; the `before-quit` handshake announces it, then tears down.
+const appQuitActions = withQuitIntentReason(
+  createAppQuitActions({
+    appInstance: app,
+    isDevelopment,
+    prepareForAppQuit: (reason) => logHeader(`${reason} requested`),
+  }),
+  quitTeardown,
+);
 floatingAssistantWindows = new FloatingAssistantWindows({
   desktopDir: __dirname,
   desktopScheme: DESKTOP_SCHEME,
@@ -142,21 +168,7 @@ function flushDiagnosticLogs(): void {
 }
 
 function recordMainProcessCrash(error: unknown): void {
-  const startup = getBackendStartupState();
-  if (startup.generation === 0) return;
-  const developmentDiagnostics = isDevelopmentDiagnostics
-    ? createDevelopmentBackendDiagnostics({ error })
-    : undefined;
-  if (startup.status === "starting" || startup.status === "upgrading") {
-    recordBackendStartupFailure(
-      startup.generation,
-      "unknown",
-      createBackendStartupDiagnostics({ category: "runtime" }),
-      developmentDiagnostics,
-    );
-  } else if (developmentDiagnostics) {
-    recordBackendStartupDevelopmentDiagnostics(startup.generation, developmentDiagnostics);
-  }
+  recordCrash(error, isDevelopmentDiagnostics);
 }
 
 installDesktopSingleInstanceLock(app, openMainWindow, appQuitActions.quitDuplicateInstance);
@@ -170,6 +182,7 @@ function handleFatalStartupError(stage: string, error: unknown): void {
     error instanceof Error && typeof error.stack === "string" ? `\n${error.stack}` : "";
   logHeader(`fatal startup error stage=${stage} error=${formatErrorDiagnostics(error)}`);
   console.error(`[desktop] fatal startup error (${stage})`, error);
+  quitTeardown.skipHandshake("fatal-startup-error");
   if (!isQuitting) {
     isQuitting = true;
     dialog.showErrorBox("bigbud failed to start", `Stage: ${stage}\n${message}${detail}`);
@@ -208,6 +221,7 @@ process.on("uncaughtException", (error) => {
   recordMainProcessCrash(error);
   if (!isQuitting) {
     isQuitting = true;
+    quitTeardown.skipHandshake("uncaught-exception");
     dialog.showErrorBox("bigbud encountered an unexpected error", formatErrorMessage(error));
     stopBackend();
     stopCuaDriverDaemon();
@@ -266,34 +280,13 @@ function openMainWindow(threadId?: string): BrowserWindow {
 
 // App event handlers
 
-/**
- * Shared teardown path called from both `before-quit` and `before-quit-for-update`.
- * Stops the backend process, clears update poll timers, and restores stdio capture. Idempotent.
- */
-function prepareForAppQuit(reason: string): void {
-  if (quitTeardownComplete) return;
-  quitTeardownComplete = true;
-  isQuitting = true;
-  systemMonitor.stop();
-  stopDesktopConnectivitySignals();
-  stopDesktopResourceAwareness();
-  floatingAssistantWindows.destroyForQuit();
-  logHeader(`${reason} received`);
-  clearUpdatePollTimer();
-  stopBackend();
-  stopCuaDriverDaemon();
-  restoreStdIoCapture?.();
-  flushDiagnosticLogs();
-}
-
-app.on("before-quit", () => {
-  prepareForAppQuit("before-quit");
-});
+registerQuitTeardownAppHandlers(app, quitTeardown);
 
 app
   .whenReady()
   .then(() => {
     logHeader("app ready");
+    registerQuitTeardownPowerMonitor(powerMonitor, quitTeardown);
     registerDesktopRuntimeMonitoring({
       appInstance: app,
       runtimeConfig: desktopLinuxRuntimeConfig,
@@ -338,6 +331,8 @@ app
     });
     void bootstrapDesktop({
       baseDir: mainConfig.cuaDriverBaseDir,
+      backendStateDir: mainConfig.backendStateDir,
+      backendArtifactId: `bigbud-server@${app.getVersion()}`,
       channels,
       cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
       computerUseGuard: {
@@ -356,6 +351,7 @@ app
       logHeader,
       makeWindow,
       prepareForAppQuit,
+      runQuitHandshake: quitTeardown.runHandshake,
       systemMonitor,
       registerFloatingAssistantIpc: () =>
         registerFloatingAssistantIpc({
@@ -397,4 +393,5 @@ app.on("window-all-closed", () => {
   }
 });
 
+// A signal to Electron main (dev launcher, service manager, OS) quits without a quit hint.
 registerDesktopShutdownSignals(prepareForAppQuit, () => app.quit());

@@ -1,0 +1,46 @@
+{
+  "expected": {
+    "alternate": [
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "cursor": [0,2],
+    "cursorHidden": false,
+    "screen": [
+      [["k",1,"default","default",0],["b",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "kitty_keyboard_push_pop",
+  "geometry": {
+    "cols": 20,
+    "rows": 2,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": true,
+    "ansi": "\u001bckb\r\n\u001b[m\u001b[1;3H\u001b7\u001b[m\u001b[>5u\u001b[?47h\u001b[H\r\n\u001b[>8u\u001b[m\u001b[1;3H\u001b[?25h",
+    "cols": 20,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [
+      {
+        "kind": "kitty_keyboard_host_only",
+        "rows": 0
+      }
+    ],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 2,
+    "scrollbackRows": 0,
+    "sha256": "13a7b847aba3ed0e3f6d0974d83b2ff70209dcf783413471a412c52f7955431b",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b[>1u\u001b[>3u\u001b[<u\u001b[=5;2ukb\u001b[?1049h\u001b[>8u"
+    }
+  ]
+}

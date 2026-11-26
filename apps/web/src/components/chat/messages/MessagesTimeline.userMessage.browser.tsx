@@ -23,7 +23,10 @@ vi.mock("../../../rpc/serverState", async (importOriginal) => ({
   useServerDiscoveredAgents: () => mocks.agents,
   useServerDiscoveredSkills: () => mocks.skills,
 }));
-vi.mock("../common/chatFileTargets", () => ({ openChatFileTarget: mocks.openFile }));
+vi.mock("../common/chatFileTargets", () => ({
+  openChatFileTarget: mocks.openFile,
+  openDiscoveredSourcePath: (path: string) => mocks.openFile(path, undefined, "file", "local"),
+}));
 
 beforeEach(() => {
   mocks.agents = [];
@@ -34,7 +37,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-async function renderSentMessage(text: string, attachments: ChatAttachment[] = []) {
+async function renderSentMessage(
+  text: string,
+  attachments: ChatAttachment[] = [],
+  workspaceExecutionTargetId?: string,
+) {
   return render(
     <MessagesTimeline
       isWorking={false}
@@ -76,6 +83,7 @@ async function renderSentMessage(text: string, attachments: ChatAttachment[] = [
       resolvedTheme="light"
       timestampFormat="locale"
       workspaceRoot="/project"
+      workspaceExecutionTargetId={workspaceExecutionTargetId as never}
     />,
   );
 }
@@ -105,8 +113,9 @@ it.each(["agent", "skill"] as const)(
     await page.getByText("review", { exact: true }).click();
     expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith(
       "/opencode/review.md",
-      "/project",
+      undefined,
       "file",
+      "local",
     );
   },
 );
@@ -137,7 +146,12 @@ it("opens bundled skills ahead of the active provider's same-name skill", async 
     />,
   );
   await page.getByText("review", { exact: true }).click();
-  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith("/bundled/SKILL.md", "/project", "file");
+  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith(
+    "/bundled/SKILL.md",
+    undefined,
+    "file",
+    "local",
+  );
 });
 
 it("uses raw message provenance when the displayed message omits metadata", async () => {
@@ -156,7 +170,12 @@ it("uses raw message provenance when the displayed message omits metadata", asyn
     />,
   );
   await page.getByText("review", { exact: true }).click();
-  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith("/recorded.md", "/project", "file");
+  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith(
+    "/recorded.md",
+    undefined,
+    "file",
+    "local",
+  );
 });
 
 it("preserves clickable mentions alongside embedded terminal context labels", async () => {
@@ -172,7 +191,7 @@ it("preserves clickable mentions alongside embedded terminal context labels", as
     />,
   );
   await page.getByText("review", { exact: true }).click();
-  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith("/review.md", "/project", "file");
+  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith("/review.md", undefined, "file", "local");
 });
 
 it("does not open an arbitrary provider source when no trustworthy match exists", async () => {
@@ -254,7 +273,7 @@ it("opens the babysitter chip in Additional instructions using verified native O
     />,
   );
   await page.getByText("babysitter", { exact: true }).click();
-  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith(sourcePath, "/project", "file");
+  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith(sourcePath, undefined, "file", "local");
 });
 
 it.each([null, "ultrathink"])(
@@ -279,3 +298,12 @@ it.each([null, "ultrathink"])(
     expect(document.querySelector("[data-chat-cite-content]")).toBeNull();
   },
 );
+
+it("opens a skill chip on this computer, where discovery found it, even in a remote thread", async () => {
+  mocks.skills = [
+    { id: "remote", name: "review", provider: "opencode", source: "user", sourcePath: "/srv/r.md" },
+  ];
+  await renderSentMessage("use @skill::review", [], "ssh:host=box&transport=agent");
+  await page.getByText("review", { exact: true }).click();
+  expect(mocks.openFile).toHaveBeenCalledExactlyOnceWith("/srv/r.md", undefined, "file", "local");
+});

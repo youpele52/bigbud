@@ -1,13 +1,20 @@
 import { V2_SUMMARY_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v5.ts";
+import { V2_DELEGATION_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v6.ts";
 import {
   V2_COMPATIBILITY_DIGEST,
   V2_BOOTSTRAP_COMPATIBILITY,
+  V2_SUMMARY_BOOTSTRAP_COMPATIBILITY,
+  V2_SUMMARY_COMPATIBILITY_DIGEST,
 } from "./Orchestration.compatibility.ts";
 import { renderV2CanonicalCandidateGuard } from "./NativeCompatibility.version.ts";
 
 /** Bootstrap public semantics are frozen; app implementation releases cannot change native registrations. */
-export function renderV2ThreadPlugin(): string {
-  const specs = V2_SUMMARY_BOOTSTRAP_SPECS;
+export function renderV2ThreadPlugin(version: "v5" | "v6" = "v6"): string {
+  const specs = version === "v5" ? V2_SUMMARY_BOOTSTRAP_SPECS : V2_DELEGATION_BOOTSTRAP_SPECS;
+  const compatibility =
+    version === "v5" ? V2_SUMMARY_BOOTSTRAP_COMPATIBILITY : V2_BOOTSTRAP_COMPATIBILITY;
+  const compatibilityDigest =
+    version === "v5" ? V2_SUMMARY_COMPATIBILITY_DIGEST : V2_COMPATIBILITY_DIGEST;
   return `import {randomBytes} from "node:crypto";
 import {protocol,issuer,hash,callback,fail} from "./identity.mjs";
 import {registry} from "./registry.mjs";
@@ -61,7 +68,7 @@ export default {id:pluginId,async setup(ctx) {
       }
     })));
     registrations.push(registration(await ctx.rpc.register({id:"bigbud.thread.v2."+issuer,events:{},methods:Object.fromEntries(["info","enroll","renew","inspect","detach"].map(name=>[name,{input:name==="info"?{type:"object",properties:{},additionalProperties:false}:envelope,output:object}]))},{
-      async info() { await healthy(); return {protocol:"bigbud.thread.v2."+issuer,enrollmentProtocol:protocol,issuer,artifactDigest:artifact,bootstrapDigest:artifact,bootstrapAbi:${JSON.stringify(V2_BOOTSTRAP_COMPATIBILITY.bootstrapAbi)},compatibilityDigest:${JSON.stringify(V2_COMPATIBILITY_DIGEST)},schemaDigest:${JSON.stringify(V2_BOOTSTRAP_COMPATIBILITY.schemaDigest)},setupInstanceId,nativeVersion:ctx.app.version,tools:specs.map(spec=>spec.name)}; },
+      async info() { await healthy(); return {protocol:"bigbud.thread.v2."+issuer,enrollmentProtocol:protocol,issuer,artifactDigest:artifact,bootstrapDigest:artifact,bootstrapAbi:${JSON.stringify(compatibility.bootstrapAbi)},compatibilityDigest:${JSON.stringify(compatibilityDigest)},schemaDigest:${JSON.stringify(compatibility.schemaDigest)},setupInstanceId,nativeVersion:ctx.app.version,tools:specs.map(spec=>spec.name)}; },
       ...Object.fromEntries(["enroll","renew","inspect","detach"].map(name=>[name,(input,context)=>state.run(name,input,context)]))
     })));
   } catch(error) { state.close(); for(const registration of registrations.reverse()) await registration.dispose(); throw error; }

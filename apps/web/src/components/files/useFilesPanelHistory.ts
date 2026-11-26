@@ -89,7 +89,8 @@ export function isConfirmedMissingFileError(error: unknown): boolean {
   return isConfirmedMissingWorkspacePathError(error);
 }
 
-async function checkFileExists(
+/** Checks a history entry against the root of the workspace it was recorded in. */
+export async function checkFileExists(
   workspaceRoot: string,
   relativePath: string,
   workspaceExecutionTargetId: string | undefined,

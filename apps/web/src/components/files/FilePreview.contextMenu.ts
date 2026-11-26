@@ -1,4 +1,8 @@
-import type { ContextMenuItem } from "@bigbud/contracts";
+import {
+  isRemoteExecutionTargetId,
+  type ContextMenuItem,
+  type ExecutionTargetId,
+} from "@bigbud/contracts";
 
 import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { openPathInPreferredApp } from "~/models/editor/fileOpen.models";
@@ -14,6 +18,8 @@ interface CreateFilePreviewContextMenuItemsInput {
   readonly hasSelectedText: boolean;
   readonly canSelectAll: boolean;
   readonly canAnnotateSelection: boolean;
+  /** False for remote files: their absolute path only exists on the remote host. */
+  readonly canOpenExternally?: boolean | undefined;
 }
 
 interface RunFilePreviewContextMenuActionInput {
@@ -31,6 +37,8 @@ interface ShowFilePreviewContextMenuInput {
   readonly relativePath: string;
   readonly selectedText: string;
   readonly canSelectAll: boolean;
+  /** The target the file is on; remote files never open in an app on this computer. */
+  readonly executionTargetId?: ExecutionTargetId | null | undefined;
   readonly onAnnotateSelection?: (() => void) | undefined;
   readonly onSelectAll?: (() => void) | undefined;
 }
@@ -42,7 +50,7 @@ export function createFilePreviewContextMenuItems(
     ...(input.hasSelectedText ? [{ id: "copy-selected-text" as const, label: "Copy" }] : []),
     ...createSharedFileActionItems({
       canSelectAll: input.canSelectAll,
-      canOpenExternally: true,
+      canOpenExternally: input.canOpenExternally ?? true,
       canCopyRelativePath: true,
       canCopyPath: true,
     }),
@@ -116,6 +124,7 @@ export async function showFilePreviewContextMenu(
       hasSelectedText: input.selectedText.length > 0,
       canSelectAll: input.canSelectAll,
       canAnnotateSelection: Boolean(input.onAnnotateSelection),
+      canOpenExternally: !isRemoteExecutionTargetId(input.executionTargetId),
     }),
     input.position,
   );

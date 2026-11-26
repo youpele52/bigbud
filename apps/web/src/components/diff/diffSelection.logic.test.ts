@@ -2,7 +2,6 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 
 import {
-  DIFF_ANNOTATION_HEADER,
   normalizeDiffLineRange,
   parseDiffLineNumber,
   resolveDiffSelectionFromContextMenu,
@@ -10,25 +9,7 @@ import {
   walkToDiffFileContainer,
   walkToDiffLineElement,
 } from "./diffSelection.logic";
-
-function mockElement(input: {
-  readonly attributes?: Record<string, string>;
-  readonly dataset?: Record<string, string>;
-  readonly parent?: Node | null;
-  readonly localName?: string;
-  readonly parentElement?: HTMLElement | null;
-  readonly textContent?: string;
-}): HTMLElement {
-  return {
-    localName: input.localName ?? "div",
-    getAttribute: (name: string) => input.attributes?.[name] ?? null,
-    hasAttribute: (name: string) => input.attributes?.[name] !== undefined,
-    dataset: input.dataset ?? {},
-    parentNode: input.parent ?? null,
-    parentElement: input.parentElement ?? (input.parent as HTMLElement | null) ?? null,
-    textContent: input.textContent ?? null,
-  } as unknown as HTMLElement;
-}
+import { mockElement } from "./diffSelection.logic.test.helpers";
 
 describe("diffSelection.logic", () => {
   it("parses diff line numbers from data-line attributes", () => {
@@ -67,62 +48,6 @@ describe("diffSelection.logic", () => {
     expect(normalizeDiffLineRange(8, 3)).toEqual({ startLine: 3, endLine: 8 });
   });
 
-  it("resolves mixed deletion and addition rows from a DOM selection", () => {
-    const fileContainer = mockElement({
-      dataset: { diffFilePath: "apps/web/src/App.tsx" },
-    });
-    const startLine = mockElement({
-      attributes: { "data-line": "12", "data-line-type": "change-deletion" },
-      parent: fileContainer,
-      textContent: "const value = 1;\n",
-    });
-    const endLine = mockElement({
-      attributes: { "data-line": "10", "data-line-type": "change-addition" },
-      parent: fileContainer,
-      textContent: "return value;\n",
-    });
-    const selection = {
-      isCollapsed: false,
-      rangeCount: 1,
-      getRangeAt: () => ({
-        startContainer: startLine,
-        endContainer: endLine,
-      }),
-      anchorNode: startLine,
-      focusNode: endLine,
-      toString: () => "const value = 1;\nreturn value;",
-    } as unknown as Selection;
-
-    expect(resolveDiffSelectionFromDom(selection)).toEqual({
-      filePath: "apps/web/src/App.tsx",
-      range: { startLine: 10, endLine: 12 },
-      selectedText: [...DIFF_ANNOTATION_HEADER, "-const value = 1;", "+return value;"].join("\n"),
-    });
-  });
-
-  it("resolves deletion-only DOM selections", () => {
-    const fileContainer = mockElement({ dataset: { diffFilePath: "src/example.ts" } });
-    const line = mockElement({
-      attributes: { "data-line": "7", "data-line-type": "change-deletion" },
-      parent: fileContainer,
-      textContent: "  removed();\n",
-    });
-    const selection = {
-      isCollapsed: false,
-      rangeCount: 1,
-      getRangeAt: () => ({ startContainer: line, endContainer: line }),
-      anchorNode: line,
-      focusNode: line,
-      toString: () => "  removed();\n",
-    } as unknown as Selection;
-
-    expect(resolveDiffSelectionFromDom(selection)).toEqual({
-      filePath: "src/example.ts",
-      range: { startLine: 7, endLine: 7 },
-      selectedText: [...DIFF_ANNOTATION_HEADER, "-  removed();"].join("\n"),
-    });
-  });
-
   it("uses a valid additions-side Pierre range when DOM side metadata is unavailable", () => {
     const filePath = "apps/web/src/example.ts";
     const fileContainer = mockElement({ dataset: { diffFilePath: filePath } });
@@ -158,7 +83,13 @@ describe("diffSelection.logic", () => {
     ).toEqual({
       filePath,
       range: { startLine: 10, endLine: 12 },
-      selectedText: [...DIFF_ANNOTATION_HEADER, " const value = 1;", " return value;"].join("\n"),
+      selectedText: [
+        "Diff annotation (unchanged lines)",
+        "",
+        "Unchanged lines (new lines 10-12):",
+        " const value = 1;",
+        " return value;",
+      ].join("\n"),
     });
   });
 

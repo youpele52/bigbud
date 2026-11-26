@@ -14,6 +14,7 @@ import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 
 import { cliProxyDiagnostic } from "../provider/Layers/CliProxy/Diagnostic.ts";
 import { readPromptTextFromUrl } from "../attachments/documentUrl";
+import { DocumentUrlError } from "../attachments/documentUrl.policy";
 import { exportThreadContext } from "../orchestration/ThreadContextExport";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import { TRACE_RETAIN_ATTRIBUTE } from "../observability/TracePolicy.ts";
@@ -70,9 +71,7 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
     [WS_METHODS.serverRefreshUsageLimits]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverRefreshUsageLimits,
-        context.providerRegistry.refreshUsageLimits.pipe(
-          Effect.map((providers) => ({ providers })),
-        ),
+        context.providerRegistry.refreshUsageLimits,
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>
@@ -156,17 +155,13 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverReadDocumentUrl,
         Effect.tryPromise({
-          try: async () => {
-            const result = await readPromptTextFromUrl({ url: input.url });
-            if (!result) {
-              throw new Error("No readable document content was found at that URL.");
-            }
-            return result;
-          },
+          try: (signal) => readPromptTextFromUrl({ url: input.url, signal }),
           catch: (cause) =>
             new ServerReadDocumentUrlError({
-              message: "Failed to read document URL",
-              cause,
+              message:
+                cause instanceof DocumentUrlError
+                  ? cause.message
+                  : "Could not extract this document. Try a different format or attach it locally.",
             }),
         }),
         { "rpc.aggregate": "server" },

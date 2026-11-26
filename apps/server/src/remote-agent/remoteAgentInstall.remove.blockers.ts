@@ -1,3 +1,4 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { ServerRemoteAgentRemovalBlocker } from "@bigbud/contracts/server/server.remoteAgentInstall";
 
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
@@ -169,11 +170,11 @@ export function parseRemoteAgentBackendRuntimeProbe(output: string): RemoteAgent
 }
 
 export async function readRemoteAgentBackendRuntimeBlockers(
-  control: Pick<RemoteAgentControl, "run">,
+  control: Pick<RemoteAgentControl, "root" | "run" | "exec">,
 ): Promise<RemoteAgentRemovalBlocker[]> {
   try {
     return parseRemoteAgentBackendRuntimeProbe(
-      await control.run(REMOTE_AGENT_BACKEND_RUNTIME_PROBE),
+      await runRemoteAgentControlOp(control, { kind: "backendRuntimeProbe" }),
     );
   } catch {
     return [

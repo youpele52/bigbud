@@ -5,20 +5,19 @@ use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 struct Fixture(PathBuf);
 impl Fixture {
     fn new() -> Self {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "bigbud-journal-temp-{}-{stamp}",
-            std::process::id()
-        ));
+        // macOS clocks are microsecond-grained, so a timestamp alone collides across parallel tests.
+        static NEXT_ROOT_ID: AtomicU64 = AtomicU64::new(0);
+        let id = NEXT_ROOT_ID.fetch_add(1, Ordering::Relaxed);
+        let root =
+            std::env::temp_dir().join(format!("bigbud-journal-temp-{}-{id}", std::process::id()));
+        let _stale = fs::remove_dir_all(&root);
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         let result = Self(root);

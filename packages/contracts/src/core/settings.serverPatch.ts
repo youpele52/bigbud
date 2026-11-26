@@ -7,6 +7,7 @@ import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import { InyosiraIdleSettingsPatchFields } from "./settings.inyosira";
 import { TerminalActivitySettingsPatchFields } from "./settings.terminalActivity";
 import { TerminalPasteSettingsPatchFields } from "./settings.terminalPaste";
+import { TerminalLifecycleSettingsPatchFields } from "./settings.terminalLifecycle";
 import { SearchSettingsPatchFields } from "./settings.search";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
@@ -160,6 +161,7 @@ export const ServerSettingsPatch = Schema.Struct({
   ...InyosiraIdleSettingsPatchFields,
   ...TerminalActivitySettingsPatchFields,
   ...TerminalPasteSettingsPatchFields,
+  ...TerminalLifecycleSettingsPatchFields,
   ...SearchSettingsPatchFields,
   providers: Schema.optionalKey(
     Schema.Struct({
@@ -203,6 +205,7 @@ export const ServerSettingsPatch = Schema.Struct({
           serviceFile: Schema.optionalKey(Schema.String),
           nativeServiceTrust: Schema.optionalKey(OpencodeV2NativeServiceTrust),
           nativePluginConfigRoot: Schema.optionalKey(OpencodeV2PluginConfigRoot),
+          remoteBinaryPath: Schema.optionalKey(Schema.String),
         }),
       ),
       pi: Schema.optionalKey(ProviderSettingsPatch),

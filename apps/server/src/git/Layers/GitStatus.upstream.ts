@@ -12,6 +12,8 @@ import {
   parseUpstreamRefWithRemoteNames,
   parseUpstreamRefByFirstSeparator,
 } from "./GitCoreUtils.ts";
+import { isInitiatingTransportUnavailable } from "./GitCore.initiatingTransport.ts";
+import { fetchThroughSelectedRoute } from "./GitCore.fetchRoute.hosts.ts";
 import { StatusRemoteRefreshCacheKey, type GitHelpers } from "./GitCoreExecutor.ts";
 import { type RemoteOps } from "./GitStatus.remotes.ts";
 
@@ -21,11 +23,14 @@ const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_FAILURE_COOLDOWN = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
+// An SSH remote without a bound owner transport will not change by retrying; back off hard.
+const STATUS_UPSTREAM_REFRESH_REFUSED_COOLDOWN = Duration.minutes(10);
 
 export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   helpers: GitHelpers,
   path: Path.Path,
   remoteOps: RemoteOps,
+  initiatingTransportDisabled: () => boolean,
 ) {
   const { executeGit, runGitStdout } = helpers;
   const {
@@ -61,25 +66,47 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   const fetchRemoteForStatus = (
     gitCommonDir: string,
     remoteName: string,
-  ): Effect.Effect<void, GitCommandError> => {
-    const fetchCwd =
-      path.basename(gitCommonDir) === ".git" ? path.dirname(gitCommonDir) : gitCommonDir;
-    return executeGit(
-      "GitCore.fetchRemoteForStatus",
-      fetchCwd,
-      ["--git-dir", gitCommonDir, "fetch", "--quiet", "--no-tags", remoteName],
-      {
-        allowNonZeroExit: true,
-        timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
-      },
-    ).pipe(Effect.asVoid);
-  };
+  ): Effect.Effect<void, GitCommandError> =>
+    Effect.gen(function* () {
+      const fetchCwd =
+        path.basename(gitCommonDir) === ".git" ? path.dirname(gitCommonDir) : gitCommonDir;
+      if (initiatingTransportDisabled()) {
+        yield* fetchThroughSelectedRoute(
+          {
+            cwd: fetchCwd,
+            remoteName,
+            refspecs: [],
+            timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
+          },
+          runGitStdout,
+        );
+        return;
+      }
+      yield* executeGit(
+        "GitCore.fetchRemoteForStatus",
+        fetchCwd,
+        ["--git-dir", gitCommonDir, "fetch", "--quiet", "--no-tags", remoteName],
+        {
+          allowNonZeroExit: true,
+          timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
+        },
+      );
+    });
 
   const refreshStatusRemoteCacheEntry = Effect.fn("refreshStatusRemoteCacheEntry")(function* (
     cacheKey: StatusRemoteRefreshCacheKey,
   ) {
-    yield* fetchRemoteForStatus(cacheKey.gitCommonDir, cacheKey.remoteName);
-    return true as const;
+    return yield* fetchRemoteForStatus(cacheKey.gitCommonDir, cacheKey.remoteName).pipe(
+      Effect.as("fetched" as const),
+      Effect.catchIf(isInitiatingTransportUnavailable, () =>
+        Effect.logInfo(
+          "Background upstream refresh skipped: this remote needs an owner-controlled transport that is not bound.",
+        ).pipe(
+          Effect.annotateLogs({ remoteName: cacheKey.remoteName }),
+          Effect.as("refused" as const),
+        ),
+      ),
+    );
   });
 
   const statusRemoteRefreshCache = yield* Cache.makeWith({
@@ -87,7 +114,9 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
     lookup: refreshStatusRemoteCacheEntry,
     timeToLive: (exit) =>
       Exit.isSuccess(exit)
-        ? STATUS_UPSTREAM_REFRESH_INTERVAL
+        ? exit.value === "refused"
+          ? STATUS_UPSTREAM_REFRESH_REFUSED_COOLDOWN
+          : STATUS_UPSTREAM_REFRESH_INTERVAL
         : STATUS_UPSTREAM_REFRESH_FAILURE_COOLDOWN,
   });
 

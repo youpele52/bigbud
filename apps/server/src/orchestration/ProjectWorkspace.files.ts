@@ -17,6 +17,10 @@ import {
   authorizeNativeWorkspaceCommit,
   nativeWorkspaceCommitEvents,
 } from "./ProjectWorkspace.engineTransition.ts";
+import {
+  projectTransportOnlyChange,
+  transportCarryOverBlocker,
+} from "./ProjectWorkspace.transportCarryOver.ts";
 
 export function projectWorkspacePersistenceError(
   command: OrchestrationCommand,
@@ -159,6 +163,8 @@ export const prepareProjectWorkspaceEvents = Effect.fn("prepareProjectWorkspaceE
           commandType: command.type,
           detail: `Thread '${retained.threadId}' retains worktree '${retained.worktreePath}'. Remove or detach this historical worktree before changing folders.`,
         });
+      // A transport-only switch keeps the folder; OpenCode V2 history is rebound at commit.
+      const transportOnly = projectTransportOnlyChange(command, readModel) !== undefined;
       for (const row of rows) {
         const nativeBindings =
           yield* sql`SELECT 1 FROM opencode_v2_shared_bindings WHERE thread_id = ${row.threadId}
@@ -166,7 +172,16 @@ export const prepareProjectWorkspaceEvents = Effect.fn("prepareProjectWorkspaceE
           UNION ALL SELECT 1 FROM provider_session_runtime WHERE thread_id = ${row.threadId} AND provider_name IN ('opencodeV2','muse')
           UNION ALL SELECT 1 FROM provider_turn_admissions WHERE owner_thread_id = ${row.threadId}
             AND json_extract(binding_json, '$.provider') IN ('opencodeV2','muse') LIMIT 1`;
-        if (nativeBindings.length && !nativeAuthorization)
+        const carryOver =
+          nativeBindings.length && !nativeAuthorization && transportOnly
+            ? yield* transportCarryOverBlocker(sql, row.threadId)
+            : "native";
+        if (carryOver === "live")
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Stop the OpenCode session in thread '${row.threadId}' before switching its connection. Its history is unchanged.`,
+          });
+        if (nativeBindings.length && !nativeAuthorization && carryOver === "native")
           return yield* new OrchestrationCommandInvariantError({
             commandType: command.type,
             detail: `Thread '${row.threadId}' retains provider-native history bound to the current folder. This provider cannot create a replacement session at another location without changing native ownership. Keep this project folder and create a new project for the new location; existing history is unchanged.`,

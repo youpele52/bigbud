@@ -1,11 +1,62 @@
-import { ApprovalRequestId } from "@bigbud/contracts";
+import {
+  ApprovalRequestId,
+  EventId,
+  RuntimeRequestId,
+  type ProviderApprovalDecision,
+} from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
-import { Deferred, Effect, Exit } from "effect";
+import { Deferred, Effect, Exit, Fiber, Stream } from "effect";
 import { vi } from "vitest";
+import { makeClaudeEventRuntime } from "./Adapter.events.ts";
+import { claudeInteractionGeneration } from "./Adapter.interactionIdentity.ts";
 import { awaitClaudeCallback } from "./Adapter.approval.wait.ts";
 import { makeApprovalTestHarness } from "./Adapter.approval.test.helpers.ts";
 
 describe("Claude SDK callback publication races", () => {
+  it.effect("does not expose a close to dispatch until the callback has released its guard", () =>
+    Effect.gen(function* () {
+      const { context } = yield* makeApprovalTestHarness();
+      const runtime = yield* makeClaudeEventRuntime(new Map([[context.session.threadId, context]]));
+      const requestId = ApprovalRequestId.makeUnsafe("pending-publication");
+      const decision = Deferred.makeUnsafe<ProviderApprovalDecision>();
+      const completion = yield* Deferred.make<void>();
+      const createdAt = "2026-11-23T12:00:00.000Z";
+      context.requestLedger.set(requestId, {
+        requestId,
+        kind: "approval",
+        state: "resolving",
+        cancelled: false,
+        decision,
+        completion,
+        createdAt,
+        requestType: "command_execution_approval",
+      });
+      yield* runtime.offerRuntimeEvent(context, {
+        type: "request.resolved",
+        provider: "claudeAgent",
+        threadId: context.session.threadId,
+        eventId: EventId.makeUnsafe("terminal-publication"),
+        createdAt,
+        requestId: RuntimeRequestId.makeUnsafe(requestId),
+        payload: { requestType: "command_execution_approval", decision: "cancel" },
+      });
+      const reader = yield* Stream.runHead(runtime.stream).pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      assert.isUndefined(reader.pollUnsafe());
+      yield* Deferred.succeed(completion, undefined);
+      const event = yield* Fiber.join(reader);
+      assert.equal(
+        event._tag === "Some" ? event.value.requestGeneration : undefined,
+        claudeInteractionGeneration(decision),
+      );
+      assert.notEqual(
+        claudeInteractionGeneration(Deferred.makeUnsafe<"cancel">()),
+        claudeInteractionGeneration(decision),
+      );
+      yield* runtime.shutdown;
+    }),
+  );
+
   it.effect(
     "shares one request and applies session allowances once during overlapping deliveries",
     () =>

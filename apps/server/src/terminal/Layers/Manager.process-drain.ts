@@ -15,23 +15,27 @@ import { withInteractiveTerminalIdentity } from "./Manager.shell.identity.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { buildWslTerminalShellCandidate } from "./Manager.wsl.invocation";
-import {
-  cleanupProcessHandles,
-  enqueueProcessEvent,
-  type ProcessLifecycleContext,
-} from "./Manager.process-lifecycle";
+import { enqueueProcessEvent, type ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import { type TerminalSessionState, type TerminalStartInput } from "./Manager.types";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
-import { confirmTerminalProcessStopped } from "./Manager.process.stop";
+import { resetSessionHistory } from "./Manager.session.state.ts";
 import { TerminalDeviceQueries } from "./TerminalDeviceQueries";
 import { observeTerminalProcessError } from "./Manager.process.error";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
 import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
+import {
+  terminalRunsLocalSshClient,
+  terminalShellPidIsInBand,
+} from "./OwnedPtyRuntime.identity.ts";
 import { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 import { startRecoveryModel, feedRecoveryModel } from "./Manager.recovery";
+import { beginTerminalHostSession, bindTerminalHostLifecycle } from "./Manager.hostLifecycle.ts";
+import { findTerminalHostLimitError } from "./Manager.hostLimit.ts";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
+import { cleanupFailedTerminalObserver } from "./Manager.process-drain.stop.ts";
+export { cleanupFailedTerminalObserver, stopProcessWith } from "./Manager.process-drain.stop.ts";
 export {
   pollSubprocessActivityWith,
   startProcessPollingWith,
@@ -50,56 +54,6 @@ function withLocalShellIntegration(
   if (!isLocalExecutionTarget(session.executionTargetId)) return env;
   const extra = ctx.shellIntegrationEnv(env);
   return extra ? { ...env, ...extra } : env;
-}
-
-export function cleanupFailedTerminalObserver(
-  process: PtyProcess | null,
-  kill: (process: PtyProcess) => Effect.Effect<void>,
-): Effect.Effect<void> {
-  if (!process) return Effect.void;
-  if (process.detach)
-    return Effect.sync(() => process.detach?.()).pipe(Effect.ignoreCause({ log: true }));
-  return kill(process);
-}
-
-// ---------------------------------------------------------------------------
-// stopProcessWith
-// ---------------------------------------------------------------------------
-
-export function stopProcessWith(
-  ctx: ProcessLifecycleContext,
-  clearKillFiber: (proc: PtyProcess | null) => Effect.Effect<void>,
-  session: TerminalSessionState,
-): Effect.Effect<void, TerminalExecutionTargetError> {
-  return Effect.gen(function* () {
-    const process = session.process;
-    yield* confirmTerminalProcessStopped(session, ctx.processKillGraceMs);
-    if (!process) return;
-    yield* ctx.flushPtyOutput(session.threadId, session.terminalId);
-    // Preserve trailing diagnostic output before dropping the old process handles.
-    yield* drainProcessEventsWith(ctx, clearKillFiber, session, process.pid);
-
-    yield* ctx.modifyManagerState((state) => {
-      cleanupProcessHandles(session);
-      session.process = null;
-      session.pid = null;
-      session.remoteShellPid = undefined;
-      session.hasRunningSubprocess = false;
-      session.activeAgentProvider = null;
-      session.activeAgent = null;
-      session.agentIdentityMisses = 0;
-      session.status = "exited";
-      session.pendingHistoryControlSequence = "";
-      session.pendingProcessEvents = [];
-      session.pendingProcessEventIndex = 0;
-      session.processEventDrainRunning = false;
-      session.updatedAt = nextTerminalTimestamp(session.updatedAt);
-      return [undefined, state] as const;
-    });
-
-    yield* clearKillFiber(process);
-    yield* ctx.evictInactiveSessionsIfNeeded();
-  }).pipe(Effect.withSpan("terminal.stopProcess"));
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +113,9 @@ export function startSessionWith(
       session.runtimeEpoch += 1;
       session.runtimeGeneration = randomUUID();
       session.modeTracker = undefined; // Modes belong to one process generation.
+      session.host = undefined;
+      session.endedReason = undefined;
+      session.hostLimitRefusal = undefined;
       session.updatedAt = nextTerminalTimestamp(session.updatedAt);
       return [undefined, state] as const;
     });
@@ -196,29 +153,50 @@ export function startSessionWith(
                 ),
               ),
             );
-            const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
+            const spawnResult = yield* trySpawnWith(
+              ctx,
+              session,
+              shellCandidates,
+              terminalEnv,
+              input.hostLifecycle,
+              eventType === "restarted" && session.remoteOwnerRecoveryRequired !== true,
+            );
             ptyProcess = spawnResult.process;
-            // A durable remote owner resumes after its acknowledged output cut,
-            // not from process birth. Empty local history is not a valid baseline.
-            session.historyUnavailable = ptyProcess.recovered === true;
+            // Only a verified birth-to-cut replay replaces retained local history.
+            // Other reattachments resume after a remote cursor and have no baseline.
+            const fromStart = ptyProcess.recovered && ptyProcess.recoveredHistoryFromStart;
+            if (fromStart) resetSessionHistory(session);
+            session.historyUnavailable = ptyProcess.recovered === true && !fromStart;
             startRecoveryModel(session, ptyProcess.recovered === true, ptyProcess);
             startedShell = spawnResult.shellLabel;
             startedDropPathMode = spawnResult.dropPathMode;
 
             const processPid = ptyProcess.pid;
             const runtimeEpoch = session.runtimeEpoch;
-            const readRemotePid =
-              !isLocalExecutionTarget(session.executionTargetId) &&
-              !isWslTerminalTargetId(session.executionTargetId) &&
-              ptyProcess.pidDomain !== "remote"
-                ? createRemoteShellPidReader(session.runtimeGeneration, (pid) => {
-                    session.remoteShellPid = pid;
-                  })
-                : (data: string) => data;
+            const readRemotePid = terminalShellPidIsInBand(
+              ctx.ptyAdapter,
+              session.executionTargetId,
+              ptyProcess,
+            )
+              ? createRemoteShellPidReader(session.runtimeGeneration, (pid) => {
+                  session.remoteShellPid = pid;
+                })
+              : (data: string) => data;
             const queryProcess = ptyProcess;
+            // Installed before onData: host output is counted for the screen splice (S3).
+            const hostSession = beginTerminalHostSession(session, ptyProcess);
+            session.host = hostSession?.state;
+            // Direct SSH (M7): the host idles it only on an explicit remote hint (§8.5).
+            if (
+              session.host &&
+              terminalRunsLocalSshClient(ctx.ptyAdapter, session.executionTargetId)
+            )
+              session.host.ownerBusyHint = "unknown";
+            // A host query responder and the view answer queries (§8.9); never answer twice.
             const queries =
-              isLocalExecutionTarget(session.executionTargetId) ||
-              isWslTerminalTargetId(session.executionTargetId)
+              ptyProcess.screen?.capabilities().queryResponder !== true &&
+              (isLocalExecutionTarget(session.executionTargetId) ||
+                isWslTerminalTargetId(session.executionTargetId))
                 ? new TerminalDeviceQueries((reply) => {
                     if (session.runtimeEpoch !== runtimeEpoch || session.stopPending) return false;
                     try {
@@ -238,13 +216,16 @@ export function startSessionWith(
               if (work) ctx.runFork(work);
               const output = queries ? queries.receive(visible) : visible;
               feedRecoveryModel(session, output);
-              if (output) ctx.runFork(ctx.queuePtyOutput(session, processPid, output));
+              if (!output) return;
+              session.host?.ledger.noteData(output);
+              ctx.runFork(ctx.queuePtyOutput(session, processPid, output));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
               if (session.runtimeEpoch !== runtimeEpoch) return;
               session.observedExit = { process: queryProcess, event };
               const tail = queries?.finish();
               if (tail) feedRecoveryModel(session, tail);
+              if (tail) session.host?.ledger.noteData(tail);
               if (tail) ctx.runFork(ctx.queuePtyOutput(session, processPid, tail));
               // Explicit restart owns the exit while awaiting durable remote release.
               if (
@@ -270,6 +251,14 @@ export function startSessionWith(
               );
             });
 
+            const unbindHost = ctx.hostHub
+              ? bindTerminalHostLifecycle({
+                  hub: ctx.hostHub,
+                  session,
+                  process: queryProcess,
+                  runFork: (effect) => void ctx.runFork(effect),
+                })
+              : undefined;
             yield* ctx.modifyManagerState((state) => {
               session.shellLaunchIdentity = spawnResult.identity;
               session.shellUnconfirmedLaunch = ptyProcess?.shellUnconfirmedLaunch;
@@ -279,7 +268,11 @@ export function startSessionWith(
               session.status = "running";
               session.dropPathMode = startedDropPathMode ?? session.dropPathMode;
               session.updatedAt = nextTerminalTimestamp(session.updatedAt);
-              session.unsubscribeData = unsubscribeData;
+              session.unsubscribeData = () => {
+                unsubscribeData();
+                hostSession?.dispose();
+                unbindHost?.();
+              };
               session.unsubscribeExit = unsubscribeExit;
               return [undefined, state] as const;
             });
@@ -297,6 +290,7 @@ export function startSessionWith(
               createdAt: session.updatedAt,
               snapshot: snapshotFn(session),
             });
+            if (session.host) ctx.hostHub?.sessionStarted(session.threadId, session.terminalId);
           }),
         ),
       ),
@@ -308,6 +302,9 @@ export function startSessionWith(
 
     {
       const error = startResult.failure;
+      // A limit refusal created nothing; the open reports it as TerminalLimitError instead.
+      session.hostLimitRefusal = findTerminalHostLimitError(error);
+      session.host = undefined;
       session.recoveryModel?.dispose("launch-failed");
       yield* cleanupFailedTerminalObserver(ptyProcess, (process) =>
         startKillEscalation(process, session.threadId, session.terminalId),
@@ -337,6 +334,13 @@ export function startSessionWith(
       yield* ctx.evictInactiveSessionsIfNeeded();
 
       const message = error.message;
+      if (session.hostLimitRefusal) {
+        yield* Effect.logInfo("terminal host refused a terminal at its live limit", {
+          threadId: session.threadId,
+          terminalId: session.terminalId,
+        });
+        return;
+      }
       yield* ctx.publishEvent({
         type: "error",
         threadId: session.threadId,

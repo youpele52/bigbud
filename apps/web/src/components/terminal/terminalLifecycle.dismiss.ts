@@ -1,5 +1,4 @@
 import { ThreadId } from "@bigbud/contracts";
-import { randomUUID } from "../../lib/utils";
 import { readTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
 import { dismissTerminalPaneInState } from "../../stores/terminal/terminal.store.dismiss";
@@ -16,12 +15,7 @@ export function dismissUnconfirmedTerminalPane(threadId: string, terminalId: str
   if (generation && operation.expectedGeneration && generation !== operation.expectedGeneration)
     return;
   useTerminalStateStore.setState((state) =>
-    dismissTerminalPaneInState(
-      state,
-      ThreadId.makeUnsafe(threadId),
-      terminalId,
-      `terminal-${randomUUID()}`,
-    ),
+    dismissTerminalPaneInState(state, ThreadId.makeUnsafe(threadId), terminalId),
   );
   finishTerminalLifecycle(threadId, terminalId, operation);
 }

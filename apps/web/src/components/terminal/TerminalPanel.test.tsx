@@ -1,20 +1,25 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseServerKeybindings = vi.fn(() => []);
 const mockUseTerminalPanelStore = vi.fn((selector: (state: { open: boolean }) => unknown) =>
   selector({ open: true }),
 );
+const mockNewPanelTerminal = vi.fn();
+const mockEnsurePanelTerminal = vi.fn();
+let mockPanelTerminalStateByThreadId: Record<string, { terminalIds: string[] }> = {};
 const mockUseTerminalStateStore = vi.fn(
   (
     selector: (state: {
-      panelTerminalStateByThreadId: Record<string, unknown>;
-      ensurePanelTerminal: () => void;
+      panelTerminalStateByThreadId: Record<string, { terminalIds: string[] }>;
+      newPanelTerminal: typeof mockNewPanelTerminal;
+      ensurePanelTerminal: typeof mockEnsurePanelTerminal;
     }) => unknown,
   ) =>
     selector({
-      panelTerminalStateByThreadId: {},
-      ensurePanelTerminal: () => undefined,
+      panelTerminalStateByThreadId: mockPanelTerminalStateByThreadId,
+      newPanelTerminal: mockNewPanelTerminal,
+      ensurePanelTerminal: mockEnsurePanelTerminal,
     }),
 );
 const mockUseThreadTerminalDrawer = vi.fn(() => ({
@@ -31,6 +36,7 @@ const mockUseThreadTerminalDrawer = vi.fn(() => ({
   activateTerminal: () => undefined,
   closeTerminal: () => undefined,
   setTerminalHeight: () => undefined,
+  bumpFocusRequestId: () => undefined,
   terminalState: {
     terminalHeight: 280,
     terminalIds: ["default"],
@@ -65,12 +71,40 @@ vi.mock("./ThreadTerminalDrawer", () => ({
 import { TerminalPanelContent } from "./TerminalPanel";
 
 describe("TerminalPanelContent", () => {
-  it("waits for explicit panel terminal state before mounting the terminal viewport", () => {
+  beforeEach(() => {
+    mockPanelTerminalStateByThreadId = {};
+    mockNewPanelTerminal.mockClear();
+    mockEnsurePanelTerminal.mockClear();
+  });
+
+  it("shows an empty state with New terminal and creates no terminal for a thread without one", () => {
     const markup = renderToStaticMarkup(
       <TerminalPanelContent activeThreadId={"thread-1" as never} />,
     );
 
-    expect(markup).toContain("Initializing terminal...");
+    expect(markup).toContain("No terminal in this thread.");
+    expect(markup).toContain("New terminal");
     expect(markup).not.toContain('data-testid="thread-terminal-drawer"');
+    expect(mockNewPanelTerminal).not.toHaveBeenCalled();
+    expect(mockEnsurePanelTerminal).not.toHaveBeenCalled();
+  });
+
+  it("treats an emptied panel surface as having no terminal", () => {
+    mockPanelTerminalStateByThreadId = { "thread-1": { terminalIds: [] } };
+    const markup = renderToStaticMarkup(
+      <TerminalPanelContent activeThreadId={"thread-1" as never} />,
+    );
+
+    expect(markup).toContain("No terminal in this thread.");
+  });
+
+  it("mounts the terminal viewport when the thread has panel terminals", () => {
+    mockPanelTerminalStateByThreadId = { "thread-1": { terminalIds: ["terminal-a"] } };
+    const markup = renderToStaticMarkup(
+      <TerminalPanelContent activeThreadId={"thread-1" as never} />,
+    );
+
+    expect(markup).toContain('data-testid="thread-terminal-drawer"');
+    expect(markup).not.toContain("No terminal in this thread.");
   });
 });

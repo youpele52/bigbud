@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { type ComposerCommandItem } from "../../composer/ComposerCommandMenu";
-import { openChatFileTarget } from "../../common/chatFileTargets";
+import { openDiscoveredSourcePath } from "../../common/chatFileTargets";
 import { buildSkillMentionPrompt } from "~/lib/skillMentions";
 
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -123,9 +123,9 @@ export function useChatViewComposerSyntheticMenu(input: UseChatViewComposerSynth
       if (!sourcePath) {
         return;
       }
-      openChatFileTarget(sourcePath, input.activeProjectCwd ?? undefined);
+      openDiscoveredSourcePath(sourcePath);
     },
-    [input.activeProjectCwd],
+    [],
   );
 
   const onCallAgent = useCallback(() => {

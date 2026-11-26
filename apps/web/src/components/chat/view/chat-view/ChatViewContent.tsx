@@ -81,6 +81,7 @@ export function ChatViewContent({
     <div
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[var(--app-shell-pane-fill)]"
       data-chat-view-root
+      data-thread-id={base.activeThread!.id}
     >
       <ContentPanelHeader>
         <ChatHeader
@@ -142,20 +143,15 @@ export function ChatViewContent({
         />
       </div>
 
-      {base.mountedTerminalThreadIds.map((mountedThreadId) => (
+      {/* Only the active thread's drawer renders; other threads' views wait in the registry. */}
+      {base.activeThreadId ? (
         <PersistentThreadTerminalDrawer
-          key={mountedThreadId}
-          threadId={mountedThreadId}
-          visible={mountedThreadId === base.activeThreadId && base.terminalState.terminalOpen}
-          presentation={
-            mountedThreadId === base.activeThreadId ? terminalLayout.terminalPresentation : "hidden"
-          }
-          launchContext={
-            mountedThreadId === base.activeThreadId
-              ? (base.activeTerminalLaunchContext ?? null)
-              : null
-          }
-          focusRequestId={mountedThreadId === base.activeThreadId ? base.terminalFocusRequestId : 0}
+          key={base.activeThreadId}
+          threadId={base.activeThreadId}
+          visible={base.terminalState.terminalOpen}
+          presentation={terminalLayout.terminalPresentation}
+          launchContext={base.activeTerminalLaunchContext ?? null}
+          focusRequestId={base.terminalFocusRequestId}
           splitShortcutLabel={composer.splitTerminalShortcutLabel ?? undefined}
           newShortcutLabel={composer.newTerminalShortcutLabel ?? undefined}
           closeShortcutLabel={composer.closeTerminalShortcutLabel ?? undefined}
@@ -164,7 +160,7 @@ export function ChatViewContent({
           onToggleExpanded={terminalLayout.toggleExpanded}
           onMinimize={() => terminalLayout.selectLayout("chat-only")}
         />
-      ))}
+      ) : null}
 
       {base.expandedImage ? (
         <ExpandedImageOverlay

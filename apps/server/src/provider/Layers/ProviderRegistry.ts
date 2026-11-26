@@ -244,16 +244,20 @@ const makeProviderRegistryLayer = (
 
       const refreshUsageLimits = singleFlightUsageRefresh(
         Effect.gen(function* () {
-          yield* refreshSubscriptionProviders(
+          const outcomes = yield* refreshSubscriptionProviders(
             registrations,
             currentProviderSnapshots(currentProviders),
           );
-          return yield* syncProviders();
+          return { providers: yield* syncProviders(), outcomes };
         }),
       );
 
       return {
         refreshUsageLimits,
+        getWorkspaceModels: (provider: ProviderKind, directory: string) =>
+          registrations
+            .find((entry) => entry.provider === provider)
+            ?.service.getWorkspaceModels?.(directory),
         getProviders: Effect.sync(() => currentProviderSnapshots(currentProviders)).pipe(
           Effect.tapError(Effect.logError),
           Effect.orElseSucceed(() => []),

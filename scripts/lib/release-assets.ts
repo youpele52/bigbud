@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { SSH_OWNER_RELEASE_TARGETS, sshOwnerReleaseAssetName } from "./packaged-ssh-owner.ts";
 import type { ReleaseMetadata } from "./release-metadata";
 
 const DESKTOP_ASSET_EXTENSIONS = [
@@ -111,7 +112,8 @@ export function verifyAssembledDesktopReleaseAssets(
   const desktopArtifactNames = names.filter(
     (name) =>
       !name.startsWith("server-workspace-agent-") &&
-      !name.startsWith("server-organization-supervisor-"),
+      !name.startsWith("server-organization-supervisor-") &&
+      !name.startsWith("server-ssh-owner-"),
   );
   for (const suffix of [
     "-arm64.dmg",
@@ -151,6 +153,15 @@ export function verifyAssembledDesktopReleaseAssets(
   ]) {
     if (!names.includes(`server-organization-supervisor-${target}`))
       throw new Error(`Missing packaged organisation supervisor: ${target}`);
+  }
+
+  // U4 standalone N owner cells; Windows arm64 is intentionally not shipped in v1.
+  for (const target of SSH_OWNER_RELEASE_TARGETS) {
+    const name = sshOwnerReleaseAssetName(target);
+    if (!names.includes(name)) throw new Error(`Missing packaged SSH owner: ${name}`);
+  }
+  if (names.includes("server-ssh-owner-win32-arm64.exe")) {
+    throw new Error("Unexpected packaged SSH owner: server-ssh-owner-win32-arm64.exe");
   }
 
   const manifestRequirements = [

@@ -8,6 +8,11 @@ import {
   TerminalRemoteAttachInput,
   TerminalRemoteDetachInput,
 } from "../workspace/terminal.remote";
+import {
+  TerminalForgetRetainedShellOwnersResult,
+  TerminalRetainedShellOwners,
+  TerminalRetainedShellOwnersInput,
+} from "../workspace/terminal.shellOwners";
 
 export const WsTerminalRemoteInventoryRpc = Rpc.make(WS_METHODS.terminalRemoteInventory, {
   payload: TerminalRemoteInventoryInput,
@@ -29,3 +34,26 @@ export const WsTerminalRemoteStopRpc = Rpc.make(WS_METHODS.terminalRemoteStop, {
   success: Schema.Void,
   error: TerminalError,
 });
+export const WsTerminalRetainedShellOwnersRpc = Rpc.make(WS_METHODS.terminalRetainedShellOwners, {
+  payload: TerminalRetainedShellOwnersInput,
+  success: TerminalRetainedShellOwners,
+  error: TerminalError,
+});
+/** Forgets only the given thread's unverifiable shell records; the remote shell is not stopped. */
+export const WsTerminalForgetRetainedShellOwnersRpc = Rpc.make(
+  WS_METHODS.terminalForgetRetainedShellOwners,
+  {
+    payload: TerminalRetainedShellOwnersInput,
+    success: TerminalForgetRetainedShellOwnersResult,
+    error: TerminalError,
+  },
+);
+
+export const TerminalRemoteRpcs = [
+  WsTerminalRemoteInventoryRpc,
+  WsTerminalRemoteAttachRpc,
+  WsTerminalRemoteDetachRpc,
+  WsTerminalRemoteStopRpc,
+  WsTerminalRetainedShellOwnersRpc,
+  WsTerminalForgetRetainedShellOwnersRpc,
+] as const;

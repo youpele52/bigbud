@@ -10,12 +10,6 @@ import {
   WsServerGetRemoteRuntimeUpdateStatusRpc,
   WsServerRequestRemoteRuntimeUpdateRpc,
 } from "./rpc.remoteBackendUpdate";
-import {
-  WsTerminalRemoteInventoryRpc,
-  WsTerminalRemoteAttachRpc,
-  WsTerminalRemoteDetachRpc,
-  WsTerminalRemoteStopRpc,
-} from "./rpc.terminalRemote";
 import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
@@ -28,9 +22,7 @@ import {
 } from "./rpc.worktrees";
 
 import { WS_METHODS } from "../constants/websocket.constant";
-import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
-import { WsTerminalShellProfilesRpc } from "./rpc.terminalShellProfiles";
-import { WsTerminalRecoveryRpc } from "./rpc.terminalRecovery";
+import { TerminalRpcs } from "./rpc.terminalGroup";
 import { WsOrchestrationGetOrganizationThreadSummariesRpc } from "./rpc.organization";
 import {
   WsOrchestrationGetMessageTextChunkRpc,
@@ -41,14 +33,6 @@ import {
   WsOrchestrationGetThreadBranchCopyRpc,
   WsOrchestrationStartThreadBranchRpc,
 } from "./rpc.branchCopy";
-import {
-  WsSubscribeTerminalSessionRpc,
-  WsTerminalOutputAckRpc,
-  WsTerminalSearchRpc,
-  WsTerminalStagePasteFileRpc,
-  WsTerminalViewRpc,
-} from "./rpc.terminalStream";
-import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
   WsKanbanCreateRpc,
   WsKanbanDeleteRpc,
@@ -67,6 +51,9 @@ import {
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsEntryActionsRpc,
+  WsProjectsCreateDirectoryRpc,
+  WsProjectsDeleteEntryRpc,
   WsSubscribeProjectDirectoryChangesRpc,
   WsTeachListProjectsRpc,
 } from "./rpc.workspace";
@@ -141,12 +128,6 @@ import {
   WsShellOpenInTerminalRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
-  WsTerminalClearRpc,
-  WsTerminalCloseRpc,
-  WsTerminalOpenRpc,
-  WsTerminalResizeRpc,
-  WsTerminalRestartRpc,
-  WsTerminalWriteRpc,
 } from "./rpc.core";
 import {
   WsServerGetRemoteAgentManualInstallRpc,
@@ -210,6 +191,14 @@ export * from "./rpc.workspace";
 
 export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+import {
+  WsServerDecideBackendDrainConsentRpc,
+  WsServerGetBackendDrainConsentRpc,
+} from "./rpc.backendDrain";
+import {
+  WsServerDrainSshOwnerIdentifiedPanesRpc,
+  WsServerGetSshOwnerAdmissionRpc,
+} from "./rpc.sshOwnerAdmission";
 import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 import { WsCopilotRuntimeRpc } from "./rpc.copilotRuntime";
 import { WsServerPeerPairingRpc } from "./rpc.remotePeer";
@@ -236,6 +225,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetProviderProvisioningStatusRpc,
   WsServerProvisionProviderRpc,
   WsServerRetryTextGenerationRpc,
+  WsServerGetBackendDrainConsentRpc,
+  WsServerDecideBackendDrainConsentRpc,
+  WsServerGetSshOwnerAdmissionRpc,
+  WsServerDrainSshOwnerIdentifiedPanesRpc,
   WsServerClaimMetadataWarningsRpc,
   WsServerAcknowledgeMetadataWarningRpc,
   WsWorktreeOperationsRpc,
@@ -309,6 +302,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
+  WsProjectsEntryActionsRpc,
+  WsProjectsCreateDirectoryRpc,
+  WsProjectsDeleteEntryRpc,
   WsKanbanListRpc,
   WsKanbanGetRpc,
   WsKanbanCreateRpc,
@@ -344,25 +340,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitInitRpc,
   WsGitFetchRpc,
   WsGitDiscardChangesRpc,
-  WsTerminalOpenRpc,
-  WsTerminalWriteRpc,
-  WsTerminalSnapshotRpc,
-  WsTerminalRemoteInventoryRpc,
-  WsTerminalRemoteAttachRpc,
-  WsTerminalRemoteDetachRpc,
-  WsTerminalRemoteStopRpc,
-  WsTerminalRecoveryRpc,
-  WsTerminalOutputAckRpc,
-  WsTerminalSearchRpc,
-  WsTerminalStagePasteFileRpc,
-  WsTerminalViewRpc,
-  WsSubscribeTerminalSessionRpc,
-  WsTerminalWslDistributionsRpc,
-  WsTerminalShellProfilesRpc,
-  WsTerminalResizeRpc,
-  WsTerminalClearRpc,
-  WsTerminalRestartRpc,
-  WsTerminalCloseRpc,
+  ...TerminalRpcs,
   WsSubscribeOrchestrationDomainEventsRpc,
   WsSubscribeThinkingActivityDeltasRpc,
   WsSubscribeTerminalEventsRpc,

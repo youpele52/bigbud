@@ -76,6 +76,8 @@ export const ThreadToolRequest = Schema.Struct({
   remoteTimeoutMs: Schema.optional(Schema.Number),
   remoteMaxOutputBytes: Schema.optional(Schema.Number),
   remoteOutputMode: Schema.optional(Schema.Literals(["error", "truncate"])),
+  /** Typed bridge tool for `remote_workspace_process` (validated by the tool module). */
+  remoteTool: Schema.optional(Schema.Unknown),
 });
 
 const OwnThreadSummaryRequest = Schema.Struct({

@@ -76,5 +76,16 @@
     "logins.json",
     "key3.db",
     "key4.db"
+  ],
+  "clutterFolders": [
+    "node_modules",
+    ".git",
+    "target",
+    "dist",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "site-packages",
+    "Library/Caches"
   ]
 }

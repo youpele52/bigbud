@@ -7,7 +7,6 @@ import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { usePersistComposerImageAttachments } from "./chat-view-effects.attachments.hooks";
-import { usePendingUserInputComposerSync } from "./chat-view-effects.pendingInput.hooks";
 import { shouldTickElapsedClock } from "./chat-view-agent-activity.logic";
 
 interface ChatViewEffectsInput {
@@ -74,7 +73,6 @@ export function useChatViewEffects({
   const { closePullRequestDialog, focusComposer } = runtime;
 
   usePersistComposerImageAttachments(base);
-  usePendingUserInputComposerSync(base, thread);
 
   useEffect(() => {
     setExpandedWorkGroups({});

@@ -5,9 +5,11 @@ import {
   type ProviderUserInputAnswers,
 } from "@bigbud/contracts";
 
-import { killCodexChildProcess } from "../provider/codexAppServer";
 import { type CodexUserInputAnswer } from "./codexAppServerManager.types";
-import { type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  terminateCodexAppServerProcess,
+  type CodexAppServerProcess,
+} from "./codexAppServerManager.processHandle.ts";
 
 /**
  * Maps the T3 runtime mode to Codex approval policy and sandbox settings.
@@ -56,8 +58,8 @@ export function mapCodexTurnSandboxPolicy(
  * wrapper, leaving the actual command running. Use `taskkill /T` to kill the
  * entire process tree instead.
  */
-export function killChildTree(child: ChildProcessWithoutNullStreams): void {
-  killCodexChildProcess(child);
+export function killChildTree(child: CodexAppServerProcess): void {
+  terminateCodexAppServerProcess(child);
 }
 
 function toCodexUserInputAnswer(value: unknown): CodexUserInputAnswer {

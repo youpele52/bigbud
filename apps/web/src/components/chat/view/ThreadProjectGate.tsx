@@ -1,9 +1,14 @@
 import type { ProjectId } from "@bigbud/contracts/core/baseSchemas";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useProjectReadiness } from "../../../hooks/useProjectReadiness";
 import { BigbudLoader } from "../../layout/BigbudLoader";
 import { Button } from "../../ui/button";
+
+interface LastReadyChildren {
+  projectId: ProjectId | undefined;
+  children: ReactNode;
+}
 
 export function ThreadProjectGate({
   projectId,
@@ -15,10 +20,16 @@ export function ThreadProjectGate({
   const { project, error, retry } = useProjectReadiness(projectId);
   // Local draft routes already resolve their project before creation.
   const ready = projectId === undefined || project !== undefined;
-  const [readyProjectId, setReadyProjectId] = useState(ready ? projectId : undefined);
-  useEffect(() => {
-    if (ready) setReadyProjectId(projectId);
-  }, [projectId, ready]);
+  // The last ready subtree stays mounted (hidden, inert) while another project loads, so a
+  // thread switch does not unmount ChatView and dispose every hidden terminal drawer.
+  const [lastReady, setLastReady] = useState<LastReadyChildren | null>(() =>
+    ready ? { projectId, children } : null,
+  );
+  if (ready && (lastReady?.projectId !== projectId || lastReady?.children !== children)) {
+    setLastReady({ projectId, children });
+  }
+  const content =
+    ready || lastReady?.projectId === projectId ? children : (lastReady?.children ?? null);
 
   return (
     <>
@@ -39,7 +50,7 @@ export function ThreadProjectGate({
       ) : null}
       {/* Keep an existing composer mounted during recovery, including its local draft state. */}
       <div className={ready ? "contents" : "hidden"} hidden={!ready} inert={!ready}>
-        {ready || readyProjectId === projectId ? children : null}
+        {content}
       </div>
     </>
   );

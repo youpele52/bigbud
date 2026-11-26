@@ -81,6 +81,8 @@ export function createTerminalViewportDelivery(input: {
   observeOutput?: (data: string) => void;
   /** The view attached live without a history baseline and asked its program to repaint. */
   onLiveAttach?: () => void;
+  /** A host screen copy is painted and live; the view fits, which resizes the PTY. */
+  onScreenApplied?: () => void;
   batcherOptions?: TerminalWriteBatcherOptions;
 }) {
   let disposed = false;
@@ -133,6 +135,9 @@ export function createTerminalViewportDelivery(input: {
       target = { threadId: attached.threadId, terminalId: attached.terminalId };
       void redraw.request();
       input.onLiveAttach?.();
+    },
+    () => {
+      if (!disposed) input.onScreenApplied?.();
     },
   );
   return {

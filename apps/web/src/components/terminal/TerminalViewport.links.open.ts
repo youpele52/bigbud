@@ -255,7 +255,11 @@ export async function openTerminalPath(input: OpenTerminalPathInput): Promise<vo
 
   if (classified.kind === "directory") {
     if (classified.workspaceRelativePath !== null) {
-      openDirectoryInFilesPanel(classified.workspaceRelativePath, null, input.executionTargetId);
+      openDirectoryInFilesPanel(
+        classified.workspaceRelativePath,
+        workspaceRoot,
+        input.executionTargetId,
+      );
       return;
     }
     if (!openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot, input.executionTargetId)) {
@@ -278,7 +282,7 @@ export async function openTerminalPath(input: OpenTerminalPathInput): Promise<vo
     openFileInFilesPanel(
       classified.workspaceRelativePath,
       classified.position,
-      null,
+      workspaceRoot,
       input.executionTargetId,
     );
     return;

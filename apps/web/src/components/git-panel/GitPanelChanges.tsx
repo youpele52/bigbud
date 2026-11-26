@@ -1,11 +1,14 @@
 import type { GitStatusResult } from "@bigbud/contracts";
+import type { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { cn } from "~/lib/utils";
-import { openFileInFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { openRootFileInFilesPanel } from "~/stores/files/filesPanel.open";
 import { joinWorkspaceEntryPath, writeFilesPanelDragEntry } from "../files/filesPanel.dnd";
 import { showGitChangedFileCopyMenu } from "./GitPanel.copy";
+import type { GitDiscardRequest } from "./GitPanel.discard.logic";
+import { GitPanelDiscardDialog } from "./GitPanelDiscardDialog";
 import { GitPatchViewer } from "./GitPatchViewer";
 import { GitPanelSplitView } from "./GitPanelSplitView";
 
@@ -17,6 +20,7 @@ interface GitPanelChangesProps {
   onSelectFile: (path: string) => void;
   selectedFilePath: string | null;
   workspaceRoot: string;
+  executionTargetId?: ExecutionTargetId | undefined;
 }
 
 export function GitPanelChanges({
@@ -27,9 +31,11 @@ export function GitPanelChanges({
   onSelectFile,
   selectedFilePath,
   workspaceRoot,
+  executionTargetId,
 }: GitPanelChangesProps) {
   const files = gitStatus.workingTree.files;
   const [visibleCount, setVisibleCount] = useState(20);
+  const [discardRequest, setDiscardRequest] = useState<GitDiscardRequest | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const visibleFiles = useMemo(() => files.slice(0, visibleCount), [files, visibleCount]);
 
@@ -58,88 +64,105 @@ export function GitPanelChanges({
   }
 
   return (
-    <GitPanelSplitView
-      resizeAriaLabel="Resize git changes list"
-      sidebar={
-        <>
-          <div className="border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
-            {files.length} changed file{files.length === 1 ? "" : "s"}
-          </div>
-          <div>
-            {visibleFiles.map((file) => {
-              const isSelected = file.path === selectedFilePath;
-              return (
-                <div
-                  key={file.path}
-                  role="button"
-                  tabIndex={0}
-                  draggable
-                  className={cn(
-                    "flex w-full flex-col border-b border-border/40 px-3 py-2 text-left transition-colors select-text outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-                    isSelected
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground hover:bg-accent/40",
-                  )}
-                  onDragStart={(event) => {
-                    const absolutePath = joinWorkspaceEntryPath(workspaceRoot, file.path);
-                    const name = file.path.split("/").at(-1) ?? file.path;
-                    writeFilesPanelDragEntry(event.dataTransfer, {
-                      name,
-                      path: absolutePath,
-                      entryKind: "file",
-                    });
-                  }}
-                  onClick={(event) => {
-                    onSelectFile(file.path);
-                    if ((event.target as HTMLElement).closest("[data-git-file-path]")) {
-                      openFileInFilesPanel(file.path);
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    void showGitChangedFileCopyMenu({
-                      path: file.path,
-                      position: { x: event.clientX, y: event.clientY },
-                    });
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
+    <>
+      {discardRequest ? (
+        <GitPanelDiscardDialog
+          request={discardRequest}
+          workspaceRoot={workspaceRoot}
+          executionTargetId={executionTargetId}
+          onClose={() => setDiscardRequest(null)}
+        />
+      ) : null}
+      <GitPanelSplitView
+        resizeAriaLabel="Resize git changes list"
+        sidebar={
+          <>
+            <div className="border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
+              {files.length} changed file{files.length === 1 ? "" : "s"}
+            </div>
+            <div>
+              {visibleFiles.map((file) => {
+                const isSelected = file.path === selectedFilePath;
+                return (
+                  <div
+                    key={file.path}
+                    role="button"
+                    tabIndex={0}
+                    draggable
+                    className={cn(
+                      "flex w-full flex-col border-b border-border/40 px-3 py-2 text-left transition-colors select-text outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
+                      isSelected
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground hover:bg-accent/40",
+                    )}
+                    onDragStart={(event) => {
+                      const absolutePath = joinWorkspaceEntryPath(workspaceRoot, file.path);
+                      const name = file.path.split("/").at(-1) ?? file.path;
+                      writeFilesPanelDragEntry(event.dataTransfer, {
+                        name,
+                        path: absolutePath,
+                        entryKind: "file",
+                      });
+                    }}
+                    onClick={(event) => {
                       onSelectFile(file.path);
-                    }
-                  }}
-                >
-                  <span
-                    data-git-file-path
-                    className="truncate text-sm font-light underline-offset-2 hover:underline"
+                      if ((event.target as HTMLElement).closest("[data-git-file-path]")) {
+                        openRootFileInFilesPanel(workspaceRoot, file.path, executionTargetId);
+                      }
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      void showGitChangedFileCopyMenu({
+                        path: file.path,
+                        listedPaths: files.map((listed) => listed.path),
+                        position: { x: event.clientX, y: event.clientY },
+                        onDiscard: setDiscardRequest,
+                      });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectFile(file.path);
+                      }
+                    }}
                   >
-                    {file.path}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    +{file.insertions} -{file.deletions}
-                  </span>
+                    <span
+                      data-git-file-path
+                      className="truncate text-sm font-light underline-offset-2 hover:underline"
+                    >
+                      {file.path}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      +{file.insertions} -{file.deletions}
+                    </span>
+                  </div>
+                );
+              })}
+              {visibleCount < files.length ? (
+                <div ref={loadMoreRef} className="px-3 py-2 text-xs text-muted-foreground">
+                  Scroll for more changed files
                 </div>
-              );
-            })}
-            {visibleCount < files.length ? (
-              <div ref={loadMoreRef} className="px-3 py-2 text-xs text-muted-foreground">
-                Scroll for more changed files
-              </div>
-            ) : null}
-          </div>
-        </>
-      }
-      main={
-        diffError ? (
-          <div className="p-4 text-sm text-destructive">{diffError}</div>
-        ) : isLoadingDiff ? (
-          <BigbudLoader label="Loading diff..." />
-        ) : (
-          <div className="flex h-full min-h-0 flex-col overflow-hidden">
-            <GitPatchViewer emptyLabel="No diff available for this file." patch={diffPatch} />
-          </div>
-        )
-      }
-    />
+              ) : null}
+            </div>
+          </>
+        }
+        main={
+          diffError ? (
+            <div className="p-4 text-sm text-destructive">{diffError}</div>
+          ) : isLoadingDiff ? (
+            <BigbudLoader label="Loading diff..." />
+          ) : (
+            <div className="flex h-full min-h-0 flex-col overflow-hidden">
+              <GitPatchViewer
+                emptyLabel="No diff available for this file."
+                patch={diffPatch}
+                workspaceRoot={workspaceRoot}
+                executionTargetId={executionTargetId}
+              />
+            </div>
+          )
+        }
+      />
+    </>
   );
 }

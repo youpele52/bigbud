@@ -66,6 +66,7 @@ describe("PiOrchestrationBridge", () => {
     });
 
     expect(source).toContain("modelSelection: Type.Optional(Type.Object({");
+    expect(source).toContain("effort: Type.Optional(Type.String(");
     expect(source).toContain("...(modelSelection !== undefined ? { modelSelection } : {}),");
     expect(source).toContain('name: "list_available_models"');
     expect(source).toContain("action: 'list_available_models'");

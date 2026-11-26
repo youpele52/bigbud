@@ -6,6 +6,7 @@ import {
   DESKTOP_PENDING_SUSPEND_MAX_AGE_MS,
   initialDesktopHintState,
   observeSupervisorSuspendedMillis,
+  routeDesktopHintLine,
   SUPERVISOR_SUSPENDED_JUMP_MS,
 } from "./SystemSleepEpochs.sources.logic.ts";
 
@@ -164,5 +165,20 @@ describe("observeSupervisorSuspendedMillis", () => {
       state: { suspendedMillis: 1_000 },
       evidence: null,
     });
+  });
+});
+
+describe("routeDesktopHintLine", () => {
+  it("sends quit lines to the quit intent and every other kind to the sleep epochs", () => {
+    const quit = {
+      kind: "quit",
+      sequence: 3,
+      occurredAt: T0,
+      online: null,
+      reason: "update",
+    } as const;
+    expect(routeDesktopHintLine(quit)).toEqual({ target: "quit-intent", hint: quit });
+    const resume = { kind: "resume", sequence: 4, occurredAt: T0, online: true } as const;
+    expect(routeDesktopHintLine(resume)).toEqual({ target: "sleep-epochs", hint: resume });
   });
 });

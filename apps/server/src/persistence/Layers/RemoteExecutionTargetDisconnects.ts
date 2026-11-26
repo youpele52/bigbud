@@ -6,6 +6,7 @@ import {
   releaseSshTargetDisconnectStore,
   type SshTargetDisconnectStore,
 } from "../../ssh/sshTargetDisconnects.ts";
+import { createRemoteExecutionTargetDisconnectsTable } from "../RemoteExecutionTargetDisconnects.schema.ts";
 
 /**
  * Loads user-initiated SSH target disconnects into the in-memory guard and
@@ -26,12 +27,8 @@ export const makeRemoteExecutionTargetDisconnects = Effect.gen(function* () {
         () => undefined,
       ),
   };
-  // Self-owned table, created here rather than by a numbered migration so this
-  // standalone feature does not depend on migration ordering.
-  yield* sql`CREATE TABLE IF NOT EXISTS remote_execution_target_disconnects (
-    target_id TEXT PRIMARY KEY NOT NULL,
-    disconnected_at INTEGER NOT NULL
-  )`;
+  // Still support callers that construct this layer without the full migrations.
+  yield* createRemoteExecutionTargetDisconnectsTable(sql);
   const rows = yield* sql<{
     target_id: string;
   }>`SELECT target_id FROM remote_execution_target_disconnects ORDER BY target_id`;

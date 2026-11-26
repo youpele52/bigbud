@@ -158,6 +158,40 @@ it.layer(TestLayer)("WorkspacePathsLive", (it) => {
       }),
     );
 
+    it.effect("rejects remote escapes and roots that are not absolute on their target", () =>
+      Effect.gen(function* () {
+        const paths = yield* WorkspacePaths;
+        const rejected = (workspaceRoot: string, relativePath: string) =>
+          paths
+            .resolveRelativePathWithinRoot({
+              workspaceRoot,
+              relativePath,
+              executionTargetId: "ssh:dev",
+            })
+            .pipe(
+              Effect.flip,
+              Effect.map((error) => error._tag),
+            );
+        for (const relativePath of ["../other/file", "a/../../file", "/etc/passwd", "a\u0000b"]) {
+          expect(yield* rejected("/srv/project", relativePath)).toBe(
+            "WorkspacePathOutsideRootError",
+          );
+        }
+        // Never resolved against the server's working directory.
+        expect(yield* rejected("project", "file")).toBe("WorkspacePathOutsideRootError");
+        expect(yield* rejected("./project", "file")).toBe("WorkspacePathOutsideRootError");
+        const inside = yield* paths.resolveRelativePathWithinRoot({
+          workspaceRoot: "/srv/project/",
+          relativePath: "a/../src/main.ts",
+          executionTargetId: "ssh:dev",
+        });
+        expect(inside).toEqual({
+          absolutePath: "/srv/project/src/main.ts",
+          relativePath: "src/main.ts",
+        });
+      }),
+    );
+
     it.effect("rejects paths that escape the workspace root", () =>
       Effect.gen(function* () {
         const workspacePaths = yield* WorkspacePaths;

@@ -7,6 +7,8 @@ export function prepareTerminalLaunchHistory(session: TerminalSessionState, reco
     history: session.history,
     historyTruncated: session.historyTruncated,
     historyUnavailable: session.historyUnavailable,
+    historyTrimmed: session.historyTrimmed,
+    historyRetention: session.historyRetention,
     historyBytes: session.historyBytes,
     historyNewlines: session.historyNewlines,
     historyTail: session.historyTail,

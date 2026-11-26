@@ -1,9 +1,22 @@
 use super::*;
 
+#[derive(Clone)]
+pub(super) struct PtyPaneIdentity {
+    pub(super) thread_id: String,
+    pub(super) pane_id: String,
+    pub(super) kind: String,
+}
+
 pub(super) struct PtySession {
     pub(super) handle: Arc<pty::PtyHandle>,
     pub(super) request_digest: Vec<u8>,
     pub(super) expires_at: Option<Instant>,
+    /// Application identity and kind for X2 inventory; absent on legacy creates.
+    pub(super) pane_identity: Option<PtyPaneIdentity>,
+    /// Present only for PTYs created by a 1.9 client on a terminal host (plan §8.7 opt-in).
+    pub(super) lifecycle: Option<Arc<super::pty_lifecycle::PtyLifecycle>>,
+    /// The workspace root this session holds a reference on (plan §8.10).
+    pub(super) workspace_handle: String,
 }
 
 impl AgentSession {
@@ -28,9 +41,9 @@ impl AgentSession {
             replay_gap,
         )];
         responses.extend(
-            chunks
-                .into_iter()
-                .map(|chunk| pty_output_frame(&request.pty_id, chunk.sequence, chunk.bytes)),
+            chunks.into_iter().map(|chunk| {
+                pty_output_frame(&request.pty_id, chunk.sequence, chunk.bytes.to_vec())
+            }),
         );
         if snapshot.state != pty::PtyState::Running {
             responses.push(pty_exited_frame(
@@ -42,16 +55,19 @@ impl AgentSession {
         Ok(responses)
     }
 
+    /// Appends one output chunk to the replay ring and returns its frame plus the shared
+    /// chunk (the screen feed and spool take the same allocation, not copies).
     pub fn record_pty_output(
         &mut self,
         pty_id: &str,
-        bytes: Vec<u8>,
-    ) -> Result<v1::Frame, SessionError> {
+        bytes: pty::OutputBytes,
+    ) -> Result<(v1::Frame, pty::PtyOutputChunk), SessionError> {
         let handle = self.pty(pty_id)?;
         let chunk = handle
             .append_output(bytes)
             .map_err(|error| SessionError::Pty(error.to_string()))?;
-        Ok(pty_output_frame(pty_id, chunk.sequence, chunk.bytes))
+        let frame = pty_output_frame(pty_id, chunk.sequence, chunk.bytes.to_vec());
+        Ok((frame, chunk))
     }
 
     pub fn complete_pty(
@@ -90,10 +106,20 @@ impl AgentSession {
 
     pub(super) fn prune_pty_sessions(&mut self) {
         let now = Instant::now();
-        self.pty_sessions.retain(|_, session| {
-            !session.handle.child_reaped()
-                || session.expires_at.is_none_or(|expires_at| expires_at > now)
-        });
+        let expired = self
+            .pty_sessions
+            .iter()
+            .filter(|(_, session)| {
+                session.handle.child_reaped()
+                    && session
+                        .expires_at
+                        .is_some_and(|expires_at| expires_at <= now)
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        for id in expired {
+            self.retire_pty_session(&id);
+        }
     }
 
     pub(super) fn handle_pty_input(&mut self, request: v1::PtyInput) -> v1::Frame {
@@ -163,9 +189,13 @@ impl AgentSession {
     pub(super) fn handle_pty_close(&mut self, request: v1::PtyCloseRequest) -> v1::Frame {
         let pty_id = request.pty_id.clone();
         let result = self.pty(&pty_id).and_then(|handle| {
-            handle
+            let result = handle
                 .close(request.terminate)
-                .map_err(|error| SessionError::Pty(error.to_string()))
+                .map_err(|error| SessionError::Pty(error.to_string()));
+            if result.is_ok() && request.terminate {
+                let _outcome = handle.wait_closed(pty::PtyHandle::close_deadline());
+            }
+            result
         });
         if result.is_ok()
             && let Some(session) = self.pty_sessions.get_mut(&pty_id)

@@ -1,5 +1,8 @@
-import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import { runSshCommand } from "../ssh/sshProcess.ts";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
+import { makeRemoteAgentOwnerExec } from "./remoteAgentControl.owner.ts";
+import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
 import {
   MAX_REMOTE_AGENT_REGISTRY_BYTES,
   parseRemoteAgentRegistry,
@@ -27,16 +30,20 @@ export function buildRemoteAgentRegistryReadOnlyProbe(): string {
 /** `null` when there is no registry; throws when the registry exists but cannot be parsed. */
 export async function readRemoteAgentRegistryReadOnly(
   executionTargetId: string,
-  run: (input: RunSshCommandInput) => Promise<unknown> = runSshCommand,
+  run?: RemoteAgentCommandRunner,
   timeoutMs = 15_000,
 ): Promise<RemoteAgentRegistry | null> {
-  const { stdout } = await runRemoteAgentDiagnosedCommand(run, "preflight", {
-    executionTargetId,
-    command: "sh",
-    args: ["-c", buildRemoteAgentRegistryReadOnlyProbe()],
-    timeoutMs,
-    maxBufferBytes: MAX_REMOTE_AGENT_REGISTRY_BYTES + 16,
-  });
+  // U25: production activation reads through the owner's fixed read-only template (15 s).
+  const owner = run ? undefined : remoteAgentOwnerSelection();
+  const { stdout } = owner
+    ? await makeRemoteAgentOwnerExec(owner, executionTargetId)({ kind: "readOnlyStatus" })
+    : await runRemoteAgentDiagnosedCommand(run ?? runSshCommand, "preflight", {
+        executionTargetId,
+        command: "sh",
+        args: ["-c", buildRemoteAgentRegistryReadOnlyProbe()],
+        timeoutMs,
+        maxBufferBytes: MAX_REMOTE_AGENT_REGISTRY_BYTES + 16,
+      });
   return stdout.trim() === "absent" ? null : parseRemoteAgentRegistry(stdout);
 }
 
@@ -90,7 +97,7 @@ export function summarizeRemoteAgentRegistry(
 
 export async function remoteAgentReadOnlyStatus(
   executionTargetId: string,
-  run?: (input: RunSshCommandInput) => Promise<unknown>,
+  run?: RemoteAgentCommandRunner,
   timeoutMs?: number,
 ): Promise<RemoteAgentReadOnlyStatus> {
   return summarizeRemoteAgentRegistry(

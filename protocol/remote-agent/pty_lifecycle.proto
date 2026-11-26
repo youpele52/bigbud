@@ -1,0 +1,201 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+// Added in 1.9. Terminal lifecycle frames (Frame fields 80-95). Every message is
+// gated by a capability advertised in AgentHello only when the agent implements
+// it: terminal.screen (80-82, 87/88), terminal.lifecycle (83-86, 89-95),
+// terminal.spool, terminal.query-responder and terminal.local-launch, all v1.
+// Older agents ignore these frames, so clients must check capabilities first.
+
+// Requires terminal.screen v1. `attach_renderer` atomically moves the query
+// responder cut to the snapshot's `through_sequence`.
+message PtyScreenSnapshotRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  // UTF-16 code units; 0 means the host default (1,048,576).
+  uint32 max_ansi_units = 3;
+  // UTF-8 bytes; 0 means the host default (3 MiB).
+  uint32 max_utf8_bytes = 4;
+  // 0 means the model's full retained scrollback.
+  uint32 max_scrollback_rows = 5;
+  bool attach_renderer = 6;
+}
+
+// Sent on the paced response path, never as a streaming frame. A refusal has
+// `accepted = false`, an `error_code` (for example SNAPSHOT_BUSY) and no chunks.
+message PtyScreenSnapshotHeader {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  uint64 through_sequence = 5;
+  uint32 cols = 6;
+  uint32 rows = 7;
+  uint32 scrollback_rows = 8;
+  bool alternate_screen = 9;
+  // "full" | "trimmed" | "partial".
+  string fidelity = 10;
+  // "live" | "cold" | "invalid".
+  string model_state = 11;
+  // At most 16 PtyScreenSnapshotChunk frames follow an accepted header.
+  uint32 chunk_count = 12;
+  // Sum of every chunk's bytes; at most 3 MiB.
+  uint64 total_ansi_bytes = 13;
+  // Incomplete escape sequence to replay after the ANSI; at most 16 KiB.
+  bytes pending_escape_tail = 14;
+  // SHA-256 of the concatenated chunk bytes, in index order.
+  bytes sha256 = 15;
+  // Scrollback rows dropped or reflowed when `fidelity` is not "full".
+  uint32 trimmed_rows = 16;
+  string error_message = 17;
+}
+
+// One slice of the snapshot ANSI; `bytes` is at most 192 KiB.
+message PtyScreenSnapshotChunk {
+  string request_id = 1;
+  uint32 index = 2;
+  bool last = 3;
+  bytes bytes = 4;
+}
+
+// Requires terminal.lifecycle v1. Sent on transitions, at most once per second.
+message PtyActivity {
+  string pty_id = 1;
+  bool idle_busy = 2;
+  bool pressure_busy = 3;
+  bool sidebar_busy = 4;
+  repeated string reasons = 5;
+  uint64 last_input_ms = 6;
+  uint64 last_output_ms = 7;
+  uint64 quiet_since_ms = 8;
+}
+
+// `kind`: idle_warning | idle_warning_cleared | idle_closed | pressure_closed |
+// pressure_no_candidate | limit_closed | orphan_closed | quit_closed |
+// model_invalid | spool_degraded. `notice_id` increases per agent epoch.
+message PtyLifecycleNotice {
+  uint64 notice_id = 1;
+  string pty_id = 2;
+  string kind = 3;
+  uint64 closes_at_ms = 4;
+  uint64 occurred_at_ms = 5;
+}
+
+// Zero numeric values mean the host default. Rust clamps every value: idle at
+// least 60 s, warning at most idle / 2, limit 1..40, orphan 0 or at least 60 s.
+message HostPolicy {
+  bool lifecycle_enabled = 1;
+  uint64 idle_close_ms = 2;
+  // Lead time before the idle close at which `idle_warning` is emitted.
+  uint64 idle_warning_ms = 3;
+  uint32 max_live_ptys = 4;
+  uint64 orphan_close_ms = 5;
+  bool memory_pressure_enabled = 6;
+  uint32 memory_available_low_percent = 7;
+  uint32 memory_available_critical_percent = 8;
+  uint64 host_rss_low_bytes = 9;
+  uint64 host_rss_critical_bytes = 10;
+  uint32 terminal_rss_low_percent = 11;
+  uint32 terminal_rss_critical_percent = 12;
+  // The latest pushed revision wins.
+  uint64 revision = 13;
+}
+
+message HostPolicyUpdateRequest {
+  string request_id = 1;
+  HostPolicy policy = 2;
+}
+
+// `effective` carries the clamped values the host applies.
+message HostPolicyUpdateResponse {
+  string request_id = 1;
+  bool accepted = 2;
+  string error_code = 3;
+  string error_message = 4;
+  HostPolicy effective = 5;
+}
+
+// Full view state; each request replaces the previous one for this PTY.
+// Detaching sends `renderer_attached = false` with `acked_sequence`, the last
+// output sequence the view parsed; the host answers queries only after it.
+message PtyViewStateRequest {
+  string request_id = 1;
+  string pty_id = 2;
+  // "visible" | "hidden".
+  string view_state = 3;
+  bool renderer_attached = 4;
+  // "busy" | "idle" | "unknown"; empty means no owner hint.
+  string owner_busy_hint = 5;
+  string theme_fg = 6;
+  string theme_bg = 7;
+  uint64 acked_sequence = 8;
+}
+
+message PtyViewStateResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PtyKeepOpenRequest {
+  string request_id = 1;
+  string pty_id = 2;
+}
+
+message PtyKeepOpenResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PtyCloseAllRequest {
+  string request_id = 1;
+  // "quit" | "update".
+  string reason = 2;
+  bool managed_only = 3;
+}
+
+message PtyCloseAllResponse {
+  string request_id = 1;
+  bool accepted = 2;
+  string error_code = 3;
+  string error_message = 4;
+  uint32 closed_count = 5;
+}
+
+message HostResourceReport {
+  uint64 sampled_at_ms = 1;
+  // "normal" | "low" | "critical".
+  string memory_level = 2;
+  uint64 memory_available_bytes = 3;
+  uint64 memory_total_bytes = 4;
+  uint64 host_rss_bytes = 5;
+  uint64 terminal_rss_bytes = 6;
+  uint64 screen_model_bytes = 7;
+  uint64 spool_bytes = 8;
+  uint32 live_ptys = 9;
+  uint32 managed_live_ptys = 10;
+  uint32 max_live_ptys = 11;
+}
+
+// Replays the host's notice ring (64 entries) after `after_notice_id`.
+message HostNoticeReplayRequest {
+  string request_id = 1;
+  string expected_epoch = 2;
+  uint64 after_notice_id = 3;
+}
+
+message HostNoticeReplayResponse {
+  string request_id = 1;
+  string agent_epoch = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  repeated PtyLifecycleNotice notices = 5;
+  // True when notices after `after_notice_id` were already evicted.
+  bool gap = 6;
+}

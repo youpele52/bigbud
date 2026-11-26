@@ -21,7 +21,7 @@ export function describePiExit(input: {
   readonly binaryPath: string;
   readonly executionTargetId: string;
   readonly code: number | null;
-  readonly signal: NodeJS.Signals | null;
+  readonly signal: string | null;
   readonly stderrTail: string;
 }): Error {
   const missingRemoteBinaryDetail =

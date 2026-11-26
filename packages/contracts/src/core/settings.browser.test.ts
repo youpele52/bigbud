@@ -24,3 +24,21 @@ describe("browser search engine setting", () => {
     expect(() => decode({ browserSearchEngine: "unsupported" })).toThrow();
   });
 });
+
+describe("browser tab limit setting", () => {
+  it("defaults older settings to five without dropping their preferences", () => {
+    expect(decode({ browserSearchEngine: "bing" })).toMatchObject({
+      browserSearchEngine: "bing",
+      browserTabLimit: 5,
+    });
+  });
+
+  it.each([3, 5, 20])("round-trips %i as a saved limit", (browserTabLimit) => {
+    const encoded = Schema.encodeSync(ClientSettingsSchema)(decode({ browserTabLimit }));
+    expect(decode(encoded).browserTabLimit).toBe(browserTabLimit);
+  });
+
+  it.each([2, 21, 3.5, "5", null])("rejects invalid limit %s", (browserTabLimit) => {
+    expect(() => decode({ browserTabLimit })).toThrow();
+  });
+});

@@ -245,6 +245,12 @@ server-dev *args:
 server-build *args:
     bun run --cwd apps/server build "$@"
 
+server-agent-control-templates *args:
+    bun run --cwd apps/server agent-control:templates "$@"
+
+server-agent-control-templates-check *args:
+    bun run --cwd apps/server agent-control:templates:check "$@"
+
 server-thread-tools-manifest *args:
     bun run --cwd apps/server thread-tools:manifest "$@"
 
@@ -286,6 +292,12 @@ server-benchmark-startup-catalog *args:
 
 server-benchmark-mobile-recovery-memory *args:
     bun run --cwd apps/server benchmark:mobile-recovery-memory "$@"
+
+server-benchmark-terminal-host *args:
+    bun run --cwd apps/server benchmark:terminal-host "$@"
+
+server-soak-terminal-host *args:
+    bun run --cwd apps/server soak:terminal-host "$@"
 
 web-dev *args:
     bun run --cwd apps/web dev "$@"

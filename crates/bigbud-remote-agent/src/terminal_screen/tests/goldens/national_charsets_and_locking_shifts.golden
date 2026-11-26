@@ -1,0 +1,39 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,6],
+    "cursorHidden": false,
+    "screen": [
+      [["£",1,"default","default",0],["Ä",1,"default","default",0],["Ö",1,"default","default",0],["Ü",1,"default","default",0],["i",1,"default","default",0],["f",1,"default","default",0],["#",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["─",1,"default","default",0],["£",1,"default","default",0],["q",1,"default","default",0],["─",1,"default","default",0],["q",1,"default","default",0],["q",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "national_charsets_and_locking_shifts",
+  "geometry": {
+    "cols": 12,
+    "rows": 3,
+    "scrollback": 10
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bc£ÄÖÜif#\r\n─£q─qq\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[2;7H\u001b[?25h\u001b+B",
+    "cols": 12,
+    "excludedAlternate": false,
+    "excludedRows": [],
+    "exclusions": [],
+    "fidelity": "full",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "3ac9f73ae427c8001563c5f760f71fa599ffc2e25702ad43b98aaf673e7935d8",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b(A#\u001b(K[\\]\u001b(4[|\u001b(B#\r\n\u001b*0\u001bnq\u001b+A\u001bo#\u001b~q\u000f\u001b(0\u001b(Xq\u001b%Gq\u001b(0\u001b[?2hq"
+    }
+  ]
+}

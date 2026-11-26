@@ -9,10 +9,15 @@ import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { subscribeToTerminalEvents } from "./Manager.session.subscription";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types";
 import { makeTerminalClose } from "./Manager.session.close";
+import { makeRetainedShellOwnerApi } from "./Manager.session.shellOwners";
+import { retainedThreadHistoryTerminalIds } from "./Manager.history.retainedPanes";
+import { sweepOrphanedTerminalHistory } from "./Manager.history.orphans";
 import { makeTerminalOutputHold } from "./Manager.session.outputHold";
 import { TerminalSearchIndex } from "./Manager.search";
 import { captureTerminalRecovery } from "./Manager.recoveryRpc";
 import { makeListTerminalShellProfiles } from "./Manager.shell.inventory";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
+import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -58,11 +63,31 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
   return {
     ...makeRemoteTerminalApi(ctx, open, close),
+    ...makeRetainedShellOwnerApi(ctx),
+    retainedHistoryTerminalIds: (threadId) => retainedThreadHistoryTerminalIds(ctx, threadId),
+    sweepOrphanedHistory: (missingThreadIds) => sweepOrphanedTerminalHistory(ctx, missingThreadIds),
     hasActiveThread: (threadId) =>
       sessionsForThread(threadId).pipe(
         Effect.map((sessions) =>
           sessions.some((session) => session.status === "running" || session.hasRunningSubprocess),
         ),
+      ),
+    listDrainPanes: () =>
+      modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(
+        Effect.map((sessions) => {
+          const keepMode = ctx.keepRunningAfterQuit?.() === true;
+          return sessions.map((session) => ({
+            threadId: session.threadId,
+            terminalId: session.terminalId,
+            executionTargetId: session.executionTargetId,
+            surface: isRemoteAgentExecutionTarget(session.executionTargetId)
+              ? ("remote-agent" as const)
+              : parseSshExecutionTarget(session.executionTargetId) !== null
+                ? ("direct-ssh" as const)
+                : ("local" as const),
+            keepMode,
+          }));
+        }),
       ),
     listExecutionTargetSessions: (executionTargetId) =>
       modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(
@@ -90,7 +115,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     close,
     subscribe: (listener, options) =>
       subscribeToTerminalEvents(
-        { modifyManagerState, terminalEventListeners, getSession },
+        {
+          modifyManagerState,
+          terminalEventListeners,
+          getSession,
+          hostInventory: ctx.hostInventory,
+        },
         listener,
         options,
       ),

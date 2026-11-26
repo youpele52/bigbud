@@ -22,7 +22,7 @@ type BrowserRealm = {
 const require = createRequire(import.meta.url);
 
 it.skipIf(process.platform === "win32")(
-  "real manager PTY survives history exhaustion and feeds a fresh browser from its shadow frame",
+  "real manager PTY survives history trimming and feeds a fresh browser from its shadow frame",
   async () => {
     vi.stubEnv("BIGBUD_TERMINAL_RECOVERY_SHADOW", "1");
     const writes = vi.spyOn(TerminalRecoveryModel.prototype, "write");
@@ -71,9 +71,20 @@ it.skipIf(process.platform === "win32")(
             const captured = yield* Effect.promise(() => model.capture());
             expect(captured.type).toBe("candidate");
             if (captured.type !== "candidate") throw new Error(captured.reason);
+            // 1.2 MiB of lines exceeds the byte limit: replay keeps a flagged line-cut tail.
             yield* waitFor(
-              manager.snapshot(input).pipe(Effect.map((state) => state.historyTruncated === true)),
+              manager
+                .snapshot(input)
+                .pipe(
+                  Effect.map(
+                    (state) =>
+                      state.historyTrimmed === true && state.history.endsWith("RECOVERY-FINAL"),
+                  ),
+                ),
             );
+            const trimmed = yield* manager.snapshot(input);
+            expect(trimmed.historyTruncated).toBeUndefined();
+            expect(Buffer.byteLength(trimmed.history)).toBeLessThanOrEqual(1024 * 1024);
             yield* Effect.promise(() =>
               page.evaluate(async (frame) => {
                 const realm = globalThis as unknown as BrowserRealm;

@@ -1,5 +1,7 @@
 import { defineConfig } from "tsdown";
 
+import { sshOwnerActivationDefine } from "@bigbud/shared/SshOwnerActivation.build";
+
 // Packages that MUST remain external and cannot be inlined into the bundle:
 // - node-pty: native C++ addon (.node binary + spawn-helper executable); also
 //   resolved at runtime via createRequire/require.resolve in NodePTY.ts.
@@ -56,6 +58,8 @@ export default defineConfig({
     { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.mjs", to: "dist" },
     { from: "src/provider/Layers/OpencodeV2/ProfileIsolation.windows.mjs", to: "dist" },
   ],
+  // Temporary local-only SSH owner override; CI/release bundles get a literal `false`.
+  define: sshOwnerActivationDefine(),
   sourcemap: true,
   clean: shouldCleanOutDir(),
   // Bundle ALL dependencies into the output except the explicitly external ones.

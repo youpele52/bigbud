@@ -5,6 +5,7 @@ members = [
   "crates/bigbud-desktop-supervisor",
   "crates/bigbud-mobile-gateway",
   "crates/bigbud-protocol",
+  "crates/bigbud-ssh-owner",
   "crates/bigbud-system",
   "crates/bigbud-remote-agent",
   "crates/bigbud-workspace-watch",

@@ -8,11 +8,7 @@ import { normalizeTerminalSplitLayout } from "../../lib/terminalSplitLayout";
  */
 
 import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
-import {
-  DEFAULT_THREAD_TERMINAL_HEIGHT,
-  DEFAULT_THREAD_TERMINAL_ID,
-  type ThreadTerminalGroup,
-} from "../../models/types";
+import { DEFAULT_THREAD_TERMINAL_HEIGHT, type ThreadTerminalGroup } from "../../models/types";
 
 // ---------------------------------------------------------------------------
 // Re-exported types (consumed by the store and by callers)
@@ -26,7 +22,15 @@ export interface ThreadTerminalState {
   activeTerminalId: string;
   terminalGroups: ThreadTerminalGroup[];
   activeTerminalGroupId: string;
+  /**
+   * Panes loaded from storage rather than opened in this page session (`paneOrigin: "restored"`).
+   * They only reattach (`attachOnly`) and are dropped when the first inventory lacks them.
+   */
+  restoredTerminalIds?: string[];
 }
+
+/** Where a pane came from: opened by the user now, or loaded from storage. */
+export type TerminalPaneOrigin = "user-created" | "restored";
 
 export interface ThreadTerminalLaunchContext {
   cwd: string;
@@ -50,8 +54,8 @@ export const MAX_TERMINAL_EVENT_BUFFER = 200;
 // ---------------------------------------------------------------------------
 
 export function normalizeTerminalIds(terminalIds: string[]): string[] {
-  const ids = [...new Set(terminalIds.map((id) => id.trim()).filter((id) => id.length > 0))];
-  return ids.length > 0 ? ids : [DEFAULT_THREAD_TERMINAL_ID];
+  // No implicit terminal: an empty list stays empty.
+  return [...new Set(terminalIds.map((id) => id.trim()).filter((id) => id.length > 0))];
 }
 
 export function normalizeRunningTerminalIds(
@@ -119,9 +123,7 @@ export function normalizeTerminalGroups(
       assignedTerminalIds.add(terminalId);
     }
     const baseGroupId =
-      group.id.trim().length > 0
-        ? group.id.trim()
-        : fallbackGroupId(groupTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID);
+      group.id.trim().length > 0 ? group.id.trim() : fallbackGroupId(groupTerminalIds[0] ?? "");
     nextGroups.push({
       id: assignUniqueGroupId(baseGroupId, usedGroupIds),
       terminalIds: groupTerminalIds,
@@ -137,15 +139,6 @@ export function normalizeTerminalGroups(
       id: assignUniqueGroupId(fallbackGroupId(terminalId), usedGroupIds),
       terminalIds: [terminalId],
     });
-  }
-
-  if (nextGroups.length === 0) {
-    return [
-      {
-        id: fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
-        terminalIds: [DEFAULT_THREAD_TERMINAL_ID],
-      },
-    ];
   }
 
   return nextGroups;
@@ -194,6 +187,7 @@ export function threadTerminalStateEqual(
     left.activeTerminalGroupId === right.activeTerminalGroupId &&
     arraysEqual(left.terminalIds, right.terminalIds) &&
     arraysEqual(left.runningTerminalIds, right.runningTerminalIds) &&
+    arraysEqual(left.restoredTerminalIds ?? [], right.restoredTerminalIds ?? []) &&
     terminalGroupsEqual(left.terminalGroups, right.terminalGroups)
   );
 }
@@ -202,19 +196,15 @@ export function threadTerminalStateEqual(
 // Default state
 // ---------------------------------------------------------------------------
 
+/** A thread has no terminal until the user opens one (plan D1). */
 export const DEFAULT_THREAD_TERMINAL_STATE: ThreadTerminalState = Object.freeze({
   terminalOpen: false,
   terminalHeight: DEFAULT_THREAD_TERMINAL_HEIGHT,
-  terminalIds: [DEFAULT_THREAD_TERMINAL_ID],
+  terminalIds: [],
   runningTerminalIds: [],
-  activeTerminalId: DEFAULT_THREAD_TERMINAL_ID,
-  terminalGroups: [
-    {
-      id: fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
-      terminalIds: [DEFAULT_THREAD_TERMINAL_ID],
-    },
-  ],
-  activeTerminalGroupId: fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
+  activeTerminalId: "",
+  terminalGroups: [],
+  activeTerminalGroupId: "",
 });
 
 export function createDefaultThreadTerminalState(): ThreadTerminalState {
@@ -227,9 +217,8 @@ export function createDefaultThreadTerminalState(): ThreadTerminalState {
 }
 
 export function createSingleThreadTerminalState(terminalId: string): ThreadTerminalState {
-  const normalizedTerminalId = isValidTerminalId(terminalId)
-    ? terminalId.trim()
-    : DEFAULT_THREAD_TERMINAL_ID;
+  if (!isValidTerminalId(terminalId)) return createDefaultThreadTerminalState();
+  const normalizedTerminalId = terminalId.trim();
   return {
     terminalOpen: true,
     terminalHeight: DEFAULT_THREAD_TERMINAL_HEIGHT,
@@ -255,12 +244,15 @@ export function getDefaultThreadTerminalState(): ThreadTerminalState {
 // ---------------------------------------------------------------------------
 
 export function normalizeThreadTerminalState(state: ThreadTerminalState): ThreadTerminalState {
-  const terminalIds = normalizeTerminalIds(state.terminalIds);
-  const nextTerminalIds = terminalIds.length > 0 ? terminalIds : [DEFAULT_THREAD_TERMINAL_ID];
+  const nextTerminalIds = normalizeTerminalIds(state.terminalIds);
   const runningTerminalIds = normalizeRunningTerminalIds(state.runningTerminalIds, nextTerminalIds);
+  const restoredTerminalIds = normalizeRunningTerminalIds(
+    state.restoredTerminalIds ?? [],
+    nextTerminalIds,
+  );
   const activeTerminalId = nextTerminalIds.includes(state.activeTerminalId)
     ? state.activeTerminalId
-    : (nextTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID);
+    : (nextTerminalIds[0] ?? "");
   const terminalGroups = normalizeTerminalGroups(state.terminalGroups, nextTerminalIds);
   const activeGroupIdFromState = terminalGroups.some(
     (group) => group.id === state.activeTerminalGroupId,
@@ -271,7 +263,8 @@ export function normalizeThreadTerminalState(state: ThreadTerminalState): Thread
     terminalGroups.find((group) => group.terminalIds.includes(activeTerminalId))?.id ?? null;
 
   const normalized: ThreadTerminalState = {
-    terminalOpen: state.terminalOpen,
+    // An empty surface cannot be open: closing the last pane closes the surface.
+    terminalOpen: state.terminalOpen && nextTerminalIds.length > 0,
     terminalHeight:
       Number.isFinite(state.terminalHeight) && state.terminalHeight > 0
         ? state.terminalHeight
@@ -281,10 +274,8 @@ export function normalizeThreadTerminalState(state: ThreadTerminalState): Thread
     activeTerminalId,
     terminalGroups,
     activeTerminalGroupId:
-      activeGroupIdFromState ??
-      activeGroupIdFromTerminal ??
-      terminalGroups[0]?.id ??
-      fallbackGroupId(DEFAULT_THREAD_TERMINAL_ID),
+      activeGroupIdFromState ?? activeGroupIdFromTerminal ?? terminalGroups[0]?.id ?? "",
+    ...(restoredTerminalIds.length > 0 ? { restoredTerminalIds } : {}),
   };
   return threadTerminalStateEqual(state, normalized) ? state : normalized;
 }
@@ -358,4 +349,44 @@ export function updateTerminalStateByThreadId(
     ...terminalStateByThreadId,
     [threadId]: next,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Pane selectors shared with the lifecycle UI (W3)
+// ---------------------------------------------------------------------------
+
+interface ThreadSurfaceState {
+  terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
+  panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
+}
+
+const EMPTY_SURFACE_PANES: readonly string[] = Object.freeze([]);
+
+/**
+ * Terminal ids the user has on a thread: drawer panes, then right-panel panes. Empty when the
+ * thread has no terminal. A single surface returns its stored array; the union is a new array,
+ * so subscribe with `useShallow`.
+ */
+export function selectThreadSurfacePanes(
+  state: ThreadSurfaceState,
+  threadId: string,
+): readonly string[] {
+  if (threadId.length === 0) return EMPTY_SURFACE_PANES;
+  const drawer = state.terminalStateByThreadId[threadId as ThreadId]?.terminalIds ?? [];
+  const panel = state.panelTerminalStateByThreadId[threadId as ThreadId]?.terminalIds ?? [];
+  if (panel.length === 0) return drawer.length > 0 ? drawer : EMPTY_SURFACE_PANES;
+  if (drawer.length === 0) return panel;
+  return [...new Set([...drawer, ...panel])];
+}
+
+export function selectTerminalPaneOrigin(
+  state: ThreadSurfaceState,
+  threadId: string,
+  terminalId: string,
+): TerminalPaneOrigin {
+  const restored = (surface: Record<ThreadId, ThreadTerminalState>) =>
+    surface[threadId as ThreadId]?.restoredTerminalIds?.includes(terminalId) === true;
+  return restored(state.terminalStateByThreadId) || restored(state.panelTerminalStateByThreadId)
+    ? "restored"
+    : "user-created";
 }

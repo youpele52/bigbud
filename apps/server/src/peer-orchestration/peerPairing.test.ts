@@ -158,3 +158,36 @@ it.live("a saved connection with unsettled dispatches cannot be deleted", () =>
     assert.strictEqual(errorCode(busy), "pairing-busy");
   }).pipe(Effect.provide(peerTestLayer)),
 );
+
+it.live("U24: the owner pin is approved before saving and revoked on delete", () =>
+  Effect.gen(function* () {
+    const { deps: base } = yield* makeDeps();
+    const approvals: Array<{ pairingId: string; pinnedHostKey: string; user: string }> = [];
+    const revoked: string[] = [];
+    let refuse = true;
+    const deps: PeerPairingDeps = {
+      ...base,
+      approvePin: async (input) => {
+        if (refuse) throw new Error("Re-scan the worker's host key.");
+        approvals.push(input);
+      },
+      revokePin: async (pairingId) => void revoked.push(pairingId),
+    };
+    yield* handlePeerPairingRequest(deps, { action: "ensure-key" });
+    // A refused owner approval saves nothing.
+    const refused = yield* Effect.flip(handlePeerPairingRequest(deps, save));
+    assert.strictEqual(errorCode(refused), "invalid-request");
+    assert.lengthOf((yield* handlePeerPairingRequest(deps, { action: "status" })).pairings, 0);
+    refuse = false;
+    const pairing = (yield* handlePeerPairingRequest(deps, save)).pairings[0]!;
+    assert.deepStrictEqual(
+      approvals.map(({ pairingId, pinnedHostKey, user }) => ({ pairingId, pinnedHostKey, user })),
+      [{ pairingId: pairing.pairingId, pinnedHostKey: PIN, user: save.user }],
+    );
+    yield* handlePeerPairingRequest(deps, {
+      action: "delete-connection",
+      pairingId: pairing.pairingId,
+    });
+    assert.deepStrictEqual(revoked, [pairing.pairingId]);
+  }).pipe(Effect.provide(peerTestLayer)),
+);

@@ -27,10 +27,32 @@ export const DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND = "delegation.model
 export const DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND = "delegation.model-choice-resolved";
 
 /** Lenient on provider names; whether the request is usable is decided by the server. */
+export const DELEGATED_EFFORT_MAX_LENGTH = 64;
+export const DelegatedEffort = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(DELEGATED_EFFORT_MAX_LENGTH),
+);
+
+/** `configured` means set on the child, not observed or confirmed by the provider. */
+export const DelegationEffortDecision = Schema.Struct({
+  requested: Schema.optional(DelegatedEffort),
+  configured: Schema.optional(DelegatedEffort),
+  reason: Schema.NullOr(
+    Schema.Literals([
+      "invalid-effort",
+      "unsupported-effort",
+      "capabilities-unknown",
+      "model-not-selected",
+      "agent-choice-disabled",
+    ]),
+  ),
+});
+export type DelegationEffortDecision = typeof DelegationEffortDecision.Type;
+
 export const RequestedModelSelection = Schema.Struct({
   provider: TrimmedNonEmptyString.check(Schema.isMaxLength(64)),
   model: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(256))),
   subProviderID: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(128))),
+  effort: Schema.optional(DelegatedEffort),
 });
 export type RequestedModelSelection = typeof RequestedModelSelection.Type;
 
@@ -83,6 +105,7 @@ export const DelegationModelChoiceRequested = Schema.Struct({
   requested: Schema.NullOr(RequestedModelSelection),
   fallback: ModelSelection,
   reason: ModelChoiceUnusableReason,
+  effort: Schema.optional(DelegationEffortDecision),
   options: Schema.Array(ModelChoiceOption).check(
     Schema.isMaxLength(DELEGATED_MODEL_CHOICE_MAX_OPTIONS),
   ),
@@ -97,6 +120,7 @@ export const DelegationModelChoiceResolved = Schema.Struct({
   fallback: ModelSelection,
   /** `null` when the requested model was usable. */
   reason: Schema.NullOr(ModelChoiceUnusableReason),
+  effort: Schema.optional(DelegationEffortDecision),
   used: ModelSelection,
   outcome: ModelChoiceOutcome,
   resolvedBy: ModelChoiceResolvedBy,

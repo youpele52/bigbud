@@ -5,6 +5,7 @@ import { parseV2CanonicalCandidate } from "./NativeCompatibility.version.ts";
 import { v2NativeEvidenceKey, v2NativeRuntimePlatform } from "./NativeCompatibility.platform.ts";
 import {
   V2_COMPATIBILITY_DIGEST,
+  V2_SUMMARY_COMPATIBILITY_DIGEST,
   knownV2BootstrapCompatibility,
 } from "./Orchestration.compatibility.ts";
 import {
@@ -44,6 +45,7 @@ export function validateV2NativeQualificationRegistry(
         (digest) =>
           ![
             V2_COMPATIBILITY_DIGEST,
+            V2_SUMMARY_COMPATIBILITY_DIGEST,
             V2_N0_COMPATIBILITY_DIGEST,
             V2_N1_COMPATIBILITY_DIGEST,
           ].includes(digest),

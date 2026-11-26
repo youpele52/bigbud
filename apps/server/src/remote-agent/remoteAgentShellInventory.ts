@@ -35,7 +35,7 @@ export async function runRemoteAgentShellInventory(
   const resolve =
     dependencies.resolve ??
     (async (target: string) => {
-      const composition = getConfiguredRemoteAgentComposition();
+      const composition = getConfiguredRemoteAgentComposition(target);
       if (!composition) throw new Error("Remote agent is unavailable.");
       const process = await composition.pool.getProcessClient(target);
       const workspace = new RemoteAgentWorkspaceClient(process.connection);

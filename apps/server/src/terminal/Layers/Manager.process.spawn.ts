@@ -6,7 +6,7 @@ import type {
 } from "@bigbud/contracts/workspace/terminalShell.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
-import { PtySpawnError, type PtyProcess } from "../Services/PTY";
+import { PtySpawnError, type PtyProcess, type PtySpawnHostLifecycle } from "../Services/PTY";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import {
   formatShellCandidate,
@@ -17,6 +17,7 @@ import type { TerminalSessionState } from "./Manager.types";
 import { LOCAL_SHELL_HOST, shellKind } from "./ShellProfiles.identity";
 
 import { spawnDirectShellProfile } from "./Manager.shell.direct";
+import { spawnTerminalPty } from "./Manager.shell.direct.host";
 import type { RemoteAgentShellLaunch } from "../../remote-agent/remoteAgentShellLaunch.ts";
 
 type LaunchCandidate = ShellCandidate & {
@@ -30,6 +31,8 @@ export function trySpawnWith(
   session: TerminalSessionState,
   shellCandidates: ReadonlyArray<LaunchCandidate>,
   spawnEnv: NodeJS.ProcessEnv,
+  hostLifecycle: PtySpawnHostLifecycle | undefined = undefined,
+  replaceTerminalOwner = false,
   index = 0,
   lastError: PtySpawnError | null = null,
 ): Effect.Effect<
@@ -81,9 +84,10 @@ export function trySpawnWith(
               },
               spawnEnv,
             )
-          : ctx.ptyAdapter.spawn({
+          : spawnTerminalPty(ctx, session, {
               ownerKey: JSON.stringify([session.threadId, session.terminalId]),
               recoverOnly: session.remoteOwnerRecoveryRequired === true,
+              replaceTerminalOwner,
               expectedRemoteResourceId: session.expectedRemoteResourceId,
               ...(candidate.shellLaunch ? { shellLaunch: candidate.shellLaunch } : {}),
               ...(candidate.identity ? { shellProfile: candidate.identity } : {}),
@@ -94,6 +98,7 @@ export function trySpawnWith(
               rows: session.rows,
               env: spawnEnv,
               executionTargetId: session.executionTargetId,
+              ...(hostLifecycle ? { hostLifecycle } : {}),
               ...(isLocalExecutionTarget(session.executionTargetId) ||
               isWslTerminalTargetId(session.executionTargetId)
                 ? {}
@@ -134,6 +139,15 @@ export function trySpawnWith(
     // Explicit profiles never enter a fallback chain, even for ENOENT.
     if (candidate.identity || candidate.shellLaunch || !isRetryableShellSpawnError(spawnError))
       return yield* spawnError;
-    return yield* trySpawnWith(ctx, session, shellCandidates, spawnEnv, index + 1, spawnError);
+    return yield* trySpawnWith(
+      ctx,
+      session,
+      shellCandidates,
+      spawnEnv,
+      hostLifecycle,
+      replaceTerminalOwner,
+      index + 1,
+      spawnError,
+    );
   });
 }

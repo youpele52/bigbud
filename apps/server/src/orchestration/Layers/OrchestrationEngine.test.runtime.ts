@@ -30,21 +30,20 @@ import {
 import { TerminalManager, type TerminalManagerShape } from "../../terminal/Services/Manager.ts";
 import { ReadModelResidencyConfig } from "./OrchestrationEngine.residency.ts";
 
-export function createRuntime(
-  dbPath: string,
+export function orchestrationTestLayer(
+  serverBaseDir: string,
   terminalManager?: TerminalManagerShape,
   maintenance?: RuntimeMaintenanceGateShape,
   residency?: typeof ReadModelResidencyConfig.Service,
 ) {
-  const layer = OrchestrationEngineLive.pipe(
+  return OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(ProjectionOperationalStateQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-    Layer.provideMerge(makeSqlitePersistenceLive(dbPath)),
     Layer.provideMerge(ComputerUseDisabledTestLayer),
-    Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+    Layer.provideMerge(ServerConfig.layerTest(serverBaseDir, serverBaseDir)),
     Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(
       terminalManager ? Layer.succeed(TerminalManager, terminalManager) : Layer.empty,
@@ -57,7 +56,19 @@ export function createRuntime(
       residency ? Layer.succeed(ReadModelResidencyConfig, residency) : Layer.empty,
     ),
   );
-  return ManagedRuntime.make(layer);
+}
+
+export function createRuntime(
+  dbPath: string,
+  terminalManager?: TerminalManagerShape,
+  maintenance?: RuntimeMaintenanceGateShape,
+  residency?: typeof ReadModelResidencyConfig.Service,
+) {
+  return ManagedRuntime.make(
+    orchestrationTestLayer(process.cwd(), terminalManager, maintenance, residency).pipe(
+      Layer.provideMerge(makeSqlitePersistenceLive(dbPath).pipe(Layer.provide(NodeServices.layer))),
+    ),
+  );
 }
 
 type Runtime = ReturnType<typeof createRuntime>;

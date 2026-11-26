@@ -1,3 +1,4 @@
+import { ComposerPrimaryActions } from "../composer/ComposerPrimaryActions";
 import { useChatViewPromptQueue } from "./chat-view/chat-view-prompt-queue.hooks";
 import { useSendHarnessInput } from "./ChatView.sendTurn.browser-helpers";
 
@@ -9,7 +10,7 @@ export function QueueSendHarness(props: Parameters<typeof useSendHarnessInput>[0
     ...props,
     overrides: { isSendBusy: true, ...props.overrides },
   });
-  const { onSend } = useChatViewPromptQueue({
+  const { onSend, canQueueChat } = useChatViewPromptQueue({
     base: {
       ...input,
       threadId: props.threadId,
@@ -41,13 +42,29 @@ export function QueueSendHarness(props: Parameters<typeof useSendHarnessInput>[0
       setThreadError: input.setThreadError,
       persistThreadSettingsForNextTurn: input.persistThreadSettingsForNextTurn,
       handleInteractionModeChange: input.handleInteractionModeChange,
-      turnActions: { onRespondToUserInput: input.onRespondToUserInput },
     } as unknown as QueueInput["runtime"],
     envMode: "local",
-    pendingUserInputHandlers: { setActivePendingUserInputQuestionIndex: () => {} },
     planHandlers: { onSubmitPlanFollowUp: input.onSubmitPlanFollowUp },
     transformPromptForSend: input.transformPromptForSend,
   });
   props.control.onSend = onSend;
-  return <button onClick={() => void onSend()}>Send {props.threadId}</button>;
+  return (
+    <form onSubmit={onSend}>
+      <ComposerPrimaryActions
+        compact={false}
+        pendingAction={null}
+        isRunning
+        queueMessage={canQueueChat}
+        showPlanFollowUpPrompt={false}
+        promptHasText={Boolean(input.promptRef.current.trim())}
+        isSendBusy={input.isSendBusy}
+        isConnecting={input.isConnecting}
+        isPreparingWorktree={false}
+        hasSendableContent={Boolean(input.promptRef.current.trim())}
+        onPreviousPendingQuestion={() => {}}
+        onInterrupt={() => {}}
+        onImplementPlanInNewThread={() => {}}
+      />
+    </form>
+  );
 }

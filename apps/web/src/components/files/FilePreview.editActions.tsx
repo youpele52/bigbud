@@ -41,7 +41,8 @@ export function FilePreviewEditActions({
     readUnavailable && draft.status === "saved"
       ? "Read unavailable"
       : {
-          saved: "Saved",
+          // Remote saves are acknowledged by the host, not by local storage.
+          saved: draft.remote ? "Saved to host" : "Saved",
           pending: "Unsaved",
           saving: "Saving…",
           error: "Save failed",

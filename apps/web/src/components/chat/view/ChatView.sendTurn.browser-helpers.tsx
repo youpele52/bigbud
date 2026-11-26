@@ -150,9 +150,6 @@ export function useSendHarnessInput({
     isComposerShellMode: false,
     showPlanFollowUpPrompt: false,
     activeProposedPlan: null,
-    isOpencodePendingUserInputMode: false,
-    activePendingUserInputRequestId: null,
-    activePendingUserInput: null,
     bootstrapSourceThreadId: null,
     replyTarget: null,
     shouldAutoScrollRef,
@@ -183,7 +180,6 @@ export function useSendHarnessInput({
     persistThreadSettingsForNextTurn: async () => {},
     onSubmitPlanFollowUp: async () => false,
     handleInteractionModeChange: () => {},
-    onRespondToUserInput: async () => {},
     submitQueuedComposerPrompt: async () => "queued",
     ...overrides,
   };

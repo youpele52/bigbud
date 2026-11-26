@@ -16,7 +16,7 @@ export function makeV2SchemaReader(schemas: V2SchemaObject) {
       allowNull = direction === "request",
     ): V2SchemaObject {
       if (++nodes > 4096 || seen.size > 32) throw new Error("Contract reference bound.");
-      const shape = schemaObject(value);
+      let shape = schemaObject(value);
       if (shape.$ref !== undefined) {
         if (
           typeof shape.$ref !== "string" ||
@@ -29,6 +29,45 @@ export function makeV2SchemaReader(schemas: V2SchemaObject) {
           .replaceAll("~1", "/")
           .replaceAll("~0", "~");
         return resolve(schemas[name], new Set([...seen, shape.$ref]), allowNull);
+      }
+      // OpenAPI 3.1 renders an annotated reference as `allOf: [$ref, {description}]`. Merge the
+      // conjunctive parts so callers still see the referenced shape; conflicts fail closed.
+      if (Array.isArray(shape.allOf)) {
+        const parts = shape.allOf.map((part) => resolve(part, seen, allowNull));
+        const merged: V2SchemaObject = { ...shape };
+        delete merged.allOf;
+        for (const part of parts) {
+          for (const [key, entry] of Object.entries(part)) {
+            if (key === "description" || key === "title" || key === "examples") continue;
+            const current = merged[key];
+            if (current === undefined) {
+              merged[key] = entry;
+            } else if (key === "required" && Array.isArray(current) && Array.isArray(entry)) {
+              merged[key] = [...new Set([...current, ...entry])];
+            } else if (
+              key === "properties" &&
+              current &&
+              entry &&
+              typeof current === "object" &&
+              typeof entry === "object" &&
+              !Array.isArray(current) &&
+              !Array.isArray(entry)
+            ) {
+              const properties: V2SchemaObject = { ...(current as V2SchemaObject) };
+              for (const [name, property] of Object.entries(entry as V2SchemaObject)) {
+                const previous = properties[name];
+                properties[name] =
+                  previous === undefined || JSON.stringify(previous) === JSON.stringify(property)
+                    ? property
+                    : { allOf: [previous, property] };
+              }
+              merged[key] = properties;
+            } else if (JSON.stringify(current) !== JSON.stringify(entry)) {
+              throw new Error("Conflicting allOf contract.");
+            }
+          }
+        }
+        shape = merged;
       }
       const alternatives = shape.anyOf ?? shape.oneOf;
       if (Array.isArray(alternatives)) {

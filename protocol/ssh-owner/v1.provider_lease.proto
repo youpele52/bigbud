@@ -1,0 +1,89 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// W2 T-prov: production Pi and Codex provider leases (Request 80–83,
+// Reply 51–52). Production verbs, admitted on macOS and Linux production
+// owners; the remote must be Linux.
+//
+// The owner discovers the executable on the exact target (the account's login
+// `command -v`, then known install locations), checks it with the shared
+// provider executable guard, and compiles the only argv: `--version` for a
+// probe, `--mode rpc` (Pi) or `app-server` (Codex) for a lease. A request
+// names the provider kind and the authorized session only: never a program,
+// argument, environment, socket path or session file.
+//
+// A lease is per target and generation, lives in that target's lanes and is
+// reaped with them. Its byte channel is two owner-created private Unix
+// sockets (a `mkdtemp` 0700 directory each): stdio (stdin and stdout) and
+// stderr. Each admits exactly one connection within 15 s and is removed
+// before the provider starts.
+
+enum ProviderLeaseKind {
+  PROVIDER_LEASE_KIND_UNSPECIFIED = 0;
+  PROVIDER_LEASE_KIND_PI = 1;
+  PROVIDER_LEASE_KIND_CODEX = 2;
+}
+
+message ProviderLeaseScope {
+  ProviderLeaseKind kind = 1;
+  string thread_id = 2;
+  uint64 session_epoch = 3;
+  // Absolute, normalized, control-free remote working directory (the
+  // production PTY rule). The target guard re-checks it after `cd -P`.
+  string cwd = 4;
+  // Codex only: the owner-compiled default-mode question feature. Refused for
+  // Pi and for a probe.
+  bool default_mode_user_input = 5;
+  // Pi only: resume this session file. The target resolves it (`readlink -e`)
+  // and admits it only beneath the account's resolved `~/.pi/agent/sessions`.
+  optional string session_file = 6;
+  // Codex only: `CODEX_HOME`. The target resolves it and admits only an
+  // existing directory beneath the account's resolved home.
+  optional string codex_home = 7;
+}
+
+// Bounded `--version` run: 5 s and 4 KiB per stream for Pi, 18 s and 1 MiB
+// for Codex. The target also checks `session_file` and `codex_home` (exit 126
+// → `operation_denied`). A successful recognized version arms lease opens with
+// the same kind, cwd, session file and Codex home for this exact target and
+// generation (a bounded set per target).
+message ProviderProbe {
+  ProviderLeaseScope scope = 1;
+}
+
+message ProviderVersion {
+  int32 code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}
+
+message ProviderLeaseOpen {
+  bytes lease = 1;
+  ProviderLeaseScope scope = 2;
+}
+
+message ProviderLeaseHandle {
+  bytes lease = 1;
+}
+
+message ProviderLeaseState {
+  bytes lease = 1;
+  ProviderLeasePhase phase = 2;
+  // Present only while LISTENING.
+  optional string stdio_socket_path = 3;
+  optional string stderr_socket_path = 4;
+  // Present only when EXITED.
+  optional uint32 exit_code = 5;
+}
+
+enum ProviderLeasePhase {
+  PROVIDER_LEASE_PHASE_UNSPECIFIED = 0;
+  PROVIDER_LEASE_PHASE_LISTENING = 1;
+  PROVIDER_LEASE_PHASE_RUNNING = 2;
+  PROVIDER_LEASE_PHASE_EXITED = 3;
+  // Closed by the owner (caller close, target retirement); teardown confirmed.
+  PROVIDER_LEASE_PHASE_CLOSED = 4;
+  PROVIDER_LEASE_PHASE_LOST = 5;
+  PROVIDER_LEASE_PHASE_REJECTED = 6;
+  PROVIDER_LEASE_PHASE_UNCONFIRMED = 7;
+}

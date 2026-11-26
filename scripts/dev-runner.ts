@@ -3,7 +3,7 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { NetService } from "@bigbud/shared/Net";
-import { Config, Effect, Layer, Logger, Schema } from "effect";
+import { Effect, Layer, Logger, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
 
@@ -26,6 +26,11 @@ import {
   COMPUTER_USE_GUARD_BUILD_ARGS,
   devModeRequiresComputerUseGuard,
 } from "./dev-runner.computerUse.ts";
+import { withoutDevSshOwnerEnv } from "./dev-runner.sshOwner.ts";
+import {
+  prepareNormalDevSshOwner,
+  resolveNormalDevSshOwner,
+} from "./dev-runner.sshOwner.normal.ts";
 
 export {
   DEFAULT_BIGBUD_HOME,
@@ -54,8 +59,8 @@ interface DevRunnerCliInput {
   readonly turboArgs: ReadonlyArray<string>;
 }
 
-const readOptionalBooleanEnv = (primary: string, alias?: string): boolean | undefined => {
-  const value = process.env[primary] ?? (alias ? process.env[alias] : undefined);
+const readOptionalBooleanEnv = (primary: string): boolean | undefined => {
+  const value = process.env[primary];
   if (value === undefined) {
     return undefined;
   }
@@ -83,35 +88,11 @@ const resolveOptionalBooleanOverride = (
   return envValue;
 };
 
-const aliasedOptionalBooleanConfig = (
-  primary: string,
-  alias: string,
-): Config.Config<boolean | undefined> =>
-  Config.all({
-    primary: optionalBooleanConfig(primary),
-    alias: optionalBooleanConfig(alias),
-  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
-
-const aliasedOptionalPortConfig = (
-  primary: string,
-  alias: string,
-): Config.Config<number | undefined> =>
-  Config.all({
-    primary: optionalPortConfig(primary),
-    alias: optionalPortConfig(alias),
-  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
-
-const aliasedOptionalStringConfig = (
-  primary: string,
-  alias: string,
-): Config.Config<string | undefined> =>
-  Config.all({
-    primary: optionalStringConfig(primary),
-    alias: optionalStringConfig(alias),
-  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
-
 export function runDevRunnerWithInput(input: DevRunnerCliInput) {
   return Effect.gen(function* () {
+    const normalSshOwner = resolveNormalDevSshOwner(input.mode, process.env);
+    if (normalSshOwner instanceof DevRunnerError) return yield* normalSshOwner;
+
     const { portOffset, devInstance } = yield* OffsetConfig.asEffect().pipe(
       Effect.mapError(
         (cause) =>
@@ -132,12 +113,9 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     });
 
     const envOverrides = {
-      noBrowser: readOptionalBooleanEnv("BIGBUD_NO_BROWSER", "T3CODE_NO_BROWSER"),
-      autoBootstrapProjectFromCwd: readOptionalBooleanEnv(
-        "BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
-        "T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
-      ),
-      logWebSocketEvents: readOptionalBooleanEnv("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
+      noBrowser: readOptionalBooleanEnv("BIGBUD_NO_BROWSER"),
+      autoBootstrapProjectFromCwd: readOptionalBooleanEnv("BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
+      logWebSocketEvents: readOptionalBooleanEnv("BIGBUD_LOG_WS_EVENTS"),
     };
 
     const cargoBuild = Effect.fn("cargoBuild")(function* (
@@ -182,27 +160,34 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       dryRun: input.dryRun,
     });
 
+    const baseEnv = withoutDevSshOwnerEnv(process.env);
+    const owner =
+      normalSshOwner && !input.dryRun
+        ? yield* prepareNormalDevSshOwner(baseEnv, process.env)
+        : undefined;
     const env = yield* createDevRunnerEnv({
       mode: input.mode,
-      baseEnv: process.env,
+      baseEnv: { ...baseEnv, ...owner?.env },
       serverOffset,
       webOffset,
       instanceOffset: offset,
       repoRoot,
       ...(webReservation === undefined ? {} : { webReservation }),
       runnerPid: process.pid,
-      t3Home: input.t3Home,
+      t3Home: owner?.baseDir ?? input.t3Home,
       authToken: input.authToken,
       noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
-      autoBootstrapProjectFromCwd: resolveOptionalBooleanOverride(
-        input.autoBootstrapProjectFromCwd,
-        envOverrides.autoBootstrapProjectFromCwd,
-      ),
+      autoBootstrapProjectFromCwd: owner
+        ? false
+        : resolveOptionalBooleanOverride(
+            input.autoBootstrapProjectFromCwd,
+            envOverrides.autoBootstrapProjectFromCwd,
+          ),
       logWebSocketEvents: resolveOptionalBooleanOverride(
         input.logWebSocketEvents,
         envOverrides.logWebSocketEvents,
       ),
-      host: input.host,
+      host: owner ? "127.0.0.1" : input.host,
       port: input.port,
       devUrl: input.devUrl,
     });
@@ -217,10 +202,20 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     );
 
     if (input.dryRun) {
+      if (normalSshOwner)
+        yield* Effect.logInfo(
+          "[dev-runner] Normal SSH owner startup would allocate a fresh profile",
+        );
       return;
     }
 
-    const modeArgs = [...MODE_ARGS[input.mode]];
+    const modeArgs = [...MODE_ARGS[input.mode]].filter((arg) => {
+      if (!owner) return true;
+      if (arg === "--filter=@bigbud/mobile-web") return false;
+      // The Linux picker can run in a 4 GiB guest without the contracts watcher.
+      // The normal dev task still builds contracts before starting the backend and UI.
+      return process.platform !== "linux" || arg !== "--filter=@bigbud/contracts";
+    });
     const child = yield* ChildProcess.make("turbo", [...modeArgs, ...input.turboArgs], {
       stdin: "inherit",
       stdout: "inherit",
@@ -260,43 +255,36 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   t3Home: Flag.string("home-dir").pipe(
     Flag.withDescription("Base directory for all bigbud data (equivalent to BIGBUD_HOME)."),
-    Flag.withFallbackConfig(aliasedOptionalStringConfig("BIGBUD_HOME", "T3CODE_HOME")),
+    Flag.withFallbackConfig(optionalStringConfig("BIGBUD_HOME")),
   ),
   authToken: Flag.string("auth-token").pipe(
     Flag.withDescription("Auth token (forwards to BIGBUD_AUTH_TOKEN)."),
     Flag.withAlias("token"),
-    Flag.withFallbackConfig(aliasedOptionalStringConfig("BIGBUD_AUTH_TOKEN", "T3CODE_AUTH_TOKEN")),
+    Flag.withFallbackConfig(optionalStringConfig("BIGBUD_AUTH_TOKEN")),
   ),
   noBrowser: Flag.boolean("no-browser").pipe(
     Flag.withDescription("Browser auto-open toggle (equivalent to BIGBUD_NO_BROWSER)."),
-    Flag.withFallbackConfig(aliasedOptionalBooleanConfig("BIGBUD_NO_BROWSER", "T3CODE_NO_BROWSER")),
+    Flag.withFallbackConfig(optionalBooleanConfig("BIGBUD_NO_BROWSER")),
   ),
   autoBootstrapProjectFromCwd: Flag.boolean("auto-bootstrap-project-from-cwd").pipe(
     Flag.withDescription(
       "Auto-bootstrap toggle (equivalent to BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD).",
     ),
-    Flag.withFallbackConfig(
-      aliasedOptionalBooleanConfig(
-        "BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
-        "T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
-      ),
-    ),
+    Flag.withFallbackConfig(optionalBooleanConfig("BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD")),
   ),
   logWebSocketEvents: Flag.boolean("log-websocket-events").pipe(
     Flag.withDescription("WebSocket event logging toggle (equivalent to BIGBUD_LOG_WS_EVENTS)."),
     Flag.withAlias("log-ws-events"),
-    Flag.withFallbackConfig(
-      aliasedOptionalBooleanConfig("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
-    ),
+    Flag.withFallbackConfig(optionalBooleanConfig("BIGBUD_LOG_WS_EVENTS")),
   ),
   host: Flag.string("host").pipe(
     Flag.withDescription("Server host/interface override (forwards to BIGBUD_HOST)."),
-    Flag.withFallbackConfig(aliasedOptionalStringConfig("BIGBUD_HOST", "T3CODE_HOST")),
+    Flag.withFallbackConfig(optionalStringConfig("BIGBUD_HOST")),
   ),
   port: Flag.integer("port").pipe(
     Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
     Flag.withDescription("Server port override (forwards to BIGBUD_PORT)."),
-    Flag.withFallbackConfig(aliasedOptionalPortConfig("BIGBUD_PORT", "T3CODE_PORT")),
+    Flag.withFallbackConfig(optionalPortConfig("BIGBUD_PORT")),
   ),
   devUrl: Flag.string("dev-url").pipe(
     Flag.withSchema(Schema.URLFromString),

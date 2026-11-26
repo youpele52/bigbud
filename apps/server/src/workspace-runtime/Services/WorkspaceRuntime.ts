@@ -8,6 +8,7 @@
 import { ServiceMap } from "effect";
 
 import type { WorkspaceFilesShape } from "./WorkspaceFiles.ts";
+import type { WorkspaceMutationsShape } from "./WorkspaceMutations.ts";
 import type { WorkspaceSearchShape } from "./WorkspaceSearch.ts";
 import type { WorkspaceWatchShape } from "./WorkspaceWatch.ts";
 
@@ -15,6 +16,8 @@ export interface WorkspaceRuntimeBackendShape {
   readonly files: WorkspaceFilesShape;
   readonly search: WorkspaceSearchShape;
   readonly watch: WorkspaceWatchShape;
+  /** Files create-folder/delete; absent on backends that cannot perform them (refused). */
+  readonly mutations?: WorkspaceMutationsShape | undefined;
 }
 
 export type WorkspaceRuntimeShape = WorkspaceRuntimeBackendShape;

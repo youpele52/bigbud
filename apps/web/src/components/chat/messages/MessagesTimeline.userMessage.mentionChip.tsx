@@ -11,7 +11,8 @@ import {
   ChatFileTargetContextMenu,
   useChatFileTargetContextMenu,
 } from "../common/ChatFileTargetContextMenu";
-import { openChatFileTarget } from "../common/chatFileTargets";
+import { openChatFileTarget, openDiscoveredSourcePath } from "../common/chatFileTargets";
+import { useFileOpenTarget } from "../../files/fileOpenTarget.context";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import { type MentionKind } from "./MessagesTimeline.userMessage.sources";
 
@@ -29,6 +30,7 @@ export const UserMessageMentionChip = memo(function UserMessageMentionChip(props
       ? inferEntryKindFromPath(props.rawValue ?? props.label)
       : undefined;
   const { contextMenuState, hideContextMenu, showContextMenu } = useChatFileTargetContextMenu();
+  const fileOpenTarget = useFileOpenTarget();
   return (
     <>
       <span
@@ -47,8 +49,8 @@ export const UserMessageMentionChip = memo(function UserMessageMentionChip(props
             ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (props.targetPath)
-                  openChatFileTarget(props.targetPath, props.workspaceRoot, "file");
+                // Agent and skill files come from discovery on this computer.
+                if (props.targetPath) openDiscoveredSourcePath(props.targetPath);
               }
             : undefined
         }
@@ -62,6 +64,7 @@ export const UserMessageMentionChip = memo(function UserMessageMentionChip(props
                     props.targetPath,
                     props.workspaceRoot,
                     inferredPathKind ?? "file",
+                    fileOpenTarget,
                   );
               }
             : undefined

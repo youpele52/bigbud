@@ -1,6 +1,8 @@
 import { makeRemoteBackendRelayRoute } from "../remote-backend/clientRelay.route.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Scope from "effect/Scope";
 import { randomUUID } from "node:crypto";
 import { WsRpcGroup } from "@bigbud/contracts";
@@ -12,6 +14,7 @@ import { makeWsRpcContext } from "./wsRpcContext";
 import { makeWsRpcAutomationHandlers } from "./wsRpcHandlers.automation";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
 import { makeWsRpcTerminalSessionHandlers } from "./wsRpcHandlers.terminalSession";
+import { makeWsRpcTerminalLifecycleHandlers } from "./wsRpcHandlers.terminalLifecycle";
 import { makeWsRpcWorktreeHandlers } from "./wsRpcHandlers.worktrees.ts";
 import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
@@ -26,6 +29,8 @@ import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
 import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.ts";
 import { makeWsRpcPeerPairingHandlers } from "./wsRpcHandlers.peerPairing.ts";
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
+import { makeWsRpcBackendDrainHandlers } from "./wsRpcHandlers.backendDrain.ts";
+import { makeWsRpcSshOwnerAdmissionHandlers } from "./wsRpcHandlers.sshOwnerAdmission.ts";
 import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
 import { makeWsRpcSearchHandlers } from "./wsRpcHandlers.search.ts";
 import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
@@ -39,10 +44,37 @@ import {
 } from "./wsRetentionMutationAuthorization.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import { makeWsRpcHttpEffectWithSshMonitorCleanup } from "./wsSshMonitor.protocol.ts";
+import { makeSshMonitorHandlers } from "./wsSshMonitor.handlers.ts";
 import { forgetSshMonitorInstance } from "../ssh/sshMonitor.connections.ts";
 import { authorizeWebsocketRpcConnection } from "./wsConnectionAuthorization.ts";
+import { makeWsSshOwnerDevHandlers } from "./wsSshOwnerDev.ts";
+import { withWsSshOwnerDevEntryActions } from "./wsSshOwnerDev.workspace.create.ts";
+import { withWsSshOwnerDevWorkspace } from "./wsSshOwnerDev.workspace.ts";
+import { withWsSshOwnerProductionWorkspace } from "./wsSshOwnerProduction.workspace.ts";
+import { initializeProductionSshGuardedWriteJournal } from "../persistence/Layers/SshOwnerGuardedWriteJournal.ts";
+import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
+
+/** W2 T-files: production Files over the live owner; unchanged when activation is off. */
+const withProductionWorkspace = Effect.fn("withProductionWorkspace")(function* <
+  C extends Parameters<typeof withWsSshOwnerProductionWorkspace>[0],
+>(base: C) {
+  // A journal that cannot open leaves guarded saves refused, never unguarded.
+  const sql = Option.getOrUndefined(yield* Effect.serviceOption(SqlClient.SqlClient));
+  const journal = sql
+    ? Option.getOrUndefined(
+        yield* initializeProductionSshGuardedWriteJournal(sql).pipe(Effect.option),
+      )
+    : undefined;
+  const production = withWsSshOwnerProductionWorkspace(base, journal ? { journal } : {});
+  if (!production) return base;
+  return {
+    ...base,
+    workspaceMutations: production.workspaceMutations,
+    workspaceRuntime: yield* production.workspaceRuntime.pipe(Effect.provide(WorkspacePathsLive)),
+  };
+});
 
 const makeWsRpcLayer = (
   withBootstrapCommandLock: BootstrapCommandLock,
@@ -51,10 +83,24 @@ const makeWsRpcLayer = (
   relayHandlers: Awaited<
     Effect.Success<ReturnType<typeof makeRemoteBackendRelayRoute>>
   >["handlers"],
+  sshOwner: Effect.Success<ReturnType<typeof makeWsSshOwnerDevHandlers>>,
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
-      const context = yield* makeWsRpcContext(withBootstrapCommandLock, monitorInstanceId);
+      const base = yield* makeWsRpcContext(withBootstrapCommandLock, monitorInstanceId);
+      const context = sshOwner
+        ? {
+            ...base,
+            workspaceMutations: withWsSshOwnerDevEntryActions(
+              base.workspaceMutations,
+              sshOwner.workspace,
+            ),
+            workspaceRuntime: yield* withWsSshOwnerDevWorkspace(
+              base.workspaceRuntime,
+              sshOwner.workspace,
+            ).pipe(Effect.provide(WorkspacePathsLive)),
+          }
+        : yield* withProductionWorkspace(base);
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
@@ -80,12 +126,17 @@ const makeWsRpcLayer = (
         ...makeWsRpcProviderControlsHandlers(context),
         ...makeWsRpcGitTerminalHandlers(context, worktreeScope),
         ...makeWsRpcTerminalSessionHandlers(context),
+        ...makeWsRpcTerminalLifecycleHandlers(context),
         ...makeWsRpcWorktreeHandlers(context, worktreeScope),
         ...makeWsRpcConnectionDiagnosticsHandlers(context),
         ...computerUseHandlers,
         ...databaseCompactionHandlers,
+        ...makeWsRpcBackendDrainHandlers(),
+        ...makeWsRpcSshOwnerAdmissionHandlers(),
         ...metadataWarningHandlers,
         ...searchHandlers,
+        ...sshOwner?.handlers,
+        ...(sshOwner?.monitorHealth && makeSshMonitorHandlers(context, sshOwner.monitorHealth)),
       });
     }),
   );
@@ -106,9 +157,18 @@ export const makeWebsocketRpcRouteLayer = (
         worktreeScope,
         Effect.sync(() => forgetSshMonitorInstance(monitorInstanceId)),
       );
+      const sshOwner = options.remoteClientRouter
+        ? undefined
+        : yield* makeWsSshOwnerDevHandlers(monitorInstanceId);
       const relay = yield* makeRemoteBackendRelayRoute(monitorInstanceId, worktreeScope);
       const wsRpcRuntimeLayer = Layer.mergeAll(
-        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId, relay.handlers),
+        makeWsRpcLayer(
+          withBootstrapCommandLock,
+          worktreeScope,
+          monitorInstanceId,
+          relay.handlers,
+          sshOwner,
+        ),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
         setupAuthority.layer,

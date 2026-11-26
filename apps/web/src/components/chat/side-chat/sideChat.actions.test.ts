@@ -17,6 +17,8 @@ import { createEmptyThreadDraft, useComposerDraftStore } from "~/stores/composer
 import { useStore } from "~/stores/main";
 import { makeState, makeThread } from "~/stores/main/main.store.test.helpers";
 import { useSideChatStore } from "~/stores/sideChat";
+import { toastManager } from "~/components/ui/toast";
+import { THREAD_DELETION_FAILED_TOAST_ID } from "~/logic/orchestration/thread-deletion.logic";
 
 import {
   applySideChatLifecycleEvents,
@@ -353,5 +355,29 @@ describe("attachSidecarToComposer", () => {
 
     expect(useSideChatStore.getState().presentation).toBe("open");
     expect(useComposerDraftStore.getState().draftsByThreadId[mainThreadId]?.files).toHaveLength(1);
+  });
+
+  it("explains a failed Close once with the server's reason, replacing earlier notices", async () => {
+    const addToast = vi.spyOn(toastManager, "add");
+    useSideChatStore.getState().show(sidecarThreadId);
+    await closeSideChat(sidecarThreadId);
+
+    const notified = applySideChatLifecycleEvents([
+      lifecycleEvent("thread.deletion-failed", {
+        threadId: sidecarThreadId,
+        reason: "Terminal cleanup failed: a remote shell may still be running.",
+        updatedAt: "2026-07-12T20:00:02.000Z",
+      }),
+    ]);
+
+    expect([...notified]).toEqual([sidecarThreadId]);
+    expect(addToast).toHaveBeenCalledOnce();
+    expect(addToast).toHaveBeenCalledWith({
+      id: THREAD_DELETION_FAILED_TOAST_ID,
+      type: "error",
+      title: "Could not close Sidecar",
+      description: "Terminal cleanup failed: a remote shell may still be running.",
+    });
+    addToast.mockRestore();
   });
 });

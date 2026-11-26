@@ -4,6 +4,9 @@ import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/t
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
+import type { TerminalHostInventorySource } from "./Manager.session.subscription.ts";
+import type { TerminalHostLimitContext } from "./Manager.hostLimit.ts";
+import type { TerminalHostClosedTombstones } from "./Manager.hostClosed.tombstones.ts";
 
 import {
   type TerminalCwdError,
@@ -40,6 +43,7 @@ export interface SessionApiContext {
     terminalId: string,
   ) => Effect.Effect<TerminalSessionState, TerminalSessionLookupError>;
   sessionsForThread: (threadId: string) => Effect.Effect<TerminalSessionState[]>;
+  keepRunningAfterQuit?: (() => boolean) | undefined;
   withThreadLock: <A, E, R>(
     threadId: string,
     effect: Effect.Effect<A, E, R>,
@@ -56,12 +60,25 @@ export interface SessionApiContext {
   readHistory: (threadId: string, terminalId: string) => Effect.Effect<string>;
   historyExists: (threadId: string, terminalId: string) => Effect.Effect<boolean>;
   deleteHistory: (threadId: string, terminalId: string) => Effect.Effect<void>;
-  deleteAllHistoryForThread: (threadId: string) => Effect.Effect<void>;
+  /** Deletes a thread's history files, keeping those of `retainedTerminalIds` (N8). */
+  deleteAllHistoryForThread: (
+    threadId: string,
+    retainedTerminalIds?: ReadonlySet<string>,
+  ) => Effect.Effect<void>;
+  /** Panes with retained history for a thread; `"unknown"` when they cannot be listed. */
+  historyTerminalIdsForThread: (
+    threadId: string,
+  ) => Effect.Effect<ReadonlyArray<string> | "unknown">;
+  /** Every file name in the history directory; `"unknown"` when it cannot be read. */
+  historyFileNames: () => Effect.Effect<ReadonlyArray<string> | "unknown">;
+  /** Removes one history file by name (the orphaned-history sweep). */
+  removeHistoryFile: (name: string) => Effect.Effect<void>;
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
   assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>;
   resolveRuntimePathIdentity?:
     | ((cwd: string) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>)
     | undefined;
+  directSshCwdOwner?: TerminalManagerOptions["directSshCwdOwner"];
   snapshot: (session: TerminalSessionState) => TerminalSessionSnapshot;
   acquireWorktreeLease: (input: {
     runtimePathIdentity?: RuntimePathIdentity | undefined;
@@ -79,6 +96,12 @@ export interface SessionApiContext {
   releaseWorktreeLease: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
   terminalEventListeners: Set<(event: TerminalEvent) => Effect.Effect<void>>;
   workSignals?: TerminalWorkSignals | undefined;
+  /** Host-owned panes in inventories, and refreshes when host facts change (plan S3). */
+  hostInventory?: TerminalHostInventorySource | undefined;
+  /** Live-limit candidates and lost panes (plan S3); absent without a host runtime. */
+  hostLimit?: TerminalHostLimitContext | undefined;
+  /** Host-closed terminals evicted from the retained sessions; an open never respawns them. */
+  hostClosed?: TerminalHostClosedTombstones | undefined;
 }
 
 export type { TerminalManagerShape };

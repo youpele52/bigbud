@@ -26,6 +26,7 @@ describe("deriveServerTurnFailure (server state only)", () => {
       pendingMessageId: "m-1",
       failureEventId: "f-1",
       failureClass: "session-dead",
+      createdAt: "2026-10-15T10:00:00.000Z",
     });
   });
 
@@ -67,5 +68,39 @@ describe("deriveServerTurnFailure (server state only)", () => {
       failureClass: "",
     });
     expect(derive([], [failure("f-1", "2026-10-15T10:00:00.000Z", "session-dead")])).toBeNull();
+  });
+
+  it("reads the server's remoteTarget marker", () => {
+    const messages = [user("m-1", "2026-10-15T10:00:00.000Z")];
+    const marked = {
+      ...failure("f-1", "2026-10-15T10:00:00.000Z"),
+      payload: {
+        failureClass: "auth-or-quota",
+        detail: "SSH password is required for ice-2-kg. Re-enter it before using this target.",
+        remoteTarget: { reason: "auth-required", executionTargetId: "ssh:x", authMode: "password" },
+      },
+    };
+    expect(derive(messages, [marked])?.remoteTarget).toEqual({
+      reason: "auth-required",
+      executionTargetId: "ssh:x",
+      authMode: "password",
+    });
+  });
+
+  it("infers a remote-target failure for a legacy session-dead row with an SSH password detail", () => {
+    const messages = [user("m-1", "2026-10-15T10:00:00.000Z")];
+    const legacy = {
+      ...failure("f-1", "2026-10-15T10:00:00.000Z"),
+      payload: {
+        failureClass: "session-dead",
+        detail: "SSH password is required for ice-2-kg. Re-enter it before using this target.",
+      },
+    };
+    expect(derive(messages, [legacy])?.remoteTarget).toEqual({
+      reason: "auth-required",
+      authMode: "password",
+    });
+    const plain = { ...legacy, payload: { failureClass: "session-dead", detail: "ECONNRESET" } };
+    expect(derive(messages, [plain])?.remoteTarget).toBeUndefined();
   });
 });

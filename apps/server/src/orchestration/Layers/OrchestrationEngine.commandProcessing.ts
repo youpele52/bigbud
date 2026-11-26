@@ -1,3 +1,4 @@
+import { decideRecoveredQueueCommand } from "./OrchestrationEngine.recoveredQueue.ts";
 import { recordCommandResultMetrics } from "./OrchestrationEngine.commandMetrics.ts";
 import { makeCanonicalCommandCommit } from "./OrchestrationEngine.commit.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
@@ -30,6 +31,7 @@ import {
   type OrchestrationDispatchError,
 } from "../Errors.ts";
 import * as ProjectWorkspace from "../ProjectWorkspace.files.ts";
+import * as ProjectWorkspaceTransport from "../ProjectWorkspace.transportCarryOver.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { WorkspaceModeGate } from "../../remote-backend/workspaceMode.gate.ts";
@@ -125,10 +127,12 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                   envelope.command.undoAutomaticMoveId) ||
                 (yield* terminalIdleBlocked(envelope.command))
                   ? []
-                  : yield* decideOrchestrationCommand({
-                      command: envelope.command,
-                      readModel: currentReadModel,
-                    });
+                  : envelope.command.type === "thread.queued-prompt.recovered"
+                    ? yield* decideRecoveredQueueCommand(sql, envelope.command, currentReadModel)
+                    : yield* decideOrchestrationCommand({
+                        command: envelope.command,
+                        readModel: currentReadModel,
+                      });
               if (
                 Option.isSome(workspaceModeGate) &&
                 (!Array.isArray(eventBase) || eventBase.length)
@@ -137,7 +141,9 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               const eventBases = yield* ProjectWorkspace.prepareProjectWorkspaceEvents(
                 envelope.command,
                 currentReadModel,
-                Array.isArray(eventBase) ? eventBase : [eventBase],
+                Array.isArray(eventBase)
+                  ? eventBase
+                  : [eventBase as Omit<OrchestrationEvent, "sequence">],
                 {
                   stateDir: workspaceConfig.stateDir,
                   sql,
@@ -157,7 +163,13 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               const committedCommand = yield* commitProjectWorkspaceApplication(
                 sql,
                 nativeIdentity,
-                commitCanonicalCommand(envelope, currentReadModel, eventBases),
+                ProjectWorkspaceTransport.carryTransportOnlyBindings(
+                  sql,
+                  envelope.command,
+                  currentReadModel,
+                ).pipe(
+                  Effect.andThen(commitCanonicalCommand(envelope, currentReadModel, eventBases)),
+                ),
               ).pipe(
                 Effect.catchTag("SqlError", (sqlError) =>
                   Effect.fail(
@@ -226,12 +238,17 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               envelope.result,
               dispatchResult,
             );
-            yield* enqueueLifecycleFlush(
-              input.commandAdmission,
-              envelope.command,
-              input.readModel(),
-              () => Option.isSome(maintenance) && maintenance.value.isClosed(),
-            );
+            if (
+              envelope.command.type !== "thread.queued-prompt.remove" ||
+              exit.value.committedEventCount > 0
+            ) {
+              yield* enqueueLifecycleFlush(
+                input.commandAdmission,
+                envelope.command,
+                input.readModel(),
+                () => Option.isSome(maintenance) && maintenance.value.isClosed(),
+              );
+            }
             return true;
           }
           const error = Cause.squash(exit.cause) as OrchestrationDispatchError;

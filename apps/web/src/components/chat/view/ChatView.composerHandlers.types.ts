@@ -21,7 +21,6 @@ export interface UsePendingUserInputStateResult {
 export interface UseAddComposerImagesInput {
   activeThreadId: ThreadId | null;
   composerImagesRef: React.MutableRefObject<ComposerImageAttachment[]>;
-  pendingUserInputsLength: number;
   addComposerImage: (image: ComposerImageAttachment) => void;
   addComposerImagesToDraft: (images: ComposerImageAttachment[]) => void;
   setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
@@ -31,7 +30,6 @@ export interface UseAddComposerFilesInput {
   activeThreadId: ThreadId | null;
   composerFilesRef: React.MutableRefObject<ComposerFileAttachment[]>;
   composerImagesLength: number;
-  pendingUserInputsLength: number;
   addComposerFile: (file: ComposerFileAttachment) => void;
   addComposerFilesToDraft: (files: ComposerFileAttachment[]) => void;
   setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
@@ -43,11 +41,6 @@ export interface UseApplyPromptReplacementInput {
   setPrompt: (prompt: string) => void;
   setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
   setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
-  activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
-  activePendingUserInput: { requestId: string } | null;
-  setPendingUserInputAnswersByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
-  >;
   composerEditorRef: React.RefObject<ComposerPromptEditorHandle | null>;
 }
 

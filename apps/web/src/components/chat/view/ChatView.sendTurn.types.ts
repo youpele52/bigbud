@@ -1,5 +1,4 @@
 import type {
-  ApprovalRequestId,
   MessageId,
   ModelSelection,
   ProviderInteractionMode,
@@ -10,11 +9,6 @@ import type {
 } from "@bigbud/contracts";
 import type { ComposerTrigger } from "../../../logic/composer";
 import type { QueuedPromptSubmission, QueuePromptResult } from "./ChatView.promptQueue.logic";
-import type { PendingUserInput } from "../../../logic/session";
-import type {
-  PendingUserInputDraftAnswer,
-  PendingUserInputProgress,
-} from "../../../logic/user-input/pending.logic";
 import type { TerminalContextDraft } from "../../../lib/terminalContext";
 import type { ChatMessage, Project, ProposedPlan, Thread } from "../../../models/types";
 import type {
@@ -54,13 +48,7 @@ export interface UseOnSendInput {
   envMode: string;
   showPlanFollowUpPrompt: boolean;
   activeProposedPlan: ProposedPlan | null;
-  isOpencodePendingUserInputMode: boolean;
-  activePendingUserInputRequestId: ApprovalRequestId | null;
-  activePendingUserInput: PendingUserInput | null;
-  /** Per-question navigation and draft answers; absent in callers without a question panel. */
-  activePendingProgress?: PendingUserInputProgress | null | undefined;
-  activePendingDraftAnswers?: Record<string, PendingUserInputDraftAnswer> | undefined;
-  setActivePendingUserInputQuestionIndex?: ((questionIndex: number) => void) | undefined;
+  hasPendingProviderRequest?: boolean;
   shouldAutoScrollRef: React.MutableRefObject<boolean>;
   setOptimisticUserMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setPrompt: (prompt: string) => void;
@@ -95,10 +83,6 @@ export interface UseOnSendInput {
     interactionMode: ProviderInteractionMode;
   }) => Promise<boolean>;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
-  onRespondToUserInput: (
-    requestId: ApprovalRequestId,
-    answers: Record<string, unknown>,
-  ) => Promise<void>;
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
   onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   /** Queues a full composer submission while a turn runs; rejects when the server refuses it. */

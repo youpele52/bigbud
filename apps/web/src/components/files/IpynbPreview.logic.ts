@@ -269,3 +269,18 @@ export function renderOutput(output: NotebookOutput): OutputRendering | null {
 
   return null;
 }
+
+/** Source lines a notebook text selection spans in the flat source, or `null` if not found. */
+export function notebookSelectionLineRange(
+  flatSource: string,
+  selectedText: string,
+): { startLine: number; endLine: number } | null {
+  if (selectedText.length < 2) return null;
+  const startIndex = flatSource.indexOf(selectedText);
+  if (startIndex === -1) return null;
+  const endIndex = startIndex + selectedText.length;
+  return {
+    startLine: flatSource.slice(0, startIndex).split("\n").length,
+    endLine: flatSource.slice(0, endIndex).split("\n").length,
+  };
+}

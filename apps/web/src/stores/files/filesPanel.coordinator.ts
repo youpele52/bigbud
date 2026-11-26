@@ -9,10 +9,14 @@ export function openFilesPanel() {
   useFilesPanelStore.getState().setOpen(true);
 }
 
+/**
+ * Low-level: `relativePath` is relative to `workspaceRoot`, which is always named explicitly.
+ * Prefer `filesPanel.open.ts`, which takes absolute paths.
+ */
 export function openFileInFilesPanel(
   relativePath: string,
-  previewPosition?: { line: number; column: number | null } | null,
-  workspaceRootOverride: string | null = null,
+  previewPosition: { line: number; column: number | null } | null,
+  workspaceRoot: string,
   workspaceExecutionTargetIdOverride?: ExecutionTargetId | null,
 ) {
   openFilesPanel();
@@ -20,15 +24,15 @@ export function openFileInFilesPanel(
     .getState()
     .requestFileOpen(
       relativePath,
-      previewPosition ?? null,
-      workspaceRootOverride,
+      previewPosition,
+      workspaceRoot,
       workspaceExecutionTargetIdOverride,
     );
 }
 
 export function openDirectoryInFilesPanel(
   relativePath: string,
-  workspaceRootOverride: string | null = null,
+  workspaceRoot: string,
   workspaceExecutionTargetIdOverride?: ExecutionTargetId | null,
 ) {
   openFilesPanel();
@@ -36,11 +40,7 @@ export function openDirectoryInFilesPanel(
   useFilesPanelStore.getState().setPreviewPosition(null);
   useFilesPanelStore
     .getState()
-    .requestDirectoryNavigation(
-      relativePath,
-      workspaceRootOverride,
-      workspaceExecutionTargetIdOverride,
-    );
+    .requestDirectoryNavigation(relativePath, workspaceRoot, workspaceExecutionTargetIdOverride);
 }
 
 export function toggleFilesPanel() {

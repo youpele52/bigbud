@@ -9,6 +9,7 @@ fn session() -> AgentSession {
             pty_create::PtyCreateFailure {
                 request_digest: vec![1, 2],
                 error: "unknown".to_owned(),
+                created_at: Instant::now(),
             },
         );
     }
@@ -107,6 +108,7 @@ fn invalid_limits_cursors_and_oversized_legacy_entries_fail_explicitly() {
         pty_create::PtyCreateFailure {
             request_digest: vec![1],
             error: "unknown".to_owned(),
+            created_at: Instant::now(),
         },
     );
     let req = request(&session);
@@ -148,8 +150,11 @@ fn running_handle_and_reaped_exit_are_observed_without_inventory_mutation() {
         "pty-live".to_owned(),
         PtySession {
             handle: Arc::clone(&handle),
+            pane_identity: None,
             request_digest: vec![4],
             expires_at: None,
+            lifecycle: None,
+            workspace_handle: String::new(),
         },
     );
     let req = request(&session);

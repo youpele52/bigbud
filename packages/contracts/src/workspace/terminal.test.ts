@@ -81,12 +81,12 @@ describe("TerminalOpenInput", () => {
       cols: 100,
       rows: 24,
       env: {
-        T3CODE_PROJECT_ROOT: "/tmp/project",
+        BIGBUD_PROJECT_ROOT: "/tmp/project",
         CUSTOM_FLAG: "1",
       },
     });
     expect(parsed.env).toMatchObject({
-      T3CODE_PROJECT_ROOT: "/tmp/project",
+      BIGBUD_PROJECT_ROOT: "/tmp/project",
       CUSTOM_FLAG: "1",
     });
     expect(parsed.worktreePath).toBe("/tmp/project/.t3/worktrees/feature-a");
@@ -178,7 +178,7 @@ describe("TerminalCloseInput", () => {
 });
 
 describe("TerminalSessionSnapshot", () => {
-  it.each(["historyTruncated", "historyUnavailable"])(
+  it.each(["historyTruncated", "historyUnavailable", "historyTrimmed"])(
     "retains explicit %s across decoding",
     (reason) => {
       const decoded = decodeSync(TerminalSessionSnapshot, {
@@ -198,6 +198,22 @@ describe("TerminalSessionSnapshot", () => {
       expect(decoded).toHaveProperty(reason, true);
     },
   );
+  it("keeps historyTrimmed optional for snapshots from older servers", () => {
+    const decoded = decodeSync(TerminalSessionSnapshot, {
+      threadId: "thread-1",
+      terminalId: DEFAULT_TERMINAL_ID,
+      dropPathMode: "posix",
+      cwd: "/project",
+      worktreePath: null,
+      status: "running",
+      pid: 1234,
+      history: "tail\n",
+      exitCode: null,
+      exitSignal: null,
+      updatedAt: "2026-10-17T00:00:00.000Z",
+    });
+    expect(decoded).not.toHaveProperty("historyTrimmed");
+  });
   it("accepts running snapshots", () => {
     expect(
       decodes(TerminalSessionSnapshot, {

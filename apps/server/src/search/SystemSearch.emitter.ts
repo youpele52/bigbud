@@ -9,13 +9,18 @@ import {
 
 /**
  * Collects one query's updates: rows are deduplicated by stable ID, capped at
- * `maxRows` (`SYSTEM_SEARCH_MAX_ROWS` per page) across every tier, and nothing is emitted once
- * the query is aborted (late batches of a superseded query are dropped). With `filesOnly`
+ * `maxRows` (`SYSTEM_SEARCH_MAX_ROWS` per page) across the shared tiers, and nothing is emitted
+ * once the query is aborted (late batches of a superseded query are dropped). With `filesOnly`
  * (Mod+P), folders are dropped before they count against the cap.
+ *
+ * Tiers in `reservedRows` have their own cap instead: the project tiers answer first and can fill
+ * the shared cap on their own (80 current + 120 other local), which used to leave "this computer"
+ * with no rows whenever Spotlight answered after them.
  */
 export class SystemSearchEmitter {
   private readonly seen = new Set<string>();
   private rows = 0;
+  private readonly reservedUsed = new Map<SystemSearchTier, number>();
 
   constructor(
     private readonly queryId: string,
@@ -23,6 +28,7 @@ export class SystemSearchEmitter {
     private readonly sink: (update: SystemSearchTierUpdate) => void,
     private readonly maxRows = SYSTEM_SEARCH_MAX_ROWS,
     private readonly filesOnly = false,
+    private readonly reservedRows: Partial<Record<SystemSearchTier, number>> = {},
   ) {}
 
   get aborted(): boolean {
@@ -38,16 +44,21 @@ export class SystemSearchEmitter {
     if (this.aborted) return true;
     const items: SystemSearchHit[] = [];
     let complete = true;
+    const reserved = this.reservedRows[input.tier];
+    let used = reserved === undefined ? this.rows : (this.reservedUsed.get(input.tier) ?? 0);
+    const cap = reserved ?? this.maxRows;
     for (const item of input.items) {
       if (this.seen.has(item.id) || (this.filesOnly && item.isDirectory)) continue;
-      if (this.rows >= this.maxRows) {
+      if (used >= cap) {
         complete = false;
         break;
       }
       this.seen.add(item.id);
-      this.rows += 1;
+      used += 1;
       items.push(item);
     }
+    if (reserved === undefined) this.rows = used;
+    else this.reservedUsed.set(input.tier, used);
     if (items.length > 0) {
       this.sink({
         queryId: this.queryId,

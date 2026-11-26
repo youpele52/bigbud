@@ -21,6 +21,8 @@ interface FilesPanelPreviewBodyInput {
   readonly workspaceKey: string;
   readonly contextMenuOpen: boolean;
   readonly visible?: boolean;
+  readonly headerActions?: ReactNode;
+  readonly revealTreeSignal?: number;
   readonly onNavigateBack: () => void;
   readonly onNavigateForward: () => void;
   readonly onClose: () => void;
@@ -36,6 +38,8 @@ export function renderFilesPanelPreviewBody(input: FilesPanelPreviewBodyInput): 
       workspaceKey={input.workspaceKey}
       contextMenuOpen={input.contextMenuOpen}
       visible={input.visible ?? true}
+      headerActions={input.headerActions}
+      revealTreeSignal={input.revealTreeSignal}
       hasPreview={Boolean(input.workspaceRoot && input.previewPath)}
       treeBody={
         input.workspaceRoot ? (

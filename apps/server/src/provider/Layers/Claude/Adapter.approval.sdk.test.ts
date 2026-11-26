@@ -26,6 +26,75 @@ function requireRequest(
 }
 
 describe("Claude SDK approval callbacks", () => {
+  it.effect.each([true, false])(
+    "refuses a pending request before dispatch (live turn: %s)",
+    (live) => {
+      const harness = makeHarness();
+      return Effect.gen(function* () {
+        const adapter = yield* ClaudeAdapter;
+        const session = yield* adapter.startSession({
+          threadId: THREAD_ID,
+          provider: "claudeAgent",
+          runtimeMode: "approval-required",
+        });
+        yield* Stream.take(adapter.streamEvents, 3).pipe(Stream.runDrain);
+        if (live) {
+          yield* adapter.sendTurn({ threadId: session.threadId, input: "first", attachments: [] });
+          yield* Stream.take(adapter.streamEvents, 1).pipe(Stream.runDrain);
+        }
+        const permission = approvalCallback(harness)(
+          "Bash",
+          { command: "pwd" },
+          {
+            signal: new AbortController().signal,
+            toolUseID: "tool-pending",
+            requestId: "pending-before-projection",
+          },
+        );
+        const opened = yield* Stream.runHead(adapter.streamEvents);
+        if (opened._tag !== "Some") throw new Error("Expected request.opened");
+        const request = requireRequest(opened.value);
+        assert.isDefined(request.requestId);
+        const requestId = ApprovalRequestId.makeUnsafe(String(request.requestId));
+        const failure = yield* Effect.flip(
+          adapter.sendTurn({
+            threadId: session.threadId,
+            input: "follow up",
+            attachments: [],
+          }),
+        );
+        assert.equal(failure._tag, "ProviderAdapterValidationError");
+        assert.equal(
+          "failureClass" in failure ? failure.failureClass : undefined,
+          live ? "busy" : "invalid-request",
+        );
+        const refusal = "turnStartRefusal" in failure ? failure.turnStartRefusal : undefined;
+        const generation = refusal?.gate.approvalRequests[0]?.generation;
+        if (typeof generation !== "string") throw new Error("Expected a request generation");
+        assert.deepEqual(refusal, {
+          kind: "pending-interaction",
+          gate: {
+            provider: "claudeAgent",
+            sessionEpoch: 0,
+            approvalRequests: [{ requestId, generation }],
+            userInputRequests: [],
+          },
+        });
+        yield* adapter.respondToRequest(session.threadId, requestId, "decline");
+        assert.equal((yield* Effect.promise(() => permission))?.behavior, "deny");
+        const closed = yield* Stream.runHead(adapter.streamEvents);
+        assert.equal(
+          closed._tag === "Some" ? closed.value.requestGeneration : undefined,
+          generation,
+        );
+        yield* adapter.stopSession(session.threadId);
+      }).pipe(
+        Effect.provideService(Random.Random, makeDeterministicRandomService()),
+        Effect.provide(harness.layer),
+      );
+    },
+  );
+
   it.effect.each([
     { label: "local", toolName: "mcp__bigbud_orchestration__browser", remote: false },
     { label: "remote", toolName: "mcp__bigbud_remote_workspace__read", remote: true },

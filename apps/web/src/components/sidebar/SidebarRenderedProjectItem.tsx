@@ -23,6 +23,7 @@ import {
 import { SidebarRemoteWorkspaceStatusIcon } from "./SidebarRemoteWorkspaceStatusIcon";
 import { SidebarProjectChevron } from "./SidebarProjectChevron";
 import { SidebarProjectStatusIndicator } from "./SidebarProjectStatusIndicator";
+import { SidebarProjectTerminals } from "./SidebarProjectTerminals";
 
 export function SidebarRenderedProjectItem({
   dragHandleProps,
@@ -276,6 +277,13 @@ export function SidebarRenderedProjectItem({
                 </span>
               )}
             </button>
+            {/* A sibling of the title button: a button may not contain another. */}
+            <SidebarProjectTerminals
+              scope={{ kind: "project", projectId: project.id }}
+              title={project.name}
+              executionTargetId={workspaceExecutionTargetId}
+              navigateToThread={navigateToThread}
+            />
           </SidebarMenuButton>
         </div>
         {!swipeReveal.isActionVisible && !isChatsProject ? (

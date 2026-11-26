@@ -207,6 +207,7 @@ pub fn run_cli_with_supervisor(
             | "run"
             | "start-rust"
             | "proxy"
+            | "drain"
     ) {
         return Err(ServiceError::Invalid(
             "unsupported account-service operation",
@@ -223,6 +224,31 @@ pub fn run_cli_with_supervisor(
         return super::lease_proxy::run(Path::new(path));
         #[cfg(not(unix))]
         return Err(ServiceError::Unsupported);
+    }
+    if operation == "drain" {
+        if args.len() != 2 || !cfg!(target_os = "linux") || files::uid()? == 0 {
+            return Err(ServiceError::Invalid(
+                "backend drain needs the managed Linux account service",
+            ));
+        }
+        let config = ServiceConfig::definition(Path::new(path))?;
+        config.validate_role(ServiceRole::Backend)?;
+        let status = config
+            .command(ServiceRole::Backend)?
+            .args([
+                "backend",
+                "stop",
+                "--for-upgrade",
+                "--authority",
+                config.authority.as_str(),
+            ])
+            .status()?;
+        if !status.success() {
+            return Err(ServiceError::Invalid(
+                "backend stop --for-upgrade refused or failed; the lock and marker are unchanged",
+            ));
+        }
+        return Ok(());
     }
     if operation == "run" {
         let role = match args.get(2).map(String::as_str) {

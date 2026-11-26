@@ -42,6 +42,42 @@ pub(super) fn remote_environment(
     Ok(result)
 }
 
+/// The environment for a `local_launch` PTY on a `--local-desktop-host` host (plan §12, N1).
+/// The server's launch spec carries the user's login-shell environment, so the requested
+/// `PATH` and `SHELL` are honoured (a `SHELL` that is not an executable absolute path falls
+/// back to the account's). `HOME`, `USER` and `LOGNAME` stay the host's own, as for remote PTYs.
+pub(super) fn local_environment(
+    requested: &[(String, String)],
+) -> Result<Vec<(String, String)>, PtyError> {
+    let requested_value = |name: &str| {
+        requested
+            .iter()
+            .rev()
+            .find(|(candidate, _)| candidate == name)
+            .map(|(_, value)| value.clone())
+            .filter(|value| !value.is_empty())
+    };
+    let path = requested_value("PATH");
+    let shell = requested_value("SHELL").filter(|value| is_executable_absolute(value));
+    let mut result = remote_environment(requested)?;
+    for (name, value) in &mut result {
+        match name.as_str() {
+            "PATH" => {
+                if let Some(path) = &path {
+                    value.clone_from(path);
+                }
+            }
+            "SHELL" => {
+                if let Some(shell) = &shell {
+                    value.clone_from(shell);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(result)
+}
+
 pub(super) fn is_executable_absolute(value: &str) -> bool {
     if !value.starts_with('/') || value.contains('\0') {
         return false;

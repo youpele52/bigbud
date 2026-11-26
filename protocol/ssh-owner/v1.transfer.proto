@@ -1,0 +1,142 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// C15 / W2 T-xfer: reserved transfer handoff boundary.
+//
+// **This is not a transfer engine and it is not enabled for real transfers in
+// S1-S4.** No product caller may issue these operations: the owner dispatcher
+// refuses both verbs typed, and only the disposable native fixture in
+// `crates/bigbud-ssh-owner/src/bin/ssh_owner/owner/transfer_fixture*.rs`
+// (compiled under `cfg(test)`) proves the boundary. Recursive traversal, rsync
+// packaging, the real `-e` launch tree, throughput and publication all remain
+// downstream of an S4-accepted owner and transfer M0.
+//
+// Frozen wire -> production verb names (W1.1 naming record):
+//   proof_transfer_stream -> transfer_stream  (product name `transferStream`)
+//   proof_packaged_rsync  -> packaged_rsync   (product name `packagedRsync`)
+//
+// Field numbers 74/75 (operations) and 47/48 (outcomes) are reserved for that
+// promotion. Promotion requires S4 accepted plus the transfer M0 plan; until
+// then the fixture is the only consumer.
+//
+// Control crosses TypeScript. Content bytes never do: a transfer stream is a
+// scoped native duplex with owner-held descriptors, and the only typed control
+// is credits, half-close and cancel; exit is an outcome, never a replay. There
+// is no field in this file that carries file content.
+
+// The owner issues the scope. A worker never supplies the authorization; it
+// echoes the opaque transfer id it received and the exact target/generation.
+message ProofTransferScope {
+  // Exactly 32 bytes. Opaque owner-issued transfer id; never a path, URL or
+  // capability the worker can mint.
+  bytes transfer_id = 1;
+  // Exact owner target. Never a worker-selected host.
+  string target_id = 2;
+  // Exact owner target generation. A stale value is refused.
+  bytes target_generation = 3;
+  ProofTransferAuthMode auth_mode = 4;
+}
+
+enum ProofTransferAuthMode {
+  PROOF_TRANSFER_AUTH_MODE_UNSPECIFIED = 0;
+  // Key material the owner packages itself; used by the supervised-child
+  // fixture only. Never an ambient agent, password or forwarded credential.
+  PROOF_TRANSFER_AUTH_MODE_PACKAGED_KEY = 1;
+  // Owner-private native channel; used by the stream fixture only.
+  PROOF_TRANSFER_AUTH_MODE_NATIVE_CHANNEL = 2;
+  // Present only to prove a typed refusal. Ordinary host trust never satisfies
+  // a transfer grant, now or after promotion.
+  PROOF_TRANSFER_AUTH_MODE_ORDINARY_TRUST = 3;
+}
+
+// Bounded operands. The owner validates every value; the worker cannot widen a
+// bound, select a host, or name a program.
+message ProofTransferOperands {
+  // Relative, traversal-free and length-bounded. No glob, brace or shell syntax.
+  string source = 1;
+  // Relative, traversal-free and length-bounded.
+  string destination = 2;
+  // Hard byte ceiling for one transfer; the owner rejects anything above 1 MiB
+  // in the fixture.
+  uint64 max_bytes = 3;
+  // Hard entry ceiling; the owner rejects anything above 64 in the fixture.
+  uint32 max_entries = 4;
+}
+
+// A caller-supplied launch attempt. Every field must be absent or empty: the
+// owner compiles the executable, argv, environment and the exact rsync `-e`
+// SSH command itself. A non-empty field is refused typed with
+// ERROR_CODE_INVALID_OPERANDS. There is no generic SSH launch escape hatch at
+// this boundary, and none is planned after promotion.
+message ProofTransferLaunchAttempt {
+  string executable = 1;
+  repeated string argv = 2;
+  repeated string env = 3;
+  string ssh_option = 4;
+}
+
+// Reserved verb 74 (`transfer_stream`). Fixture-only until S4 is accepted.
+message ProofTransferStream {
+  ProofTransferScope scope = 1;
+  ProofTransferOperands operands = 2;
+  ProofTransferLaunchAttempt launch_attempt = 3;
+}
+
+// Reserved verb 75 (`packaged_rsync`). Fixture-only until S4 is accepted.
+message ProofPackagedRsync {
+  ProofTransferScope scope = 1;
+  ProofTransferOperands operands = 2;
+  ProofTransferLaunchAttempt launch_attempt = 3;
+}
+
+// The only stream control the worker may send. `sequence` is monotonic per
+// lease and an acknowledgement never moves backward. No content bytes exist in
+// this message.
+message ProofTransferStreamControl {
+  bytes lease = 1;
+  uint64 sequence = 2;
+  oneof action {
+    // Adds to the outstanding bounded window; never above the owner cap.
+    uint64 grant_credit = 3;
+    // Closes the write direction only. Reads keep draining.
+    bool half_close = 4;
+    // Terminal for this exact lease; never a replay.
+    bool cancel = 5;
+  }
+}
+
+// Stream state as observed by the owner. Counters only; no content.
+message ProofTransferStreamState {
+  bytes lease = 1;
+  uint64 sequence = 2;
+  uint64 credits = 3;
+  uint64 sent = 4;
+  uint64 received = 5;
+  bool write_closed = 6;
+  bool peer_closed = 7;
+  bool cancelled = 8;
+  bool exited = 9;
+  optional int32 exit_code = 10;
+  optional int32 exit_signal = 11;
+}
+
+// One bounded progress sample from the supervised child fixture. `phase` is an
+// owner-compiled label, never worker text. Reserved push shape: not enabled for
+// real transfers in S1-S4.
+message ProofTransferChildProgress {
+  bytes lease = 1;
+  string phase = 2;
+  uint64 bytes = 3;
+  uint32 items = 4;
+}
+
+// Supervised-child exit as observed by the owner. `charged_trees` is the number
+// of process trees charged to this one transfer lease.
+message ProofTransferChildState {
+  bytes lease = 1;
+  bool exited = 2;
+  optional int32 exit_code = 3;
+  optional int32 exit_signal = 4;
+  bool cancelled = 5;
+  uint32 charged_trees = 6;
+}

@@ -1,4 +1,4 @@
-import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentRegistryBuild } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentInventory } from "./remoteAgentUpdate.inventory.ts";
@@ -14,8 +14,6 @@ import { reconcileRemoteAgentLaunchExits } from "./remoteAgentInstall.reconcile.
 import { remoteAgentBuildIsReferenced } from "./remoteAgentInstall.registry.references.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
-import { buildRemoteAgentSupervisorShutdownCommand } from "./remoteAgentSupervisor.ts";
-import { buildRemoteAgentRetirementDeletionCommand } from "./remoteAgentInstall.retirement.deletion.ts";
 import type { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
 
 type RetirementResult = "deleted" | "deferred";
@@ -92,22 +90,15 @@ export async function probeRemoteAgentSupervisorState(
     (entry) => entry.id === runtime.generation,
   )?.attemptId;
   if (!attemptId) {
-    const state = `'${runtime.statePath.replaceAll("'", "'\\''")}'`;
-    const result = await control.run(`set -eu
-state=${state}
-if test ! -e "$state" && test ! -L "$state" && test "$(readlink -m -- "$state")" = "$state"; then printf absent; else printf uncertain; fi
-`);
+    const result = await runRemoteAgentControlOp(control, { kind: "stateAbsent", runtime });
     return result.trim() === "absent" ? "absent" : "uncertain";
   }
-  const result = await control.run(`set -eu
-${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
-case "$(observe_supervisor)" in
-  ready|live) printf live ;;
-  exited:*) printf dead ;;
-  prior-boot-dead) printf dead ;;
-  *) printf uncertain ;;
-esac
-`);
+  const result = await runRemoteAgentControlOp(control, {
+    kind: "supervisorObserve",
+    mode: "retirementState",
+    runtime,
+    attemptId,
+  });
   return result.trim() === "live" ? "live" : result.trim() === "dead" ? "dead" : "uncertain";
 }
 
@@ -119,14 +110,12 @@ export async function awaitSupervisorExit(
     (entry) => entry.id === runtime.generation,
   )?.attemptId;
   if (!attemptId) return false;
-  const result = await control.run(`set -eu
-${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
-for n in $(seq 1 100); do
-  case "$(observe_supervisor)" in exited:*|prior-boot-dead) printf exited; exit 0 ;; esac
-  sleep .1
-done
-printf uncertain
-`);
+  const result = await runRemoteAgentControlOp(control, {
+    kind: "supervisorObserve",
+    mode: "retirementExit",
+    runtime,
+    attemptId,
+  });
   return result.trim() === "exited";
 }
 
@@ -197,7 +186,10 @@ export async function retireManagedRemoteAgentBuild(input: {
       await input.control.registry.update((state) =>
         advanceRemoteAgentRetirement(state, input.reservationId, "shutdown-requested"),
       );
-      const result = await input.control.run(buildRemoteAgentSupervisorShutdownCommand(runtime));
+      const result = await runRemoteAgentControlOp(input.control, {
+        kind: "supervisorShutdown",
+        runtime,
+      });
       if (result.trim() !== "shutdown-accepted")
         throw new Error("Supervisor shutdown was not accepted.");
       if (!(await awaitSupervisorExit(input.control, runtime))) {
@@ -241,7 +233,10 @@ export async function retireManagedRemoteAgentBuild(input: {
       tombstoneRemoteAgentRetirement(state, input.reservationId),
     );
     deletionStarted = true;
-    const deletion = await input.control.run(buildRemoteAgentRetirementDeletionCommand(runtime));
+    const deletion = await runRemoteAgentControlOp(input.control, {
+      kind: "retirementDelete",
+      runtime,
+    });
     if (deletion.trim() !== "deleted") {
       // Tombstones remain active until the exact unlink is reconciled.
       return "deferred";

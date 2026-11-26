@@ -8,7 +8,7 @@ import {
 import { Cause, Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { ProviderValidationError } from "../../provider/Errors.ts";
+import { ProviderAdapterValidationError } from "../../provider/Errors.ts";
 import { attributedSegments } from "../deciderThreads.turn.queue.ts";
 import { makeHandleTurnStartFailure } from "./ProviderCommandReactorHandlers.turnStart.ts";
 import {
@@ -71,9 +71,21 @@ describe("busy turn-start re-queue provenance", () => {
             event: requested!,
             message: message!,
             cause: Cause.fail(
-              new ProviderValidationError({
+              // Only a typed pending-interaction refusal re-queues (turn admission hardening).
+              new ProviderAdapterValidationError({
+                provider: "codex",
                 operation: "sendTurn",
-                issue: "has ongoing provider work",
+                issue: "Pending provider interaction",
+                failureClass: "invalid-request",
+                turnStartRefusal: {
+                  kind: "pending-interaction",
+                  gate: {
+                    provider: "codex",
+                    sessionEpoch: 1,
+                    approvalRequests: [],
+                    userInputRequests: [],
+                  },
+                },
               }),
             ),
           }),

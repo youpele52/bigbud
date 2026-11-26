@@ -6,7 +6,6 @@
 //! Call it from a dedicated worker thread that owns no other run-loop sources (never the main
 //! thread of a GUI process). Nothing here logs the query or any result.
 
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
@@ -15,35 +14,63 @@ use objc2_core_foundation::{
     CFType, kCFRunLoopDefaultMode,
 };
 use objc2_core_services::{
-    MDItem, MDQuery, kMDItemContentType, kMDItemFSContentChangeDate, kMDItemFSSize,
-    kMDItemLastUsedDate, kMDItemPath,
+    MDItem, MDQuery, MDQuerySortOptionFlags, kMDItemContentModificationDate, kMDItemContentType,
+    kMDItemFSSize, kMDItemLastUsedDate, kMDItemPath,
 };
 
 use super::error::OsIndexError;
+use super::exclusions::Exclusions;
 use super::predicate::name_predicate;
 use super::request::{OS_INDEX_FETCH_LIMIT, OsIndexRequest};
-use super::results::RawOsIndexHit;
+use super::results::{RawOsIndexHit, select_top_paths};
 use crate::search::StopReason;
 
 /// Longest gap between cancel and deadline checks (the plan's cancel budget is 50 ms).
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
-/// `MDQuerySetMaxCount` argument. 200 always fits in `CFIndex` (`isize`).
-const FETCH_LIMIT: CFIndex = OS_INDEX_FETCH_LIMIT as CFIndex;
+/// `MDQuerySetMaxCount` argument: matches Spotlight gathers. Only their paths are read (from the
+/// query's own value cache); the best [`OS_INDEX_FETCH_LIMIT`] by name are read in full. Fits in
+/// `CFIndex` (`isize`).
+pub(super) const RAW_FETCH_LIMIT: usize = 2_000;
 /// Uniform type identifier Spotlight reports for folders.
 const FOLDER_CONTENT_TYPE: &str = "public.folder";
 
 /// Runs the name query and returns the raw rows plus how gathering ended.
+///
+/// Spotlight sorts the matches by last used, then content modified (newest first), and gathers
+/// path, type and size with them, so reading a value costs no extra call per item. Paths are read
+/// first; rows outside the scopes or on the exclusion list are dropped and the rest ranked by name
+/// before any other attribute is read.
 pub(super) fn gather(
     request: &OsIndexRequest,
     cancel: &AtomicBool,
 ) -> Result<(Vec<RawOsIndexHit>, StopReason), OsIndexError> {
+    let exclusions = Exclusions::embedded()?;
     let deadline_at = Instant::now() + request.deadline();
     let predicate = CFString::from_str(&name_predicate(request.query())?);
-    // SAFETY: a NULL allocator selects the default allocator and NULL value-list and sorting
-    // arrays are documented as "no value lists" and "no sorting"; the query string is a live
-    // CFString. MDQueryCreate returns NULL for invalid syntax, which maps to `QueryRejected`.
-    let query = unsafe { MDQuery::new(None, Some(&predicate), None, None) }
-        .ok_or(OsIndexError::QueryRejected)?;
+    let names = attribute_names();
+    let value_list = attribute_array(&[names.path, names.content_type, names.size]);
+    let sorting = attribute_array(&[names.last_used, names.modified]);
+    // SAFETY: a NULL allocator selects the default allocator; the value-list and sorting arrays
+    // hold only attribute-name CFStrings; the query string is a live CFString. MDQueryCreate
+    // returns NULL for invalid syntax, which maps to `QueryRejected`.
+    let query = unsafe {
+        MDQuery::new(
+            None,
+            Some(&predicate),
+            Some(value_list.as_opaque()),
+            Some(sorting.as_opaque()),
+        )
+    }
+    .ok_or(OsIndexError::QueryRejected)?;
+    for name in [names.last_used, names.modified].into_iter().flatten() {
+        // SAFETY: `name` is one of the query's sorting attributes; set before execution.
+        unsafe {
+            query.set_sort_option_flags_for_attribute(
+                Some(name),
+                MDQuerySortOptionFlags::ReverseSortOrderFlag.0,
+            )
+        };
+    }
     let scopes: Vec<CFRetained<CFString>> = request
         .scopes()
         .iter()
@@ -54,8 +81,8 @@ pub(super) fn gather(
     // SAFETY: the scope array holds only CFStrings (folder paths), as MDQuerySetSearchScope
     // requires; options must be 0; the query has not been executed yet.
     unsafe { query.set_search_scope(Some(scopes.as_opaque()), 0) };
-    // SAFETY: called before MDQueryExecute, as required; the count is positive.
-    unsafe { query.set_max_count(FETCH_LIMIT) };
+    // SAFETY: called before MDQueryExecute, as required; the count is positive and fits.
+    unsafe { query.set_max_count(RAW_FETCH_LIMIT as CFIndex) };
     // SAFETY: option flags 0 select an asynchronous static query (no live updates). Results are
     // delivered through this thread's run loop, which `run_until_settled` pumps.
     if !unsafe { query.execute(0) } {
@@ -65,9 +92,19 @@ pub(super) fn gather(
     // SAFETY: MDQueryStop is valid after execution, also once gathering has finished; afterwards
     // the result list is static, so the reads below cannot race with result updates.
     unsafe { query.stop() };
-    let rows = read_rows(&query);
+    // SAFETY: the query is stopped, so the count is stable. A negative count reads as none.
+    let count = usize::try_from(unsafe { query.result_count() })
+        .map_or(0, |count| count.min(RAW_FETCH_LIMIT));
+    let paths: Vec<Option<String>> = (0..count)
+        .map(|index| item_path(&query, names.path, index))
+        .collect();
+    let selected = select_top_paths(request, exclusions, &paths, OS_INDEX_FETCH_LIMIT);
+    let rows = selected
+        .into_iter()
+        .filter_map(|index| read_row(&query, &names, index, paths.get(index)?.clone()?))
+        .collect();
     let stop = match stop {
-        StopReason::Complete if rows.len() >= OS_INDEX_FETCH_LIMIT => StopReason::Limit,
+        StopReason::Complete if count >= RAW_FETCH_LIMIT => StopReason::Limit,
         other => other,
     };
     Ok((rows, stop))
@@ -97,34 +134,7 @@ fn run_until_settled(query: &MDQuery, cancel: &AtomicBool, deadline_at: Instant)
     }
 }
 
-fn read_rows(query: &MDQuery) -> Vec<RawOsIndexHit> {
-    // SAFETY: the query is stopped, so the count is stable.
-    let count = unsafe { query.result_count() };
-    // A negative count is impossible; treating it as "no rows" can only return fewer rows.
-    let count = usize::try_from(count).map_or(0, |count| count.min(OS_INDEX_FETCH_LIMIT));
-    let names = attribute_names();
-    let mut rows = Vec::with_capacity(count);
-    for index in 0..count {
-        let Ok(index) = CFIndex::try_from(index) else {
-            break;
-        };
-        // SAFETY: `0 <= index < result_count` on a stopped (static) query. With no custom
-        // create-result function the result is an MDItemRef owned by the query.
-        let item = unsafe { query.result_at_index(index) };
-        let Some(item) = NonNull::new(item.cast_mut()) else {
-            continue;
-        };
-        // SAFETY: the pointer is a non-null MDItemRef owned by `query`, which outlives this
-        // borrow; the item is only read.
-        let item = unsafe { item.cast::<MDItem>().as_ref() };
-        if let Some(row) = read_row(item, &names) {
-            rows.push(row);
-        }
-    }
-    rows
-}
-
-/// The MDItem attribute names read for every row.
+/// The attribute names the query gathers and sorts by.
 struct AttributeNames {
     path: Option<&'static CFString>,
     content_type: Option<&'static CFString>,
@@ -141,46 +151,84 @@ fn attribute_names() -> AttributeNames {
             path: kMDItemPath,
             content_type: kMDItemContentType,
             size: kMDItemFSSize,
-            modified: kMDItemFSContentChangeDate,
+            modified: kMDItemContentModificationDate,
             last_used: kMDItemLastUsedDate,
         }
     }
 }
 
-fn read_row(item: &MDItem, names: &AttributeNames) -> Option<RawOsIndexHit> {
-    let path = string_attribute(item, names.path)?;
+fn attribute_array(names: &[Option<&'static CFString>]) -> CFRetained<CFArray<CFString>> {
+    let names: Vec<&CFString> = names.iter().flatten().copied().collect();
+    CFArray::from_objects(&names)
+}
+
+fn read_row(
+    query: &MDQuery,
+    names: &AttributeNames,
+    index: usize,
+    path: String,
+) -> Option<RawOsIndexHit> {
     // A missing type only means "unknown", which the palette shows as a plain file.
-    let content_type = string_attribute(item, names.content_type).unwrap_or_default();
+    let content_type = string_value(query, names.content_type, index).unwrap_or_default();
     Some(RawOsIndexHit {
         path,
         is_directory: content_type == FOLDER_CONTENT_TYPE,
         content_type,
         // Missing or negative sizes and dates are reported as 0 ("unknown").
-        size_bytes: number_attribute(item, names.size).unwrap_or(0),
-        modified_unix_ms: date_attribute(item, names.modified).unwrap_or(0),
-        last_used_unix_ms: date_attribute(item, names.last_used).unwrap_or(0),
+        size_bytes: number_value(query, names.size, index).unwrap_or(0),
+        modified_unix_ms: date_value(query, names.modified, index).unwrap_or(0),
+        last_used_unix_ms: date_value(query, names.last_used, index).unwrap_or(0),
     })
 }
 
-fn attribute(item: &MDItem, name: Option<&'static CFString>) -> Option<CFRetained<CFType>> {
+/// A gathered value of `name` for result `index`, retained so it outlives the query's cache.
+fn value(
+    query: &MDQuery,
+    name: Option<&'static CFString>,
+    index: usize,
+) -> Option<CFRetained<CFType>> {
     let name = name?;
-    // SAFETY: `name` is a valid attribute-name CFString and `item` a live MDItem; the binding
-    // takes ownership of the copied (+1) value.
-    unsafe { item.attribute(Some(name)) }
+    let index = CFIndex::try_from(index).ok()?;
+    // SAFETY: the query is stopped and `index < result_count`; `name` is a value-list or sorting
+    // attribute of this query. The value is borrowed from the query (Get rule), so it is retained
+    // before use; NULL means the result has no such value.
+    let raw = unsafe { query.attribute_value_of_result_at_index(Some(name), index) };
+    let raw = std::ptr::NonNull::new(raw.cast::<CFType>())?;
+    // SAFETY: a non-null CFTypeRef owned by the query, which is alive here.
+    Some(unsafe { CFRetained::retain(raw) })
 }
 
-fn string_attribute(item: &MDItem, name: Option<&'static CFString>) -> Option<String> {
-    let value = attribute(item, name)?.downcast::<CFString>().ok()?;
-    Some(value.to_string())
+/// The result's path. Spotlight computes it per item rather than gathering it with the
+/// value-list attributes, so it is the one attribute read from the MDItem.
+fn item_path(query: &MDQuery, name: Option<&'static CFString>, index: usize) -> Option<String> {
+    let index = CFIndex::try_from(index).ok()?;
+    // SAFETY: `0 <= index < result_count` on a stopped (static) query. With no custom
+    // create-result function the result is an MDItemRef owned by the query.
+    let item = unsafe { query.result_at_index(index) };
+    let item = std::ptr::NonNull::new(item.cast_mut())?;
+    // SAFETY: a non-null MDItemRef owned by `query`, which outlives this borrow; only read.
+    let item = unsafe { item.cast::<MDItem>().as_ref() };
+    // SAFETY: `name` is a valid attribute-name CFString; the binding owns the copied value.
+    let value = unsafe { item.attribute(Some(name?)) }?;
+    Some(value.downcast::<CFString>().ok()?.to_string())
 }
 
-fn number_attribute(item: &MDItem, name: Option<&'static CFString>) -> Option<u64> {
-    let value = attribute(item, name)?.downcast::<CFNumber>().ok()?;
+fn string_value(query: &MDQuery, name: Option<&'static CFString>, index: usize) -> Option<String> {
+    Some(
+        value(query, name, index)?
+            .downcast::<CFString>()
+            .ok()?
+            .to_string(),
+    )
+}
+
+fn number_value(query: &MDQuery, name: Option<&'static CFString>, index: usize) -> Option<u64> {
+    let value = value(query, name, index)?.downcast::<CFNumber>().ok()?;
     u64::try_from(value.as_i64()?).ok()
 }
 
-fn date_attribute(item: &MDItem, name: Option<&'static CFString>) -> Option<u64> {
-    let value = attribute(item, name)?.downcast::<CFDate>().ok()?;
+fn date_value(query: &MDQuery, name: Option<&'static CFString>, index: usize) -> Option<u64> {
+    let value = value(query, name, index)?.downcast::<CFDate>().ok()?;
     let since_epoch = value.to_system_time()?.duration_since(UNIX_EPOCH).ok()?;
     u64::try_from(since_epoch.as_millis()).ok()
 }

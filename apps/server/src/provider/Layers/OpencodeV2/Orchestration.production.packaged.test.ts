@@ -70,7 +70,7 @@ it("the release compiler bundles genuine A/B handlers and the canonical HTTP/SQL
       bDigest: v2ThreadImplementation("v4").implementationDigest,
     });
     expect(report.current).toEqual({
-      bootstrapAbi: "bigbud.thread.bootstrap.v5",
+      bootstrapAbi: "bigbud.thread.bootstrap.v6",
       incompatibleRollbackRejected: true,
       completedDuplicate: true,
     });

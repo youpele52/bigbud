@@ -23,6 +23,38 @@ import {
   type TerminalAgentIdentityState,
 } from "./terminal.store.identity";
 
+/** Project setup scripts run in `setup-<script id>` terminals the server opens (§8.8). */
+export function isSetupTerminalId(terminalId: string): boolean {
+  return terminalId.startsWith("setup-");
+}
+
+/**
+ * A start this client did not initiate (another window or client, a server restart of a known
+ * pane) adds its pane but never opens the surface or takes the active tab. Only a setup script's
+ * terminal opens it; a local launch already has its pane on an open surface.
+ */
+function startedTerminalState(current: ThreadTerminalState, terminalId: string) {
+  if (isSetupTerminalId(terminalId)) {
+    let nextState = current.terminalIds.includes(terminalId)
+      ? current
+      : newThreadTerminal(current, terminalId);
+    nextState = setThreadActiveTerminal(nextState, terminalId);
+    return normalizeThreadTerminalState(setThreadTerminalOpen(nextState, true));
+  }
+  if (current.terminalIds.includes(terminalId)) return current;
+  const added = newThreadTerminal(current, terminalId);
+  return normalizeThreadTerminalState(
+    current.terminalIds.length === 0
+      ? { ...added, terminalOpen: current.terminalOpen }
+      : {
+          ...added,
+          terminalOpen: current.terminalOpen,
+          activeTerminalId: current.activeTerminalId,
+          activeTerminalGroupId: current.activeTerminalGroupId,
+        },
+  );
+}
+
 interface PanelTerminalStateSlice {
   dismissedTerminalPanes?: TerminalStateStoreState["dismissedTerminalPanes"];
   panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
@@ -137,15 +169,7 @@ export function applyTerminalEventToState(
 
   if (event.type === "started" || event.type === "restarted") {
     recordTerminalLaunch(event.snapshot);
-    updateTargetTerminalState((current) => {
-      let nextState = current;
-      if (!current.terminalIds.includes(event.terminalId)) {
-        nextState = newThreadTerminal(nextState, event.terminalId);
-      }
-      nextState = setThreadActiveTerminal(nextState, event.terminalId);
-      nextState = setThreadTerminalOpen(nextState, true);
-      return normalizeThreadTerminalState(nextState);
-    });
+    updateTargetTerminalState((current) => startedTerminalState(current, event.terminalId));
   }
 
   const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);

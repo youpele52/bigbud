@@ -6,7 +6,7 @@ import {
 } from "./Orchestration.enrollment.record.ts";
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
 import { V2_COMPACT_NATIVE_SESSION_PREFIX } from "./Orchestration.sessionIdentity.ts";
-import { V2_SCOPED_BOOTSTRAP_ABI } from "./Orchestration.registration.ts";
+import { V2_SCOPED_BOOTSTRAP_ABI, V2_SUMMARY_BOOTSTRAP_ABI } from "./Orchestration.registration.ts";
 import { selectV2HtmlBootstrapUpgrade } from "./Orchestration.selection.htmlUpgrade.ts";
 import {
   v2OwnerRegistration,
@@ -27,6 +27,7 @@ export function assertV2SessionBootstrap(artifact: V2PluginSetupArtifact, native
   if (
     nativeSessionId.startsWith(V2_COMPACT_NATIVE_SESSION_PREFIX) &&
     artifact.bootstrapAbi !== V2_SCOPED_BOOTSTRAP_ABI &&
+    artifact.bootstrapAbi !== V2_SUMMARY_BOOTSTRAP_ABI &&
     artifact.bootstrapAbi !== "bigbud.thread.bootstrap.v3" &&
     artifact.bootstrapAbi !== "bigbud.thread.bootstrap.v4"
   )

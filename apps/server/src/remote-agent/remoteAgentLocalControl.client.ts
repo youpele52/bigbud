@@ -61,8 +61,7 @@ export function resolveRemoteAgentControlSocket(input: {
   readonly environment?: NodeJS.ProcessEnv;
 }): string {
   const environment = input.environment ?? process.env;
-  const configured =
-    input.baseDir ?? (environment.BIGBUD_HOME?.trim() || environment.T3CODE_HOME?.trim());
+  const configured = input.baseDir ?? environment.BIGBUD_HOME?.trim();
   const raw =
     configured ??
     (input.version && !input.development

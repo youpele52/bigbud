@@ -9,12 +9,14 @@ import {
   type TerminalSearchResult,
 } from "@bigbud/contracts/workspace/terminal.search.ts";
 import { terminalOutputLines } from "@bigbud/shared/terminalText";
+import { terminalSearchTail } from "./Manager.history.retention";
+import type { TerminalSessionState } from "./Manager.types";
 
 /** Long lines are clipped to a window around the match. */
 const LINE_CONTEXT_BEFORE = 80;
 const LINE_CONTEXT_AFTER = 160;
 
-export interface SearchableTerminal {
+export interface SearchableTerminal extends Pick<TerminalSessionState, "historyRetention"> {
   readonly threadId: string;
   readonly terminalId: string;
   readonly status: string;
@@ -23,15 +25,15 @@ export interface SearchableTerminal {
 }
 
 interface CachedLines {
-  readonly history: string;
+  readonly text: string;
   readonly lines: readonly string[];
   readonly lowered: readonly string[];
 }
 
 /**
- * Scan-on-search over the output each terminal already retains (bounded per terminal by the
- * history limits), so the output path pays nothing. Displayed lines are cached per terminal and
- * rebuilt only when that terminal's history changed since the previous search.
+ * Scan-on-search over each terminal's visible-text search tail (kept by history retention and
+ * bounded to 512 KiB), so the output path pays nothing extra. Displayed lines are cached per
+ * terminal and rebuilt only when that terminal's tail changed since the previous search.
  */
 export class TerminalSearchIndex {
   private readonly cache = new Map<string, CachedLines>();
@@ -85,10 +87,12 @@ export class TerminalSearchIndex {
   private linesFor(session: SearchableTerminal): CachedLines {
     const key = cacheKey(session);
     const cached = this.cache.get(key);
-    if (cached && cached.history === session.history) return cached;
-    const lines = terminalOutputLines(session.history);
+    // The search tail outlives replay trims and lost baselines, bounded to 512 KiB of text.
+    const text = terminalSearchTail(session);
+    if (cached && cached.text === text) return cached;
+    const lines = terminalOutputLines(text);
     const next = {
-      history: session.history,
+      text,
       lines,
       lowered: lines.map((line) => line.toLowerCase()),
     };

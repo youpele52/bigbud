@@ -2,6 +2,12 @@ import { type ExecutionTargetId } from "@bigbud/contracts";
 
 import { runCancellableSshToolCommand } from "./toolTransport.ssh.cancellation.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import { assertSelectedSshToolTransportAvailable } from "./toolTransport.ssh.errors.ts";
+
+export {
+  SelectedSshToolTransportError,
+  assertSelectedSshToolTransportAvailable,
+} from "./toolTransport.ssh.errors.ts";
 
 export interface RunSshToolCommandInput {
   readonly executionTargetId: ExecutionTargetId;
@@ -31,6 +37,7 @@ function normalizeEnvironment(
 }
 
 export function runSshToolCommand(input: RunSshToolCommandInput) {
+  assertSelectedSshToolTransportAvailable();
   const env = normalizeEnvironment(input.env);
   if (input.signal)
     return runCancellableSshToolCommand({ ...input, env: env ?? {}, signal: input.signal });

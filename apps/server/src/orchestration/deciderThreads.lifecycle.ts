@@ -222,6 +222,8 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         type: "thread.deletion-failed",
         payload: {
           threadId: command.threadId,
+          ...(command.reason !== undefined ? { reason: command.reason } : {}),
+          ...(command.initiator !== undefined ? { initiator: command.initiator } : {}),
           updatedAt: command.createdAt,
         },
       };

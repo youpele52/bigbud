@@ -34,6 +34,7 @@ export function normalizeV2Catalog(
         group: getSubProviderDisplayName(names.get(model.providerID) ?? model.providerID),
         availability: "available" as const,
         isCustom: false,
+        effortCatalogDirectory: location,
         capabilities: {
           reasoningEffortLevels: model.variants.map((variant) => ({
             value: variant.id,

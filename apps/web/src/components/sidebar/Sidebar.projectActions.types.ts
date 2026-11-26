@@ -4,7 +4,6 @@ import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { type useSettings } from "../../hooks/useSettings";
 import type { Project } from "../../models/types";
 import type { SidebarProjectSnapshot } from "./Sidebar.types";
-import type { PendingDisconnectConfirmation } from "./Sidebar.projectActions.connection.logic";
 
 export interface SidebarProjectActionsInput {
   projects: Project[];
@@ -22,12 +21,6 @@ export interface SidebarProjectActionsInput {
 }
 
 export interface SidebarProjectActionsOutput {
-  pendingReconnect: { projectId: ProjectId; projectName: string } | null;
-  dismissReconnect: () => void;
-  confirmReconnect: () => Promise<void>;
-  pendingDisconnect: PendingDisconnectConfirmation | null;
-  dismissDisconnect: () => void;
-  confirmDisconnect: () => Promise<void>;
   renamingProjectId: ProjectId | null;
   renamingProjectTitle: string;
   setRenamingProjectTitle: (title: string) => void;

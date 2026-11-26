@@ -51,14 +51,22 @@ describe("planSearchResultOpen", () => {
     }
   });
 
-  it("never loads this-computer rows into bigbud panels, even text files", () => {
-    const outside = row("notes.txt", {
-      id: "thisComputer:name:local:/Users/me/Documents/notes.txt",
+  it("opens this-computer rows in bigbud when it can show them, else in the system app", () => {
+    const outside = (path: string) =>
+      row(path, {
+        id: `thisComputer:name:local:/Users/me/Documents/${path}`,
+        root: "/Users/me/Documents",
+      });
+    expect(planSearchResultOpen(outside("notes.txt"))).toEqual({
+      action: "in-app",
+      target: "/Users/me/Documents/notes.txt",
       root: "/Users/me/Documents",
+      kind: "file",
+      executionTargetId: "local",
     });
-    expect(planSearchResultOpen(outside)).toEqual({
+    expect(planSearchResultOpen(outside("song.mp3"))).toEqual({
       action: "system",
-      absolutePath: "/Users/me/Documents/notes.txt",
+      absolutePath: "/Users/me/Documents/song.mp3",
     });
   });
 

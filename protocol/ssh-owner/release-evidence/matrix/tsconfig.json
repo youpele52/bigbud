@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "files": ["catalog.ts", "input.ts", "check.ts", "check.test.ts", "verify.ts", "vitest.config.ts"]
+}

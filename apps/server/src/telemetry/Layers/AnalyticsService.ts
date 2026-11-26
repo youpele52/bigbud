@@ -7,7 +7,7 @@
  * @module AnalyticsServiceLive
  */
 
-import { Config, DateTime, Effect, Layer, Option, Ref } from "effect";
+import { Config, DateTime, Effect, Layer, Ref } from "effect";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../../startup/config.ts";
@@ -22,53 +22,30 @@ interface BufferedAnalyticsEvent {
 }
 
 const TelemetryEnvConfig = Config.all({
-  posthogKey: Config.all({
-    primary: Config.string("BIGBUD_POSTHOG_KEY").pipe(Config.option),
-    legacy: Config.string("T3CODE_POSTHOG_KEY").pipe(Config.option),
-  }).pipe(
-    Config.map(({ primary, legacy }) =>
-      Option.getOrElse(
-        Option.firstSomeOf([primary, legacy]),
-        () => "phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m",
-      ),
-    ),
+  posthogKey: Config.string("BIGBUD_POSTHOG_KEY").pipe(
+    Config.withDefault(""),
+    Config.map((key) => key.trim()),
   ),
-  posthogHost: Config.all({
-    primary: Config.string("BIGBUD_POSTHOG_HOST").pipe(Config.option),
-    legacy: Config.string("T3CODE_POSTHOG_HOST").pipe(Config.option),
-  }).pipe(
-    Config.map(({ primary, legacy }) =>
-      Option.getOrElse(Option.firstSomeOf([primary, legacy]), () => "https://us.i.posthog.com"),
-    ),
+  posthogHost: Config.string("BIGBUD_POSTHOG_HOST").pipe(
+    Config.withDefault("https://us.i.posthog.com"),
   ),
-  enabled: Config.all({
-    primary: Config.boolean("BIGBUD_TELEMETRY_ENABLED").pipe(Config.option),
-    legacy: Config.boolean("T3CODE_TELEMETRY_ENABLED").pipe(Config.option),
-  }).pipe(
-    Config.map(({ primary, legacy }) =>
-      Option.getOrElse(Option.firstSomeOf([primary, legacy]), () => true),
-    ),
-  ),
-  flushBatchSize: Config.all({
-    primary: Config.number("BIGBUD_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.option),
-    legacy: Config.number("T3CODE_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.option),
-  }).pipe(
-    Config.map(({ primary, legacy }) =>
-      Option.getOrElse(Option.firstSomeOf([primary, legacy]), () => 20),
-    ),
-  ),
-  maxBufferedEvents: Config.all({
-    primary: Config.number("BIGBUD_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(Config.option),
-    legacy: Config.number("T3CODE_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(Config.option),
-  }).pipe(
-    Config.map(({ primary, legacy }) =>
-      Option.getOrElse(Option.firstSomeOf([primary, legacy]), () => 1_000),
-    ),
+  enabled: Config.boolean("BIGBUD_TELEMETRY_ENABLED").pipe(Config.withDefault(false)),
+  flushBatchSize: Config.number("BIGBUD_TELEMETRY_FLUSH_BATCH_SIZE").pipe(Config.withDefault(20)),
+  maxBufferedEvents: Config.number("BIGBUD_TELEMETRY_MAX_BUFFERED_EVENTS").pipe(
+    Config.withDefault(1_000),
   ),
 });
 
 const makeAnalyticsService = Effect.gen(function* () {
   const telemetryConfig = yield* TelemetryEnvConfig.asEffect();
+  if (telemetryConfig.enabled && !telemetryConfig.posthogKey) {
+    yield* Effect.logWarning(
+      "Telemetry is enabled but no PostHog key is configured; telemetry is disabled",
+    );
+  }
+  if (!telemetryConfig.enabled || !telemetryConfig.posthogKey) {
+    return { record: () => Effect.void, flush: Effect.void } satisfies AnalyticsServiceShape;
+  }
   const httpClient = yield* HttpClient.HttpClient;
   const serverConfig = yield* ServerConfig;
   const identifier = yield* getTelemetryIdentifier;

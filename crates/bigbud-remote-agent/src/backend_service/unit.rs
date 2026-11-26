@@ -63,7 +63,7 @@ pub(super) fn render_definition(config: &ServiceConfig) -> Result<UnitFiles> {
             .ok_or(ServiceError::Invalid("non-UTF-8 config path"))?,
     );
     let backend = format!(
-        "# bigbud account-service v1; user scope only\n[Unit]\nDescription=bigbud remote backend\nAfter={}\nStartLimitIntervalSec=300\nStartLimitBurst=6\n\n[Service]\nType=exec\nExecStart={launcher} --backend-service run {path} backend\n{BACKEND_STOP_POST}\nRestart={}\nRestartSec=1\nKillMode=control-group\nTimeoutStopSec=15\nSendSIGKILL=yes\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+        "# bigbud account-service v1; user scope only\n[Unit]\nDescription=bigbud remote backend\nAfter={}\nStartLimitIntervalSec=300\nStartLimitBurst=6\n\n[Service]\nType=exec\nExecStart={launcher} --backend-service run {path} backend\n# Runs the W3.2 drain before graph replacement; failure is reported, not skipped.\nExecStop={launcher} --backend-service drain {path}\n{BACKEND_STOP_POST}\nRestart={}\nRestartSec=1\nKillMode=control-group\nTimeoutStopSec=15\nSendSIGKILL=yes\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
         names.rust,
         if config.restart { "on-failure" } else { "no" }
     );

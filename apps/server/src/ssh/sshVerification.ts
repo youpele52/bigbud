@@ -32,15 +32,28 @@ import {
 import { runProcess } from "../utils/processRunner.ts";
 import { inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
 import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
+import { buildSshKeyLoadMessage, SshTargetAuthRequiredError } from "./sshTargetUnavailable.ts";
 
 const SSH_VERIFY_TIMEOUT_MS = 8_000;
 const SSH_UNLOCK_ASKPASS_DIR_PREFIX = "bigbud-ssh-askpass-";
 
 export function formatSshKeyLoadMessage(keyPath: string): string {
-  return `SSH key '${keyPath}' requires a passphrase. Load it into ssh-agent with 'ssh-add ${keyPath}' before using this target.`;
+  return buildSshKeyLoadMessage(keyPath);
 }
 
-type KeyTarget = { readonly keyPath: string; readonly expandedKeyPath: string };
+type KeyTarget = {
+  readonly executionTargetId: string;
+  readonly keyPath: string;
+  readonly expandedKeyPath: string;
+};
+
+function keyPassphraseRequiredError(key: KeyTarget): SshTargetAuthRequiredError {
+  return new SshTargetAuthRequiredError(
+    key.executionTargetId,
+    "ssh-key-passphrase",
+    formatSshKeyLoadMessage(key.keyPath),
+  );
+}
 
 /** Parses the target; returns the key to probe, or `undefined` when no local probe is needed. */
 function resolveKeyTarget(executionTargetId: string | null | undefined): KeyTarget | undefined {
@@ -55,7 +68,7 @@ function resolveKeyTarget(executionTargetId: string | null | undefined): KeyTarg
   if (!fs.existsSync(expandedKeyPath)) {
     throw new Error(`SSH key not found at '${target.keyPath}'.`);
   }
-  return { keyPath: target.keyPath, expandedKeyPath };
+  return { executionTargetId: target.executionTargetId, keyPath: target.keyPath, expandedKeyPath };
 }
 
 function keyProbeArgs(key: KeyTarget): string[] {
@@ -98,7 +111,7 @@ export function assertSshExecutionTargetReady(executionTargetId: string | null |
     timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS,
   });
   if (keyNeedsAgent(key, keyProbe) && !isPassphraseProtectedKeyLoaded(key.expandedKeyPath)) {
-    throw new Error(formatSshKeyLoadMessage(key.keyPath));
+    throw keyPassphraseRequiredError(key);
   }
 }
 
@@ -122,7 +135,7 @@ export async function assertSshExecutionTargetReadyAsync(
       keyNeedsAgent(key, keyProbe) &&
       !(await isPassphraseProtectedKeyLoadedAsync(key.expandedKeyPath, deadline))
     ) {
-      throw new Error(formatSshKeyLoadMessage(key.keyPath));
+      throw keyPassphraseRequiredError(key);
     }
   } catch (error) {
     return inspectSshHostTrustOnFailure(executionTargetId ?? "local", error);

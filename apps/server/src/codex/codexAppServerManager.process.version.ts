@@ -1,16 +1,16 @@
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { CodexAppServerProcess } from "./codexAppServerManager.processHandle.ts";
 
-const versions = new WeakMap<ChildProcessWithoutNullStreams, string | undefined>();
+const versions = new WeakMap<CodexAppServerProcess, string | undefined>();
 
 /** Bind a fresh startup observation to this child, never to a reusable binary-path cache. */
-export function bindCodexProcessVersion(
-  child: ChildProcessWithoutNullStreams,
+export function bindCodexProcessVersion<T extends CodexAppServerProcess>(
+  child: T,
   version: string | undefined,
-): ChildProcessWithoutNullStreams {
+): T {
   versions.set(child, version);
   return child;
 }
 
-export function readCodexProcessVersion(child: ChildProcessWithoutNullStreams): string | undefined {
+export function readCodexProcessVersion(child: CodexAppServerProcess): string | undefined {
   return versions.get(child);
 }

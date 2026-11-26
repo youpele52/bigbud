@@ -4,6 +4,7 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { CommandId, ProjectId, ThreadId, MessageId, ModelSelection } from "@bigbud/contracts";
 import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.ts";
 import { createOrchestrationSystem } from "../../../orchestration/Layers/OrchestrationEngine.test.helpers.ts";
+import { createHarness } from "../../../orchestration/Layers/ProviderCommandReactor.test.helpers.ts";
 import {
   getThreadOrchestrationToolDispatcher,
   setThreadOrchestrationToolDispatcher,
@@ -26,24 +27,54 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
     parent: ThreadId;
     runtimeMode?: "full-access" | "approval-required" | "auto-accept-edits";
     consumeChildren?: boolean;
+    queuedProvider?: boolean;
   }) {
-    const system = yield* Effect.promise(() => createOrchestrationSystem({ catalog: true }));
+    let adapter: OpencodeV2AdapterShape | undefined;
+    const run = Effect.runPromiseWith(yield* Effect.services());
+    const reactor = input.queuedProvider
+      ? yield* Effect.promise(() =>
+          createHarness({
+            baseDir: input.profile,
+            workspaceRoot: input.workspace,
+            startReactor: false,
+            threadModelSelection: selection,
+            overrideProvider: (service) => {
+              const provider = () => {
+                if (!adapter) throw new Error("native reactor provider is not bound");
+                return adapter;
+              };
+              return {
+                ...service,
+                startSession: (_, request) => provider().startSession(request),
+                startSessionFresh: (_, request) => provider().startSession(request),
+                sendTurn: (request) => provider().sendTurn(request),
+                listSessions: () => provider().listSessions(),
+              };
+            },
+          }),
+        )
+      : undefined;
+    const system = reactor
+      ? { engine: reactor.engine, run, dispose: reactor.cleanup }
+      : yield* Effect.promise(() => createOrchestrationSystem({ catalog: true }));
     yield* Effect.addFinalizer(() => Effect.promise(() => system.dispose()));
-    const projectId = ProjectId.makeUnsafe("native-delegation-project"),
+    const projectId = ProjectId.makeUnsafe(reactor ? "project-1" : "native-delegation-project"),
       createdAt = new Date().toISOString();
-    yield* Effect.promise(() =>
-      system.run(
-        system.engine.dispatch({
-          type: "project.create",
-          commandId: CommandId.makeUnsafe("delegation-project"),
-          projectId,
-          title: "Disposable",
-          workspaceRoot: input.workspace,
-          defaultModelSelection: selection,
-          createdAt,
-        }),
-      ),
-    );
+    if (!reactor) {
+      yield* Effect.promise(() =>
+        system.run(
+          system.engine.dispatch({
+            type: "project.create",
+            commandId: CommandId.makeUnsafe("delegation-project"),
+            projectId,
+            title: "Disposable",
+            workspaceRoot: input.workspace,
+            defaultModelSelection: selection,
+            createdAt,
+          }),
+        ),
+      );
+    }
     yield* Effect.promise(() =>
       system.run(
         system.engine.dispatch({
@@ -66,7 +97,6 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
     );
     const installed = getThreadOrchestrationToolDispatcher()!;
     if (!installed.createThread) throw new Error("real canonical child dispatcher missing");
-    let adapter: OpencodeV2AdapterShape | undefined;
     const dispatched: Record<string, unknown>[] = [];
     setThreadOrchestrationToolDispatcher({
       ...installed,
@@ -75,7 +105,7 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
           dispatched.push(request);
           const result = yield* Effect.promise(() => system.run(installed.createThread!(request)));
           if (isThreadCoordinationRefusal(result)) return result;
-          if (!result.replayed && input.consumeChildren !== false) {
+          if (!result.replayed && !reactor && input.consumeChildren !== false) {
             if (!adapter) throw new Error("provider consumer missing");
             const readModel = yield* Effect.promise(() => system.run(system.engine.getReadModel()));
             const child = readModel.threads.find((thread) => thread.id === result.childThreadId)!;
@@ -128,6 +158,11 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
       dispatched,
       engine: system.engine,
       run: system.run,
+      runQueuedTurns: async () => {
+        if (!reactor) throw new Error("native queued reactor was not configured");
+        await reactor.startReactor();
+        await reactor.drain();
+      },
       bind: (value: OpencodeV2AdapterShape) => {
         adapter = value;
       },

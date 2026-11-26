@@ -50,11 +50,11 @@ describe("ChatView scripts and worktree integration", () => {
             _tag: WS_METHODS.terminalOpen,
             cwd: "/repo/project",
             worktreePath: null,
-            env: { T3CODE_PROJECT_ROOT: "/repo/project" },
+            env: { BIGBUD_PROJECT_ROOT: "/repo/project" },
           });
           expect(
             (openRequest as { env?: Record<string, string> } | undefined)?.env
-              ?.T3CODE_WORKTREE_PATH,
+              ?.BIGBUD_WORKTREE_PATH,
           ).toBeUndefined();
         },
         { timeout: 8_000, interval: 16 },
@@ -110,7 +110,7 @@ describe("ChatView scripts and worktree integration", () => {
           _tag: WS_METHODS.terminalOpen,
           threadId: THREAD_ID,
           cwd: "/repo/project",
-          env: { T3CODE_PROJECT_ROOT: "/repo/project" },
+          env: { BIGBUD_PROJECT_ROOT: "/repo/project" },
         });
       });
       await vi.waitFor(() => {
@@ -174,8 +174,8 @@ describe("ChatView scripts and worktree integration", () => {
           threadId: THREAD_ID,
           cwd: "/repo/worktrees/feature-draft",
           env: {
-            T3CODE_PROJECT_ROOT: "/repo/project",
-            T3CODE_WORKTREE_PATH: "/repo/worktrees/feature-draft",
+            BIGBUD_PROJECT_ROOT: "/repo/project",
+            BIGBUD_WORKTREE_PATH: "/repo/worktrees/feature-draft",
           },
         });
       });

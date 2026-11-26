@@ -141,6 +141,7 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
             childProcessSpawner,
             nativeEventLogger,
             remoteAgentPtyResolver: options?.remoteAgentPtyResolver,
+            sessionFsOwner: options?.sessionFsOwner,
             remoteWorkspaceReadinessProbe: options?.remoteWorkspaceReadinessProbe,
             serverConfig: {
               stateDir: serverConfig.stateDir,

@@ -1,11 +1,14 @@
 import * as Effect from "effect/Effect";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle.ts";
+import type { TerminalSessionState } from "./Manager.types.ts";
 import { toSessionKey } from "./Manager.shell.ts";
 import { terminalPaneWork } from "./Manager.idleWork.ts";
 
 export function makeInactiveSessionEviction(
   modify: ProcessLifecycleContext["modifyManagerState"],
   limit: number,
+  /** Sees each evicted session (host-closed ones leave a tombstone). */
+  onEvicted?: (session: TerminalSessionState) => void,
 ) {
   return Effect.fn("terminal.evictInactiveSessionsIfNeeded")(function* () {
     yield* modify((state) => {
@@ -24,6 +27,7 @@ export function makeInactiveSessionEviction(
       const sessions = new Map(state.sessions);
       for (const session of inactive.slice(0, inactive.length - limit)) {
         sessions.delete(toSessionKey(session.threadId, session.terminalId));
+        onEvicted?.(session);
       }
       return [undefined, { ...state, sessions }] as const;
     });

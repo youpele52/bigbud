@@ -11,6 +11,7 @@ import {
   isNotGitRepositoryResult,
 } from "./GitCoreUtils.ts";
 import type { GitHelpers } from "./GitCoreExecutor.ts";
+import { makeUntrackedLineCounter } from "./GitStatus.untrackedCounts.ts";
 
 const NON_REPOSITORY_STATUS_DETAILS = Object.freeze<GitStatusDetails>({
   isRepo: false,
@@ -26,6 +27,9 @@ const NON_REPOSITORY_STATUS_DETAILS = Object.freeze<GitStatusDetails>({
 });
 
 interface MakeStatusDetailsReaderInput {
+  allowPathNumstat?: () => boolean;
+  /** Bounded untracked-only counts for the selected owner; never an unbounded scan. */
+  allowUntrackedCount?: () => boolean;
   executeGit: GitHelpers["executeGit"];
   runGitStdout: GitHelpers["runGitStdout"];
   originRemoteExists: (cwd: string) => Effect.Effect<boolean, GitCommandError>;
@@ -36,6 +40,8 @@ interface MakeStatusDetailsReaderInput {
 }
 
 export function makeReadStatusDetails({
+  allowPathNumstat = () => true,
+  allowUntrackedCount = () => false,
   executeGit,
   runGitStdout,
   originRemoteExists,
@@ -95,6 +101,7 @@ export function makeReadStatusDetails({
     let behindCount = 0;
     let hasWorkingTreeChanges = false;
     const changedFilesWithoutNumstat = new Set<string>();
+    const untrackedPaths = new Set<string>();
 
     for (const line of statusStdout.split(/\r?\n/g)) {
       if (line.startsWith("# branch.head ")) {
@@ -117,7 +124,10 @@ export function makeReadStatusDetails({
       if (line.trim().length > 0 && !line.startsWith("#")) {
         hasWorkingTreeChanges = true;
         const pathValue = parsePorcelainPath(line);
-        if (pathValue) changedFilesWithoutNumstat.add(pathValue);
+        if (pathValue) {
+          changedFilesWithoutNumstat.add(pathValue);
+          if (line.startsWith("? ")) untrackedPaths.add(pathValue);
+        }
       }
     }
 
@@ -164,10 +174,35 @@ export function makeReadStatusDetails({
       })
       .toSorted((a, b) => a.path.localeCompare(b.path));
 
+    const untrackedCounts =
+      allowUntrackedCount() && untrackedPaths.size > 0
+        ? yield* makeUntrackedLineCounter({ executeGit, operationPrefix }).countUntrackedPaths(
+            cwd,
+            [...untrackedPaths],
+          )
+        : undefined;
+
     for (const filePath of changedFilesWithoutNumstat) {
       if (fileStatMap.has(filePath)) continue;
 
-      const fallbackStat = yield* readFallbackNumstatForPath(filePath);
+      const untrackedCount = untrackedCounts?.get(filePath);
+      if (untrackedCount?.counted === true) {
+        insertions += untrackedCount.insertions;
+        deletions += untrackedCount.deletions;
+        files.push({
+          path: filePath,
+          insertions: untrackedCount.insertions,
+          deletions: untrackedCount.deletions,
+        });
+        continue;
+      }
+
+      // Selected target status reports porcelain-only paths without opening them. The bounded
+      // untracked counter above decides exactly which paths were attempted.
+      const fallbackStat =
+        untrackedCount === undefined && allowPathNumstat()
+          ? yield* readFallbackNumstatForPath(filePath)
+          : null;
       if (fallbackStat) {
         insertions += fallbackStat.insertions;
         deletions += fallbackStat.deletions;

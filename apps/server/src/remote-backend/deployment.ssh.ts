@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { buildSshCommandInvocation, sshClientProcessEnv } from "../ssh/sshCommand.ts";
 import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
+import { makeOwnedDeploymentSshRunner, type DeploymentSshOwner } from "./deployment.ssh.owner.ts";
 import type {
   DeploymentRemoteCommand,
   DeploymentRemoteResult,
@@ -113,3 +114,16 @@ export const runDeploymentSsh: DeploymentRemoteRunner = async (target, command, 
     signal,
   );
 };
+
+export type DeploymentSshTransport =
+  | { readonly kind: "legacy" }
+  | { readonly kind: "owner"; readonly owner: DeploymentSshOwner };
+
+/** Selection is for the whole runner, not per command. An unsupported owner step cannot fall back. */
+export function makeDeploymentSshRunner(
+  transport: DeploymentSshTransport = { kind: "legacy" },
+): DeploymentRemoteRunner {
+  return transport.kind === "owner"
+    ? makeOwnedDeploymentSshRunner(transport.owner)
+    : runDeploymentSsh;
+}

@@ -1,7 +1,11 @@
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentRegistryStore } from "./remoteAgentInstall.registry.store.ts";
-import { hasRemoteAgentPathControls } from "./remoteAgentRuntime.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import type { RemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
+import { REMOTE_AGENT_CONTROL_ROOT_SCRIPT } from "./remoteAgentControl.scripts.ts";
+import { assertRemoteAgentControlRoot } from "./remoteAgentControl.root.ts";
+import { openOwnerRemoteAgentControl } from "./remoteAgentControl.owner.install.ts";
+import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
 import {
   buildRemoteAgentInventoryCommand,
   parseRemoteAgentInventory,
@@ -14,13 +18,22 @@ export interface RemoteAgentControl {
   run: (command: string, options?: { readonly timeoutMs?: number }) => Promise<string>;
   readonly registry: ReturnType<typeof makeRemoteAgentRegistryStore>;
   readonly inventory?: () => Promise<RemoteAgentInventory>;
+  /**
+   * Production (U25): run one typed operation through the SSH owner. When set, every module
+   * routes through it and `run` is never given script text.
+   */
+  readonly exec?: (op: RemoteAgentControlOp) => Promise<string>;
 }
 
 /** Resolve the verified account's canonical control root without opening any agent state. */
 export async function openRemoteAgentControl(
   executionTargetId: string,
-  execute: (input: RunSshCommandInput) => Promise<unknown> = runSshCommand,
+  runner?: (input: RunSshCommandInput) => Promise<unknown>,
 ): Promise<RemoteAgentControl> {
+  // U25: production activation runs every control operation through the live SSH owner.
+  const owner = runner ? undefined : remoteAgentOwnerSelection();
+  if (owner) return openOwnerRemoteAgentControl(owner, executionTargetId);
+  const execute = runner ?? runSshCommand;
   const run = async (command: string, options?: { readonly timeoutMs?: number }) => {
     const result = await runRemoteAgentDiagnosedCommand(execute, "control", {
       executionTargetId,
@@ -34,32 +47,8 @@ export async function openRemoteAgentControl(
       throw new Error("Missing remote control response.");
     return String(result.stdout);
   };
-  const root = (
-    await run(`set -eu
-umask 077
-home=$(readlink -f -- "$HOME")
-for path in "$home/.bigbud" "$home/.bigbud/agent"; do
-  test ! -L "$path"
-  if test ! -e "$path"; then mkdir -m 700 -- "$path" || test -d "$path"; fi
-  test -d "$path"
-  test "$(stat -c '%u' -- "$path")" = "$(id -u)"
-  mode=$(stat -c '%a' -- "$path")
-  if test "$path" = "$home/.bigbud"; then
-    test "$mode" = 700 || test "$mode" = 755
-  else
-    test "$mode" = 700
-  fi
-done
-printf '%s' "$home/.bigbud/agent"
-`)
-  ).trim();
-  if (
-    !root.startsWith("/") ||
-    !root.endsWith("/.bigbud/agent") ||
-    hasRemoteAgentPathControls(root)
-  ) {
-    throw new Error("Invalid remote control root.");
-  }
+  const root = (await run(REMOTE_AGENT_CONTROL_ROOT_SCRIPT)).trim();
+  assertRemoteAgentControlRoot(root);
   return {
     root,
     run,

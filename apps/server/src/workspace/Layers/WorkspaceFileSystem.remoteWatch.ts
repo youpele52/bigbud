@@ -4,6 +4,10 @@ import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts/workspace/pro
 
 import { runSshCommand } from "../../ssh/sshProcess.ts";
 import { WorkspaceFileSystemError } from "../Services/WorkspaceFileSystem.ts";
+import type {
+  WorkspaceMutationWatchOwnerInput,
+  WorkspaceMutationWatchOwnerShape,
+} from "../Services/WorkspaceMutationWatchOwner.ts";
 
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -13,7 +17,7 @@ const REMOTE_DIRECTORY_SNAPSHOT_TIMEOUT_MS = 10_000;
 interface RemoteDirectoryPollingInput {
   readonly cwd: string;
   readonly relativePath: string;
-  readonly readSnapshot: () => Promise<string>;
+  readonly readSnapshot: (signal: AbortSignal) => Promise<string>;
   readonly pollIntervalMs?: number;
 }
 
@@ -65,16 +69,26 @@ export function createRemoteDirectoryPollingStream(
           let disconnected = false;
           let failureCount = 0;
           let generation = 0;
+          const offer = async (event: ProjectDirectoryWatchEvent) => {
+            try {
+              await Effect.runPromise(Queue.offer(queue, event), {
+                signal: abortController.signal,
+              });
+            } catch (cause) {
+              if (!abortController.signal.aborted) throw cause;
+            }
+          };
 
           while (!abortController.signal.aborted) {
             try {
-              const nextSnapshot = await input.readSnapshot();
+              const nextSnapshot = await input.readSnapshot(abortController.signal);
+              if (abortController.signal.aborted) break;
               failureCount = 0;
 
               // The preview may predate the first successful snapshot or a reconnect.
               if (disconnected || previousSnapshot === undefined) {
                 generation += 1;
-                Queue.offerUnsafe(queue, {
+                await offer({
                   version: 1,
                   type: "directoryChanged",
                   relativePath: input.relativePath,
@@ -84,7 +98,7 @@ export function createRemoteDirectoryPollingStream(
                 disconnected = false;
               } else if (previousSnapshot !== undefined && previousSnapshot !== nextSnapshot) {
                 generation += 1;
-                Queue.offerUnsafe(queue, {
+                await offer({
                   version: 1,
                   type: "directoryChanged",
                   relativePath: input.relativePath,
@@ -94,11 +108,12 @@ export function createRemoteDirectoryPollingStream(
               }
               previousSnapshot = nextSnapshot;
             } catch {
+              if (abortController.signal.aborted) break;
               failureCount += 1;
               previousSnapshot = undefined;
               if (!disconnected) {
                 generation += 1;
-                Queue.offerUnsafe(queue, {
+                await offer({
                   version: 1,
                   type: "rescanRequired",
                   relativePath: input.relativePath,
@@ -122,11 +137,16 @@ export function createRemoteDirectoryPollingStream(
   );
 }
 
-export function watchRemoteDirectoryViaSsh(input: {
-  readonly executionTargetId: string;
-  readonly cwd: string;
-  readonly relativePath: string;
-}): Stream.Stream<ProjectDirectoryWatchEvent, WorkspaceFileSystemError> {
+export function watchRemoteDirectoryViaSsh(
+  input: WorkspaceMutationWatchOwnerInput,
+  owner?: Pick<WorkspaceMutationWatchOwnerShape, "snapshotDirectory">,
+): Stream.Stream<ProjectDirectoryWatchEvent, WorkspaceFileSystemError> {
+  if (owner) {
+    return createRemoteDirectoryPollingStream({
+      ...input,
+      readSnapshot: (signal) => owner.snapshotDirectory(input, signal),
+    });
+  }
   return createRemoteDirectoryPollingStream({
     cwd: input.cwd,
     relativePath: input.relativePath,

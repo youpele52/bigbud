@@ -4,11 +4,9 @@ import { isRemoteExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useResolvedWorkspace } from "../../hooks/useResolvedWorkspace";
-import { useComposerDraftStore } from "../../stores/composer";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { canMoveFileHistory, EMPTY_FILE_HISTORY } from "../../stores/files/filesPanel.history";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
-import type { CodeAnnotationDraft } from "./FilePreview";
 import { notifyRemovedFileHistoryEntries } from "./FilesPanel.historyNotification";
 import {
   applyDirectoryNavigationRequest,
@@ -16,7 +14,9 @@ import {
   applyPreviewDirectoryNavigation,
   openFilesPanelEntry,
 } from "./FilesPanel.logic";
-import { EMPTY_ENTRIES, makeAnnotationId } from "./FilesPanel.shared";
+import { EMPTY_ENTRIES } from "./FilesPanel.shared";
+import { useFilesPanelCodeAnnotation } from "./useFilesPanelCodeAnnotation";
+import { useFilesPanelEntryActionsUi } from "./FilesPanel.entryActions";
 import { renderFilesPanelTreeBody } from "./FilesPanel.body";
 import { FilesPanelRefreshCoordinator } from "./FilesPanelRefreshCoordinator";
 import { useFilesPanelDirectoryLoader } from "./useFilesPanelDirectoryLoader";
@@ -26,7 +26,11 @@ import {
   useFilesPanelHistory,
   useFilesPanelScrollPersistence,
 } from "./useFilesPanelHistory";
-import { createFilesPanelWorkspaceKey } from "./FilesPanel.workspace";
+import {
+  createFilesPanelWorkspaceKey,
+  resolveFilesPanelWorkspaceRootOverride,
+} from "./FilesPanel.workspace";
+import { FileOpenTargetContext } from "./fileOpenTarget.context";
 import { renderFilesPanelPreviewBody } from "./FilesPanel.previewBody";
 import { pruneRemovedPaths } from "./FilesPanel.pathState";
 
@@ -43,7 +47,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const filesWorkspaceKey = useFilesPanelStore((state) => state.workspaceKey);
   const previewPosition = useFilesPanelStore((state) => state.previewPosition);
   const fileOpenRequest = useFilesPanelStore((state) => state.fileOpenRequest);
-  const workspaceRootOverride = useFilesPanelStore((state) => state.workspaceRootOverride);
+  const requestedWorkspaceRoot = useFilesPanelStore((state) => state.workspaceRootOverride);
   const workspaceExecutionTargetIdOverride = useFilesPanelStore(
     (state) => state.workspaceExecutionTargetIdOverride,
   );
@@ -66,8 +70,13 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     cwd: workspaceRoot,
     executionTargetId: workspaceExecutionTargetId,
   } = useResolvedWorkspace(activeThreadId);
+  const workspaceRootOverride = resolveFilesPanelWorkspaceRootOverride({
+    requestedRoot: requestedWorkspaceRoot,
+    requestedExecutionTargetId: workspaceExecutionTargetIdOverride,
+    workspaceRoot,
+    workspaceExecutionTargetId,
+  });
   const { resolvedTheme } = useTheme();
-  const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
   const regularProject = project && !isBuiltInChatsProject(project.id) ? project : undefined;
   const activeWorkspaceExecutionTargetId =
@@ -215,19 +224,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const showRootLoading = rootDirectoryState?.loading && sortedRootEntries.length === 0;
   const previewTargetLine = previewPosition?.line;
 
-  const handleToggleDirectory = useCallback(
-    (entry: ProjectEntry) => {
-      setExpandedDirectories((current) => ({
-        ...current,
-        [entry.path]: !(current[entry.path] ?? false),
-      }));
-      if (directoryStateByPath[entry.path] === undefined) {
-        void loadDirectory(entry.path);
-      }
-    },
-    [directoryStateByPath, loadDirectory],
-  );
-
   const handleOpenFile = useCallback(
     (entry: ProjectEntry) => {
       if (!activeWorkspaceRoot) return;
@@ -249,29 +245,35 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     ],
   );
 
-  const handleCreateCodeAnnotation = useCallback(
-    (annotation: CodeAnnotationDraft) => {
-      if (!activeThreadId || !activeWorkspaceRoot || !previewPath) return;
-      addAnnotation(activeThreadId, {
-        id: makeAnnotationId(),
-        kind: "code",
-        comment: annotation.comment,
-        intent: annotation.intent,
-        createdAt: new Date().toISOString(),
-        file: {
-          ...(activeProjectName ? { projectName: activeProjectName } : {}),
-          cwd: activeWorkspaceRoot,
-          relativePath: previewPath,
-        },
-        selection: {
-          startLine: annotation.startLine,
-          endLine: annotation.endLine,
-          text: annotation.text,
-        },
-      });
+  const handleCreateCodeAnnotation = useFilesPanelCodeAnnotation({
+    activeThreadId,
+    activeWorkspaceRoot,
+    activeProjectName,
+    previewPath,
+  });
+  const entryUi = useFilesPanelEntryActionsUi({
+    workspaceRoot: activeWorkspaceRoot,
+    executionTargetId: activeWorkspaceExecutionTargetId,
+    expandedDirectories,
+    loadDirectory,
+    onOpenFile: handleOpenFile,
+    resolvedTheme,
+  });
+  const { noteDirectoryToggled } = entryUi;
+  const handleToggleDirectory = useCallback(
+    (entry: ProjectEntry) => {
+      noteDirectoryToggled(entry.path);
+      setExpandedDirectories((current) => ({
+        ...current,
+        [entry.path]: !(current[entry.path] ?? false),
+      }));
+      if (directoryStateByPath[entry.path] === undefined) {
+        void loadDirectory(entry.path);
+      }
     },
-    [activeProjectName, activeThreadId, activeWorkspaceRoot, addAnnotation, previewPath],
+    [directoryStateByPath, loadDirectory, noteDirectoryToggled],
   );
+
   const handleSearchMatch = useCallback(
     (line: number) => setPreviewPosition({ line, column: null }),
     [setPreviewPosition],
@@ -290,6 +292,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       onRetryDirectory: handleRetryDirectory,
       error: rootDirectoryState?.error,
       entries: sortedRootEntries,
+      pendingEntry: entryUi.pendingEntrySlot,
       workspaceRoot: activeWorkspaceRoot,
       previewPath,
       resolvedTheme,
@@ -313,6 +316,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     showRootLoading,
     sortedRootEntries,
     activeWorkspaceRoot,
+    entryUi.pendingEntrySlot,
   ]);
 
   const panelBody = useMemo(() => {
@@ -328,6 +332,8 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       workspaceKey,
       contextMenuOpen: contextMenuState !== null,
       visible,
+      headerActions: entryUi.headerActions,
+      revealTreeSignal: entryUi.revealTreeSignal,
       onNavigateBack: handleNavigateBack,
       onNavigateForward: handleNavigateForward,
       onClose: closePreview,
@@ -356,28 +362,34 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     activeWorkspaceRoot,
     workspaceKey,
     visible,
+    entryUi.headerActions,
+    entryUi.revealTreeSignal,
   ]);
 
   return (
-    <div ref={panelContainerRef} className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <FilesPanelRefreshCoordinator
-          workspaceRoot={activeWorkspaceRoot}
-          workspaceExecutionTargetId={activeWorkspaceExecutionTargetId}
-          previewPath={previewPath}
-          expandedDirectories={expandedDirectories}
-          directoryStateByPath={directoryStateByPath}
-          loadDirectory={loadDirectory}
-        >
-          {panelBody}
-        </FilesPanelRefreshCoordinator>
+    <FileOpenTargetContext.Provider value={activeWorkspaceExecutionTargetId}>
+      <div ref={panelContainerRef} className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <FilesPanelRefreshCoordinator
+            workspaceRoot={activeWorkspaceRoot}
+            workspaceExecutionTargetId={activeWorkspaceExecutionTargetId}
+            previewPath={previewPath}
+            expandedDirectories={expandedDirectories}
+            directoryStateByPath={directoryStateByPath}
+            loadDirectory={loadDirectory}
+          >
+            {panelBody}
+          </FilesPanelRefreshCoordinator>
+        </div>
+        <FilesPanelContextMenu
+          contextMenuState={contextMenuState}
+          workspaceRoot={activeWorkspaceRoot ?? undefined}
+          threadId={workspaceRootOverride === null ? activeThreadId : null}
+          onClose={closeContextMenu}
+          {...entryUi.contextMenuDelete}
+        />
+        {entryUi.deleteDialog}
       </div>
-      <FilesPanelContextMenu
-        contextMenuState={contextMenuState}
-        workspaceRoot={activeWorkspaceRoot ?? undefined}
-        threadId={workspaceRootOverride === null ? activeThreadId : null}
-        onClose={closeContextMenu}
-      />
-    </div>
+    </FileOpenTargetContext.Provider>
   );
 });

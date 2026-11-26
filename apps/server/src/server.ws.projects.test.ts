@@ -182,6 +182,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         sizeBytes: 25,
         truncated: false,
         sha256: createHash("sha256").update("export const rpc = true;\n").digest("hex"),
+        edit: { mode: "guarded", maxBytes: 512 * 1024 },
       });
     }).pipe(Effect.provide(serverHttpTestLayer)),
   );

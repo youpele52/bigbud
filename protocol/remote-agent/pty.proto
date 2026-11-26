@@ -18,6 +18,26 @@ message PtyCreateRequest {
   // Added in 1.5. Requires terminal.shell-profiles v1; validates exact profile
   // executable/argv before admission. False retains unrestricted legacy PTYs.
   bool profile_launch = 11;
+  // Added in 1.9. Requires terminal.lifecycle v1: atomically close this managed,
+  // hidden PTY (limit_closed) before admitting the new one.
+  string evict_pty_id = 12;
+  // Added in 1.9. "host" (default) or "owner-hint" for Direct SSH owners.
+  string activity_source = 13;
+  // Added in 1.9. Requires terminal.screen v1; 0 means the host default (1,000).
+  uint32 screen_scrollback_rows = 14;
+  // Added in 1.9. Requires terminal.spool v1; keeps a host scrollback spool.
+  bool spool = 15;
+  // Added in 1.9. Requires terminal.local-launch v1 (local host only).
+  bool local_launch = 16;
+  // Added in 1.9. Opts this PTY into host lifecycle policy; false keeps today's
+  // behavior and never counts toward the limit.
+  bool lifecycle_managed = 17;
+  // Added in 1.10 for the X2 terminal-host inventory. Empty on a legacy create;
+  // the host then reports empty identity and infers the kind from the launch.
+  string thread_id = 18;
+  string pane_id = 19;
+  // "local" | "managed-ssh"; empty means infer from the launch command.
+  string pane_kind = 20;
 }
 
 message PtyCreateResponse {
@@ -29,6 +49,13 @@ message PtyCreateResponse {
   string error_message = 6;
   // Added in 1.4. Empty means unknown; "unconfirmed" is not exec confirmation.
   string launch_status = 7;
+  // Added in 1.9. With error_code PTY_LIMIT_REACHED these describe the limit
+  // and the least recently used eviction candidate; after an eviction,
+  // `evicted_pty_id` names the closed PTY.
+  uint32 limit = 8;
+  uint32 live_count = 9;
+  string eviction_candidate_pty_id = 10;
+  string evicted_pty_id = 11;
 }
 
 message PtyInput {
@@ -183,6 +210,12 @@ message PtyInventoryEntry {
   uint64 first_retained_sequence = 6;
   bool verified_exit = 7;
   string launch_status = 8;
+  // Added in 1.9 (terminal.lifecycle v1).
+  string activity_state = 9;
+  uint64 last_used_ms = 10;
+  bool screen_available = 11;
+  bool lost = 12;
+  bool lifecycle_managed = 13;
 }
 message PtyListResponse {
   string request_id = 1;

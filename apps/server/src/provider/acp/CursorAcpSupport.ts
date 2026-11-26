@@ -16,6 +16,8 @@ import {
   type AcpSpawnInput,
 } from "./AcpSessionRuntime.ts";
 
+import { applyExactDelegatedAcpEffort, ExactDelegatedAcpEffort } from "./acpSessionEffort.ts";
+
 type CursorAcpRuntimeCursorSettings = Pick<CursorSettings, "apiEndpoint" | "binaryPath">;
 
 export interface CursorAcpRuntimeInput extends Omit<
@@ -120,9 +122,12 @@ export function applyCursorAcpModelSelection<E>(input: {
       ),
     );
 
+    const exactEffort = yield* ExactDelegatedAcpEffort;
     const configUpdates = resolveCursorAcpConfigUpdates(
       yield* input.runtime.getConfigOptions,
-      input.modelOptions,
+      exactEffort === undefined
+        ? input.modelOptions
+        : { ...input.modelOptions, reasoning: undefined },
     );
     for (const update of configUpdates) {
       yield* input.runtime.setConfigOption(update.configId, update.value).pipe(
@@ -133,6 +138,11 @@ export function applyCursorAcpModelSelection<E>(input: {
             configId: update.configId,
           }),
         ),
+      );
+    }
+    if (exactEffort !== undefined) {
+      yield* applyExactDelegatedAcpEffort(input.runtime, exactEffort).pipe(
+        Effect.mapError((cause) => input.mapError({ cause, step: "set-config-option" })),
       );
     }
   });

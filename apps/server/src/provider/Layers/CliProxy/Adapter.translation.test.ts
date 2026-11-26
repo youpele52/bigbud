@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { toClaudeSendTurnInput, toClaudeSessionStartInput } from "./Adapter.ts";
+import { refusePendingInteractions } from "../../pendingInteractionAdmission.ts";
+import { remapError, toClaudeSendTurnInput, toClaudeSessionStartInput } from "./Adapter.ts";
 
 describe("CLIProxy Claude input translation", () => {
   it("translates both provider identities when starting a session", () => {
@@ -14,6 +15,24 @@ describe("CLIProxy Claude input translation", () => {
     ).toMatchObject({
       provider: "claudeAgent",
       modelSelection: { provider: "claudeAgent", model: "gpt-5-codex" },
+    });
+  });
+
+  it("remaps both the refusal and the durable interaction owner from Claude to CLIProxy", () => {
+    const refusal = refusePendingInteractions({
+      provider: "claudeAgent",
+      sessionEpoch: 3,
+      approvals: new Map([["id", {}]]),
+    });
+    expect(remapError(refusal!)).toMatchObject({
+      provider: "cliProxy",
+      turnStartRefusal: {
+        gate: {
+          provider: "cliProxy",
+          sessionEpoch: 3,
+          approvalRequests: [{ requestId: "id", generation: "id" }],
+        },
+      },
     });
   });
 

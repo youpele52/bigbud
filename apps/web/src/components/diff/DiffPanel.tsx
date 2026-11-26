@@ -3,7 +3,7 @@ import type { SelectedLineRange } from "@pierre/diffs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
-import { openFileInFilesPanel } from "../../stores/files/filesPanel.coordinator";
+import { openRootFileInFilesPanel } from "../../stores/files/filesPanel.open";
 import { useSettings } from "../../hooks/useSettings";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import {
@@ -59,6 +59,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     activeThreadId,
     activeProject,
     activeCwd,
+    activeExecutionTargetId,
     isGitRepo,
     orderedTurnDiffSummaries,
     inferredCheckpointTurnCountByTurnId,
@@ -156,6 +157,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     viewportRef: patchViewportRef,
     canAnnotate,
     cwd: activeCwd,
+    executionTargetId: activeExecutionTargetId,
     fileDiffByPath,
     pierreLineSelectionsRef,
     diffStyle: diffRenderMode === "split" ? "split" : "unified",
@@ -186,9 +188,13 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     target?.scrollIntoView({ block: "nearest" });
   }, [selectedFilePath, renderableFiles]);
 
-  const openDiffFileInViewer = useCallback((filePath: string) => {
-    openFileInFilesPanel(filePath);
-  }, []);
+  const openDiffFileInViewer = useCallback(
+    (filePath: string) => {
+      // Diff paths are relative to the thread's folder; open them by absolute path from there.
+      if (activeCwd) openRootFileInFilesPanel(activeCwd, filePath, activeExecutionTargetId);
+    },
+    [activeCwd, activeExecutionTargetId],
+  );
 
   const handleCreateCodeAnnotation = useCallback(
     (annotation: CodeAnnotationDraft, filePath: string) => {

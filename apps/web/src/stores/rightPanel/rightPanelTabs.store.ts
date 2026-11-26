@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { getBrowserTabLimit } from "~/hooks/useSettings.storage";
 import { randomUUID } from "~/lib/utils";
 
 export type RightPanelTabKind =
@@ -14,8 +15,6 @@ export type RightPanelTabKind =
   | "terminal";
 export type RightPanelTabId = RightPanelTabKind | `browser:${string}`;
 
-export const MAX_RIGHT_PANEL_BROWSER_TABS = 5;
-
 interface OpenBrowserTabResult {
   status: "activated" | "created" | "limit_reached";
   tabId: RightPanelTabId | null;
@@ -26,6 +25,7 @@ interface RightPanelTabsState {
   activeTabId: RightPanelTabId | null;
   openTabs: ReadonlyArray<RightPanelTabId>;
   browserCreationOrder: ReadonlyArray<RightPanelTabId>;
+  browserDraftTabId: RightPanelTabId | null;
   gamesWidthTabId: RightPanelTabId | null;
   rightPanelOpen: boolean;
   lastActiveKind: RightPanelTabKind | null;
@@ -38,7 +38,8 @@ interface RightPanelTabsState {
     position: "before" | "after",
   ) => void;
   openTab: (kind: Exclude<RightPanelTabKind, "browser">) => void;
-  openBrowserTab: () => OpenBrowserTabResult;
+  openBrowserTab: (limit?: number, draft?: boolean) => OpenBrowserTabResult;
+  promoteBrowserDraft: (tabId: RightPanelTabId, limit: number) => boolean;
   setActiveTab: (tabId: RightPanelTabId) => void;
   setGamesWidthTabId: (tabId: RightPanelTabId | null) => void;
   clearGamesWidthMode: () => void;
@@ -63,6 +64,15 @@ export function countRightPanelTabsByKind(
   kind: RightPanelTabKind,
 ): number {
   return openTabs.filter((tabId) => isRightPanelTabOfKind(tabId, kind)).length;
+}
+
+/** The pending address field is not an open page and cannot be an eviction candidate. */
+export function selectOpenBrowserTabs(
+  state: Pick<RightPanelTabsState, "openTabs" | "browserDraftTabId">,
+) {
+  return state.openTabs.filter(
+    (id) => id !== state.browserDraftTabId && isRightPanelTabOfKind(id, "browser"),
+  );
 }
 
 export function selectLastRightPanelTabIdByKind(
@@ -153,6 +163,7 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
   activeTabId: null,
   openTabs: [],
   browserCreationOrder: [],
+  browserDraftTabId: null,
   gamesWidthTabId: null,
   rightPanelOpen: false,
   lastActiveKind: null,
@@ -169,6 +180,7 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
       return {
         openTabs: nextTabs,
         browserCreationOrder: kind === "browser" ? [] : state.browserCreationOrder,
+        browserDraftTabId: kind === "browser" ? null : state.browserDraftTabId,
         gamesWidthTabId: kind === "browser" ? null : state.gamesWidthTabId,
         ...buildActiveState(nextActiveTabId),
         lastActiveKind: nextActiveTabId
@@ -190,6 +202,7 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
       return {
         openTabs: nextTabs,
         browserCreationOrder: state.browserCreationOrder.filter((id) => id !== tabId),
+        browserDraftTabId: state.browserDraftTabId === tabId ? null : state.browserDraftTabId,
         gamesWidthTabId: state.gamesWidthTabId === tabId ? null : state.gamesWidthTabId,
         ...buildActiveState(nextActiveTabId),
         lastActiveKind: nextActiveTabId
@@ -224,11 +237,15 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
       lastActiveKind: kind,
       rightPanelOpen: true,
     })),
-  openBrowserTab: () => {
+  openBrowserTab: (limit = getBrowserTabLimit(), draft = false) => {
     let result: OpenBrowserTabResult = { status: "limit_reached", tabId: null };
 
     set((state) => {
-      if (countRightPanelTabsByKind(state.openTabs, "browser") >= MAX_RIGHT_PANEL_BROWSER_TABS) {
+      if (draft && state.browserDraftTabId) {
+        result = { status: "activated", tabId: state.browserDraftTabId };
+        return state;
+      }
+      if (!draft && selectOpenBrowserTabs(state).length >= limit) {
         const existingTabId = selectLastRightPanelTabIdByKind(state.openTabs, "browser");
         result = { status: "limit_reached", tabId: existingTabId };
         return state;
@@ -239,7 +256,10 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
 
       return {
         openTabs: [...state.openTabs, tabId],
-        browserCreationOrder: [...state.browserCreationOrder, tabId],
+        browserCreationOrder: draft
+          ? state.browserCreationOrder
+          : [...state.browserCreationOrder, tabId],
+        browserDraftTabId: draft ? tabId : state.browserDraftTabId,
         gamesWidthTabId: null,
         ...buildActiveState(tabId),
         lastActiveKind: "browser",
@@ -248,6 +268,20 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
     });
 
     return result;
+  },
+  promoteBrowserDraft: (tabId, limit) => {
+    let promoted = false;
+    set((state) => {
+      if (state.browserDraftTabId !== tabId || selectOpenBrowserTabs(state).length >= limit) {
+        return state;
+      }
+      promoted = true;
+      return {
+        browserDraftTabId: null,
+        browserCreationOrder: [...state.browserCreationOrder, tabId],
+      };
+    });
+    return promoted;
   },
   setActiveTab: (tabId) =>
     set((state) =>

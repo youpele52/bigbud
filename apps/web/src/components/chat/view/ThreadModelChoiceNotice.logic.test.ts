@@ -31,6 +31,38 @@ describe("modelChoiceRemainingMs", () => {
 });
 
 describe("deriveModelChoiceNotice", () => {
+  it("distinguishes configured effort from an unapplied request", () => {
+    expect(
+      deriveModelChoiceNotice(
+        resolved({
+          outcome: "requested",
+          resolvedBy: "server",
+          reason: null,
+          effort: { requested: "high", configured: "high", reason: null },
+        }),
+        0,
+      ),
+    ).toMatchObject({
+      tone: "success",
+      description: "Effort configured: high.",
+    });
+    expect(
+      deriveModelChoiceNotice(
+        resolved({
+          outcome: "requested",
+          resolvedBy: "server",
+          reason: null,
+          effort: { requested: "high", reason: "capabilities-unknown" },
+        }),
+        0,
+      ),
+    ).toMatchObject({
+      tone: "warning",
+      description:
+        "Requested effort high not applied (support is unknown for this model and target).",
+    });
+  });
+
   it("is a blue pending notice with the countdown in whole seconds", () => {
     expect(deriveModelChoiceNotice(pending(), 6_500)).toEqual({
       kind: "pending",

@@ -1,0 +1,44 @@
+{
+  "expected": {
+    "alternate": null,
+    "cursor": [1,4],
+    "cursorHidden": false,
+    "screen": [
+      [["l",1,"default","default",0],["i",1,"default","default",0],["n",1,"default","default",0],["k",1,"default","default",0],["",1,"default","default",0],["p",1,"default","default",0],["l",1,"default","default",0],["a",1,"default","default",0],["i",1,"default","default",0],["n",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["t",1,"default","default",0],["a",1,"default","default",0],["i",1,"default","default",0],["l",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]],
+      [["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0],["",1,"default","default",0]]
+    ],
+    "scrollback": []
+  },
+  "fixture": "osc8_hyperlinks",
+  "geometry": {
+    "cols": 30,
+    "rows": 3,
+    "scrollback": 100
+  },
+  "snapshot": {
+    "alternateScreen": false,
+    "ansi": "\u001bclink plain\r\ntail\r\n\u001b[m\u001b[1;1H\u001b7\u001b[m\u001b[m\u001b[2;5H\u001b[?25h\u001b]8;;https://open.example\u001b\\",
+    "cols": 30,
+    "excludedAlternate": false,
+    "excludedRows": [0,1,2],
+    "exclusions": [
+      {
+        "kind": "osc8_link_targets",
+        "rows": 3
+      }
+    ],
+    "fidelity": "trimmed",
+    "pendingEscapeTailHex": "",
+    "reflowRows": 0,
+    "rows": 3,
+    "scrollbackRows": 0,
+    "sha256": "1dba90cef495583578390a5c3fe88a0fda8f5ba02e7723eaf0a95150e522e40c",
+    "trimmedRows": 0
+  },
+  "steps": [
+    {
+      "feed": "\u001b]8;id=1;https://example.com\u001b\\link\u001b]8;;\u001b\\ plain\r\n\u001b]8;;https://open.example\u0007tail"
+    }
+  ]
+}

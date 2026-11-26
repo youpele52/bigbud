@@ -16,7 +16,15 @@ impl TestRoot {
             let path = std::env::temp_dir()
                 .join(format!("bigbud-agent-test-{}-{suffix}", std::process::id()));
             match fs::create_dir(&path) {
-                Ok(()) => return Self(path),
+                Ok(()) => {
+                    // BSD filesystems give new files their directory's group (often `wheel` under
+                    // the temp root), and the kernel silently drops set-group-ID when the owner
+                    // is not in that group. Own the root by our group so mode fixtures stick.
+                    #[cfg(unix)]
+                    std::os::unix::fs::chown(&path, None, Some(unsafe { libc::getegid() }))
+                        .unwrap();
+                    return Self(path);
+                }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(error) => panic!("failed to create test root: {error}"),
             }

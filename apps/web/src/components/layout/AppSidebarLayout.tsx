@@ -6,6 +6,7 @@ import { isElectron } from "~/config/env";
 import { useStore } from "~/stores/main";
 
 import ThreadSidebar from "../sidebar/Sidebar";
+import { RemoteTargetDialogsHost } from "../remote/RemoteTargetDialogsHost";
 import {
   getBrowserPanelPlaceholderWidth,
   THREAD_MAIN_CONTENT_MIN_WIDTH_PX,
@@ -80,6 +81,8 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
       {children}
+      {/* Outside the mobile sidebar Sheet, so every entry point can show these dialogs. */}
+      <RemoteTargetDialogsHost />
       {/* After the page content: Chromium lets a later drag region override an earlier no-drag
           one, so rendered first, a closed sidebar's page header would swallow the toggle's clicks. */}
       {isElectron && <WindowSidebarToggle />}

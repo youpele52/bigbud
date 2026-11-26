@@ -28,9 +28,11 @@ impl Drop for Fixture {
 impl Fixture {
     // Native PTY spawn IDs are process-wide, so each parallel test needs its own.
     fn new(pty_id: &'static str) -> Result<Self, Box<dyn std::error::Error>> {
+        // macOS clocks are microsecond-grained, so a timestamp alone collides across parallel
+        // fixtures; the process ID and the fixture's unique PTY ID make the root unique.
         let root = std::env::temp_dir().join(format!(
-            "bigbud-input-receipt-{}",
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+            "bigbud-input-receipt-{}-{pty_id}",
+            std::process::id()
         ));
         std::fs::create_dir(&root)?;
         let mut session = AgentSession::new()?;

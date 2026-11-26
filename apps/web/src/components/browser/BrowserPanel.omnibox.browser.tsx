@@ -5,6 +5,8 @@ import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
+import { openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
+import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 
 const searchSettings = vi.hoisted(() => ({ browserSearchEngine: "duckduckgo" }));
 const browserHistoryStorageMock = vi.hoisted(() => {
@@ -26,7 +28,8 @@ vi.mock("~/hooks/useSettings", () => ({
     selector(searchSettings),
 }));
 
-vi.mock("~/hooks/useLocalStorage", () => ({
+vi.mock("~/hooks/useLocalStorage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("~/hooks/useLocalStorage")>()),
   getLocalStorageItem: vi.fn((key: string) => browserHistoryStorageMock.values.get(key) ?? null),
   setLocalStorageItem: browserHistoryStorageMock.set,
 }));
@@ -84,6 +87,28 @@ describe("BrowserPanel omnibox", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     useBrowserPanelStore.setState({ open: false, tabsById: {} });
+    useRightPanelTabsStore.setState(useRightPanelTabsStore.getInitialState(), true);
+  });
+
+  it.each([1, 5])("reuses an open page from a blank tab (%i open)", async (count) => {
+    openNewBrowserTab({ url: "https://example.com/" });
+    for (let index = 1; index < count; index++)
+      openNewBrowserTab({ url: `https://example.com/${index}` });
+    const { openTabs } = useRightPanelTabsStore.getState();
+    openNewBrowserTab();
+    const blank = useRightPanelTabsStore.getState().activeTabId;
+    const screen = await render(<BrowserPanel tabId={blank!} />);
+    try {
+      await page.getByPlaceholder("Enter a URL or search").fill("https://example.com");
+      await userEvent.keyboard("{Enter}");
+      expect(useRightPanelTabsStore.getState()).toMatchObject({
+        openTabs,
+        activeTabId: openTabs[0],
+      });
+      expect(useBrowserPanelStore.getState().tabsById[blank!]).toBeUndefined();
+    } finally {
+      await screen.unmount();
+    }
   });
 
   it("shows a validation error without navigating for unsupported schemes", async () => {

@@ -7,9 +7,11 @@ import "remote-agent/process.proto";
 import "remote-agent/service_lease.proto";
 import "remote-agent/paste_staging.proto";
 import "remote-agent/pty.proto";
+import "remote-agent/pty_lifecycle.proto";
 import "remote-agent/resource_cleanup.proto";
 import "remote-agent/search.proto";
 import "remote-agent/workspace.proto";
+import "remote-agent/terminal_host.proto";
 
 message Frame {
   // Retired experimental terminal-backend payloads must never be reused.
@@ -85,6 +87,22 @@ message Frame {
     OsIndexSearchRequest os_index_search_request = 77;
     OsIndexSearchBatch os_index_search_batch = 78;
     OsIndexSearchCompleted os_index_search_completed = 79;
+    PtyScreenSnapshotRequest pty_screen_snapshot_request = 80;
+    PtyScreenSnapshotHeader pty_screen_snapshot_header = 81;
+    PtyScreenSnapshotChunk pty_screen_snapshot_chunk = 82;
+    PtyActivity pty_activity = 83;
+    PtyLifecycleNotice pty_lifecycle_notice = 84;
+    HostPolicyUpdateRequest host_policy_update_request = 85;
+    HostPolicyUpdateResponse host_policy_update_response = 86;
+    PtyViewStateRequest pty_view_state_request = 87;
+    PtyViewStateResponse pty_view_state_response = 88;
+    PtyKeepOpenRequest pty_keep_open_request = 89;
+    PtyKeepOpenResponse pty_keep_open_response = 90;
+    PtyCloseAllRequest pty_close_all_request = 91;
+    PtyCloseAllResponse pty_close_all_response = 92;
+    HostResourceReport host_resource_report = 93;
+    HostNoticeReplayRequest host_notice_replay_request = 94;
+    HostNoticeReplayResponse host_notice_replay_response = 95;
     ResourceCleanupRootBootstrapRequest resource_cleanup_root_bootstrap_request = 100;
     ResourceCleanupRootBootstrapResponse resource_cleanup_root_bootstrap_response = 101;
     ResourceCleanupRequest resource_cleanup_request = 102;
@@ -93,6 +111,12 @@ message Frame {
     ResourceCleanupKeepAliveResponse resource_cleanup_keep_alive_response = 105;
     ResourceCleanupCancelRequest resource_cleanup_cancel_request = 106;
     ResourceCleanupCancelResponse resource_cleanup_cancel_response = 107;
+    WriteReceiptRequest write_receipt_request = 108;
+    WriteReceiptResponse write_receipt_response = 109;
+    CreateDirectoryRequest create_directory_request = 110;
+    CreateDirectoryResponse create_directory_response = 111;
+    DeleteEntryRequest delete_entry_request = 112;
+    DeleteEntryResponse delete_entry_response = 113;
     .bigbud.remote_agent.service_lease.v1.StartRequest service_lease_start_request = 120;
     .bigbud.remote_agent.service_lease.v1.Response service_lease_start_response = 121;
     .bigbud.remote_agent.service_lease.v1.QueryRequest service_lease_status_request = 122;
@@ -101,5 +125,9 @@ message Frame {
     .bigbud.remote_agent.service_lease.v1.Response service_lease_resume_response = 125;
     .bigbud.remote_agent.service_lease.v1.ControlRequest service_lease_control_request = 126;
     .bigbud.remote_agent.service_lease.v1.Response service_lease_control_response = 127;
+    TerminalHostInventoryRequest terminal_host_inventory_request = 128;
+    TerminalHostInventoryResponse terminal_host_inventory_response = 129;
+    TerminalHostRetireSshSpawnRequest terminal_host_retire_ssh_spawn_request = 130;
+    TerminalHostRetireSshSpawnResponse terminal_host_retire_ssh_spawn_response = 131;
   }
 }

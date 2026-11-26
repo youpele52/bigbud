@@ -1,8 +1,14 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { toastManager } from "../ui/toast";
+import { readNativeApi } from "../../rpc/nativeApi";
 import { submitSshAuthentication } from "../../lib/ssh.auth";
-import { getSshAuthPrompt, getSshAuthFailureToastTitle, type SshAuthMode } from "../../lib/ssh";
+import {
+  getSshAuthPrompt,
+  getSshAuthFailureToastTitle,
+  getSshHostTrustChallenge,
+  type SshAuthMode,
+} from "../../lib/ssh";
 import {
   createRemoteWorkspaceExecutionTargetId,
   type RemoteWorkspaceDraft,
@@ -62,8 +68,19 @@ export function useRemoteWorkspaceUnlock({
   );
 
   const close = useCallback(() => {
-    if (!isUnlocking) dismiss();
-  }, [dismiss, isUnlocking]);
+    if (isUnlocking) return;
+    const challenge = mode === "host-trust" ? getSshHostTrustChallenge(keyPath) : null;
+    if (challenge?.challengeId.startsWith("rust-dev-jump:")) {
+      void readNativeApi()
+        ?.server.trustSshHost({
+          executionTargetId: createRemoteWorkspaceExecutionTargetId(draft),
+          challengeId: challenge.challengeId,
+          cancel: true,
+        })
+        .catch(() => undefined);
+    }
+    dismiss();
+  }, [dismiss, draft, isUnlocking, keyPath, mode]);
 
   /** Unlocks, then runs the request's continuation or `afterUnlock` (verify and save). */
   const submit = useCallback(

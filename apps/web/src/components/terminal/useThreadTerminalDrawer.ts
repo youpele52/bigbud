@@ -1,24 +1,22 @@
 import type { TerminalSplitDirection } from "../../lib/terminalSplitLayout";
-import { LOCAL_EXECUTION_TARGET_ID, type ThreadId } from "@bigbud/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { LOCAL_EXECUTION_TARGET_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useComposerDraftStore } from "../../stores/composer";
-import {
-  selectTerminalEventEntries,
-  selectThreadTerminalState,
-  terminalEventBufferKey,
-  useTerminalStateStore,
-} from "../../stores/terminal";
+import { selectThreadTerminalState, useTerminalStateStore } from "../../stores/terminal";
+import { resolveTerminalAgentKind } from "./terminalAgentKind.resolve";
 import { useServerSettings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
+import { resolveTerminalBaseLabel } from "./terminalDisplay";
 import { closeTerminalConfirmed } from "./terminalLifecycle.operations";
+import { requestTerminalClose, type CloseTerminalHandler } from "./terminalCloseGuard";
 import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
 import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import { canCreateProfileTerminal } from "./TerminalProfilePicker.launch";
+import { inheritsNothing } from "../../stores/terminal/terminal.store.create";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
@@ -29,6 +27,7 @@ export interface TerminalLaunchContext {
 }
 
 export interface UseThreadTerminalDrawerResult {
+  projectId: ProjectId | undefined;
   project: ReturnType<typeof useProjectById>;
   terminalState: ReturnType<typeof selectThreadTerminalState>;
   cwd: string | null;
@@ -43,7 +42,7 @@ export interface UseThreadTerminalDrawerResult {
     profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
   ) => void;
   activateTerminal: (terminalId: string) => void;
-  closeTerminal: (terminalId: string) => void;
+  closeTerminal: CloseTerminalHandler;
   setTerminalLabelOverride: (terminalId: string, label: string) => void;
   clearTerminalLabelOverride: (terminalId: string) => void;
   setTerminalHeight: (height: number) => void;
@@ -62,6 +61,24 @@ export function resolveTerminalExecutionTargetId(input: {
       : undefined;
 }
 
+/**
+ * Bounded catalog replacement can evict a hidden thread's project. Mounted terminals keep their
+ * last-known project so cwd, env and labels do not rebind or unmount while it is re-fetched.
+ */
+function useLastKnownProject(
+  projectId: ProjectId | undefined,
+  liveProject: ReturnType<typeof useProjectById>,
+): ReturnType<typeof useProjectById> {
+  // A ref, not state: selectors may return fresh objects, and recording one must not re-render.
+  const lastKnownProject = useRef(liveProject);
+  useEffect(() => {
+    if (liveProject) lastKnownProject.current = liveProject;
+  }, [liveProject]);
+  if (liveProject) return liveProject;
+  const fallback = lastKnownProject.current;
+  return fallback?.id === projectId ? fallback : undefined;
+}
+
 export function useThreadTerminalDrawer(
   threadId: ThreadId,
   launchContext: TerminalLaunchContext | null,
@@ -72,7 +89,8 @@ export function useThreadTerminalDrawer(
   const draftThread = useComposerDraftStore(
     (store) => store.draftThreadsByThreadId[threadId] ?? null,
   );
-  const project = useProjectById(serverThread?.projectId ?? draftThread?.projectId);
+  const projectId = serverThread?.projectId ?? draftThread?.projectId;
+  const project = useLastKnownProject(projectId, useProjectById(projectId));
   // Leave home expansion to the launch target, not to the server's welcome payload.
   const defaultChatCwd = useServerSettings().defaultChatCwd;
   const distribution = useTerminalStateStore(
@@ -165,22 +183,10 @@ export function useThreadTerminalDrawer(
   );
   const terminalProviderById = useMemo(() => {
     const nextById: Record<string, TerminalAgentKind> = {};
+    const source = { terminalAgentProviderByKey, terminalEventEntriesByKey };
     for (const terminalId of terminalState.terminalIds) {
-      const key = terminalEventBufferKey(threadId, terminalId);
-      if (Object.hasOwn(terminalAgentProviderByKey, key)) {
-        const liveProvider = terminalAgentProviderByKey[key];
-        if (liveProvider) nextById[terminalId] = liveProvider;
-        continue;
-      }
-      const eventEntries = selectTerminalEventEntries(
-        terminalEventEntriesByKey,
-        threadId,
-        terminalId,
-      );
-      const terminalProvider = resolveTerminalProviderFromEvents(eventEntries);
-      if (terminalProvider) {
-        nextById[terminalId] = terminalProvider;
-      }
+      const provider = resolveTerminalAgentKind(source, threadId, terminalId);
+      if (provider) nextById[terminalId] = provider;
     }
     return nextById;
   }, [terminalAgentProviderByKey, terminalEventEntriesByKey, terminalState.terminalIds, threadId]);
@@ -199,15 +205,22 @@ export function useThreadTerminalDrawer(
     [storeSetTerminalHeight, threadId],
   );
 
+  // A first pane has no source pane to inherit from: it starts this thread's default target.
+  const isEmptySurface = terminalState.terminalIds.length === 0;
   const splitTerminal = useCallback(
     (direction: TerminalSplitDirection = "right") => {
       const profile = { newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID };
-      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)) return;
+      if (
+        !isEmptySurface &&
+        !canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)
+      )
+        return;
       storeSplitTerminal(threadId, `terminal-${randomUUID()}`, profile, direction);
       bumpFocusRequestId();
     },
     [
       bumpFocusRequestId,
+      isEmptySurface,
       storeSplitTerminal,
       threadId,
       terminalState.activeTerminalId,
@@ -220,12 +233,18 @@ export function useThreadTerminalDrawer(
       const requested = profile ?? {
         newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
       };
-      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, requested)) return;
+      // A target-only request needs no source pane; an explicit shell profile still does.
+      if (
+        !(isEmptySurface && inheritsNothing(requested)) &&
+        !canCreateProfileTerminal(threadId, terminalState.activeTerminalId, requested)
+      )
+        return;
       storeNewTerminal(threadId, `terminal-${randomUUID()}`, requested);
       bumpFocusRequestId();
     },
     [
       bumpFocusRequestId,
+      isEmptySurface,
       storeNewTerminal,
       threadId,
       terminalState.activeTerminalId,
@@ -241,31 +260,41 @@ export function useThreadTerminalDrawer(
     [bumpFocusRequestId, storeSetActiveTerminal, threadId],
   );
 
-  const closeTerminal = useCallback(
-    (terminalId: string) => {
+  const closeTerminal = useCallback<CloseTerminalHandler>(
+    (terminalId, options) => {
       const api = readNativeApi();
       if (!api) return;
-      void closeTerminalConfirmed({
-        api,
+      requestTerminalClose({
         threadId,
         terminalId,
-        executionTargetId,
-        onPending: () => {
-          const next = terminalState.terminalIds.find((id) => id !== terminalId);
-          if (next && terminalState.activeTerminalId === terminalId)
-            storeSetActiveTerminal(threadId, next);
-          bumpFocusRequestId();
-        },
-        onConfirmed: () => storeCloseTerminal(threadId, terminalId),
+        options,
+        close: () =>
+          void closeTerminalConfirmed({
+            api,
+            threadId,
+            terminalId,
+            executionTargetId,
+            onPending: () => {
+              // Read now: the confirmation may have waited while panes changed.
+              const surfaces = useTerminalStateStore.getState();
+              const current = (
+                isPanel ? surfaces.panelTerminalStateByThreadId : surfaces.terminalStateByThreadId
+              )[threadId];
+              const next = current?.terminalIds.find((id) => id !== terminalId);
+              if (next && current?.activeTerminalId === terminalId)
+                storeSetActiveTerminal(threadId, next);
+              bumpFocusRequestId();
+            },
+            onConfirmed: () => storeCloseTerminal(threadId, terminalId),
+          }),
       });
     },
     [
       bumpFocusRequestId,
       executionTargetId,
+      isPanel,
       storeCloseTerminal,
       storeSetActiveTerminal,
-      terminalState.terminalIds,
-      terminalState.activeTerminalId,
       threadId,
     ],
   );
@@ -285,6 +314,7 @@ export function useThreadTerminalDrawer(
   );
 
   return {
+    projectId,
     project,
     terminalState,
     cwd,

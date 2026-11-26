@@ -169,7 +169,9 @@ const makeThreadRetention = Effect.gen(function* () {
           ),
         ),
         Schedule.fixed("1 minute"),
-      ).pipe(Effect.forkDetach);
+        // A child of `start`'s fiber (forked scoped by the runtime) so shutdown interrupts it;
+        // a detached fiber re-arms its timer forever and keeps the process from exiting.
+      ).pipe(Effect.forkChild);
       yield* runThreadRetentionSchedule(runScheduledOnce);
     }),
   } satisfies ThreadRetentionShape;

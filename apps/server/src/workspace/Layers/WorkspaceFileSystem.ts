@@ -9,7 +9,10 @@ import {
   WorkspaceFileSystemError,
   type WorkspaceFileSystemShape,
 } from "../Services/WorkspaceFileSystem.ts";
+import { WorkspaceContentSearchOwner } from "../Services/WorkspaceContentSearchOwner.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
+import { WorkspaceFileReadOwner } from "../Services/WorkspaceFileReadOwner.ts";
+import { WorkspaceMutationWatchOwner } from "../Services/WorkspaceMutationWatchOwner.ts";
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
@@ -18,8 +21,10 @@ import { searchRemoteFileContentsViaSsh } from "./WorkspaceFileSystem.search.ts"
 import { makeWorkspaceFileRange } from "./WorkspaceFileSystem.range.ts";
 import { watchRemoteDirectoryViaSsh } from "./WorkspaceFileSystem.remoteWatch.ts";
 import { makeWorkspaceWriteFile } from "./WorkspaceFileSystem.write.ts";
-
-const DEFAULT_FILE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
+import {
+  decodeWorkspaceFilePreview,
+  WORKSPACE_FILE_PREVIEW_MAX_BYTES,
+} from "../WorkspaceFilePreview.ts";
 
 async function readTextFilePreview(
   absolutePath: string,
@@ -28,7 +33,7 @@ async function readTextFilePreview(
   if (!fileStat.isFile()) {
     throw new Error("Workspace preview target is not a file.");
   }
-  if (fileStat.size > DEFAULT_FILE_PREVIEW_MAX_BYTES) {
+  if (fileStat.size > WORKSPACE_FILE_PREVIEW_MAX_BYTES) {
     throw new Error("File is too large to preview (maximum 5 MiB).");
   }
 
@@ -38,17 +43,8 @@ async function readTextFilePreview(
     const { bytesRead } = await fileHandle.read(buffer, 0, fileStat.size, 0);
     if (bytesRead !== fileStat.size) throw new Error("File changed while reading preview.");
     const bytes = buffer.subarray(0, bytesRead);
-    if (bytes.includes(0)) {
-      throw new Error("File is not valid UTF-8 text and cannot be previewed.");
-    }
-    let contents: string;
-    try {
-      contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    } catch {
-      throw new Error("File is not valid UTF-8 text and cannot be previewed.");
-    }
     return {
-      contents,
+      contents: decodeWorkspaceFilePreview(bytes),
       sizeBytes: fileStat.size,
       truncated: false,
       sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -64,6 +60,13 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
   const workspacePaths = yield* WorkspacePaths;
   const workspaceEntries = yield* WorkspaceEntries;
   const workspaceSql = yield* Effect.serviceOption(SqlClient.SqlClient);
+  const readOwner = Option.getOrUndefined(yield* Effect.serviceOption(WorkspaceFileReadOwner));
+  const contentSearchOwner = Option.getOrUndefined(
+    yield* Effect.serviceOption(WorkspaceContentSearchOwner),
+  );
+  const mutationWatchOwner = Option.getOrUndefined(
+    yield* Effect.serviceOption(WorkspaceMutationWatchOwner),
+  );
 
   const readFilePreview: WorkspaceFileSystemShape["readFilePreview"] = Effect.fn(
     "WorkspaceFileSystem.readFilePreview",
@@ -81,33 +84,30 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
           return readTextFilePreview(target.absolutePath);
         }
 
-        const workspaceTarget = resolveWorkspaceTarget({
-          executionTargetId,
-          cwd: input.cwd,
-        });
+        const toolTarget = resolveToolTransportTarget(
+          resolveWorkspaceTarget({ executionTargetId, cwd: input.cwd }),
+        );
+        if (readOwner && toolTarget.transport === "ssh") {
+          return readOwner.readFilePreview({
+            executionTargetId,
+            cwd: input.cwd,
+            relativePath: target.relativePath,
+          });
+        }
         const result = await runToolCommand({
-          target: resolveToolTransportTarget(workspaceTarget),
+          target: toolTarget,
           command: "cat",
           args: ["--", target.relativePath],
           timeoutMs: 30_000,
-          maxBufferBytes: DEFAULT_FILE_PREVIEW_MAX_BYTES + 1,
+          maxBufferBytes: WORKSPACE_FILE_PREVIEW_MAX_BYTES + 1,
           outputMode: "truncate",
         });
         const bytes = new TextEncoder().encode(result.stdout);
-        if (result.stdoutTruncated || bytes.byteLength > DEFAULT_FILE_PREVIEW_MAX_BYTES) {
+        if (result.stdoutTruncated || bytes.byteLength > WORKSPACE_FILE_PREVIEW_MAX_BYTES) {
           throw new Error("File is too large to preview (maximum 5 MiB).");
         }
-        if (bytes.includes(0)) {
-          throw new Error("File is not valid UTF-8 text and cannot be previewed.");
-        }
-        let contents: string;
-        try {
-          contents = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-        } catch {
-          throw new Error("File is not valid UTF-8 text and cannot be previewed.");
-        }
         return {
-          contents,
+          contents: decodeWorkspaceFilePreview(bytes),
           sizeBytes: bytes.byteLength,
           truncated: false,
         };
@@ -127,7 +127,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     return { relativePath: target.relativePath, ...preview };
   });
 
-  const readFileRange = makeWorkspaceFileRange(workspacePaths);
+  const readFileRange = makeWorkspaceFileRange(workspacePaths, readOwner);
 
   const searchFileContents: WorkspaceFileSystemShape["searchFileContents"] = Effect.fn(
     "WorkspaceFileSystem.searchFileContents",
@@ -148,7 +148,10 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
         detail: "Workspace root cannot contain NUL bytes.",
       });
     }
-    return yield* searchRemoteFileContentsViaSsh({ ...input, executionTargetId });
+    return yield* searchRemoteFileContentsViaSsh(
+      { ...input, executionTargetId },
+      contentSearchOwner,
+    );
   });
 
   const watchDirectory: WorkspaceFileSystemShape["watchDirectory"] = Effect.fn(
@@ -171,11 +174,13 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
           relativePath: input.relativePath,
         })
       : { relativePath: "" };
-    return watchRemoteDirectoryViaSsh({
-      executionTargetId,
-      cwd: input.cwd,
-      relativePath: target.relativePath,
-    });
+    const watchInput = { executionTargetId, cwd: input.cwd, relativePath: target.relativePath };
+    const owner =
+      mutationWatchOwner &&
+      resolveToolTransportTarget(resolveWorkspaceTarget(watchInput)).transport === "ssh"
+        ? mutationWatchOwner
+        : undefined;
+    return watchRemoteDirectoryViaSsh(watchInput, owner);
   });
 
   const writeFile = makeWorkspaceWriteFile({
@@ -183,6 +188,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     path,
     workspacePaths,
     workspaceEntries,
+    mutationWatchOwner,
     ...(Option.isSome(workspaceSql) ? { sql: workspaceSql.value } : {}),
   });
   return {

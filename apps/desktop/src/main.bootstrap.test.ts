@@ -151,6 +151,8 @@ const originalPlatform = process.platform;
 function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
   return {
     baseDir: "/base",
+    backendStateDir: "/base/userdata",
+    backendArtifactId: "bigbud-server@0.0.0-test",
     systemMonitor: {} as never,
     channels: {} as never,
     cuaDriverHostBundleId: "bundle-id",
@@ -170,6 +172,7 @@ function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
     logHeader: vi.fn(),
     makeWindow: vi.fn() as never,
     prepareForAppQuit: vi.fn(),
+    runQuitHandshake: vi.fn(async () => undefined),
     registerFloatingAssistantIpc: vi.fn(),
     resolveIconPath: () => null,
     resourcesPath: String.raw`C:\Program Files\bigbud\resources`,

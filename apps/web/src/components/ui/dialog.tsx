@@ -3,7 +3,10 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
-import { SOLID_FLOATING_SURFACE_CLASS_NAME } from "~/components/ui/solidSurface";
+import {
+  MODAL_BACKDROP_CLASS_NAME,
+  SOLID_FLOATING_SURFACE_CLASS_NAME,
+} from "~/components/ui/solidSurface";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 
@@ -25,7 +28,8 @@ function DialogBackdrop({ className, ...props }: DialogPrimitive.Backdrop.Props)
   return (
     <DialogPrimitive.Backdrop
       className={cn(
-        "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
+        MODAL_BACKDROP_CLASS_NAME,
+        "transition-all duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0",
         className,
       )}
       data-slot="dialog-backdrop"

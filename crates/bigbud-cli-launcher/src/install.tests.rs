@@ -33,13 +33,20 @@ impl Fixture {
             entry,
         })
     }
+    /// A test child forked concurrently by another test can briefly hold an inherited
+    /// install-lock fd until it execs, so `WouldBlock` is retried for a bounded time.
     fn install(&self) -> io::Result<()> {
-        install(
-            &self.source,
-            &self.destination,
-            &std::env::current_exe()?,
-            &self.entry,
-        )
+        let launcher = std::env::current_exe()?;
+        let mut attempt = 0;
+        loop {
+            match install(&self.source, &self.destination, &launcher, &self.entry) {
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock && attempt < 99 => {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(2))
+                }
+                result => return result,
+            }
+        }
     }
 }
 impl Drop for Fixture {

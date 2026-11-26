@@ -14,16 +14,16 @@ import {
   createGitCommandError,
 } from "./GitCoreUtils.ts";
 import { gitMutationOperationId, type GitHelpers } from "./GitCoreExecutor.ts";
+import { fetchThroughSelectedRoute } from "./GitCore.fetchRoute.hosts.ts";
 import type { GitStatusOpsResult } from "./GitStatus.ts";
+import {
+  isInitiatingGitTransportDisabled,
+  WORKSPACE_GIT_HARDENED_CONFIG_ARGS,
+  type GitExecutionLane,
+} from "./GitCore.initiatingFence.ts";
 
 const WORKSPACE_FILES_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const GIT_CHECK_IGNORE_MAX_STDIN_BYTES = 256 * 1024;
-const WORKSPACE_GIT_HARDENED_CONFIG_ARGS = [
-  "-c",
-  "core.fsmonitor=false",
-  "-c",
-  "core.untrackedCache=false",
-] as const;
 
 export interface GitWorktreeOps {
   createWorktree: GitCoreShape["createWorktree"];
@@ -40,8 +40,9 @@ export function makeGitWorktreeOps(
   statusOps: Pick<GitStatusOpsResult, "branchExists" | "resolvePrimaryRemoteName">,
   path: Path.Path,
   worktreesDir: string,
+  lane: GitExecutionLane,
 ): GitWorktreeOps {
-  const { executeGit, runGit } = helpers;
+  const { executeGit, runGit, runGitStdout } = helpers;
   const { branchExists, resolvePrimaryRemoteName } = statusOps;
 
   const createWorktree: GitCoreShape["createWorktree"] = Effect.fn("createWorktree")(
@@ -96,6 +97,27 @@ export function makeGitWorktreeOps(
   const fetchPullRequestBranch: GitCoreShape["fetchPullRequestBranch"] = Effect.fn(
     "fetchPullRequestBranch",
   )(function* (input): Effect.fn.Return<void, GitCommandError, never> {
+    if (!Number.isInteger(input.prNumber) || input.prNumber <= 0) {
+      return yield* createGitCommandError(
+        "GitCore.fetchPullRequestBranch",
+        input.cwd,
+        ["fetch", "pull request"],
+        "A positive pull request number is required.",
+      );
+    }
+    if (isInitiatingGitTransportDisabled(lane)) {
+      const remoteName = yield* resolvePrimaryRemoteName(input.cwd);
+      yield* fetchThroughSelectedRoute(
+        {
+          cwd: input.cwd,
+          remoteName,
+          refspecs: [`+refs/pull/${input.prNumber}/head:refs/heads/${input.branch}`],
+          timeoutMs: 30_000,
+        },
+        runGitStdout,
+      );
+      return;
+    }
     const remoteName = yield* resolvePrimaryRemoteName(input.cwd);
     yield* executeGit(
       "GitCore.fetchPullRequestBranch",
@@ -116,19 +138,33 @@ export function makeGitWorktreeOps(
 
   const fetchRemoteBranch: GitCoreShape["fetchRemoteBranch"] = Effect.fn("fetchRemoteBranch")(
     function* (input): Effect.fn.Return<void, GitCommandError, never> {
-      yield* runGit(
-        "GitCore.fetchRemoteBranch.fetch",
-        input.cwd,
-        [
-          "fetch",
-          "--quiet",
-          "--no-tags",
-          input.remoteName,
-          `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
-        ],
-        false,
-        { operationId: gitMutationOperationId(input.operationId, "fetch") },
-      );
+      if (isInitiatingGitTransportDisabled(lane)) {
+        yield* fetchThroughSelectedRoute(
+          {
+            cwd: input.cwd,
+            remoteName: input.remoteName,
+            refspecs: [
+              `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
+            ],
+            timeoutMs: 30_000,
+          },
+          runGitStdout,
+        );
+      } else {
+        yield* runGit(
+          "GitCore.fetchRemoteBranch.fetch",
+          input.cwd,
+          [
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            input.remoteName,
+            `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
+          ],
+          false,
+          { operationId: gitMutationOperationId(input.operationId, "fetch") },
+        );
+      }
 
       const localBranchAlreadyExists = yield* branchExists(input.cwd, input.localBranch);
       const targetRef = `${input.remoteName}/${input.remoteBranch}`;

@@ -254,7 +254,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
           requestId,
         },
       );
-      yield* emit([event]);
+      yield* emit([{ ...event, requestGeneration: requestId }]);
     });
 
   const respondToUserInput: CopilotAdapterShape["respondToUserInput"] = (
@@ -293,7 +293,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
           requestId,
         },
       );
-      yield* emit([event]);
+      yield* emit([{ ...event, requestGeneration: requestId }]);
     });
 
   return {

@@ -7,6 +7,7 @@ export function invalidateV2Interactions(
   session: V2RuntimeSession,
   retained = new Set<string>(),
   answers = new Map<string, Record<string, unknown>>(),
+  confirmed: ReadonlySet<string> = new Set(),
 ) {
   const events: ProviderRuntimeEvent[] = [];
   for (const [key, opened] of session.pendingInteractions ?? []) {
@@ -20,6 +21,9 @@ export function invalidateV2Interactions(
         sessionEpoch: opened.sessionEpoch,
         ...(opened.turnId ? { turnId: opened.turnId } : {}),
         requestId: opened.requestId,
+        ...(confirmed.has(key) && opened.requestGeneration
+          ? { requestGeneration: opened.requestGeneration }
+          : {}),
         ...(opened.type === "request.opened"
           ? {
               type: "request.resolved" as const,

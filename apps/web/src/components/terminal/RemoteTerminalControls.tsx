@@ -150,7 +150,12 @@ function RemoteTerminalMenu({
           recordTerminalLaunch(snapshot);
           const store = useTerminalStateStore.getState();
           store.hydrateTerminalAgentFromSnapshot(snapshot);
-          store.ensureTerminal(threadId, row.terminalId, { open: true, active: true });
+          // Attached above: the pane only reattaches and never respawns (D1).
+          store.ensureTerminal(threadId, row.terminalId, {
+            open: true,
+            active: true,
+            restored: true,
+          });
           setOpen(false);
         }
       }

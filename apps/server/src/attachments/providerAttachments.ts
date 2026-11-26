@@ -5,6 +5,11 @@ import {
   appendAttachedImageOcrContents,
   extractPromptTextFromBuffer,
 } from "./documentText.ts";
+import {
+  documentJsonForMarkup,
+  documentMarkupPrefix,
+  escapeDocumentMarkup,
+} from "./documentText.markup.ts";
 import { truncateExtractedText } from "./documentText.shared.ts";
 
 export interface PreparedAttachment {
@@ -55,28 +60,34 @@ export async function prepareAttachmentContext(
       continue;
     }
     const bounded = truncateExtractedText(text);
-    const value =
-      bounded.length <= remaining
-        ? bounded
-        : `${bounded.slice(0, Math.max(0, remaining))}\n[Supplemental attachment context truncated]`;
-    remaining = Math.max(0, remaining - value.length);
-    if (bounded !== text || bounded.includes("[Document text truncated]") || value !== bounded)
+    const prefix = documentMarkupPrefix(bounded, remaining);
+    const marker = "\n[Supplemental attachment context truncated]";
+    const clipped = prefix.text.length !== bounded.length;
+    const value = !clipped
+      ? prefix.text
+      : remaining < marker.length
+        ? ""
+        : `${documentMarkupPrefix(prefix.text, remaining - marker.length).text}${marker}`;
+    remaining = clipped ? 0 : remaining - prefix.length;
+    if (bounded !== text || bounded.includes("[Document text truncated]") || clipped)
       warnings.push(`${attachment.name}: supplemental extracted context was truncated.`);
-    (attachment.type === "image" || attachment.mimeType.startsWith("image/") ? images : files).push(
-      { fileName: attachment.name, text: value },
-    );
+    if (value) {
+      const blocks =
+        attachment.type === "image" || attachment.mimeType.startsWith("image/") ? images : files;
+      blocks.push({ fileName: attachment.name, text: value });
+    }
   }
   const instructions =
     "<attachment_delivery>\n" +
     "Attached paths refer to immutable snapshots on the provider execution target, not permission to read arbitrary host files. Prefer these paths with available reading tools, subject to existing approvals. Supplemental extracted/OCR text below is approximate and may be incomplete. Never bypass a denied read or silently assume missing visual information.\n" +
-    JSON.stringify(references) +
+    documentJsonForMarkup(references) +
     "\n</attachment_delivery>";
   let text = appendAttachedImageOcrContents(
     appendAttachedFileContents(prompt ? `${prompt}\n\n${instructions}` : instructions, files),
     images,
   );
   if (warnings.length)
-    text += `\n\n<attachment_context_notices>\n${warnings.join("\n")}\n</attachment_context_notices>`;
+    text += `\n\n<attachment_context_notices>\n${escapeDocumentMarkup(warnings.join("\n"))}\n</attachment_context_notices>`;
   return {
     text,
     warnings,

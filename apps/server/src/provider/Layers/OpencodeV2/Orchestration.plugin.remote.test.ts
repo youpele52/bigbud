@@ -1,4 +1,4 @@
-import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
+import { V2_SUMMARY_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
 import { V2_N8_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.n8.ts";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
@@ -12,14 +12,14 @@ import { renderV2ThreadIdentity } from "./Orchestration.plugin.identity.ts";
 it("pins current v5 identity bytes and retained v4 migration provenance", () => {
   // The own-thread summary migration introduced v5/canonical-v3 in f73faab0d3;
   // N8 retains the previous six-tool descriptor. Fixed placeholders contain no private state.
-  const current = renderV2ThreadIdentity("public-key");
+  const current = renderV2ThreadIdentity("public-key", "v5");
   const hash = (source: string) => createHash("sha256").update(source).digest("hex");
   expect(hash(current)).toBe("f7b6fc93dbf267b63e7a3cf33d67c53e4e560824f2e75a88eef29b34a1dee186");
   expect(
     hash(
       current
         .replaceAll("bigbud.thread.bootstrap.v5", "bigbud.thread.bootstrap.v4")
-        .replaceAll(V2_COMPATIBILITY_DIGEST, V2_N8_COMPATIBILITY_DIGEST),
+        .replaceAll(V2_SUMMARY_COMPATIBILITY_DIGEST, V2_N8_COMPATIBILITY_DIGEST),
     ),
   ).toBe("155eb230bac8f0e67b24b5f430c78d005a7413fba30005bb4fcc4537d4e6a4f2");
 });

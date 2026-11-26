@@ -4,6 +4,7 @@ import {
   type ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
+import { isInteractionLifecycleActivityKind } from "@bigbud/shared/providerApproval";
 
 const DEFAULT_MAX_ROWS_PER_TURN = 120;
 const DEFAULT_MAX_ROWS_PER_CATEGORY = 40;
@@ -39,7 +40,7 @@ function categoryFor(activity: OrchestrationThreadActivity): string {
 
 function isTerminal(activity: OrchestrationThreadActivity): boolean {
   if (activity.tone === "error" || activity.kind.endsWith(".completed")) return true;
-  if (activity.kind.startsWith("request.") || activity.kind.startsWith("user-input.")) return true;
+  if (isInteractionLifecycleActivityKind(activity.kind)) return true;
   const payload = activity.payload;
   return (
     activity.kind === "hook.updated" &&
