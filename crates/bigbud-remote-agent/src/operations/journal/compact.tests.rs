@@ -1,16 +1,8 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use super::*;
+use crate::operations::journal::test_dir::JournalTestDir;
 
-static NEXT_PATH_ID: AtomicU64 = AtomicU64::new(0);
-
-fn temp_path() -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        ^ u128::from(NEXT_PATH_ID.fetch_add(1, Ordering::Relaxed));
-    std::env::temp_dir().join(format!("bigbud-operation-compact-{suffix}.bin"))
+fn temp_path() -> (JournalTestDir, PathBuf) {
+    JournalTestDir::with_journal("compact")
 }
 
 fn unix_ms_in(seconds: u64) -> u64 {
@@ -75,7 +67,7 @@ fn has_output(records: &[JournalRecord], operation_id: &str) -> bool {
 
 #[test]
 fn pressure_relief_drops_the_oldest_completed_output_and_keeps_its_result() {
-    let path = temp_path();
+    let (_dir, path) = temp_path();
     let journal = OperationJournal::open(&path, 4_096).unwrap();
     append_operation(&journal, "older", 700, Some(unix_ms_in(60)));
     append_operation(&journal, "newer", 700, Some(unix_ms_in(120)));
@@ -109,7 +101,7 @@ fn pressure_relief_drops_the_oldest_completed_output_and_keeps_its_result() {
 
 #[test]
 fn pressure_relief_never_drops_running_output() {
-    let path = temp_path();
+    let (_dir, path) = temp_path();
     let journal = OperationJournal::open(&path, 4_096).unwrap();
     append_operation(&journal, "running-1", 1_200, None);
     append_operation(&journal, "running-2", 1_200, None);
@@ -124,7 +116,7 @@ fn pressure_relief_never_drops_running_output() {
 
 #[test]
 fn a_full_journal_relieves_pressure_instead_of_refusing_new_work() {
-    let path = temp_path();
+    let (_dir, path) = temp_path();
     let journal = OperationJournal::open(&path, 1024 * 1024).unwrap();
     append_operation(&journal, "done-1", 1_500, Some(unix_ms_in(60)));
     append_operation(&journal, "done-2", 1_500, Some(unix_ms_in(120)));
@@ -151,7 +143,7 @@ fn a_full_journal_relieves_pressure_instead_of_refusing_new_work() {
 
 #[test]
 fn compaction_keeps_a_running_operation_past_its_acceptance_retention() {
-    let path = temp_path();
+    let (_dir, path) = temp_path();
     let journal = OperationJournal::open(&path, 4_096).unwrap();
     let id = "long-running".to_owned();
     journal

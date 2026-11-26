@@ -134,7 +134,8 @@ pub fn finish_hits(
 /// drops paths outside every scope or on the exclusion list, ranks the rest by name like
 /// [`finish_hits`], and returns the indices of at most `limit` of them, best first. Ties keep the
 /// index's own order, which is the OS index's recency order. Only these rows have their other
-/// attributes read.
+/// attributes read. Only Spotlight (macOS) reads paths first, so other targets omit it.
+#[cfg(any(target_os = "macos", test))]
 pub fn select_top_paths(
     request: &OsIndexRequest,
     exclusions: &Exclusions,

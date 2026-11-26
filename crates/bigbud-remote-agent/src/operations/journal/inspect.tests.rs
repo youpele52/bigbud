@@ -1,21 +1,17 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::*;
+use crate::operations::journal::test_dir::JournalTestDir;
 use crate::operations::{OperationJournal, OperationState};
 
-fn journal_path(label: &str) -> std::path::PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    std::env::temp_dir().join(format!("bigbud-journal-inspect-{label}-{suffix}"))
+fn journal_path(label: &str) -> (JournalTestDir, std::path::PathBuf) {
+    JournalTestDir::with_journal(label)
 }
 
 #[test]
 fn reports_nonterminal_operations_without_mutating_the_journal() {
-    let path = journal_path("active");
+    let (_path_dir, path) = journal_path("active");
     let journal = OperationJournal::open(&path, MAX_OPERATION_JOURNAL_BYTES).unwrap();
     journal
         .append(&JournalRecord::Accepted {
@@ -47,14 +43,14 @@ fn reports_nonterminal_operations_without_mutating_the_journal() {
 
 #[test]
 fn fails_closed_for_missing_corrupt_and_incomplete_journals() {
-    let missing = journal_path("missing");
+    let (_missing_dir, missing) = journal_path("missing");
     assert!(inspect_active_operations(&missing).is_err());
 
-    let corrupt = journal_path("corrupt");
+    let (_corrupt_dir, corrupt) = journal_path("corrupt");
     fs::write(&corrupt, b"not-a-journal").unwrap();
     assert!(inspect_active_operations(&corrupt).is_err());
 
-    let incomplete = journal_path("incomplete");
+    let (_incomplete_dir, incomplete) = journal_path("incomplete");
     let journal = OperationJournal::open(&incomplete, MAX_OPERATION_JOURNAL_BYTES).unwrap();
     journal
         .append(&JournalRecord::Accepted {
@@ -102,7 +98,7 @@ fn rejects_orphan_records_without_repairing_them() {
             first_retained_sequence: 1,
         },
     ] {
-        let path = journal_path("orphan");
+        let (_path_dir, path) = journal_path("orphan");
         let journal = OperationJournal::open(&path, MAX_OPERATION_JOURNAL_BYTES).unwrap();
         journal.append(&record).unwrap();
         let before = fs::read(&path).unwrap();
@@ -114,7 +110,7 @@ fn rejects_orphan_records_without_repairing_them() {
 
 #[test]
 fn structural_validation_does_not_interpret_retention_as_runtime_liveness() {
-    let path = journal_path("retention");
+    let (_path_dir, path) = journal_path("retention");
     let journal = OperationJournal::open(&path, MAX_OPERATION_JOURNAL_BYTES).unwrap();
     journal
         .append(&JournalRecord::Accepted {
@@ -140,7 +136,7 @@ fn structural_validation_does_not_interpret_retention_as_runtime_liveness() {
 
 #[test]
 fn validates_compacted_output_followed_by_new_output() {
-    let path = journal_path("watermark");
+    let (_path_dir, path) = journal_path("watermark");
     let journal = OperationJournal::open(&path, MAX_OPERATION_JOURNAL_BYTES).unwrap();
     for record in [
         JournalRecord::Accepted {
@@ -192,8 +188,8 @@ fn validates_compacted_output_followed_by_new_output() {
 #[test]
 fn rejects_symlinks_unsafe_permissions_and_oversized_files() {
     use std::os::unix::fs::{PermissionsExt, symlink};
-    let path = journal_path("unsafe");
-    let link = journal_path("symlink");
+    let (_path_dir, path) = journal_path("unsafe");
+    let (_link_dir, link) = journal_path("symlink");
     OperationJournal::open(&path, MAX_OPERATION_JOURNAL_BYTES).unwrap();
     let before = fs::read(&path).unwrap();
     symlink(&path, &link).unwrap();

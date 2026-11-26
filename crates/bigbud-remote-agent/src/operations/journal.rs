@@ -289,5 +289,8 @@ impl JournalGuard {
 }
 
 #[cfg(test)]
+#[path = "journal/test_dir.rs"]
+pub(crate) mod test_dir;
+#[cfg(test)]
 #[path = "journal/tests.rs"]
 mod tests;
