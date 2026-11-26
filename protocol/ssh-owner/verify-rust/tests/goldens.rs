@@ -4,6 +4,8 @@ use prost::Message;
 
 #[path = "support/agent_action_vectors.rs"]
 mod agent_action_vectors;
+#[path = "support/agent_control_vectors.rs"]
+mod agent_control_vectors;
 #[path = "support/attachment_vectors.rs"]
 mod attachment_vectors;
 #[path = "support/consumer_vectors.rs"]
@@ -166,6 +168,7 @@ fn assert_frame(values: &mut BTreeMap<&str, Vec<u8>>, name: &str, payload: Paylo
 fn s1_wire_goldens() {
     let mut values = goldens(include_str!("../../v1.golden.frames"));
     agent_action_vectors::verify(&mut values);
+    agent_control_vectors::verify(&mut values);
     attachment_vectors::verify(&mut values);
     consumer_vectors::verify(&mut values);
     control_vectors::verify(&mut values);

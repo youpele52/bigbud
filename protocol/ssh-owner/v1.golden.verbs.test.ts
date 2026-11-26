@@ -87,6 +87,13 @@ test("frozen production verbs cover every proof_* operation exactly once", () =>
       { name: "peer_relay_open", field: 134 },
       { name: "peer_relay_status", field: 135 },
       { name: "peer_relay_close", field: 136 },
+      // U25 remote-agent control parity (owner-compiled templates per kind).
+      { name: "agent_control_open", field: 140 },
+      { name: "agent_control_status", field: 141 },
+      { name: "agent_control_cancel", field: 142 },
+      { name: "agent_proxy_lease_open", field: 143 },
+      { name: "agent_proxy_lease_status", field: 144 },
+      { name: "agent_proxy_lease_close", field: 145 },
     ],
   );
 

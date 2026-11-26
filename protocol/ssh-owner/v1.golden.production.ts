@@ -1,3 +1,4 @@
+import { agentControlWireCases } from "./v1.golden.agentControl.ts";
 import type { Message } from "./v1.golden.codec.ts";
 import { gitUploadWireCases } from "./v1.golden.gitUpload.ts";
 import { peerProductionWireCases } from "./v1.golden.peerProduction.ts";
@@ -15,5 +16,6 @@ export function productionLeaseWireCases(
     ...gitUploadWireCases(request, reply),
     ...remoteBackendWireCases(request, reply),
     ...peerProductionWireCases(request, reply),
+    ...agentControlWireCases(request, reply),
   };
 }

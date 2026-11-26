@@ -1,4 +1,11 @@
-import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
+import { routeProductionRemoteAgentProxy } from "./remoteAgentConnection.owner.production.ts";
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
+import {
+  buildRemoteAgentCandidateExitWaitCommand,
+  buildRemoteAgentCandidateStartupWaitCommand,
+  launchAttemptId,
+} from "./remoteAgentUpdate.prepare.scripts.ts";
+export { buildRemoteAgentCandidateExitWaitCommand, buildRemoteAgentCandidateStartupWaitCommand };
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import {
   RemoteAgentAdmissionError,
@@ -6,7 +13,6 @@ import {
 } from "./remoteAgentAdmission.types.ts";
 import { RemoteAgentStageDefinitiveError } from "./remoteAgentInstall.stage.ts";
 import { markRemoteAgentUpdate } from "./remoteAgentUpdate.state.ts";
-import { buildIsolatedRemoteAgentLaunch } from "./remoteAgentRuntime.launch.ts";
 import { verifyRemoteAgentRuntimeHealth } from "./remoteAgentRuntime.health.ts";
 import { remoteAgentBuildId, type RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
@@ -36,48 +42,8 @@ export interface RemoteAgentPreparationResult {
   readonly epoch: string;
 }
 
-export function buildRemoteAgentCandidateStartupWaitCommand(
-  runtime: RemoteAgentRuntime,
-  attemptId = launchAttemptId(runtime),
-): string {
-  return `set -eu
-${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
-for n in $(seq 1 300); do
-  observed=$(observe_supervisor)
-  case "$observed" in
-    ready) printf ready; exit 0 ;;
-    prior-boot-dead) printf prior-boot-dead; exit 0 ;;
-    exited:*) printf 'startup-exit:%s' "\${observed#exited:}"; exit 0 ;;
-  esac
-  sleep .1
-done
-printf unavailable
-`;
-}
-
-export function buildRemoteAgentCandidateExitWaitCommand(
-  runtime: RemoteAgentRuntime,
-  attemptId = launchAttemptId(runtime),
-): string {
-  return `set -eu
-${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
-for n in $(seq 1 300); do
-  case "$(observe_supervisor)" in
-    exited:*) printf exited; exit 0 ;;
-    prior-boot-dead) printf prior-boot-dead; exit 0 ;;
-  esac
-  sleep .1
-done
-printf unavailable
-`;
-}
-
 function buildIdForArtifact(artifact: RemoteAgentArtifact): string {
   return `${artifact.version}:${artifact.sha256}:${artifact.targetTriple}`;
-}
-
-function launchAttemptId(runtime: RemoteAgentRuntime): string {
-  return `launch-${runtime.generation}`;
 }
 
 function hasValidLaunchAttemptId(value: string | undefined): value is string {
@@ -161,7 +127,11 @@ async function ensureCandidateLaunch(input: {
       output = (
         await (input.launch
           ? input.launch(input.runtime, attemptId)
-          : input.control.run(buildIsolatedRemoteAgentLaunch(input.runtime, attemptId)))
+          : runRemoteAgentControlOp(input.control, {
+              kind: "isolatedLaunch",
+              runtime: input.runtime,
+              attemptId,
+            }))
       ).trim();
     } catch (cause) {
       throw new RemoteAgentUpdateUncertainError(
@@ -176,12 +146,12 @@ async function ensureCandidateLaunch(input: {
   let startup: string;
   try {
     startup = (
-      await input.control.run(
-        buildRemoteAgentCandidateStartupWaitCommand(
-          input.runtime,
-          launch.attemptId ?? launchAttemptId(input.runtime),
-        ),
-      )
+      await runRemoteAgentControlOp(input.control, {
+        kind: "supervisorObserve",
+        mode: "candidateStartup",
+        runtime: input.runtime,
+        attemptId: launch.attemptId ?? launchAttemptId(input.runtime),
+      })
     ).trim();
   } catch (cause) {
     throw new RemoteAgentUpdateUncertainError(
@@ -338,11 +308,14 @@ export async function prepareStagedRemoteAgentCandidate(input: {
     connect:
       input.connect ??
       ((target, candidate) =>
-        RemoteAgentConnection.ssh({
-          executionTargetId: target,
-          runtime: candidate,
-          binaryPath: candidate.binaryPath,
-        })),
+        RemoteAgentConnection.ssh(
+          // U25: under production activation the owner proxies this pinned candidate.
+          routeProductionRemoteAgentProxy({
+            executionTargetId: target,
+            runtime: candidate,
+            binaryPath: candidate.binaryPath,
+          }),
+        )),
   });
   await input.control.registry.update((current) => {
     const launch = current.launches.find((entry) => entry.buildId === buildId);

@@ -3,11 +3,8 @@ import {
   parseRemoteAgentRegistry,
   type RemoteAgentRegistry,
 } from "./remoteAgentInstall.registry.ts";
-import {
-  buildRemoteAgentRegistryCas,
-  buildRemoteAgentRegistryRead,
-  parseRemoteAgentRegistryReadOutput,
-} from "./remoteAgentInstall.registry.shell.ts";
+import { parseRemoteAgentRegistryReadOutput } from "./remoteAgentInstall.registry.shell.ts";
+import { runRemoteAgentControlOp, type RemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { assertMobileRegistryTransition } from "./remoteAgentInstall.mobile.invariants.ts";
 import {
   assertRemoteAgentRemovalFenceTransition,
@@ -16,13 +13,20 @@ import {
 
 export interface RemoteAgentRegistryCommand {
   readonly run: (command: string) => Promise<string>;
+  /** Production controls run typed operations (U25); legacy commands leave this unset. */
+  readonly exec?: (op: RemoteAgentControlOp) => Promise<string>;
 }
 
 /** Cross-controller CAS; lost acknowledgements reconcile content before reporting a failed write. */
 export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentRegistryCommand) {
+  const control = {
+    root,
+    run: (script: string) => command.run(script),
+    ...(command.exec ? { exec: command.exec } : {}),
+  };
   const read = async () => {
     const { text, hostNow } = parseRemoteAgentRegistryReadOutput(
-      await command.run(buildRemoteAgentRegistryRead(root)),
+      await runRemoteAgentControlOp(control, { kind: "registryRead" }),
     );
     if (text === null) return { text, state: emptyRemoteAgentRegistry(), hostNow };
     return { text, state: parseRemoteAgentRegistry(text), hostNow };
@@ -56,9 +60,11 @@ export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentR
         let result: string;
         try {
           result = (
-            await command.run(
-              buildRemoteAgentRegistryCas({ root, expected: before.text, next: text }),
-            )
+            await runRemoteAgentControlOp(control, {
+              kind: "registryCas",
+              expected: before.text,
+              next: text,
+            })
           ).trim();
         } catch (cause) {
           // A failed reply does not undo rename. Leave all intents/pins until reconciliation.

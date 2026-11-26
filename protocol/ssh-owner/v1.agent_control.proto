@@ -1,0 +1,142 @@
+syntax = "proto3";
+package bigbud.ssh_owner.v1;
+
+// U25 remote-agent control parity (Request 140-142, Reply 81). Every legacy
+// remote-agent control script is one owner-compiled kind. The owner runs the
+// template generated from the legacy builder (owner_agent_control/templates),
+// binds each operand to one positional argument, and recomputes the control
+// root on the host. A request carries validated data operands only: never shell
+// text, a command, an argument vector, a working directory, an environment, a
+// local path or a socket path. Requests 143-169, Replies 82-95 and ErrorCodes
+// 63-70 stay reserved for this track.
+
+enum AgentControlKind {
+  AGENT_CONTROL_KIND_UNSPECIFIED = 0;
+  AGENT_CONTROL_KIND_CONTROL_ROOT = 1;
+  AGENT_CONTROL_KIND_REGISTRY_READ = 2;
+  // Expected and next registry bytes arrive on the lease socket, in that order.
+  AGENT_CONTROL_KIND_REGISTRY_CAS = 3;
+  AGENT_CONTROL_KIND_STAGE_FENCE_REVOKE = 4;
+  AGENT_CONTROL_KIND_INVENTORY = 5;
+  AGENT_CONTROL_KIND_SUPERVISOR_OBSERVE = 6;
+  AGENT_CONTROL_KIND_ADMISSION_DEATH_OBSERVE = 7;
+  AGENT_CONTROL_KIND_STATE_ABSENT = 8;
+  AGENT_CONTROL_KIND_SUPERVISOR_SHUTDOWN = 9;
+  AGENT_CONTROL_KIND_SUPERVISOR_RESTART = 10;
+  AGENT_CONTROL_KIND_ISOLATED_LAUNCH = 11;
+  AGENT_CONTROL_KIND_REPLACEMENT_LAUNCH = 12;
+  AGENT_CONTROL_KIND_RETIREMENT_DELETE = 13;
+  AGENT_CONTROL_KIND_REMOVAL = 14;
+  AGENT_CONTROL_KIND_REMOVAL_RESUME = 15;
+  AGENT_CONTROL_KIND_REMOVAL_OUTCOME = 16;
+  AGENT_CONTROL_KIND_HOST_CLOCK = 17;
+  AGENT_CONTROL_KIND_ORPHAN_DELETE = 18;
+  AGENT_CONTROL_KIND_BACKEND_RUNTIME_PROBE = 19;
+  AGENT_CONTROL_KIND_SOCKET_LIVE = 20;
+  AGENT_CONTROL_KIND_SOCKET_GONE = 21;
+  // Empty `binary_path` reads the legacy default `~/.bigbud/agent/bin/current`.
+  AGENT_CONTROL_KIND_RUNTIME_PROBE = 22;
+  AGENT_CONTROL_KIND_PLATFORM_PROBE = 23;
+  AGENT_CONTROL_KIND_READ_ONLY_STATUS = 24;
+  // Raw artifact bytes arrive on the lease socket; the host checks size and SHA-256.
+  AGENT_CONTROL_KIND_INSTALL_UPLOAD = 25;
+  AGENT_CONTROL_KIND_PLACED_PROBE = 26;
+  AGENT_CONTROL_KIND_INBOX_ADOPT = 27;
+  AGENT_CONTROL_KIND_IDENTITY_CHECK = 28;
+}
+
+enum AgentObserveMode {
+  AGENT_OBSERVE_MODE_UNSPECIFIED = 0;
+  AGENT_OBSERVE_MODE_RETIREMENT_STATE = 1;
+  AGENT_OBSERVE_MODE_RETIREMENT_EXIT = 2;
+  AGENT_OBSERVE_MODE_LAUNCH_EXIT = 3;
+  AGENT_OBSERVE_MODE_RAW = 4;
+  AGENT_OBSERVE_MODE_CANDIDATE_STARTUP = 5;
+  AGENT_OBSERVE_MODE_CANDIDATE_EXIT = 6;
+  AGENT_OBSERVE_MODE_REPLACEMENT_READINESS = 7;
+  AGENT_OBSERVE_MODE_REPLACEMENT_DEATH = 8;
+}
+
+enum AgentRuntimeOrigin {
+  AGENT_RUNTIME_ORIGIN_UNSPECIFIED = 0;
+  AGENT_RUNTIME_ORIGIN_MANAGED = 1;
+  AGENT_RUNTIME_ORIGIN_LEGACY_EXTERNAL = 2;
+}
+
+// A registry runtime descriptor. A managed runtime must match the canonical
+// layout under the host's own control root; the template refuses any other.
+message AgentRuntime {
+  string generation = 1;
+  string version = 2;
+  string sha256 = 3;
+  string build_digest = 4;
+  string target_triple = 5;
+  string binary_path = 6;
+  string state_path = 7;
+  string socket_path = 8;
+  string log_path = 9;
+  AgentRuntimeOrigin origin = 10;
+}
+
+// One control lease. The 32-byte token is the operation's identity: opening it
+// again or reading its status returns the retained outcome and never runs the
+// kind a second time. A kind admits exactly its own operands.
+message AgentControlOpen {
+  bytes lease = 1;
+  AgentControlKind kind = 2;
+  AgentRuntime runtime = 3;
+  AgentObserveMode observe_mode = 4;
+  string attempt_id = 5;
+  string epoch = 6;
+  string old_attempt_id = 7;
+  string old_epoch = 8;
+  string reservation_id = 9;
+  string fence_id = 10;
+  string version = 11;
+  string sha256 = 12;
+  uint64 size = 13;
+  string binary_path = 14;
+  bool expected_present = 15;
+  uint64 expected_size = 16;
+  string expected_sha256 = 17;
+  uint64 next_size = 18;
+  string next_sha256 = 19;
+}
+
+message AgentControlLease {
+  bytes lease = 1;
+}
+
+enum AgentControlPhase {
+  AGENT_CONTROL_PHASE_UNSPECIFIED = 0;
+  // Waiting for the caller's single input connection on `socket_path`.
+  AGENT_CONTROL_PHASE_LISTENING = 1;
+  AGENT_CONTROL_PHASE_RUNNING = 2;
+  // Confirmed remote exit with fully drained, bounded output.
+  AGENT_CONTROL_PHASE_EXITED = 3;
+  // Cancelled by this lease's own cancel; the local child was confirmed reaped.
+  AGENT_CONTROL_PHASE_CANCELLED = 4;
+  // Dispatched without a confirmed result. Never replayed.
+  AGENT_CONTROL_PHASE_OUTCOME_UNKNOWN = 5;
+}
+
+message AgentControlState {
+  bytes lease = 1;
+  AgentControlPhase phase = 2;
+  AgentControlKind kind = 3;
+  optional string socket_path = 4;
+  optional uint32 exit_code = 5;
+  string stdout = 6;
+  string stderr = 7;
+}
+
+// U25 installed-agent proxy lease (Request 143-145, Reply 82): one `--proxy`
+// session for one registry runtime, as the legacy pinned proxy. The owner runs
+// its installed-agent recipe, which re-verifies the private directories and the
+// binary's SHA-256 on the opened descriptor before it executes anything (exit
+// 126 otherwise). Bytes travel on the lease socket; the relay lease phases and
+// state are reused.
+message AgentProxyLeaseOpen {
+  bytes lease = 1;
+  AgentRuntime runtime = 2;
+}

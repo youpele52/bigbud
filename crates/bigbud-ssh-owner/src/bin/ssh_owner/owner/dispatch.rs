@@ -212,6 +212,21 @@ impl Owner {
             | Operation::ClientRelayLeaseOpen(_)
             | Operation::ClientRelayLeaseStatus(_)
             | Operation::ClientRelayLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            // U25 remote-agent control leases (owner/agent_control.rs).
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::AgentControlOpen(_)
+            | Operation::AgentControlStatus(_)
+            | Operation::AgentControlCancel(_)
+            | Operation::AgentProxyLeaseOpen(_)
+            | Operation::AgentProxyLeaseStatus(_)
+            | Operation::AgentProxyLeaseClose(_)) => Ok(self.dispatch_agent_control(operation)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::AgentControlOpen(_)
+            | Operation::AgentControlStatus(_)
+            | Operation::AgentControlCancel(_)
+            | Operation::AgentProxyLeaseOpen(_)
+            | Operation::AgentProxyLeaseStatus(_)
+            | Operation::AgentProxyLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
             // W2 T-prov production provider leases (owner/provider_lease.rs).
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             operation @ (Operation::ProbeProvider(_)

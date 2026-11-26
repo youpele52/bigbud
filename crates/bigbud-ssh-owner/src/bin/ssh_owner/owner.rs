@@ -1,6 +1,10 @@
 mod activation;
 mod admission;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod agent_control;
 mod agent_proxy;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod agent_proxy_lease;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod backend;
 mod bootstrap;

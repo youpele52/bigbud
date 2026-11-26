@@ -227,7 +227,8 @@ fn production_verb(operation: &Operation) -> bool {
     let shell = false;
     // W2 T-backend: per-target deployment step and client relay leases.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let backend = super::backend::production_verb(operation);
+    let backend = super::backend::production_verb(operation)
+        || super::agent_control::production_verb(operation);
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let backend = false;
     // W2 T-prov: per-target Pi/Codex probe and provider leases.

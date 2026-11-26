@@ -1,3 +1,4 @@
+import { routeProductionRemoteAgentProxy } from "./remoteAgentConnection.owner.production.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
 import { finishRemoteAgentAdmission } from "./remoteAgentAdmission.finish.ts";
 import { RemoteAgentConnection } from "./remoteAgentConnection.ts";
@@ -71,7 +72,14 @@ export function makeRemoteAgentAdmission(
   const connect =
     dependencies.connect ??
     ((executionTargetId, runtime) =>
-      RemoteAgentConnection.ssh({ executionTargetId, runtime, binaryPath: runtime.binaryPath }));
+      RemoteAgentConnection.ssh(
+        // U25: under production activation the owner proxies this pinned runtime.
+        routeProductionRemoteAgentProxy({
+          executionTargetId,
+          runtime,
+          binaryPath: runtime.binaryPath,
+        }),
+      ));
 
   const verify = (target: string, runtime: RemoteAgentRuntime, expectedEpoch?: string) =>
     verifyRemoteAgentRuntimeAdmission({

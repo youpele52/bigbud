@@ -27,8 +27,6 @@ import {
   WorkspaceRuntimeLayerLive,
   makeWorkspaceRuntimeLayer,
 } from "../workspace-runtime/Layers/WorkspaceRuntime.ts";
-import { runSshCommand } from "../ssh/sshProcess.ts";
-import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
 import { RemoteAgentRuntimeBindingsLive } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
 import type { ServerRemoteAgentRuntimeSummary } from "@bigbud/contracts/server/server.ts";
@@ -44,6 +42,7 @@ import { RemoteAgentRestartService } from "./remoteAgentRestart.types.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 import { makeRemoteAgentInstaller } from "./remoteAgentServerLayer.installer.ts";
 import { remoteAgentInstallOperationsLayer } from "./remoteAgentInstall.operation.live.ts";
+import { makeRemoteAgentIdentityProbe } from "./remoteAgentServerLayer.identity.ts";
 
 export { makeRemoteAgentInstaller };
 
@@ -356,16 +355,7 @@ export function makeConfiguredRemoteAgentLayers<E = never, R = never>(
     pool: composition.pool,
     beginRetirement: (executionTargetId, generation) =>
       composition.pool.beginRetirement(executionTargetId, generation),
-    runIdentityProbe: async (executionTargetId, command) => {
-      const presence = await runRemoteAgentDiagnosedCommand(runSshCommand, "check", {
-        executionTargetId,
-        command: "sh",
-        args: ["-lc", command],
-        timeoutMs: 30_000,
-        maxBufferBytes: 1024,
-      });
-      return presence.stdout;
-    },
+    runIdentityProbe: makeRemoteAgentIdentityProbe(configuration.binaryPath!),
   });
   const services = Layer.mergeAll(
     composition.managed ? RemoteAgentRuntimeBindingsLive : Layer.empty,

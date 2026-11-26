@@ -61,6 +61,9 @@ pub(crate) struct Lanes {
     /// W2 T-backend deployment step and client relay leases.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) backend: crate::owner::backend::BackendLanes,
+    /// U25 remote-agent control leases (bounded per target).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) agent_control: crate::owner::agent_control::AgentControlLanes,
     /// W2 T-prov production Pi/Codex provider leases (bounded per target).
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) providers: crate::owner::provider_lease::Leases,
@@ -99,7 +102,7 @@ impl Lanes {
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let shell = Ok(());
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        let backend = self.backend.revoke();
+        let backend = self.backend.revoke().and(self.agent_control.revoke());
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let backend = Ok(());
         #[cfg(any(target_os = "macos", target_os = "linux"))]

@@ -96,33 +96,48 @@ if test -S "$socket" && "$binary" --prepare-supervisor; then printf awake; exit 
 printf 'not-awake\n' >&2
 exit 4"#;
 
+// Mirrors the legacy managed layout (`remoteAgentInstall.ts`): 0700
+// `bin/<version>/<sha256>/` holding a 0700 `bigbud-remote-agent`, verified by
+// size and SHA-256 before it is linked into place. `bin/current` is not moved:
+// the product binds a runtime through the registry, as the legacy installer does.
 const INSTALL: &str = r#"set -eu
 umask 077
 version=$1
 sha=$2
 size=$3
 home=$(readlink -f -- "$HOME")
-for d in "$home/.bigbud" "$home/.bigbud/agent" "$home/.bigbud/agent/bin" "$home/.bigbud/agent/staging"; do
+root="$home/.bigbud/agent"
+bin_root="$root/bin"
+staging_root="$root/staging"
+version_root="$bin_root/$version"
+build_root="$version_root/$sha"
+installed="$build_root/bigbud-remote-agent"
+for d in "$home/.bigbud" "$root" "$bin_root" "$staging_root" "$version_root" "$build_root"; do
   test ! -L "$d"
   if test ! -e "$d"; then mkdir -m 700 -- "$d" || test -d "$d"; fi
   test -d "$d"
   test "$(stat -c '%u' -- "$d")" = "$(id -u)"
+  if test "$d" != "$home/.bigbud"; then test "$(stat -c '%a' -- "$d")" = 700; fi
 done
-root="$home/.bigbud/agent"
-target="$root/bin/$version/$sha"
-install -d -m 700 -- "$root/bin/$version"
-stage=$(mktemp "$root/staging/.bigbud-remote-agent.XXXXXX")
-trap 'rm -f -- "$stage"' EXIT HUP INT TERM
-cat > "$stage"
-test "$(wc -c < "$stage")" -eq "$size"
-test "$(sha256sum "$stage" | awk '{print $1}')" = "$sha"
-chmod 700 -- "$stage"
-sync -f -- "$stage" 2>/dev/null || true
-if ln -- "$stage" "$target" 2>/dev/null; then rm -f -- "$stage"; else
-  test -f "$target"
-  rm -f -- "$stage"
+staged=$(mktemp "$build_root/.bigbud-remote-agent.stage.XXXXXX")
+trap 'rm -f -- "$staged"' EXIT HUP INT TERM
+cat > "$staged"
+test "$(wc -c < "$staged")" -eq "$size"
+test "$(sha256sum "$staged" | awk '{print $1}')" = "$sha"
+chmod 700 -- "$staged"
+sync -f "$staged"
+if ln -- "$staged" "$installed" 2>/dev/null; then
+  rm -f -- "$staged"
+else
+  test ! -L "$installed"
+  test -f "$installed"
+  test "$(stat -c '%u' -- "$installed")" = "$(id -u)"
+  test "$(stat -c '%a' -- "$installed")" = 700
+  test "$(wc -c < "$installed")" -eq "$size"
+  test "$(sha256sum "$installed" | awk '{print $1}')" = "$sha"
+  rm -f -- "$staged"
 fi
-sync -f -- "$root/bin/$version" 2>/dev/null || true
+sync -f "$build_root"
 trap - EXIT HUP INT TERM
 printf installed"#;
 
@@ -174,3 +189,7 @@ pub(super) fn execute(
         ActionKind::Unspecified => Err(ErrorCode::InvalidOperands),
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "recipe.tests.rs"]
+mod tests;

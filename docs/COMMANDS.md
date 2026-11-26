@@ -410,6 +410,8 @@ Source: [apps/server/package.json](../apps/server/package.json).
 | --------------------------------------------------------------------- | ------------------------------------------------------- |
 | `bun run --cwd apps/server dev`                                       | `just server-dev`                                       |
 | `bun run --cwd apps/server build`                                     | `just server-build`                                     |
+| `bun run --cwd apps/server agent-control:templates`                   | `just server-agent-control-templates`                   |
+| `bun run --cwd apps/server agent-control:templates:check`             | `just server-agent-control-templates-check`             |
 | `bun run --cwd apps/server thread-tools:manifest`                     | `just server-thread-tools-manifest`                     |
 | `bun run --cwd apps/server thread-tools:manifest:check`               | `just server-thread-tools-manifest-check`               |
 | `bun run --cwd apps/server thread-tools:native-qualification:check`   | `just server-thread-tools-native-qualification-check`   |

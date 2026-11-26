@@ -1438,3 +1438,75 @@ No code changed, no wire number was used and no commit was produced. The activat
 - **Cleanup.** The sshd was stopped; `/tmp/bb-peer-fixture`, `/tmp/bb-linit` and the Mac script scratch were removed; no owner, sshd or Node process remains.
 - **Guest disk audit (read-only, root btrfs 37 GB, 35 GB used, 94%).** Almost all of it is `/home/bbdev` (35 GB): `workspace-mode-proof.1MZti8` 16 GB (24 Nov; 3.0 GB `node_modules`, 1.8 GB `target`; previously kept by the user), `checkout` 4.3 GB (23 Nov), `c06-browser.G7AinPml` 2.7 GB, `e2-guarded-reload.MUsIEbhX` 2.1 GB, `e2-guarded-browser.XGQFT9AE` 2.0 GB, `bigbud-c04.pJjlQFbZ` 1.6 GB, `e2-apply.riahnzzZ` 1.5 GB, `first-new-file.Ui3JXIDz` 1.4 GB (all 24–25 Nov repo copies with `node_modules`), `~/.bun/install/cache` 2.8 GB (hardlinked into those copies, so freed only with them), `downloads` 1.8 GB (of which `rust.tar.xz` plus extraction 1.8 GB), `tools` 0.8 GB, `.cache` 331 MB, `.cargo` 203 MB, `bigbud-s3-c13.VZqXgUr7` 75 MB. Outside it: `/usr` 1.5 GB, `/var` 476 MB (apt cache 360 MB, journal 8 MB). No Docker. These were reported, not deleted. Recommendation: remove the seven dated repo copies and `checkout` (about 15 GB) and then `~/.bun/install/cache`, keep `tools` and the Node/Bun archives, and decide on `workspace-mode-proof.1MZti8` separately.
 - **Removed (ours, tmpfs).** 23 `/tmp/bigbud-picker-linux-*` picker fixture directories from 23 November (no live process); tmpfs `/tmp` went from 475 MB to 115 MB used. The root disk is unaffected by that.
+
+## U25 T-agent remote-agent control parity (26 November 2026, in progress)
+
+Decision U25 (option A, full legacy parity) and its design entry are in the [finish-line plan §4](2026-11-25-rust-ssh-ownership-finish-line-plan.md#u25-design-entry-remote-agent-control-parity-through-the-production-owner-26-november-2026). Wire budget held for this track: Request 140–169, Reply 81–95, ErrorCode 63–70. Activation flag unchanged; no commit.
+
+- **Stage 1 (design entry): done.** The 16 legacy `control.run` modules map to 29 `AgentControlKind` values of one step-lease verb family (Request 140–142, Reply 81). Each kind has typed operands only, a fixed owner template, the root recomputed remotely, and streamed bytes for install and the registry CAS on a per-lease socket. The TypeScript seam is a typed `RemoteAgentControl.exec(op)`; the legacy implementation keeps its scripts byte-identical.
+- **Stage 2 (install-layout defect): done.** `owner_agent_proxy/agent_action/recipe.rs` INSTALL wrote the binary as the file `bin/<version>/<sha256>`. It now writes the legacy layout: 0700 `bin/<version>/<sha256>/` holding a 0700 `bigbud-remote-agent`, size and SHA-256 checked before the link, idempotent re-install. `bin/current` is intentionally not written, because the legacy installer does not write it either (the activation takeover helpers are retired and runtimes bind through the registry). Checks: `cargo fmt -p bigbud-ssh-owner -- --check` clean; strict Clippy `--all-targets -D warnings` clean on macOS, `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`; macOS `cargo test … agent_action` 8 passed; the cross-built (zigbuild aarch64) suite in `bb-ssh-owner-linux-dev` (guest tmpfs `/tmp/bb-agent-t`) ran `agent_action` with 10 passed, including the new Linux-only `install_writes_the_legacy_managed_layout_and_is_idempotent` and `install_refuses_bytes_that_do_not_match_the_identity`.
+- **Stage 1 correction (as built).** There are 28 kinds, not 29. `SUPERVISOR_OBSERVE` takes 8 modes, and the installed-agent proxy became its own lease (Request 143–145, Reply 82). Templates are generated from the legacy builders rather than ported by hand. The plan's design entry is updated to match.
+- **Stage 3 (protocol and owner): done.**
+  - **Wire.** `v1.agent_control.proto` defines Request 140–145 and Reply 81–82. No ErrorCode was used, so 63–70 stay free, and Request 146–169 and Reply 83–95 stay free.
+  - **Owner modules.** [`owner_agent_control.rs`](/Users/youpele/DevWorld/bigbud/crates/bigbud-ssh-owner/src/bin/ssh_owner/owner_agent_control.rs) checks each kind's operands against its allowed set and against the legacy rules, and selects the template, deadline and output cap. [`owner/agent_control.rs`](/Users/youpele/DevWorld/bigbud/crates/bigbud-ssh-owner/src/bin/ssh_owner/owner/agent_control.rs) holds per-target lanes: at most 4 running leases and 64 kept outcomes, with token reattach and cancel, revoked with the target. [`owner/agent_proxy_lease.rs`](/Users/youpele/DevWorld/bigbud/crates/bigbud-ssh-owner/src/bin/ssh_owner/owner/agent_proxy_lease.rs) runs the installed-agent recipe over the relay worker, at most 8 per target.
+  - **Templates.** 41 generated templates live in `owner_agent_control/templates/`, built by `bun run --cwd apps/server agent-control:templates`; the `:check` script and a vitest fail on drift.
+  - **Goldens.** A new TS module `v1.golden.agentControl.ts` adds 13 cases to frames and grants, with Rust vectors in `verify-rust/tests/support/agent_control_vectors.rs`. `AgentControlOpen` is boxed in prost (Clippy `large_enum_variant`).
+- **Stage 4 (TypeScript): done, with one open item.**
+  - **Seam and composition.** `runRemoteAgentControlOp` is the seam: legacy controls get byte-identical scripts, production controls get typed leases. All 16 modules now call it. `makeOwnerRemoteAgentInstallDependencies` drives the unchanged install manager. `remoteAgentControl.selection.ts` routes control open, install, platform, read-only status (D1/D4/D5) and the identity probe to the owner under activation.
+  - **Proxy.** `makeProductionRemoteAgentProxyOwner` is used by the managed composition's pool and by the custom-binary observation under activation. `observeOwnedInstalledSupervisor` is injectable into `composeInstalledRemoteAgentStartup`.
+  - **Refactors.** Root validation moved to `remoteAgentControl.root.ts`, the install `--check` assertion to `remoteAgentInstallManager.verify.ts`, and the server-layer identity probe to `remoteAgentServerLayer.identity.ts`, which keeps that file at 385 lines.
+  - **Open.** No server-boot caller supplies a trusted `InstalledStartupBinding`. Its production source (local owner store versus configuration) is undecided.
+- **Stage 5 (live): done, 3/3.**
+  - **Setup.** The macOS production owner (debug, this tree) targeted the OrbStack Debian guest: a root sshd on `192.168.139.96:42996` in a private mount namespace, a namespace-only account `bbtag` (uid 60026, bind-mounted `passwd`/`group`/`shadow` copies) and a 512 MiB tmpfs home. Generated host and client keys with an explicit pin.
+  - **Agent bytes: local build, not release-trusted (E7 open).** Three `cargo zigbuild --locked --release` aarch64 builds of `bigbud-remote-agent`, each about 6.9 MB:
+    - 0.9.1-e7open, SHA-256 `10740254…8232`
+    - 0.9.2-e7open, SHA-256 `58718de4…a7`
+    - 0.9.3-e7open
+      Each was signed with a disposable ed25519 key, so the signature check, the TypeScript byte check and the remote size/SHA-256 check all run.
+  - **Three acceptance tests, 3/3 consecutive runs:**
+    1. `remoteAgentControl.owner.agentInstall.linux.test.ts`
+       - Install through the unchanged manager: a streamed upload, `placedProbe` reports `managed`, and the registry runtime has the legacy path. Read-only status matches the runtime.
+       - Retirement deletion and `stateAbsent`.
+       - Inbox adoption (`placement: inbox`), then an update to the second slot.
+       - Two-slot capacity refusal (`RemoteAgentCapacityUnavailableError`, as on the legacy path).
+       - An orphan is reclaimed by the next install's capacity step, leaving exactly builds 2 and 3.
+       - Isolated launch, `candidateStartup` returns `ready`, the socket is live, shutdown is accepted, then exit and socket gone.
+       - Removal is blocked by typed stage blockers while this controller's stages are live; on a stage-free tree it removes `~/.bigbud/agent`.
+       - No agent process is left on the account.
+    2. `remoteAgentControl.owner.agentProxy.linux.test.ts`: `observeOwnedInstalledSupervisor` (hello, identity and epoch) and a full `RemoteAgentConnection` handshake through an owner proxy lease. A runtime with a tampered digest is refused (`observation-required`; the recipe exits 126). Shutdown follows, and no process is left.
+    3. `remoteAgentControl.owner.agentReattach.linux.test.ts`: a streamed registry CAS commits once. Re-opening the same token returns the kept outcome with no second CAS. After `disconnect` and `connect` the token still reads back (`reattach-after-reconnect=retained`). Cancelling a settled lease is idempotent, and an unknown token is `operationDenied`.
+  - **Parity, 3/3.** `remoteAgentControl.owner.parity.linux.test.ts` runs 10 operations (root, three CAS outcomes, read, upload, placed probe, inventory, fence revoke, removal outcome) as legacy `sh -lc` scripts and as owner kinds, each from an empty `~/.bigbud`. Outputs, minus the clock line, are equal, and the final `~/.bigbud/agent` file trees (paths, modes, sizes) are equal.
+  - **Totals.** sshd accepted 2,981 sessions over the whole run. Cleanup removed the sshd, account, home, guest `/tmp/bb-u25` and `/tmp/bb-agent-t`, and all Mac scratch and keys; no owner process remains.
+  - **Environment finding (not a product bug).** The production owner refused `configUnsupported` when the identity and known-hosts files sat under `/private/tmp`; keys under a 0700 directory in `$HOME` are admitted.
+- **Checks.**
+  - **Rust format and lint.** `cargo fmt -p bigbud-ssh-owner -- --check` is clean. Strict Clippy `--all-targets -D warnings` is clean on `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`.
+  - **Rust tests.** macOS `cargo test --locked -p bigbud-ssh-owner`: 72 + 602 (9 ignored) + 9 + 2 passed. The Linux cross-built suite (zigbuild aarch64, guest tmpfs) passed 72 + 612 (6 ignored) + 9. `windows_password_helper` was not run on Linux (it needs the `bwrap` path trick and is untouched).
+  - **Protocol goldens.** `verify-rust`: `cargo fmt --check` is clean and `cargo test --offline --locked` passed 3 + 12. `bunx vitest run --config protocol/ssh-owner/vitest.config.ts` passed 12.
+  - **TypeScript.** The server typecheck (`tsc --noEmit`, 8 GB heap) has 0 errors. Explicit-path `oxfmt --check` and `oxlint` on 55 files are clean. `agent-control:templates:check` verifies 41 templates.
+  - **Focused vitest.** `src/remote-agent`, `src/ssh/sshOwnerPickerProof.codec*`, `…client*` and `src/remote-backend/deployment.ssh.owner*`: 1,513 passed, 123 skipped, 7 failed, none from this change:
+    - 6 failures are in `remoteAgentOwnedPty.{close,restart}.test.ts`. The `../ssh/sshCommand.ts` mock lacks `buildSshTerminalCandidateInvocation`; they fail the same way on files this slice does not touch.
+    - 1 failure is a millisecond flake in `remoteAgentInstall.registry.removalFence.test.ts:135`, which calls `fenced(Date.now())` twice; it fails about 1 in 3 runs alone and is unchanged here.
+  - **Structural checker.** On the 42 changed remote-agent and SSH source files it reports 5 rule-3 `sshProcess` imports. All are the legacy branch kept until W7: `remoteAgentControl.ts`, `remoteAgentInstallManager.ts`, `remoteAgentPlatform.ts` and `remoteAgentReadOnlyStatus.ts` already had them, and the import moved out of `remoteAgentServerLayer.ts` into `remoteAgentServerLayer.identity.ts`.
+  - **File length.** Every changed file is at most 400 lines; the largest are 392.
+- **Formatter note.** Early in this slice, one `oxfmt` run took its file list from `git status` and so included the then-uncommitted T-peer files. Those files were already formatted; they were committed afterwards as `643ae1037d`.
+
+- **Decision (a) wired (U25, 26 November 2026).** The trusted startup binding is the local owner store's bound runtime and epoch.
+  - **New module.** [`remoteAgentComposition.installedStartup.production.ts`](/Users/youpele/DevWorld/bigbud/apps/server/src/remote-agent/remoteAgentComposition.installedStartup.production.ts) is forked from `RemoteAgentRuntimeBindingsLive` under activation. It waits for owner registration, then composes only targets with a stored binding and an admitted registry, observing through the owner proxy. An offline host, an unadmitted registry or a missing binding composes nothing and refuses nothing.
+  - **Routing.** `routeProductionRemoteAgentProxy` makes the remaining legacy `RemoteAgentConnection.ssh` call sites (admission, candidate health, legacy binding) owner-proxied under activation. `remoteAgentConnection.ts` is untouched because it is at 400 lines.
+  - **Live (macOS production owner → same namespace-only Debian account, tmpfs home; agent bytes are a local build, not release-trusted, E7 open), 3/3.** `remoteAgentControl.owner.agentStartup.linux.test.ts` ran with `BIGBUD_SSH_OWNER_ACTIVATION=1`:
+    1. A fresh admission went through the product path: the update coordinator, the install manager on owner deps and `remoteAgentAdmission.fresh`. It wrote the local SQLite owner store.
+    2. Server-side restart: the owner process was shut down and a new one started, the store was reopened from the same SQLite file, and in-memory startup state was cleared.
+    3. `composeProductionInstalledStartups` reported `ready`. The observed epoch equals the stored binding's epoch.
+    4. `getConfiguredRemoteAgentComposition(target)` returned the installed composition, and its pool connected through an owner proxy.
+    5. The install count stayed at 1, so there was no reinstall.
+  - **Regression run.** The earlier four live tests passed again 1/1 on this tree. The rebuilt agents are reproducible: the same SHA-256 as before (`10740254…`, `58718de4…`, `250d00b2…`).
+- **Fixed test causes.**
+  - `remoteAgentOwnedPty.{close,restart}.test.ts`: the mocks were stale. `ab9e837e4b` split terminal routing into `buildSshTerminalCandidateInvocation`, and the module mock still exported only `buildSshCommandInvocation`. The mocks now export both; 6/6 pass.
+  - `remoteAgentInstall.registry.removalFence.test.ts`: the flake came from two `Date.now()` reads. The test now uses one injected clock (the store's host clock and `now` for the helper); 8/8 consecutive runs pass.
+- **Checks.**
+  - Server `tsc` (8 GB): 0 errors.
+  - Focused vitest (`src/remote-agent`, `RemoteAgentRuntimeBindings*`, `ssh/sshOwnerPickerProof.codec*`/`client*`): 1,477 passed, 122 skipped, **0 failed**.
+  - Explicit-path `oxfmt --check`/`oxlint` on the 12 touched files: clean.
+  - Structural checker on the 6 touched sources: 0 findings.
+  - Largest touched file: 398 lines.
+  - Cleanup: the guest sshd, account and scratch, the Mac keys, agent builds and SQLite scratch were removed; no owner process remains.

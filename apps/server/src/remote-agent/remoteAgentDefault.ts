@@ -3,6 +3,7 @@ import {
   type RemoteAgentComposition,
 } from "./remoteAgentComposition.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import { REMOTE_AGENT_DEFAULT_BINARY } from "./remoteAgentControl.ops.ts";
 import { parseSshExecutionTarget, parseSshExecutionTransport } from "../ssh/sshExecutionTarget.ts";
 import {
   clearInstalledRemoteAgentStartups,
@@ -20,7 +21,7 @@ export {
   registerInstalledRemoteAgentStartup,
 };
 
-export const DEFAULT_REMOTE_AGENT_BINARY = "$HOME/.bigbud/agent/bin/current";
+export const DEFAULT_REMOTE_AGENT_BINARY = REMOTE_AGENT_DEFAULT_BINARY;
 
 export type RemoteAgentTransport = "agent" | "direct-ssh";
 

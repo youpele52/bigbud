@@ -2,6 +2,8 @@ import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 import { makeRemoteAgentMaintenance } from "../../remote-agent/remoteAgentInstall.maintenance.ts";
+import { composeProductionInstalledStartups } from "../../remote-agent/remoteAgentComposition.installedStartup.production.ts";
+import { remoteAgentOwnerSelection } from "../../remote-agent/remoteAgentControl.selection.ts";
 import {
   configureRemoteAgentOwners,
   parseRemoteAgentOwner,
@@ -333,6 +335,15 @@ export const RemoteAgentRuntimeBindingsLive = Layer.effectDiscard(
       }
     }
     configureRemoteAgentOwners(store);
+    // U25 decision (a): under production activation, observe and compose each target's
+    // installed agent from its locally bound runtime and epoch. Boot never waits for a host.
+    const selection = remoteAgentOwnerSelection();
+    if (selection)
+      yield* Effect.forkDetach(
+        Effect.promise(() =>
+          composeProductionInstalledStartups({ selection, owners: store }).catch(() => undefined),
+        ),
+      );
     yield* Effect.promise(() => store.pruneTerminal?.().then(() => undefined) ?? Promise.resolve());
     const maintenance = yield* makeRemoteAgentMaintenance;
     const targets = yield* sql<{

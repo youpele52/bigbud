@@ -37,6 +37,12 @@ export interface InstalledStartupBinding {
   /** Read-only snapshot used only to prove admission; never to discover an endpoint. */
   readonly registry: RemoteAgentRegistry | null;
   readonly maxFrameBytes?: number;
+  /**
+   * How the pinned endpoint is observed. Default: the local socket proof. Production (U25)
+   * passes the owner-proxy observation, which reaches the remote supervisor through one owner
+   * proxy lease for exactly this runtime.
+   */
+  readonly observe?: typeof observeLocalInstalledSupervisor;
 }
 
 export type InstalledStartupComposition =
@@ -58,7 +64,7 @@ export async function composeInstalledRemoteAgentStartup(
   const { executionTargetId, runtime, expectedEpoch, owner, registry } = input;
   let observation: VerifiedInstalledProxyObservation;
   try {
-    observation = await observeLocalInstalledSupervisor({
+    observation = await (input.observe ?? observeLocalInstalledSupervisor)({
       executionTargetId,
       runtime,
       expectedEpoch,

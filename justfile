@@ -245,6 +245,12 @@ server-dev *args:
 server-build *args:
     bun run --cwd apps/server build "$@"
 
+server-agent-control-templates *args:
+    bun run --cwd apps/server agent-control:templates "$@"
+
+server-agent-control-templates-check *args:
+    bun run --cwd apps/server agent-control:templates:check "$@"
+
 server-thread-tools-manifest *args:
     bun run --cwd apps/server thread-tools:manifest "$@"
 

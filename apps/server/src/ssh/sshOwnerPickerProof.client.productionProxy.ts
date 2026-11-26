@@ -13,6 +13,10 @@ import {
   type PickerProofProductionBackendClient,
 } from "./sshOwnerPickerProof.client.productionBackend.ts";
 import {
+  makePickerProofProductionAgentControlClient,
+  type PickerProofProductionAgentControlClient,
+} from "./sshOwnerPickerProof.client.productionAgentControl.ts";
+import {
   makePickerProofProductionShellClient,
   type PickerProofProductionShellClient,
 } from "./sshOwnerPickerProof.client.productionShell.ts";
@@ -40,7 +44,8 @@ export interface PickerProofProductionProxyClient
     PickerProofProductionBackendClient,
     PickerProofProductionShellClient,
     PickerProofProductionProviderClient,
-    PickerProofProductionGitReceiveClient {
+    PickerProofProductionGitReceiveClient,
+    PickerProofProductionAgentControlClient {
   /** Open the target's owner-selected agent proxy over its verified master. */
   openAgentProxy(): Promise<ProofAgentProxyStatus>;
   agentProxyStatus(lease: Uint8Array, pid: number): Promise<ProofAgentProxyStatus>;
@@ -112,6 +117,8 @@ export function makePickerProofProductionProxyClient(
     ...makePickerProofProductionShellClient(queued),
     ...makePickerProofProductionProviderClient(queued),
     ...makePickerProofProductionGitReceiveClient(queued),
+    // U25 remote-agent control leases poll their status, so they queue too.
+    ...makePickerProofProductionAgentControlClient(queued),
     // An empty binding is the production request: the owner refuses it unless
     // its own installed-agent recipe exists, and a fixture owner refuses it too.
     openAgentProxy: () => agent({ kind: "openProofAgentProxy", binaryPath: "", sha256: "" }),

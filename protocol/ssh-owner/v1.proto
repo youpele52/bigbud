@@ -13,6 +13,7 @@ import "v1.peer.proto";
 import "v1.transfer.proto";
 import "v1.provider_lease.proto";
 import "v1.remote_backend.proto";
+import "v1.agent_control.proto";
 
 // Private local owner proof; no caller-supplied SSH argv, env, auth flags or forwarding.
 //
@@ -337,6 +338,14 @@ message Request {
     PeerRelayOpen peer_relay_open = 134;
     PeerRelayLease peer_relay_status = 135;
     PeerRelayLease peer_relay_close = 136;
+    // U25 remote-agent control parity (see v1.agent_control.proto). Per target
+    // and generation; the owner compiles every remote script from its template.
+    AgentControlOpen agent_control_open = 140;
+    AgentControlLease agent_control_status = 141;
+    AgentControlLease agent_control_cancel = 142;
+    AgentProxyLeaseOpen agent_proxy_lease_open = 143;
+    ClientRelayLease agent_proxy_lease_status = 144;
+    ClientRelayLease agent_proxy_lease_close = 145;
   }
 }
 
@@ -538,6 +547,9 @@ message Reply {
     PeerHostKey peer_host_key = 77;
     PeerPin peer_pin = 78;
     PeerRelayState peer_relay = 79;
+    // U25 remote-agent control lease state (v1.agent_control.proto).
+    AgentControlState agent_control = 81;
+    ClientRelayLeaseState agent_proxy_lease = 82;
   }
 }
 

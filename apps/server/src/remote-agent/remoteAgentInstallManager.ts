@@ -11,17 +11,16 @@ import {
 } from "./remoteAgentArtifact.ts";
 import { installRemoteAgentArtifact, type RemoteAgentInstallPaths } from "./remoteAgentInstall.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
-import {
-  RemoteAgentStageDefinitiveError,
-  stageRemoteAgentBuild,
-} from "./remoteAgentInstall.stage.ts";
+import { stageRemoteAgentBuild } from "./remoteAgentInstall.stage.ts";
 import { cleanupRemoteAgentBuilds } from "./remoteAgentInstall.cleanup.ts";
 import { prepareRemoteAgentInstallCapacity } from "./remoteAgentInstall.capacity.ts";
 import { remoteAgentRuntimeSummary } from "./remoteAgentStatus.ts";
 import { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.ts";
 import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remoteAgentPlatform.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
-import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
+import { assertInstalledRemoteAgentCheck } from "./remoteAgentInstallManager.verify.ts";
+import { makeOwnerRemoteAgentInstallDependencies } from "./remoteAgentControl.owner.install.ts";
+import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
 import { downloadRemoteAgentArtifact } from "./remoteAgentArtifactDownload.ts";
 import {
   RemoteAgentRemoteCommandError,
@@ -41,14 +40,8 @@ import {
   type RemoteAgentTerminalOwnerList,
 } from "./remoteAgentInstall.remove.ts";
 
-export class RemoteAgentInstallManagerError extends Error {
-  readonly _tag = "RemoteAgentInstallManagerError";
-
-  constructor(message: string) {
-    super(message);
-    this.name = "RemoteAgentInstallManagerError";
-  }
-}
+import { RemoteAgentInstallManagerError } from "./remoteAgentInstallManager.verify.ts";
+export { RemoteAgentInstallManagerError };
 
 export interface RemoteAgentInstallSource {
   readonly manifest: RemoteAgentArtifactManifest;
@@ -153,24 +146,7 @@ function defaultDependencies(
         timeoutMs: 30_000,
         maxBufferBytes: 64 * 1024,
       });
-      try {
-        const identity = parseRemoteAgentCheckOutput(stdout);
-        const architecture = input.targetTriple.startsWith("aarch64") ? "aarch64" : "x86_64";
-        if (
-          !remoteAgentIdentityMatches(identity, input) ||
-          identity.operatingSystem !== "linux" ||
-          identity.architecture !== architecture
-        ) {
-          throw new RemoteAgentInstallManagerError(
-            "Installed remote agent candidate returned an invalid handshake.",
-          );
-        }
-      } catch (cause) {
-        throw new RemoteAgentStageDefinitiveError(
-          "Installed remote agent candidate returned an invalid check.",
-          { cause },
-        );
-      }
+      assertInstalledRemoteAgentCheck(stdout, input);
     },
   };
 }
@@ -178,8 +154,11 @@ function defaultDependencies(
 export function makeRemoteAgentInstallManager(
   overrides: Partial<RemoteAgentInstallManagerDependencies> = {},
 ) {
+  // U25: production activation routes every remote step through the live SSH owner.
+  const owner = overrides.runRemoteCommand ? undefined : remoteAgentOwnerSelection();
   const dependencies = {
     ...defaultDependencies(overrides.runRemoteCommand ?? runSshCommand),
+    ...(owner ? makeOwnerRemoteAgentInstallDependencies(owner) : {}),
     ...overrides,
   };
   const installTails = new Map<string, Promise<void>>();

@@ -1,3 +1,4 @@
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentRemovalBlocker } from "./remoteAgentInstall.remove.blockers.ts";
@@ -5,40 +6,30 @@ import {
   awaitSupervisorExit,
   probeRemoteAgentSupervisorState,
 } from "./remoteAgentInstall.retirement.ts";
-import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
-import { quoteShellArgument as quote } from "./remoteAgentShellQuote.ts";
-import { buildRemoteAgentSupervisorShutdownCommand } from "./remoteAgentSupervisor.ts";
+import { validateRemoteAgentRuntime, type RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 
-/**
- * Shell test: is a process still bound to this socket? Reads `/proc/net/unix`, so a stale socket
- * file left by a crashed supervisor is not mistaken for a live one.
- */
-export function buildRemoteAgentSocketLivenessCheck(socketPath: string): string {
-  return `awk -v p=${quote(socketPath)} 'NR > 1 && $NF == p { found = 1 } END { exit found ? 0 : 1 }' /proc/net/unix`;
-}
+export { buildRemoteAgentSocketLivenessCheck } from "./remoteAgentControl.scripts.ts";
 
 /** True when a live process is bound to the socket; unknown answers count as live. */
-async function socketIsLive(control: RemoteAgentControl, socketPath: string): Promise<boolean> {
+async function socketIsLive(
+  control: RemoteAgentControl,
+  runtime: RemoteAgentRuntime,
+): Promise<boolean> {
   // Whitespace defeats the textual match below; never treat such a socket as gone.
-  if (/\s/.test(socketPath)) return true;
-  const result = await control
-    .run(
-      `if test ! -r /proc/net/unix; then printf socket; elif ${buildRemoteAgentSocketLivenessCheck(socketPath)}; then printf socket; else printf none; fi`,
-    )
-    .catch(() => "socket");
+  if (/\s/.test(runtime.socketPath)) return true;
+  const result = await runRemoteAgentControlOp(control, { kind: "socketLive", runtime }).catch(
+    () => "socket",
+  );
   return result.trim() !== "none";
 }
 
 /** Waits for a supervisor without a recorded launch until nothing is bound to its socket. */
-async function awaitSocketGone(control: RemoteAgentControl, socketPath: string): Promise<boolean> {
-  if (/\s/.test(socketPath)) return false;
-  const result = await control.run(`set -eu
-for n in $(seq 1 100); do
-  if ! ${buildRemoteAgentSocketLivenessCheck(socketPath)}; then printf exited; exit 0; fi
-  sleep .1
-done
-printf uncertain
-`);
+async function awaitSocketGone(
+  control: RemoteAgentControl,
+  runtime: RemoteAgentRuntime,
+): Promise<boolean> {
+  if (/\s/.test(runtime.socketPath)) return false;
+  const result = await runRemoteAgentControlOp(control, { kind: "socketGone", runtime });
   return result.trim() === "exited";
 }
 
@@ -62,7 +53,7 @@ export async function stopIdleRemoteAgentSupervisors(
       () => "uncertain" as const,
     );
     if (observed === "dead" || observed === "absent") continue;
-    if (observed === "uncertain" && !(await socketIsLive(control, runtime.socketPath))) continue;
+    if (observed === "uncertain" && !(await socketIsLive(control, runtime))) continue;
     if (build.binary !== "present") {
       blockers.push({
         kind: "process",
@@ -71,7 +62,10 @@ export async function stopIdleRemoteAgentSupervisors(
       continue;
     }
     try {
-      const accepted = await control.run(buildRemoteAgentSupervisorShutdownCommand(runtime));
+      const accepted = await runRemoteAgentControlOp(control, {
+        kind: "supervisorShutdown",
+        runtime,
+      });
       if (accepted.trim() !== "shutdown-accepted") throw new Error("Shutdown was refused.");
     } catch {
       blockers.push({
@@ -83,7 +77,7 @@ export async function stopIdleRemoteAgentSupervisors(
     const exited =
       observed === "live"
         ? await awaitSupervisorExit(control, runtime).catch(() => false)
-        : await awaitSocketGone(control, runtime.socketPath).catch(() => false);
+        : await awaitSocketGone(control, runtime).catch(() => false);
     if (!exited)
       blockers.push({ kind: "process", label: `Agent ${runtime.version} is still shutting down` });
   }

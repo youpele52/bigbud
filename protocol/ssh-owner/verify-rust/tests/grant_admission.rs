@@ -180,7 +180,13 @@ fn normalized_operand(operation: &Operation) -> (Verb, [u8; 32]) {
         | Operation::ListTerminalShells(_)
         | Operation::WorkspaceEntryInfo(_)
         | Operation::WorkspaceRename(_)
-        | Operation::WorkspaceAppend(_) => Verb::OtherFixtureOperation,
+        | Operation::WorkspaceAppend(_)
+        | Operation::AgentControlOpen(_)
+        | Operation::AgentControlStatus(_)
+        | Operation::AgentControlCancel(_)
+        | Operation::AgentProxyLeaseOpen(_)
+        | Operation::AgentProxyLeaseStatus(_)
+        | Operation::AgentProxyLeaseClose(_) => Verb::OtherFixtureOperation,
     };
     let digest = Sha256::digest(operand_preimage(operation.clone()));
     (verb, digest.into())

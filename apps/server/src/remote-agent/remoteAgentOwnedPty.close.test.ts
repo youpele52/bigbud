@@ -5,8 +5,11 @@ vi.mock("../ssh/sshVerification.ts", () => ({
   assertSshExecutionTargetReady: () => undefined,
   assertSshExecutionTargetReadyAsync: async () => undefined,
 }));
+// Terminal routing builds its candidate with `buildSshTerminalCandidateInvocation` (split from
+// `buildSshCommandInvocation` in ab9e837e4b); both are fixture-only here.
 vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
+  buildSshTerminalCandidateInvocation: () => ({ command: "fixture", args: [] }),
 }));
 afterEach(() => vi.restoreAllMocks());
 

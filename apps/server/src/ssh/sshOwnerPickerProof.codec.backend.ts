@@ -7,6 +7,13 @@ import {
   type PeerProductionOutcome,
 } from "./sshOwnerPickerProof.codec.peerProduction.ts";
 import {
+  isAgentControlOperation,
+  readAgentControlState,
+  writeAgentControl,
+  type AgentControlOperation,
+  type AgentControlState,
+} from "./sshOwnerPickerProof.codec.agentControl.ts";
+import {
   bytesValue,
   invalid,
   PickerProofOwnerError,
@@ -78,7 +85,9 @@ export type BackendLeaseOperation =
       readonly lease: Uint8Array;
     }
   // U24 owner-wide peer enrollment and relay (Request 130–136).
-  | PeerProductionOperation;
+  | PeerProductionOperation
+  // U25 remote-agent control leases (Request 140–142).
+  | AgentControlOperation;
 
 export type DeploymentStepState = {
   readonly lease: Uint8Array;
@@ -144,23 +153,32 @@ const FIELD = {
 } as const;
 
 const isPeerProduction = (operation: BackendLeaseOperation): operation is PeerProductionOperation =>
-  !Object.hasOwn(FIELD, operation.kind);
+  !Object.hasOwn(FIELD, operation.kind) && !isAgentControlOperation(operation);
 
 export function writeBackendLease(writer: WireWriter, operation: BackendLeaseOperation) {
   if (isPeerProduction(operation)) return writePeerProduction(writer, operation);
+  if (isAgentControlOperation(operation))
+    return writeAgentControl(writer, operation as AgentControlOperation);
+  const leaseOperation = operation as Exclude<
+    BackendLeaseOperation,
+    PeerProductionOperation | AgentControlOperation
+  >;
   const operands = new WireWriter();
-  lease(operands, operation.lease);
-  if (operation.kind === "deploymentStepOpen") writeStep(operands, operation.step);
-  else if (operation.kind === "clientRelayLeaseOpen") {
-    if (!isExactRemotePath(operation.nodeBinary) || !isExactRemotePath(operation.helperEntry))
+  lease(operands, leaseOperation.lease);
+  if (leaseOperation.kind === "deploymentStepOpen") writeStep(operands, leaseOperation.step);
+  else if (leaseOperation.kind === "clientRelayLeaseOpen") {
+    if (
+      !isExactRemotePath(leaseOperation.nodeBinary) ||
+      !isExactRemotePath(leaseOperation.helperEntry)
+    )
       throw new PickerProofOwnerError("invalidOperands");
-    operands.fieldString(2, operation.nodeBinary);
-    operands.fieldString(3, operation.nodeSha256);
-    operands.fieldString(4, operation.helperEntry);
-    operands.fieldString(5, operation.helperSha256);
-    operands.fieldString(6, operation.authorityId);
+    operands.fieldString(2, leaseOperation.nodeBinary);
+    operands.fieldString(3, leaseOperation.nodeSha256);
+    operands.fieldString(4, leaseOperation.helperEntry);
+    operands.fieldString(5, leaseOperation.helperSha256);
+    operands.fieldString(6, leaseOperation.authorityId);
   }
-  writer.fieldRepeatedMessage(FIELD[operation.kind], operands.finish());
+  writer.fieldRepeatedMessage(FIELD[leaseOperation.kind], operands.finish());
 }
 
 const KIND_BY_WIRE = Object.fromEntries(
@@ -235,13 +253,17 @@ export function readClientRelayLease(bytes: Uint8Array): ClientRelayLeaseState {
 export type BackendLeaseOutcome =
   | { readonly kind: "deploymentStep"; readonly value: DeploymentStepState }
   | { readonly kind: "clientRelayLease"; readonly value: ClientRelayLeaseState }
-  | PeerProductionOutcome;
+  | PeerProductionOutcome
+  | { readonly kind: "agentControl"; readonly value: AgentControlState }
+  | { readonly kind: "agentProxyLease"; readonly value: ClientRelayLeaseState };
 
-/** Reply 61 (deployment step), 62 (client relay channel) or U24 peer replies 76–79. */
+/** Reply 61 (deployment step), 62 (client relay), U24 peer replies 76–79 or U25 reply 81. */
 export function readBackendLeaseOutcome(
-  field: 61 | 62 | 76 | 77 | 78 | 79,
+  field: 61 | 62 | 76 | 77 | 78 | 79 | 81 | 82,
   bytes: Uint8Array,
 ): BackendLeaseOutcome {
+  if (field === 81) return { kind: "agentControl", value: readAgentControlState(bytes) };
+  if (field === 82) return { kind: "agentProxyLease", value: readClientRelayLease(bytes) };
   if (field !== 61 && field !== 62) return readPeerProductionOutcome(field, bytes);
   return field === 61
     ? { kind: "deploymentStep", value: readDeploymentStep(bytes) }

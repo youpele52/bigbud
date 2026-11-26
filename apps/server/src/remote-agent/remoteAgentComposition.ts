@@ -29,6 +29,8 @@ import {
   makeOwnedRemoteAgentProcess,
 } from "./remoteAgentOwnedProcess.ts";
 import { installedRemoteAgentStartupRefusal } from "./remoteAgentInstalledStartup.state.ts";
+import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
+import { makeProductionRemoteAgentProxyOwner } from "./remoteAgentConnection.owner.production.ts";
 
 export interface RemoteAgentComposition {
   readonly managed: boolean;
@@ -49,6 +51,7 @@ export function makeRemoteAgentComposition(
   const managed =
     input.installedProxy !== undefined || input.binaryPath === "$HOME/.bigbud/agent/bin/current";
   const { binaryPath, maxFrameBytes } = input;
+  const production = remoteAgentOwnerSelection();
   const raw: RemoteAgentConnectionPoolFactory =
     binaryPath === undefined
       ? makeInstalledProxyPoolFactory(input.installedProxy, maxFrameBytes)
@@ -68,13 +71,28 @@ export function makeRemoteAgentComposition(
                 },
               }
             : {}),
-          create: async (executionTargetId, binding) =>
-            RemoteAgentConnection.ssh({
+          create: async (executionTargetId, binding) => {
+            // U25: under production activation every proxy is an owner lease for the exact
+            // registry runtime; there is no SSH launch from this process and no fallback.
+            if (production) {
+              if (!binding)
+                throw new RemoteAgentConnectionError(
+                  "The SSH owner opens only a registry-bound agent proxy.",
+                );
+              return RemoteAgentConnection.ssh({
+                executionTargetId,
+                runtime: binding.runtime,
+                owner: makeProductionRemoteAgentProxyOwner(production),
+                ...(maxFrameBytes !== undefined ? { maxFrameBytes } : {}),
+              });
+            }
+            return RemoteAgentConnection.ssh({
               executionTargetId,
               binaryPath,
               ...(binding ? { runtime: binding.runtime } : {}),
               ...(maxFrameBytes !== undefined ? { maxFrameBytes } : {}),
-            }),
+            });
+          },
         };
   // A refused endpoint never re-enters through the process-default composition:
   // the refusal is typed and this pool refuses before any SSH launch.
@@ -92,7 +110,14 @@ export function makeRemoteAgentComposition(
       observeLegacyRemoteAgentBinding(
         target,
         await openRemoteAgentControl(target),
-        undefined,
+        production
+          ? (runtime) =>
+              RemoteAgentConnection.ssh({
+                executionTargetId: target,
+                runtime,
+                owner: makeProductionRemoteAgentProxyOwner(production),
+              })
+          : undefined,
         undefined,
         binaryPath,
       ));

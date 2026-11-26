@@ -11,6 +11,8 @@ mod main_run;
 mod openssh_image;
 #[cfg(unix)]
 mod owner;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod owner_agent_control;
 #[cfg(unix)]
 mod owner_agent_proxy;
 #[cfg(unix)]

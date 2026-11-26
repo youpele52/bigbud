@@ -1,7 +1,6 @@
-import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
+import { runRemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import { isRemoteAgentControllerAlive } from "./remoteAgentController.ts";
-import { buildRemoteAgentStageFenceRevokeCommand } from "./remoteAgentInstall.stageFence.ts";
 import { releaseRemoteAgentStage } from "./remoteAgentInstall.registry.transitions.ts";
 
 /** A matching launch with a free lock and exit receipt or distinct prior-boot proof is dead. */
@@ -20,14 +19,12 @@ export async function reconcileRemoteAgentLaunchExits(
     .slice(0, 8)) {
     const build = snapshot.builds.find((entry) => entry.id === launch.buildId);
     if (!build || build.runtime.origin !== "managed") continue;
-    const result = await control.run(`set -eu
-${buildRemoteAgentSupervisorObservation(build.runtime, launch.attemptId!)}
-case "$(observe_supervisor)" in
-  exited:*) printf dead ;;
-  prior-boot-dead) printf prior-boot-dead ;;
-  *) printf unknown ;;
-esac
-`);
+    const result = await runRemoteAgentControlOp(control, {
+      kind: "supervisorObserve",
+      mode: "launchExit",
+      runtime: build.runtime,
+      attemptId: launch.attemptId!,
+    });
     if (result !== "dead" && result !== "prior-boot-dead") continue;
     await control.registry.update((current) => {
       const entry = current.launches.find((value) => value.id === launch.id);
@@ -80,7 +77,10 @@ export async function reconcileRemoteAgentStages(control: RemoteAgentControl): P
     if (alive) continue;
     let result: string;
     try {
-      result = await control.run(buildRemoteAgentStageFenceRevokeCommand(control.root, stage.id));
+      result = await runRemoteAgentControlOp(control, {
+        kind: "stageFenceRevoke",
+        reservationId: stage.id,
+      });
     } catch {
       continue;
     }

@@ -379,6 +379,8 @@ export const readOutcome = (field: number, bytes: Uint8Array): Outcome => {
     case 77:
     case 78:
     case 79:
+    case 81: // U25 remote-agent control and installed-agent proxy lease states.
+    case 82:
       return readBackendLeaseOutcome(field, bytes);
     case 32:
       return { kind: "proofGitTrackedPush", value: readProofTrackedPushStatus(bytes) };

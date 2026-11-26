@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import type { Socket } from "node:net";
+import type { Readable, Writable } from "node:stream";
+import type {
+  RemoteAgentProxyLease,
+  RemoteAgentProxyOwner,
+} from "./remoteAgentConnection.owner.ts";
 import { assertRemoteAgentRuntimeHello } from "./remoteAgentCompatibility.ts";
 import type { VerifiedInstalledProxyObservation } from "./remoteAgentComposition.installedAdmission.ts";
 import { decodeDelimitedFrame, encodeDelimitedFrame } from "./remoteAgentProtocol.codec.ts";
@@ -36,17 +40,70 @@ export async function observeLocalInstalledSupervisor(input: {
   readonly runtime: RemoteAgentRuntime;
   readonly expectedEpoch: string;
 }): Promise<VerifiedInstalledProxyObservation> {
-  const { executionTargetId, expectedEpoch } = input;
-  const runtime = validateRemoteAgentRuntime(input.runtime);
-  if (!executionTargetId || !expectedEpoch || runtime.origin !== "managed") {
-    throw new InstalledObservationError(
-      "observation-required",
-      "Installed supervisor observation requires a pinned local endpoint.",
-    );
-  }
+  const runtime = pinned(input);
   const socket = createConnection(runtime.socketPath);
   try {
-    const hello = await exchangeHello(socket);
+    return await observe(input, runtime, socket, socket, (error) => socket.destroy(error));
+  } finally {
+    socket.destroy();
+  }
+}
+
+/**
+ * U25 production observation: the same pinned hello, carried by one owner proxy lease for the
+ * exact runtime (the owner re-verifies the binary before `--proxy` runs). The lease is closed
+ * afterwards; nothing here launches, prepares or restarts a supervisor.
+ */
+export async function observeOwnedInstalledSupervisor(input: {
+  readonly executionTargetId: string;
+  readonly runtime: RemoteAgentRuntime;
+  readonly expectedEpoch: string;
+  readonly owner: RemoteAgentProxyOwner;
+}): Promise<VerifiedInstalledProxyObservation> {
+  const runtime = pinned(input);
+  let lease: RemoteAgentProxyLease;
+  try {
+    lease = await input.owner.openAgentProxy({
+      executionTargetId: input.executionTargetId,
+      runtime,
+    });
+  } catch (cause) {
+    throw new InstalledObservationError("observation-required", errorMessage(cause));
+  }
+  try {
+    return await observe(input, runtime, lease.pipes.stdin, lease.pipes.stdout, (error) =>
+      lease.pipes.stdout.destroy(error),
+    );
+  } finally {
+    await lease.close({ mode: "terminate", timeoutMs: 5_000 }).catch(() => undefined);
+  }
+}
+
+function pinned(input: {
+  readonly executionTargetId: string;
+  readonly runtime: RemoteAgentRuntime;
+  readonly expectedEpoch: string;
+}): RemoteAgentRuntime {
+  const runtime = validateRemoteAgentRuntime(input.runtime);
+  if (!input.executionTargetId || !input.expectedEpoch || runtime.origin !== "managed") {
+    throw new InstalledObservationError(
+      "observation-required",
+      "Installed supervisor observation requires a pinned endpoint.",
+    );
+  }
+  return runtime;
+}
+
+async function observe(
+  input: { readonly executionTargetId: string; readonly expectedEpoch: string },
+  runtime: RemoteAgentRuntime,
+  writable: Writable,
+  readable: Readable,
+  abort: (error: Error) => void,
+): Promise<VerifiedInstalledProxyObservation> {
+  const { executionTargetId, expectedEpoch } = input;
+  try {
+    const hello = await exchangeHello(writable, readable, abort);
     try {
       assertRemoteAgentRuntimeHello(runtime, hello);
     } catch (cause) {
@@ -67,8 +124,6 @@ export async function observeLocalInstalledSupervisor(input: {
   } catch (cause) {
     if (cause instanceof InstalledObservationError) throw cause;
     throw new InstalledObservationError("observation-required", errorMessage(cause));
-  } finally {
-    socket.destroy();
   }
 }
 
@@ -76,13 +131,14 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-async function exchangeHello(socket: Socket) {
-  const timeout = setTimeout(
-    () => socket.destroy(new Error("Timed out waiting for agent hello")),
-    5_000,
-  );
+async function exchangeHello(
+  writable: Writable,
+  readable: Readable,
+  abort: (error: Error) => void,
+) {
+  const timeout = setTimeout(() => abort(new Error("Timed out waiting for agent hello")), 5_000);
   try {
-    socket.write(
+    writable.write(
       encodeDelimitedFrame({
         type: "clientHello",
         value: {
@@ -98,7 +154,7 @@ async function exchangeHello(socket: Socket) {
     const header = Buffer.allocUnsafe(4);
     let bytes: Buffer | undefined;
     let received = 0;
-    for await (const chunk of socket.iterator({
+    for await (const chunk of readable.iterator({
       destroyOnReturn: false,
     }) as AsyncIterable<Buffer>) {
       let offset = 0;
