@@ -107,6 +107,7 @@ mod process_attach_tests;
 #[path = "pty_handlers.tests.rs"]
 mod pty_handler_tests;
 #[cfg(test)]
+#[cfg(unix)]
 #[path = "terminal_host.tests.rs"]
 mod terminal_host_tests;
 #[cfg(test)]

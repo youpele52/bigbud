@@ -34,7 +34,13 @@ export function fixture() {
       logicalSha256: hash("8"),
     },
   });
-  const capture = { complete: true, lostEvents: 0, fenceContinuous: true, otherAStarts: 0, otherBStarts: 0 };
+  const capture = {
+    complete: true,
+    lostEvents: 0,
+    fenceContinuous: true,
+    otherAStarts: 0,
+    otherBStarts: 0,
+  };
   return {
     matrix,
     evidence: {

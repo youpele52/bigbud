@@ -41,8 +41,8 @@ describe("capability catalog", () => {
     expect(create?.relatedCapabilityIds).toContain("thread.models.list");
     expect(list).toMatchObject({ risk: "read-only", relatedCapabilityIds: ["thread.create"] });
     expect(list?.guide.workflow).toContain("list_available_models");
-    // OpenCode V2 does not offer these yet, so the guide stays conditional (Phase 5).
-    expect(list?.availability.join(" ")).toContain("not in OpenCode V2");
+    // OpenCode V2 offers these from bootstrap ABI 6, so the guide stays conditional on the ABI.
+    expect(list?.availability.join(" ")).toContain("OpenCode V2 requires bootstrap ABI 6");
   });
 
   it("reports missing related Tracks", () => {

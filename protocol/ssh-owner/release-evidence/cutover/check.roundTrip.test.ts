@@ -49,41 +49,82 @@ describe("offline A/B round-trip evidence continuity", () => {
   });
 
   const splices: Array<[string, (f: Fixture) => void, RegExp]> = [
-    ["another profile instance", ({ evidence }) => {
-      evidence.rollback.profileInstance = "other-profile";
-    }, /Profile, DB instance/],
-    ["an internally consistent copied DB", (f) => {
-      for (const { db } of rollbackSnapshots(f)) db.instance = "copied-db";
-    }, /Profile, DB instance/],
-    ["a separately acquired release fence", (f) => {
-      for (const snapshot of rollbackSnapshots(f)) snapshot.fence = "different-fence";
-    }, /release fence/],
-    ["different migration bytes under the same schema numbers", (f) => {
-      const { plan, observations } = f.evidence.rollback;
-      for (const metadata of [plan.metadata, observations.a.metadata, observations.b.metadata, ...rollbackSnapshots(f).map(({ db }) => db.metadata)]) {
-        metadata.migrationSha256 = hash("9");
-      }
-    }, /schema\/migration identity/],
-    ["an overlapping rollback", ({ evidence }) => {
-      evidence.rollback.observations.before.seq = 29;
-    }, /after the forward capture/],
-    ["a reused recorder position at the join", ({ evidence }) => {
-      evidence.rollback.observations.before.seq = 30;
-    }, /after the forward capture/],
-    ["another B owner lifetime with the correct image", ({ evidence }) => {
-      const { before, exit } = evidence.rollback.observations.retirements[1]!;
-      before.instance = exit.instance = "replacement-owner";
-    }, /Process lifetimes/],
-    ["another B writer lifetime with the correct image", ({ evidence }) => {
-      const { before, drained, retirements } = evidence.rollback.observations;
-      before.db.holders = drained.db.holders = ["replacement-writer"];
-      retirements[0]!.before.instance = retirements[0]!.exit.instance = "replacement-writer";
-    }, /Process lifetimes/],
-    ["an already retired A lifetime reopening the DB", ({ evidence }) => {
-      const { aStart, aOpen } = evidence.rollback.observations;
-      aStart.process.instance = evidence.forward.observations.retirements[0]!.exit.instance;
-      aOpen.db.holders = [aStart.process.instance];
-    }, /Process lifetimes/],
+    [
+      "another profile instance",
+      ({ evidence }) => {
+        evidence.rollback.profileInstance = "other-profile";
+      },
+      /Profile, DB instance/,
+    ],
+    [
+      "an internally consistent copied DB",
+      (f) => {
+        for (const { db } of rollbackSnapshots(f)) db.instance = "copied-db";
+      },
+      /Profile, DB instance/,
+    ],
+    [
+      "a separately acquired release fence",
+      (f) => {
+        for (const snapshot of rollbackSnapshots(f)) snapshot.fence = "different-fence";
+      },
+      /release fence/,
+    ],
+    [
+      "different migration bytes under the same schema numbers",
+      (f) => {
+        const { plan, observations } = f.evidence.rollback;
+        for (const metadata of [
+          plan.metadata,
+          observations.a.metadata,
+          observations.b.metadata,
+          ...rollbackSnapshots(f).map(({ db }) => db.metadata),
+        ]) {
+          metadata.migrationSha256 = hash("9");
+        }
+      },
+      /schema\/migration identity/,
+    ],
+    [
+      "an overlapping rollback",
+      ({ evidence }) => {
+        evidence.rollback.observations.before.seq = 29;
+      },
+      /after the forward capture/,
+    ],
+    [
+      "a reused recorder position at the join",
+      ({ evidence }) => {
+        evidence.rollback.observations.before.seq = 30;
+      },
+      /after the forward capture/,
+    ],
+    [
+      "another B owner lifetime with the correct image",
+      ({ evidence }) => {
+        const { before, exit } = evidence.rollback.observations.retirements[1]!;
+        before.instance = exit.instance = "replacement-owner";
+      },
+      /Process lifetimes/,
+    ],
+    [
+      "another B writer lifetime with the correct image",
+      ({ evidence }) => {
+        const { before, drained, retirements } = evidence.rollback.observations;
+        before.db.holders = drained.db.holders = ["replacement-writer"];
+        retirements[0]!.before.instance = retirements[0]!.exit.instance = "replacement-writer";
+      },
+      /Process lifetimes/,
+    ],
+    [
+      "an already retired A lifetime reopening the DB",
+      ({ evidence }) => {
+        const { aStart, aOpen } = evidence.rollback.observations;
+        aStart.process.instance = evidence.forward.observations.retirements[0]!.exit.instance;
+        aOpen.db.holders = [aStart.process.instance];
+      },
+      /Process lifetimes/,
+    ],
   ];
   it.each(splices)("rejects %s even when both standalone checkers pass", (_name, change, error) => {
     const f = fixture();

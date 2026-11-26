@@ -61,10 +61,7 @@ try {
       input.artifact,
       new V2ThreadImplementationRegistry(),
     );
-    await selection.select(
-      v2DefaultImplementationVersion(input.artifact.bootstrapAbi),
-      authority,
-    );
+    await selection.select(v2DefaultImplementationVersion(input.artifact.bootstrapAbi), authority);
   } else {
     const { acquireV2PluginPublicationLock } = await import("./PluginSetup.lock.ts");
     const { v2NativePluginDirectory } = await import("./PluginSetup.fs.ts");

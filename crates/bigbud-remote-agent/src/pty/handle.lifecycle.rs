@@ -2,7 +2,6 @@
 //! the foreground probe on the master descriptor, and the fenced ring read for a screen rebuild.
 
 use super::*;
-#[cfg(unix)]
 use crate::terminal_policy::probe::{ProbeSource, ProcessProbe};
 
 /// The replay ring up to the fenced sequence, oldest first, and whether it starts at the first
@@ -32,6 +31,12 @@ impl PtyHandle {
         let fd = master.as_ref()?.as_raw_fd();
         // The probe only issues read-only queries on the descriptor, which the lock keeps open.
         Some(probe.foreground_program(fd, i32::try_from(self.pid).ok()?))
+    }
+
+    /// No master descriptor to probe off Unix; the caller treats `None` as a foreground program.
+    #[cfg(not(unix))]
+    pub fn foreground_program<S: ProbeSource>(&self, _probe: &ProcessProbe<S>) -> Option<bool> {
+        None
     }
 
     /// Runs `fence` with the ring's newest sequence while the ring lock is held, so every later
