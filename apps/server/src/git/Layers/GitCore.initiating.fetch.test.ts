@@ -9,6 +9,7 @@ import {
   ambientTransportEnvironment,
   InitiatingFetchOwner,
   initiatingTransportUnavailable,
+  isInitiatingTransportUnavailable,
   validateFetchOperands,
 } from "./GitCore.initiatingTransport.ts";
 import { makeGitStatusOps } from "./GitStatus.ts";
@@ -33,7 +34,8 @@ function gitFixture(status: string) {
     const args = input.args;
     const result = (() => {
       if (args[0] === "status") return { ...success, stdout: status };
-      if (args[0] === "remote" && args[1] === "get-url") return success;
+      if (args[0] === "remote" && args[1] === "get-url")
+        return { ...success, stdout: "ssh://u@target.example/repo.git\n" };
       if (args[0] === "remote") return { ...success, stdout: "origin\n" };
       if (args.includes("@{upstream}")) return { ...success, stdout: "origin/main\n" };
       if (args.includes("--git-common-dir")) return { ...success, stdout: "/repo/.git\n" };
@@ -126,7 +128,7 @@ describe("owner-controlled initiating fetch", () => {
         return yield* Effect.flip(ops.fetch("/repo"));
       }).pipe(Effect.provide(Path.layer)),
     );
-    expect(error).toMatchObject({ _tag: "GitCommandError", operation: "GitCore.fetch" });
+    expect(isInitiatingTransportUnavailable(error)).toBe(true);
     expect(fixture.launches.some(({ args }) => args.includes("fetch"))).toBe(false);
   });
 });

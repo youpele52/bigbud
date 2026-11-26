@@ -3,7 +3,7 @@
  *
  * @module GitStatus
  */
-import { Effect, Option, Path } from "effect";
+import { Effect, Path } from "effect";
 
 import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import { type GitCoreShape } from "../Services/GitCore.ts";
@@ -17,13 +17,13 @@ import { makeReadStatusDetails } from "./GitStatus.details.ts";
 import { gitMutationOperationId } from "./GitCoreExecutor.ts";
 import { makeDiscardSelectedChanges } from "./GitStatus.discard.ts";
 import { makeSelectedPullThroughOwner } from "./GitStatus.pull.ts";
-import { InitiatingFetchOwner, fetchThroughSelectedOwner } from "./GitCore.initiatingTransport.ts";
+import { makeSelectedPushThroughRoute } from "./GitStatus.push.ts";
+import { fetchThroughSelectedRoute } from "./GitCore.fetchRoute.hosts.ts";
 import {
   makeSystemWorkspaceTrash,
   type WorkspaceTrash,
 } from "../../workspace/Layers/WorkspaceTrash.ts";
 import {
-  initiatingGitDenied,
   isInitiatingGitTransportDisabled,
   type GitExecutionLane,
 } from "./GitCore.initiatingFence.ts";
@@ -119,10 +119,19 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
       })),
     );
 
+  // Lazily bound: statusDetailsLocal is defined later in this function.
+  const pushThroughSelectedRoute = (cwd: string, fallbackBranch: string | null) =>
+    makeSelectedPushThroughRoute({
+      statusDetailsLocal,
+      resolveCurrentUpstream,
+      resolvePushRemoteName,
+      helpers,
+    })(cwd, fallbackBranch);
+
   const pushCurrentBranch: GitCoreShape["pushCurrentBranch"] = Effect.fn("pushCurrentBranch")(
     function* (cwd, fallbackBranch, _executionTargetId, operationId) {
       if (initiatingTransportDisabled()) {
-        return yield* initiatingGitDenied({ operation: "GitCore.pushCurrentBranch", cwd });
+        return yield* pushThroughSelectedRoute(cwd, fallbackBranch);
       }
       const details = yield* statusDetails(cwd);
       const branch = details.branch ?? fallbackBranch;
@@ -237,9 +246,6 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
   const pullCurrentBranch: GitCoreShape["pullCurrentBranch"] = Effect.fn("pullCurrentBranch")(
     function* (cwd, _executionTargetId, operationId) {
       if (initiatingTransportDisabled()) {
-        if (Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))) {
-          return yield* initiatingGitDenied({ operation: "GitCore.pullCurrentBranch", cwd });
-        }
         return yield* pullThroughSelectedOwner(cwd, operationId);
       }
       const details = yield* statusDetails(cwd);
@@ -297,12 +303,6 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
 
   const fetch: GitCoreShape["fetch"] = Effect.fn("fetch")(
     function* (cwd, _executionTargetId, operationId) {
-      if (
-        initiatingTransportDisabled() &&
-        Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))
-      ) {
-        return yield* initiatingGitDenied({ operation: "GitCore.fetch", cwd });
-      }
       const hasOrigin = yield* originRemoteExists(cwd);
       if (!hasOrigin) {
         return yield* new GitCommandError({
@@ -314,12 +314,15 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
       }
 
       if (initiatingTransportDisabled()) {
-        yield* fetchThroughSelectedOwner({
-          cwd,
-          remoteName: "origin",
-          refspecs: [],
-          timeoutMs: 30_000,
-        });
+        yield* fetchThroughSelectedRoute(
+          {
+            cwd,
+            remoteName: "origin",
+            refspecs: [],
+            timeoutMs: 30_000,
+          },
+          runGitStdout,
+        );
         return { status: "fetched" as const };
       }
 

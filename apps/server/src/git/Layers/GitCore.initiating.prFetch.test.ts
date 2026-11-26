@@ -21,6 +21,8 @@ function harness() {
   const calls: string[][] = [];
   const execute = (input: ExecuteGitInput): Effect.Effect<ExecuteGitResult> => {
     calls.push([...input.args]);
+    if (input.args[0] === "remote" && input.args[1] === "get-url")
+      return Effect.succeed({ ...success, stdout: "ssh://u@target.example/srv/repo.git\n" });
     return Effect.succeed(success);
   };
   const helpers = makeGitHelpers(execute);

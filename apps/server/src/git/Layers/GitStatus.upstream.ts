@@ -3,7 +3,7 @@
  *
  * @module GitStatus.upstream
  */
-import { Cache, Duration, Effect, Exit, Path, Option, Schema } from "effect";
+import { Cache, Duration, Effect, Exit, Path, Option } from "effect";
 import { RemoteAgentGitActionBinding } from "../../remote-agent/remoteAgentGit.action.ts";
 
 import { GitCommandError } from "@bigbud/contracts";
@@ -12,11 +12,8 @@ import {
   parseUpstreamRefWithRemoteNames,
   parseUpstreamRefByFirstSeparator,
 } from "./GitCoreUtils.ts";
-import {
-  fetchThroughOwner,
-  InitiatingFetchOwner,
-  initiatingTransportUnavailable,
-} from "./GitCore.initiatingTransport.ts";
+import { isInitiatingTransportUnavailable } from "./GitCore.initiatingTransport.ts";
+import { fetchThroughSelectedRoute } from "./GitCore.fetchRoute.hosts.ts";
 import { StatusRemoteRefreshCacheKey, type GitHelpers } from "./GitCoreExecutor.ts";
 import { type RemoteOps } from "./GitStatus.remotes.ts";
 
@@ -26,6 +23,8 @@ const STATUS_UPSTREAM_REFRESH_INTERVAL = Duration.seconds(15);
 const STATUS_UPSTREAM_REFRESH_TIMEOUT = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_FAILURE_COOLDOWN = Duration.seconds(5);
 const STATUS_UPSTREAM_REFRESH_CACHE_CAPACITY = 2_048;
+// An SSH remote without a bound owner transport will not change by retrying; back off hard.
+const STATUS_UPSTREAM_REFRESH_REFUSED_COOLDOWN = Duration.minutes(10);
 
 export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   helpers: GitHelpers,
@@ -69,27 +68,18 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
     remoteName: string,
   ): Effect.Effect<void, GitCommandError> =>
     Effect.gen(function* () {
-      const fetchOwner = yield* Effect.serviceOption(InitiatingFetchOwner);
       const fetchCwd =
         path.basename(gitCommonDir) === ".git" ? path.dirname(gitCommonDir) : gitCommonDir;
-      if (Option.isSome(fetchOwner)) {
-        yield* Effect.tryPromise({
-          try: (signal) =>
-            fetchThroughOwner(
-              {
-                owner: fetchOwner.value,
-                cwd: fetchCwd,
-                remoteName,
-                refspecs: [],
-                timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
-              },
-              signal,
-            ),
-          catch: (cause) =>
-            Schema.is(GitCommandError)(cause)
-              ? cause
-              : initiatingTransportUnavailable("fetch", fetchCwd),
-        });
+      if (initiatingTransportDisabled()) {
+        yield* fetchThroughSelectedRoute(
+          {
+            cwd: fetchCwd,
+            remoteName,
+            refspecs: [],
+            timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
+          },
+          runGitStdout,
+        );
         return;
       }
       yield* executeGit(
@@ -106,8 +96,17 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
   const refreshStatusRemoteCacheEntry = Effect.fn("refreshStatusRemoteCacheEntry")(function* (
     cacheKey: StatusRemoteRefreshCacheKey,
   ) {
-    yield* fetchRemoteForStatus(cacheKey.gitCommonDir, cacheKey.remoteName);
-    return true as const;
+    return yield* fetchRemoteForStatus(cacheKey.gitCommonDir, cacheKey.remoteName).pipe(
+      Effect.as("fetched" as const),
+      Effect.catchIf(isInitiatingTransportUnavailable, () =>
+        Effect.logInfo(
+          "Background upstream refresh skipped: this remote needs an owner-controlled transport that is not bound.",
+        ).pipe(
+          Effect.annotateLogs({ remoteName: cacheKey.remoteName }),
+          Effect.as("refused" as const),
+        ),
+      ),
+    );
   });
 
   const statusRemoteRefreshCache = yield* Cache.makeWith({
@@ -115,19 +114,15 @@ export const makeUpstreamOps = Effect.fn("makeUpstreamOps")(function* (
     lookup: refreshStatusRemoteCacheEntry,
     timeToLive: (exit) =>
       Exit.isSuccess(exit)
-        ? STATUS_UPSTREAM_REFRESH_INTERVAL
+        ? exit.value === "refused"
+          ? STATUS_UPSTREAM_REFRESH_REFUSED_COOLDOWN
+          : STATUS_UPSTREAM_REFRESH_INTERVAL
         : STATUS_UPSTREAM_REFRESH_FAILURE_COOLDOWN,
   });
 
   const refreshStatusUpstreamIfStale = Effect.fn("refreshStatusUpstreamIfStale")(function* (
     cwd: string,
   ) {
-    // Keep selected status local until an owner-controlled fetch binding is present.
-    if (
-      initiatingTransportDisabled() &&
-      Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))
-    )
-      return;
     // A shared cache's lookup context is not a logical action's pinned generation.
     // Mutations use current local tracking refs; observational refresh remains independently cached.
     if (Option.isSome(yield* Effect.serviceOption(RemoteAgentGitActionBinding))) return;

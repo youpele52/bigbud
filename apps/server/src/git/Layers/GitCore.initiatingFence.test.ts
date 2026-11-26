@@ -59,7 +59,7 @@ it.effect("rejects unowned initiating transports before the Git spawner", () => 
           args,
           allowNonZeroExit: true,
         });
-      for (const operation of [
+      const refused: ReadonlyArray<Effect.Effect<unknown, unknown>> = [
         execute(["fetch", "https://example.invalid/project.git"]),
         execute(["--git-dir", "/code/.git", "fetch", "origin"]),
         execute(["--no-lazy-fetch", "fetch"]),
@@ -70,9 +70,19 @@ it.effect("rejects unowned initiating transports before the Git spawner", () => 
         execute(["pull", "--rebase"]),
         execute(["merge", "--no-ff", "origin/main"]),
         execute(["unknown-command"]),
+      ];
+      for (const operation of refused) {
+        expect(yield* Effect.flip(operation)).toMatchObject({
+          _tag: "GitCommandError",
+          detail: initiatingGitOwnerUnavailable,
+        });
+      }
+      // Routed verbs (U7/U14/U15) resolve the remote URL locally first; the missing repo fails
+      // there, before any transport.
+      for (const operation of [
         git.fetch(cwd),
-        git.pullCurrentBranch(cwd),
         git.pushCurrentBranch(cwd, null),
+        git.pullCurrentBranch(cwd),
         git.fetchPullRequestBranch({ cwd, prNumber: 1, branch: "pr-1" }),
         git.fetchRemoteBranch({
           cwd,
@@ -81,17 +91,19 @@ it.effect("rejects unowned initiating transports before the Git spawner", () => 
           localBranch: "pr-1",
         }),
       ]) {
-        expect(yield* Effect.flip(operation)).toMatchObject({
-          _tag: "GitCommandError",
-          detail: initiatingGitOwnerUnavailable,
-        });
+        expect(yield* Effect.flip(operation)).toMatchObject({ _tag: "GitCommandError" });
       }
     }),
   );
   return fixture.effect.pipe(
     Effect.tap(() =>
       Effect.sync(() => {
-        expect(fixture.commands).toEqual([]);
+        // Only local reads (status, remote get-url) reached the spawner; no transport verb.
+        expect(
+          fixture.commands.some(({ args }) =>
+            ["fetch", "pull", "push", "ls-remote", "clone"].some((verb) => args.includes(verb)),
+          ),
+        ).toBe(false);
         expect(fixture.remote).not.toHaveBeenCalled();
       }),
     ),
@@ -115,7 +127,8 @@ it.effect("keeps a stale custom upstream ref unchanged in selected status", () =
       yield* execute(["commit", "--allow-empty", "-m", "advance published source"]);
       expect((yield* execute(["rev-parse", sourceRef])).stdout.trim()).not.toBe(initialOid);
       yield* execute(["checkout", initialBranch]);
-      yield* execute(["config", "remote.team/upstream.url", cwd]);
+      // An SSH remote on a bigbud target with no owner bound: the selected refresh is refused.
+      yield* execute(["config", "remote.team/upstream.url", "ssh://u@target.example/srv/x.git"]);
       yield* execute(["config", "remote.team/upstream.fetch", `+${sourceRef}:${trackingRef}`]);
       yield* execute(["config", `branch.${initialBranch}.remote`, "team/upstream"]);
       yield* execute(["config", `branch.${initialBranch}.merge`, sourceRef]);
@@ -137,11 +150,8 @@ it.effect("keeps a stale custom upstream ref unchanged in selected status", () =
       Effect.sync(() => {
         const commands = fixture.commands;
         expect(commands.some(({ args }) => args[0] === "status")).toBe(true);
-        expect(
-          commands.some(
-            ({ args }) => args.includes("@{upstream}") || args.includes("--git-common-dir"),
-          ),
-        ).toBe(false);
+        // The refresh now resolves the upstream locally and is refused before any transport.
+        expect(commands.some(({ args }) => args.includes("fetch"))).toBe(false);
         expect(
           commands.every(
             ({ options }) =>

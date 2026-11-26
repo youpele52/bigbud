@@ -39,12 +39,21 @@ function parseDestination(url: string): InitiatingGitDestination | undefined {
 
 function isAvailableTarget(destination: InitiatingGitPushDestination): boolean {
   const target = parseSshExecutionTarget(destination.executionTargetId);
+  // A producer-resolved endpoint was matched to the owner descriptor; it must be what is used.
+  const { endpoint } = destination;
+  const sameEndpoint = endpoint
+    ? destination.host === endpoint.host &&
+      destination.user === endpoint.user &&
+      destination.port === endpoint.port &&
+      destination.repositoryPath === endpoint.repositoryPath
+    : !!target &&
+      destination.host === target.host &&
+      destination.user === target.user &&
+      destination.port === Number(target.port ?? 22);
   return (
     !!destination.targetGeneration &&
     !!target &&
-    destination.host === target.host &&
-    destination.user === target.user &&
-    destination.port === Number(target.port ?? 22) &&
+    sameEndpoint &&
     !isSshTargetDisconnected(destination.executionTargetId)
   );
 }
@@ -62,8 +71,8 @@ function approveDestinations(
     },
   ];
   const destinations: InitiatingGitPushDestination[] = [];
-  for (const { effectiveUrl, executionTargetId, targetGeneration } of scopes) {
-    const parsed = parseDestination(effectiveUrl);
+  for (const { effectiveUrl, executionTargetId, targetGeneration, endpoint } of scopes) {
+    const parsed = endpoint ? { ...endpoint } : parseDestination(effectiveUrl);
     if (!parsed) return undefined;
     if (approval.destinations === undefined) {
       const { host, user, port, repositoryPath } = approval.destination;
@@ -76,7 +85,13 @@ function approveDestinations(
         return undefined;
       }
     }
-    const destination = { ...parsed, effectiveUrl, executionTargetId, targetGeneration };
+    const destination = {
+      ...parsed,
+      effectiveUrl,
+      executionTargetId,
+      targetGeneration,
+      ...(endpoint ? { endpoint: { ...endpoint } } : {}),
+    };
     if (!isAvailableTarget(destination)) return undefined;
     destinations.push(destination);
   }
@@ -184,24 +199,23 @@ export const pushSelectedInitiatingBranch = Effect.fn("pushSelectedInitiatingBra
   const branch = source.slice("refs/heads/".length);
   const trackingRemotes = yield* config(`branch.${branch}.remote`);
   const trackingRefs = yield* config(`branch.${branch}.merge`);
-  if (
-    trackingRemotes.length !== 1 ||
-    trackingRemotes[0] !== remoteName ||
-    trackingRefs.length !== 1 ||
-    trackingRefs[0] !== refs.destination ||
-    !refs.destination.startsWith("refs/heads/")
-  ) {
+  // U15 first publish: a branch with no upstream at all, published under its own name.
+  const publish = approval.publish === true;
+  const scoped = publish
+    ? trackingRemotes.length === 0 && trackingRefs.length === 0 && refs.destination === source
+    : trackingRemotes.length === 1 &&
+      trackingRemotes[0] === remoteName &&
+      trackingRefs.length === 1 &&
+      trackingRefs[0] === refs.destination;
+  if (!scoped || !refs.destination.startsWith("refs/heads/")) {
     return yield* deny(
       "The tracked remote/ref is unknown or does not match the approved push scope.",
     );
   }
   yield* stdout(["check-ref-format", refs.destination]);
-  const upstream = yield* stdout([
-    "rev-parse",
-    "--abbrev-ref",
-    "--symbolic-full-name",
-    "@{upstream}",
-  ]);
+  const upstream = publish
+    ? `${remoteName}/${branch}`
+    : yield* stdout(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]);
   if (upstream !== `${remoteName}/${refs.destination.slice("refs/heads/".length)}`) {
     return yield* deny("The Git push requires an unambiguous upstream tracking ref.");
   }
@@ -262,10 +276,18 @@ export const pushSelectedInitiatingBranch = Effect.fn("pushSelectedInitiatingBra
     return yield* deny("An approved SSH push destination or target is invalid or disconnected.");
   }
 
-  const outcome = yield* Effect.tryPromise({
+  const settled = yield* Effect.tryPromise({
     try: (signal) =>
       owner.push(
-        { direction: "push", repository, remoteName, destinations, refs, sourceOid },
+        {
+          direction: "push",
+          repository,
+          remoteName,
+          destinations,
+          refs,
+          sourceOid,
+          ...(publish ? { publish: true as const } : {}),
+        },
         signal,
       ),
     catch: () =>
@@ -279,8 +301,20 @@ export const pushSelectedInitiatingBranch = Effect.fn("pushSelectedInitiatingBra
         ),
     }),
   );
+  const outcome = typeof settled === "string" ? settled : settled.outcome;
   if (outcome === "denied") return yield* deny("The owner denied the selected Git push.");
-  if (outcome === "rejectedRef") return yield* deny("The selected Git push ref was rejected.");
+  if (outcome === "rejectedRef") {
+    return yield* deny(
+      typeof settled === "string"
+        ? "The selected Git push ref was rejected."
+        : `The selected Git push was rejected: ${settled.detail}`,
+    );
+  }
+  if (outcome === "stale") {
+    return yield* deny(
+      "The remote branch changed since it was last fetched. Pull, then push again. Nothing was pushed.",
+    );
+  }
   if (outcome === "partial") {
     return yield* deny(
       "The selected Git push was partial. Verify the remote state before retrying.",
@@ -295,6 +329,6 @@ export const pushSelectedInitiatingBranch = Effect.fn("pushSelectedInitiatingBra
     status: outcome === "pushed" ? "pushed" : "skipped_up_to_date",
     branch,
     upstreamBranch: upstream,
-    setUpstream: false,
+    setUpstream: publish,
   } satisfies GitPushResult;
 });

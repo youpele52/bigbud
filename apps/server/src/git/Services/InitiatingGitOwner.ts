@@ -21,12 +21,23 @@ interface InitiatingGitPushScope {
     readonly source: `refs/heads/${string}`;
     readonly destination: `refs/heads/${string}`;
   };
+  /**
+   * U15 first publish: the branch has no upstream, the destination is the same branch name and
+   * must not exist on the remote (expected old OID all zeros); the push sets the upstream.
+   */
+  readonly publish?: true;
 }
 
 interface ApprovedInitiatingGitPushDestination {
   readonly effectiveUrl: string;
   readonly executionTargetId: string;
   readonly targetGeneration: string;
+  /**
+   * The exact dialled endpoint, resolved by the trusted producer through `~/.ssh/config` and
+   * matched to the owner descriptor (U15). Required for scp-style or alias URLs; without it the
+   * URL must be an explicit `ssh://` spelling of the target id.
+   */
+  readonly endpoint?: InitiatingGitDestination;
 }
 
 type PushDestinations<A> = readonly [A, ...A[]];
@@ -62,8 +73,15 @@ export type InitiatingGitPushOutcome =
   | "upToDate"
   | "denied"
   | "rejectedRef"
+  | "stale"
   | "partial"
   | "unknown";
+
+/** A confirmed rejection with Git's own bounded, single-line reason (no URL or path). */
+export interface InitiatingGitPushRejection {
+  readonly outcome: "rejectedRef";
+  readonly detail: string;
+}
 
 export interface InitiatingGitOwnerShape {
   /** Presence selects this lane. A missing approval or owner is a denial, not legacy selection. */
@@ -82,7 +100,7 @@ export interface InitiatingGitOwnerShape {
     readonly push: (
       request: InitiatingGitPushRequest,
       signal: AbortSignal,
-    ) => Promise<InitiatingGitPushOutcome>;
+    ) => Promise<InitiatingGitPushOutcome | InitiatingGitPushRejection>;
   };
 }
 

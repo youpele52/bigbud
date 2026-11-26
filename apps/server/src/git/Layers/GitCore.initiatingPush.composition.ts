@@ -14,7 +14,7 @@ import { DEFAULT_TIMEOUT_MS } from "./GitCoreExecutor.ts";
 
 type DestinationScope = Pick<
   InitiatingGitPushDestination,
-  "effectiveUrl" | "executionTargetId" | "targetGeneration"
+  "effectiveUrl" | "executionTargetId" | "targetGeneration" | "endpoint"
 >;
 
 type TrackedDestination = DestinationScope & { readonly expectedOldOid: string };
@@ -22,7 +22,7 @@ type TrackedDestination = DestinationScope & { readonly expectedOldOid: string }
 /** The old OIDs are trusted admission inputs, not local remote-tracking refs. */
 export type IsolatedInitiatingPushApproval = Pick<
   ApprovedInitiatingGitPush,
-  "direction" | "repository" | "remoteName" | "refs"
+  "direction" | "repository" | "remoteName" | "refs" | "publish"
 > & {
   readonly sourceOid: string;
   readonly destinations: readonly [TrackedDestination, ...TrackedDestination[]];
@@ -37,7 +37,10 @@ export type BoundedTrackedReceiveRequest = Omit<InitiatingGitPushRequest, "desti
 
 export type TrackedReceiveReceipt = DestinationScope & {
   readonly index: number;
-  readonly outcome: "accepted" | "unchanged" | "rejected" | "unconfirmed";
+  /** `stale`: the live remote ref was not the expected old OID; nothing was written. */
+  readonly outcome: "accepted" | "unchanged" | "rejected" | "stale" | "unconfirmed";
+  /** For `rejected`: Git's bounded single-line reason, when it gave one. */
+  readonly detail?: string;
 };
 
 /** Trusted owner capability. Not a Git argv runner or a writable SSH stream. */
@@ -66,8 +69,15 @@ function snapshotDestination({
   executionTargetId,
   targetGeneration,
   expectedOldOid,
+  endpoint,
 }: TrackedDestination): TrackedDestination {
-  return { effectiveUrl, executionTargetId, targetGeneration, expectedOldOid };
+  return {
+    effectiveUrl,
+    executionTargetId,
+    targetGeneration,
+    expectedOldOid,
+    ...(endpoint ? { endpoint: { ...endpoint } } : {}),
+  };
 }
 
 function snapshotDestinations(
@@ -100,6 +110,7 @@ function summarize(
 ): InitiatingGitPushOutcome {
   let written = false;
   let rejected = false;
+  let stale = false;
   let incomplete = receipts.length !== request.destinations.length;
   for (const [index, destination] of request.destinations.entries()) {
     const receipt = receipts[index];
@@ -109,6 +120,8 @@ function summarize(
       written = true;
     } else if (receipt.outcome === "rejected") {
       rejected = true;
+    } else if (receipt.outcome === "stale") {
+      stale = true;
     } else if (
       receipt.outcome !== "unchanged" ||
       destination.expectedOldOid !== request.sourceOid
@@ -116,8 +129,9 @@ function summarize(
       incomplete = true;
     }
   }
-  if (written && (incomplete || rejected)) return "partial";
+  if (written && (incomplete || rejected || stale)) return "partial";
   if (incomplete) return "unknown";
+  if (stale) return "stale";
   if (rejected) return "rejectedRef";
   return written ? "pushed" : "upToDate";
 }
@@ -137,6 +151,7 @@ export function makeIsolatedInitiatingGitOwnerShape(
       repository: { ...approval.repository },
       remoteName: approval.remoteName,
       refs: { ...approval.refs },
+      ...(approval.publish ? { publish: true as const } : {}),
       destinations: snapshotDestinations(approval.destinations),
     },
     owner: {
@@ -180,6 +195,7 @@ export function makeIsolatedInitiatingPushOwner(
       !expected ||
       signal.aborted ||
       sourceOid !== request.sourceOid ||
+      (request.publish === true) !== (approval.publish === true) ||
       !isObjectId(sourceOid, sourceOid.length) ||
       request.destinations.length !== expected.length
     ) {
@@ -191,7 +207,9 @@ export function makeIsolatedInitiatingPushOwner(
       if (
         !scope ||
         !matchesScope(scope, destination) ||
-        !isObjectId(scope.expectedOldOid, sourceOid.length)
+        !(approval.publish
+          ? scope.expectedOldOid === "0".repeat(sourceOid.length)
+          : isObjectId(scope.expectedOldOid, sourceOid.length))
       ) {
         return "denied";
       }
@@ -207,7 +225,9 @@ export function makeIsolatedInitiatingPushOwner(
     const result = await transport.receiveTrackedPush(receive, signal);
     if (result.status === "deniedBeforeDispatch") return "denied";
     if (result.status !== "finished" || !Array.isArray(result.receipts)) return "unknown";
-    return summarize(receive, result.receipts);
+    const outcome = summarize(receive, result.receipts);
+    const detail = result.receipts.find((receipt) => receipt.outcome === "rejected")?.detail;
+    return outcome === "rejectedRef" && detail ? { outcome, detail } : outcome;
   };
 }
 
@@ -228,6 +248,7 @@ export function makeIsolatedInitiatingGitPush(
         repository: { ...approval.repository },
         remoteName: approval.remoteName,
         refs: { ...approval.refs },
+        ...(approval.publish ? { publish: true as const } : {}),
         destinations: snapshotDestinations(approval.destinations),
       },
       owner: {

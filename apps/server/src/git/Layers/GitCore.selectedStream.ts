@@ -87,17 +87,30 @@ export async function openOwnerGitStream(
   signal: AbortSignal,
 ): Promise<OwnerGitStream> {
   signal.throwIfAborted();
-  const lease = await session.withClient((client) => {
-    const open = (client as { readonly openGitUpload?: unknown }).openGitUpload;
-    if (typeof open !== "function") {
-      throw new Error("The selected owner does not expose an owner-controlled Git stream.");
-    }
-    return (open as OwnerGitStreamClient["openGitUpload"]).call(
-      client,
-      { executionTargetId: session.targetId, repositoryPath },
-      signal,
-    );
-  }, signal);
+  return bridgeOwnerGitLease(
+    await session.withClient((client) => {
+      const open = (client as { readonly openGitUpload?: unknown }).openGitUpload;
+      if (typeof open !== "function") {
+        throw new Error("The selected owner does not expose an owner-controlled Git stream.");
+      }
+      return (open as OwnerGitStreamClient["openGitUpload"]).call(
+        client,
+        { executionTargetId: session.targetId, repositoryPath },
+        signal,
+      );
+    }, signal),
+    signal,
+  );
+}
+
+/**
+ * Expose one already-open owner lease (upload or receive) to local Git through a private,
+ * one-connection shim socket. The lease is closed if the bridge cannot be set up.
+ */
+export async function bridgeOwnerGitLease(
+  lease: OwnerGitStreamLease,
+  signal: AbortSignal,
+): Promise<OwnerGitStream> {
   const directory = await mkdtemp(join(tmpdir(), "bbgs-"));
   const socketPath = join(directory, "s.sock");
   const shimPath = join(directory, "shim.cjs");
@@ -229,34 +242,45 @@ export function makeSelectedInitiatingFetchBinding(
       }
       const repositoryPath = validatedRepository(operands, session.targetId, url);
       if (!repositoryPath) throw initiatingTransportUnavailable("fetch", operands.cwd);
-      const stream = await openOwnerGitStream(session, repositoryPath, signal);
-      try {
-        const result = await runGit(
-          [
-            "fetch",
-            "--no-tags",
-            "--quiet",
-            "--no-write-fetch-head",
-            "--no-auto-maintenance",
-            operands.remoteName,
-            ...operands.refspecs,
-          ],
-          {
-            cwd: operands.cwd,
-            env: { ...sanitizedTransportEnvironment(process.env), ...stream.env },
-            timeoutMs: Math.min(operands.timeoutMs, 30_000),
-            signal,
-          },
-        );
-        if (result.code !== 0) {
-          throw fetchFailure(operands.cwd, result.stderr.trim() || "Git fetch failed.");
-        }
-        return "fetched";
-      } finally {
-        await stream.close();
-      }
+      return fetchOverOwnerStream(session, repositoryPath, operands, signal, runGit);
     },
   };
+}
+
+/** One fetch over a private owner stream for an already validated repository path. */
+export async function fetchOverOwnerStream(
+  session: OwnerGitStreamSession,
+  repositoryPath: string,
+  operands: InitiatingFetchOperands,
+  signal: AbortSignal,
+  runGit: SelectedStreamDependencies["runGit"] = defaultRunGit,
+): Promise<"fetched"> {
+  const stream = await openOwnerGitStream(session, repositoryPath, signal);
+  try {
+    const result = await runGit(
+      [
+        "fetch",
+        "--no-tags",
+        "--quiet",
+        "--no-write-fetch-head",
+        "--no-auto-maintenance",
+        operands.remoteName,
+        ...operands.refspecs,
+      ],
+      {
+        cwd: operands.cwd,
+        env: { ...sanitizedTransportEnvironment(process.env), ...stream.env },
+        timeoutMs: Math.min(operands.timeoutMs, 30_000),
+        signal,
+      },
+    );
+    if (result.code !== 0) {
+      throw fetchFailure(operands.cwd, result.stderr.trim() || "Git fetch failed.");
+    }
+    return "fetched";
+  } finally {
+    await stream.close();
+  }
 }
 
 /** Product `gh` owner transport: SSH-delegating verbs run under the owner shim. */

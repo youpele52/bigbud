@@ -3,7 +3,7 @@
  *
  * @module GitWorktree
  */
-import { Effect, Option, Path } from "effect";
+import { Effect, Path } from "effect";
 
 import { GitCommandError } from "@bigbud/contracts";
 import { type GitCoreShape } from "../Services/GitCore.ts";
@@ -14,10 +14,9 @@ import {
   createGitCommandError,
 } from "./GitCoreUtils.ts";
 import { gitMutationOperationId, type GitHelpers } from "./GitCoreExecutor.ts";
-import { fetchThroughSelectedOwner, InitiatingFetchOwner } from "./GitCore.initiatingTransport.ts";
+import { fetchThroughSelectedRoute } from "./GitCore.fetchRoute.hosts.ts";
 import type { GitStatusOpsResult } from "./GitStatus.ts";
 import {
-  initiatingGitDenied,
   isInitiatingGitTransportDisabled,
   WORKSPACE_GIT_HARDENED_CONFIG_ARGS,
   type GitExecutionLane,
@@ -43,7 +42,7 @@ export function makeGitWorktreeOps(
   worktreesDir: string,
   lane: GitExecutionLane,
 ): GitWorktreeOps {
-  const { executeGit, runGit } = helpers;
+  const { executeGit, runGit, runGitStdout } = helpers;
   const { branchExists, resolvePrimaryRemoteName } = statusOps;
 
   const createWorktree: GitCoreShape["createWorktree"] = Effect.fn("createWorktree")(
@@ -107,19 +106,16 @@ export function makeGitWorktreeOps(
       );
     }
     if (isInitiatingGitTransportDisabled(lane)) {
-      if (Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))) {
-        return yield* initiatingGitDenied({
-          operation: "GitCore.fetchPullRequestBranch",
-          cwd: input.cwd,
-        });
-      }
       const remoteName = yield* resolvePrimaryRemoteName(input.cwd);
-      yield* fetchThroughSelectedOwner({
-        cwd: input.cwd,
-        remoteName,
-        refspecs: [`+refs/pull/${input.prNumber}/head:refs/heads/${input.branch}`],
-        timeoutMs: 30_000,
-      });
+      yield* fetchThroughSelectedRoute(
+        {
+          cwd: input.cwd,
+          remoteName,
+          refspecs: [`+refs/pull/${input.prNumber}/head:refs/heads/${input.branch}`],
+          timeoutMs: 30_000,
+        },
+        runGitStdout,
+      );
       return;
     }
     const remoteName = yield* resolvePrimaryRemoteName(input.cwd);
@@ -143,20 +139,17 @@ export function makeGitWorktreeOps(
   const fetchRemoteBranch: GitCoreShape["fetchRemoteBranch"] = Effect.fn("fetchRemoteBranch")(
     function* (input): Effect.fn.Return<void, GitCommandError, never> {
       if (isInitiatingGitTransportDisabled(lane)) {
-        if (Option.isNone(yield* Effect.serviceOption(InitiatingFetchOwner))) {
-          return yield* initiatingGitDenied({
-            operation: "GitCore.fetchRemoteBranch",
+        yield* fetchThroughSelectedRoute(
+          {
             cwd: input.cwd,
-          });
-        }
-        yield* fetchThroughSelectedOwner({
-          cwd: input.cwd,
-          remoteName: input.remoteName,
-          refspecs: [
-            `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
-          ],
-          timeoutMs: 30_000,
-        });
+            remoteName: input.remoteName,
+            refspecs: [
+              `+refs/heads/${input.remoteBranch}:refs/remotes/${input.remoteName}/${input.remoteBranch}`,
+            ],
+            timeoutMs: 30_000,
+          },
+          runGitStdout,
+        );
       } else {
         yield* runGit(
           "GitCore.fetchRemoteBranch.fetch",

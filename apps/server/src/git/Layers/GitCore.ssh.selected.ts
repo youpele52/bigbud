@@ -19,6 +19,11 @@ import {
   type OwnerGitStreamSession,
 } from "./GitCore.selectedStream.ts";
 import { GitHubCliOwnerTransport } from "./GitHubCli.owner.ts";
+import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
+import { readSshOwnerProductionOwner } from "../../ssh/sshOwnerProductionRegistry.ts";
+import { makeProductionInitiatingFetchBinding } from "./GitCore.selectedStream.production.ts";
+import { makeProductionPushBinding } from "./GitCore.selectedStream.receive.ts";
+import { readSshTargetRecords } from "./GitCore.targetRecords.ts";
 
 interface SelectedOwner {
   readonly kind: "unix";
@@ -134,9 +139,19 @@ export function makeSelectedDevGitLayer<E = never, R = never>(
   const fetch = Layer.effect(
     InitiatingFetchOwner,
     resolve.pipe(
-      Effect.map((context) =>
-        makeSelectedInitiatingFetchBinding({ session: streamSession(selectedOwner(context)) }),
-      ),
+      Effect.map((context) => {
+        const session = streamSession(selectedOwner(context));
+        // U15: without a dev fixture session, production activation uses the live owner's
+        // per-target upload lease; the owner is read on every fetch, never cached.
+        // U15 push: the same live owner's receive lease, selected per push.
+        const production = { owner: readSshOwnerProductionOwner, records: readSshTargetRecords };
+        return !session && SSH_OWNER_PRODUCTION_ACTIVATION
+          ? {
+              ...makeProductionInitiatingFetchBinding(production),
+              push: makeProductionPushBinding(production),
+            }
+          : makeSelectedInitiatingFetchBinding({ session });
+      }),
     ),
   );
   const github = Layer.effect(

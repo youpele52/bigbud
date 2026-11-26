@@ -181,7 +181,7 @@ export function makeGitHelpers(
       ),
     );
 
-  return { executeGit, runGit, runGitStdout, runGitStdoutWithOptions };
+  return { execute, executeGit, runGit, runGitStdout, runGitStdoutWithOptions };
 }
 
 export type GitHelpers = ReturnType<typeof makeGitHelpers>;

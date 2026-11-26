@@ -4,7 +4,7 @@ import type { GitCommandError } from "@bigbud/contracts";
 import type { GitCoreShape } from "../Services/GitCore.ts";
 import { gitMutationOperationId, type GitHelpers } from "./GitCoreExecutor.ts";
 import { createGitCommandError } from "./GitCoreUtils.ts";
-import { fetchThroughSelectedOwner } from "./GitCore.initiatingTransport.ts";
+import { fetchThroughSelectedRoute } from "./GitCore.fetchRoute.hosts.ts";
 
 interface CurrentUpstream {
   readonly remoteName: string;
@@ -55,12 +55,15 @@ export function makeSelectedPullThroughOwner({
       ["rev-parse", "HEAD"],
       true,
     ).pipe(Effect.map((stdout) => stdout.trim()));
-    yield* fetchThroughSelectedOwner({
-      cwd,
-      remoteName: upstream.remoteName,
-      refspecs: [],
-      timeoutMs: 30_000,
-    });
+    yield* fetchThroughSelectedRoute(
+      {
+        cwd,
+        remoteName: upstream.remoteName,
+        refspecs: [],
+        timeoutMs: 30_000,
+      },
+      runGitStdout,
+    );
     // Re-read after the fetch: stale tracking state must not decide divergence or fast-forward.
     const fresh = yield* statusDetailsLocal(cwd);
     if (fresh.aheadCount > 0 && fresh.behindCount > 0) {

@@ -64,6 +64,16 @@ function harness() {
     Effect.tryPromise({
       try: async () => {
         launches.push([...input.args]);
+        // Model an SSH remote on a bigbud target: the fetch must go through the owner.
+        if (input.args[0] === "remote" && input.args[1] === "get-url") {
+          return {
+            code: 0,
+            stdout: "ssh://u@target.example/srv/origin.git\n",
+            stderr: "",
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          };
+        }
         try {
           const result = await exec(GIT, input.args, {
             cwd: input.cwd,

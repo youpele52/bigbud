@@ -1,5 +1,6 @@
-import { Effect, Option, Schema, ServiceMap } from "effect";
+import { Schema, ServiceMap } from "effect";
 import { GitCommandError } from "@bigbud/contracts/workspace/git.errors.ts";
+import type { BoundedInitiatingGitTransport } from "./GitCore.initiatingPush.composition.ts";
 
 /**
  * Owner-controlled initiating Git transport.
@@ -20,11 +21,28 @@ export interface InitiatingFetchOperands {
 
 export type InitiatingFetchOutcome = "fetched" | "upToDate";
 
+/** The bigbud target that serves one push URL, as the trusted push producer records it. */
+export interface InitiatingPushTarget {
+  readonly executionTargetId: string;
+  readonly targetGeneration: string;
+  readonly endpoint: {
+    readonly host: string;
+    readonly user: string;
+    readonly port: number;
+    readonly repositoryPath: string;
+  };
+}
+
 export interface InitiatingFetchBinding {
   readonly fetch: (
     operands: InitiatingFetchOperands,
     signal: AbortSignal,
   ) => Promise<InitiatingFetchOutcome>;
+  /** U15 production push to a bigbud target; absent keeps such pushes refused. */
+  readonly push?: {
+    readonly select: (url: string) => Promise<InitiatingPushTarget | undefined>;
+    readonly transport: BoundedInitiatingGitTransport;
+  };
 }
 
 /** Injected only by the selected dev composition; absence keeps the verb refused. */
@@ -96,6 +114,18 @@ export function ambientTransportEnvironment(
   return AMBIENT_TRANSPORT_ENV.filter((name) => env[name] !== undefined);
 }
 
+const INITIATING_TRANSPORT_UNAVAILABLE_DETAIL =
+  "This initiating Git verb has no owner-controlled transport in the selected SSH owner mode. No ambient transport was started.";
+
+/** Typed refusal check: the owner path was required but no owner transport is bound. */
+export function isInitiatingTransportUnavailable(error: unknown): boolean {
+  return (
+    Schema.is(GitCommandError)(error) &&
+    error.operation.startsWith("GitCore.initiating.") &&
+    error.detail === INITIATING_TRANSPORT_UNAVAILABLE_DETAIL
+  );
+}
+
 export function initiatingTransportUnavailable(
   verb: InitiatingGitVerb,
   cwd: string,
@@ -104,8 +134,7 @@ export function initiatingTransportUnavailable(
     operation: `GitCore.initiating.${verb}`,
     command: "git",
     cwd,
-    detail:
-      "This initiating Git verb has no owner-controlled transport in the selected SSH owner mode. No ambient transport was started.",
+    detail: INITIATING_TRANSPORT_UNAVAILABLE_DETAIL,
   });
 }
 
@@ -117,48 +146,6 @@ export function ambientTransportDenied(cwd: string, names: ReadonlyArray<string>
     detail: `Refusing caller-selected transport environment: ${names.join(", ")}. No process was started.`,
   });
 }
-
-export interface ComposeFetchBindingInput {
-  readonly owner: InitiatingFetchBinding | undefined;
-  readonly cwd: string;
-  readonly remoteName: string;
-  readonly refspecs: ReadonlyArray<string>;
-  readonly timeoutMs: number;
-}
-
-/** Run one explicit or background fetch through the owner, never through ambient Git. */
-export async function fetchThroughOwner(
-  { owner, ...operands }: ComposeFetchBindingInput,
-  signal: AbortSignal,
-): Promise<InitiatingFetchOutcome> {
-  const validated = validateFetchOperands(operands);
-  if (!validated) throw initiatingTransportUnavailable("fetch", operands.cwd);
-  if (!owner) throw initiatingTransportUnavailable("fetch", operands.cwd);
-  if (signal.aborted) throw new Error("fetch aborted before owner dispatch");
-  return owner.fetch(validated, signal);
-}
-
-/**
- * Product helper: resolve the optional selected owner at call time, validate operands, and
- * refuse typed when no owner is composed. Used by explicit fetch, background refresh, pull and
- * both PR fetch paths.
- */
-export const fetchThroughSelectedOwner = Effect.fn("fetchThroughSelectedOwner")(function* (
-  operands: InitiatingFetchOperands,
-) {
-  const owner = yield* Effect.serviceOption(InitiatingFetchOwner);
-  if (Option.isNone(owner)) {
-    return yield* initiatingTransportUnavailable("fetch", operands.cwd);
-  }
-  yield* Effect.tryPromise({
-    try: (signal) => fetchThroughOwner({ owner: owner.value, ...operands }, signal),
-    catch: (cause) =>
-      Schema.is(GitCommandError)(cause)
-        ? cause
-        : initiatingTransportUnavailable("fetch", operands.cwd),
-  });
-  return "fetched" as const;
-});
 
 export interface ParsedSshRemote {
   readonly user: string;
