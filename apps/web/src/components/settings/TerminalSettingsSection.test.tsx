@@ -34,6 +34,7 @@ describe("terminal settings order", () => {
       "Terminal GPU rendering",
       "Default shell profile",
       "Terminal history suggestions",
+      "Run terminals in the background host (preview)",
       "Keep terminals running after quitting",
       "Terminal scroll speed",
       "Terminal fast scroll speed",

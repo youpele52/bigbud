@@ -72,6 +72,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(terminalSections.map(({ title }) => title)).toEqual([
       "Appearance",
       "Shell",
+      "Running terminals",
       "Scrolling",
       "Paste",
       "Agent activity",
@@ -104,6 +105,7 @@ describe("GeneralSettingsPanel terminal group", () => {
         "Terminal GPU rendering",
       ],
       ["Default shell profile", "Terminal history suggestions"],
+      ["Run terminals in the background host (preview)", "Keep terminals running after quitting"],
       ["Terminal scroll speed", "Terminal fast scroll speed", "Full-screen app scroll speed"],
       ["Largest pasted file", "Clipboard requests from terminal programs"],
       ["Detect when terminal agents finish", "Terminal agent hooks"],
