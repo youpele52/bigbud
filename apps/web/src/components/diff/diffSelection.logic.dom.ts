@@ -1,14 +1,15 @@
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 
+import { buildDiffAnnotation, type DiffSelectionRange } from "./diffSelection.logic.annotate";
+import { buildSelectedDiffRows, parseDiffLineNumber } from "./diffSelection.logic.dom.rows";
 import {
   resolveDiffShadowRootFromPath,
   resolveShadowSelectionLines,
 } from "./diffSelection.logic.dom.shadow";
+import { buildDiffVisualLines, type DiffVisualLine } from "./diffSelection.logic.lines";
 
-export interface DiffSelectionRange {
-  readonly startLine: number;
-  readonly endLine: number;
-}
+export type { DiffSelectionRange };
+export { parseDiffLineNumber };
 
 export interface ResolvedDiffSelection {
   readonly filePath: string;
@@ -27,21 +28,7 @@ export interface ResolvedDiffContextMenuTarget {
   readonly fileContainer: HTMLElement;
 }
 
-export const DIFF_ANNOTATION_HEADER = [
-  'Diff legend: "-" deleted, "+" added, " " unchanged.',
-  "--- before",
-  "+++ after",
-] as const;
-
 const TEXT_NODE = 3;
-
-export function parseDiffLineNumber(element: HTMLElement): number | null {
-  const raw = element.getAttribute("data-line") ?? element.getAttribute("data-column-number");
-  if (!raw) return null;
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
 
 function asElement(node: Node): HTMLElement | null {
   if (typeof node !== "object" || node === null) return null;
@@ -253,51 +240,14 @@ function resolveSelectedText(selection: Selection | null): string {
   return selection?.toString() ?? "";
 }
 
-function removeStructuralLineEnding(text: string): string {
-  return text.endsWith("\n") ? text.slice(0, text.endsWith("\r\n") ? -2 : -1) : text;
-}
-
-function formatSelectedDiffText(
-  selectedLines: readonly HTMLElement[],
-  range: Range | null,
-  fallbackText: string,
-  exactSelectionText = false,
-): string {
-  // Retargeted shadow selections cannot be sliced with Range boundaries, so
-  // align the exact selection string with the selected rows instead.
-  const segments = exactSelectionText ? fallbackText.split("\n") : null;
-  const rows = selectedLines.map((line, index) => {
-    const lineType = line.getAttribute("data-line-type");
-    const prefix =
-      lineType === "change-deletion" ? "-" : lineType === "change-addition" ? "+" : " ";
-    let text = line.textContent ?? (selectedLines.length === 1 ? fallbackText : "");
-    if (range && typeof Range !== "undefined" && range instanceof Range) {
-      const lineRange = document.createRange();
-      lineRange.selectNodeContents(line);
-      const intersection = range.cloneRange();
-      if (range.compareBoundaryPoints(Range.START_TO_START, lineRange) < 0) {
-        intersection.setStart(lineRange.startContainer, lineRange.startOffset);
-      }
-      if (range.compareBoundaryPoints(Range.END_TO_END, lineRange) > 0) {
-        intersection.setEnd(lineRange.endContainer, lineRange.endOffset);
-      }
-      text = intersection.toString();
-    } else if (segments) {
-      text = segments[index] ?? (selectedLines.length === 1 ? fallbackText : text);
-    }
-    return `${prefix}${removeStructuralLineEnding(text)}`;
-  });
-  return [...DIFF_ANNOTATION_HEADER, ...rows].join("\n");
-}
-
-function selectionFitsSingleHunk(
+function resolveHunkIndex(
   selectedLines: readonly HTMLElement[],
   fileDiff: FileDiffMetadata,
-): boolean {
+): number | null {
   let matchingHunks = fileDiff.hunks.map((_, index) => index);
   for (const line of selectedLines) {
     const lineNumber = parseDiffLineNumber(line);
-    if (lineNumber === null) return false;
+    if (lineNumber === null) return null;
     const lineType = line.getAttribute("data-line-type");
     matchingHunks = matchingHunks.filter((index) => {
       const hunk = fileDiff.hunks[index]!;
@@ -309,9 +259,38 @@ function selectionFitsSingleHunk(
       if (lineType === "change-deletion") return inDeletions;
       return inAdditions || inDeletions;
     });
-    if (matchingHunks.length === 0) return false;
+    if (matchingHunks.length === 0) return null;
   }
-  return matchingHunks.length > 0;
+  return matchingHunks[0] ?? null;
+}
+
+function resolveRowIndex(rows: readonly DiffVisualLine[], line: HTMLElement): number {
+  const lineNumber = parseDiffLineNumber(line);
+  if (lineNumber === null) return -1;
+  const lineType = line.getAttribute("data-line-type");
+  if (lineType === "change-deletion") {
+    return rows.findIndex(
+      (row) => row.side === "deletions" && row.deletionLineNumber === lineNumber,
+    );
+  }
+  if (lineType === "change-addition") {
+    return rows.findIndex(
+      (row) => row.side === "additions" && row.additionLineNumber === lineNumber,
+    );
+  }
+  return rows.findIndex((row) => row.additionLineNumber === lineNumber);
+}
+
+function resolveSelectedRowIndices(
+  rows: readonly DiffVisualLine[],
+  selectedLines: readonly HTMLElement[],
+): number[] {
+  const indices: number[] = [];
+  for (const line of selectedLines) {
+    const index = resolveRowIndex(rows, line);
+    if (index !== -1 && !indices.includes(index)) indices.push(index);
+  }
+  return indices;
 }
 
 export function selectionSpansDiffFiles(selection: Selection | null, filePath: string): boolean {
@@ -350,34 +329,40 @@ export function resolveDiffSelectionFromDom(
     !filePath ||
     !lineElements.selectedLines.every(
       (line) => walkToDiffFileContainer(line)?.dataset.diffFilePath?.trim() === filePath,
-    )
+    ) ||
+    !lineElements.selectedLines.some((line) => parseDiffLineNumber(line) !== null)
   ) {
     return null;
   }
 
-  const lineNumbers = lineElements.selectedLines
-    .map(parseDiffLineNumber)
-    .filter((lineNumber): lineNumber is number => lineNumber !== null);
-  if (lineNumbers.length === 0) return null;
-  if (
-    options?.fileDiff &&
-    Array.isArray(options.fileDiff.hunks) &&
-    !selectionFitsSingleHunk(lineElements.selectedLines, options.fileDiff)
-  ) {
-    return null;
-  }
+  const selectedLines = buildSelectedDiffRows(
+    lineElements.selectedLines,
+    lineElements.range,
+    selectedText,
+    lineElements.exactSelectionText,
+  );
+  if (selectedLines.length === 0) return null;
 
-  return {
+  const fileDiff = options?.fileDiff;
+  const hasHunks = Boolean(fileDiff && Array.isArray(fileDiff.hunks));
+  const hunkIndex =
+    hasHunks && fileDiff ? resolveHunkIndex(lineElements.selectedLines, fileDiff) : null;
+  if (hasHunks && hunkIndex === null) return null;
+
+  const hunk = hunkIndex !== null && fileDiff ? fileDiff.hunks[hunkIndex] : undefined;
+  const rows = fileDiff && hunk ? buildDiffVisualLines(fileDiff, hunk) : undefined;
+  const selectedRowIndices =
+    rows && rows.length > 0 ? resolveSelectedRowIndices(rows, lineElements.selectedLines) : [];
+
+  const annotation = buildDiffAnnotation({
     filePath,
-    range: {
-      startLine: Math.min(...lineNumbers),
-      endLine: Math.max(...lineNumbers),
-    },
-    selectedText: formatSelectedDiffText(
-      lineElements.selectedLines,
-      lineElements.range,
-      selectedText,
-      lineElements.exactSelectionText,
-    ),
-  };
+    ...(fileDiff ? { fileDiff } : {}),
+    ...(hunk ? { hunk } : {}),
+    ...(rows && rows.length > 0 ? { rows } : {}),
+    selectedRowIndices,
+    selectedLines,
+  });
+  if (!annotation) return null;
+
+  return { filePath, range: annotation.range, selectedText: annotation.selectedText };
 }

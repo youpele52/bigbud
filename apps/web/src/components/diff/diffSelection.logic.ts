@@ -13,7 +13,6 @@ import { resolveDiffSelectionFromPierreLineRange } from "./diffSelection.logic.p
 export { resolveDiffSelectionFromVisualLine } from "./diffSelection.logic.pierre";
 
 export {
-  DIFF_ANNOTATION_HEADER,
   normalizeDiffLineRange,
   parseDiffLineNumber,
   resolveDiffContextMenuTarget,

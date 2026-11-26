@@ -152,11 +152,16 @@ describe("DiffPanelFile real drag annotation", () => {
     expect(onAnnotationRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         filePath: FILE_PATH,
-        range: { startLine: 30, endLine: 33 },
+        range: { startLine: 30, endLine: 36 },
       }),
     );
     const annotation = onAnnotationRequest.mock.calls[0]![0] as { selectedText: string };
-    expect(annotation.selectedText).toContain("- active = useRef");
+    expect(annotation.selectedText).toContain("Before (old lines 30-32):");
+    expect(annotation.selectedText).toContain(
+      "-  const active = useRef<{ session: StoredMobileSession | null; generation: number } | null>(null);",
+    );
+    expect(annotation.selectedText).toContain("After (new lines 30-36):");
+    expect(annotation.selectedText).toContain("+  const [active, setActive] = useState(() => ({");
     expect(annotation.selectedText).toContain("+  }));");
   });
 

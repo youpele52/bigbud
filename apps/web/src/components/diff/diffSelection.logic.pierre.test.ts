@@ -1,7 +1,7 @@
 import { parsePatchFiles, type SelectedLineRange } from "@pierre/diffs";
 import { describe, expect, it } from "vitest";
 
-import { DIFF_ANNOTATION_HEADER, resolveDiffSelectionFromContextMenu } from "./diffSelection.logic";
+import { resolveDiffSelectionFromContextMenu } from "./diffSelection.logic";
 import {
   resolveDiffSelectionFromPierreLineRange,
   resolveDiffSelectionFromVisualLine,
@@ -25,6 +25,18 @@ const PATCH = [
   "+newLater();",
 ].join("\n");
 
+const FIRST_HUNK_BLOCK_TEXT = [
+  "Diff annotation (both states)",
+  "",
+  "Before (old lines 3-4):",
+  "-  const oldValue = true;  ",
+  "-",
+  "",
+  "After (new lines 3-4):",
+  "+  const newValue = true;  ",
+  "+  ",
+].join("\n");
+
 function resolvePierreSelection(range: SelectedLineRange) {
   const fileDiff = parsePatchFiles(PATCH, "pierre-selection")[0]!.files[0]!;
   const fileContainer = {
@@ -41,58 +53,67 @@ function resolvePierreSelection(range: SelectedLineRange) {
   });
 }
 
-describe("Pierre diff selection serialization", () => {
-  it("serializes only the exact selected addition rows", () => {
-    expect(resolvePierreSelection({ start: 3, end: 4, side: "additions" })?.selectedText).toBe(
-      [...DIFF_ANNOTATION_HEADER, "+  const newValue = true;  ", "+  "].join("\n"),
-    );
+describe("Pierre diff selection annotation", () => {
+  it("captures both states for an addition-row selection", () => {
+    expect(resolvePierreSelection({ start: 3, end: 4, side: "additions" })).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 3, endLine: 4 },
+      selectedText: FIRST_HUNK_BLOCK_TEXT,
+    });
   });
 
-  it("serializes only the exact selected deletion rows", () => {
-    expect(resolvePierreSelection({ start: 3, end: 4, side: "deletions" })?.selectedText).toBe(
-      [...DIFF_ANNOTATION_HEADER, "-  const oldValue = true;  ", "-"].join("\n"),
-    );
+  it("captures both states for a deletion-row selection", () => {
+    expect(resolvePierreSelection({ start: 3, end: 4, side: "deletions" })).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 3, endLine: 4 },
+      selectedText: FIRST_HUNK_BLOCK_TEXT,
+    });
   });
 
-  it("serializes cross-side selections within one hunk", () => {
+  it("captures both states for cross-side selections within one hunk", () => {
     expect(
       resolvePierreSelection({
         start: 2,
         end: 4,
         side: "deletions",
         endSide: "additions",
-      })?.selectedText,
-    ).toBe(
-      [
-        ...DIFF_ANNOTATION_HEADER,
-        "   const context = true;  ",
-        "-  const oldValue = true;  ",
-        "-",
-        "+  const newValue = true;  ",
-        "+  ",
-      ].join("\n"),
-    );
+      }),
+    ).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 3, endLine: 4 },
+      selectedText: FIRST_HUNK_BLOCK_TEXT,
+    });
   });
 
-  it("serializes context-only selections with a context prefix", () => {
-    expect(resolvePierreSelection({ start: 5, end: 5, side: "additions" })?.selectedText).toBe(
-      [...DIFF_ANNOTATION_HEADER, "   return context;"].join("\n"),
-    );
+  it("labels context-only selections as unchanged new-state lines", () => {
+    expect(resolvePierreSelection({ start: 5, end: 5, side: "additions" })).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 5, endLine: 5 },
+      selectedText: [
+        "Diff annotation (unchanged lines)",
+        "",
+        "Unchanged lines (new line 5):",
+        "   return context;",
+      ].join("\n"),
+    });
   });
 
   it("rejects selections across omitted multi-hunk gaps", () => {
     expect(resolvePierreSelection({ start: 5, end: 20, side: "additions" })).toBeNull();
   });
 
-  it("serializes partial and reverse selections without expanding replacement groups", () => {
+  it("expands partial and reverse selections to the change block", () => {
     expect(resolvePierreSelection({ start: 3, end: 3, side: "additions" })).toEqual(
       expect.objectContaining({
-        range: { startLine: 3, endLine: 3 },
-        selectedText: [...DIFF_ANNOTATION_HEADER, "+  const newValue = true;  "].join("\n"),
+        range: { startLine: 3, endLine: 4 },
+        selectedText: FIRST_HUNK_BLOCK_TEXT,
       }),
     );
-    expect(resolvePierreSelection({ start: 4, end: 3, side: "deletions" })?.selectedText).toBe(
-      [...DIFF_ANNOTATION_HEADER, "-  const oldValue = true;  ", "-"].join("\n"),
+    expect(resolvePierreSelection({ start: 4, end: 3, side: "deletions" })).toEqual(
+      expect.objectContaining({
+        range: { startLine: 3, endLine: 4 },
+        selectedText: FIRST_HUNK_BLOCK_TEXT,
+      }),
     );
   });
 
@@ -105,16 +126,11 @@ describe("Pierre diff selection serialization", () => {
         { start: 3, end: 3, side: "additions" },
         "split",
       ),
-    ).toEqual(
-      expect.objectContaining({
-        range: { startLine: 3, endLine: 3 },
-        selectedText: [
-          ...DIFF_ANNOTATION_HEADER,
-          "-  const oldValue = true;  ",
-          "+  const newValue = true;  ",
-        ].join("\n"),
-      }),
-    );
+    ).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 3, endLine: 4 },
+      selectedText: FIRST_HUNK_BLOCK_TEXT,
+    });
   });
 
   it("uses the after-file range when selected split sides have shifted line numbers", () => {
@@ -135,33 +151,51 @@ describe("Pierre diff selection serialization", () => {
         { start: 100, end: 110, side: "deletions", endSide: "additions" },
         "split",
       ),
-    ).toEqual(
-      expect.objectContaining({
-        range: { startLine: 110, endLine: 110 },
-        selectedText: [...DIFF_ANNOTATION_HEADER, "-oldValue();", "+newValue();"].join("\n"),
-      }),
-    );
+    ).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 110, endLine: 110 },
+      selectedText: [
+        "Diff annotation (both states)",
+        "",
+        "Before (old line 100):",
+        "-oldValue();",
+        "",
+        "After (new line 110):",
+        "+newValue();",
+      ].join("\n"),
+    });
   });
 
-  it("serializes exact addition and deletion visual lines without expanding replacements", () => {
+  it("expands gutter selections on either change side to the change block", () => {
     const fileDiff = parsePatchFiles(PATCH, "visual-line-selection")[0]!.files[0]!;
 
-    expect(
-      resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 3, "additions")?.selectedText,
-    ).toBe([...DIFF_ANNOTATION_HEADER, "+  const newValue = true;  "].join("\n"));
-    expect(
-      resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 3, "deletions")?.selectedText,
-    ).toBe([...DIFF_ANNOTATION_HEADER, "-  const oldValue = true;  "].join("\n"));
+    expect(resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 3, "additions")).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 3, endLine: 4 },
+      selectedText: FIRST_HUNK_BLOCK_TEXT,
+    });
+    expect(resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 3, "deletions")).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 3, endLine: 4 },
+      selectedText: FIRST_HUNK_BLOCK_TEXT,
+    });
   });
 
-  it("preserves the prefix for exact blank changed and context lines", () => {
+  it("keeps the prefix for exact blank changed and context lines", () => {
     const fileDiff = parsePatchFiles(PATCH, "visual-line-prefixes")[0]!.files[0]!;
 
     expect(
       resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 4, "deletions")?.selectedText,
-    ).toBe([...DIFF_ANNOTATION_HEADER, "-"].join("\n"));
-    expect(
-      resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 5, "additions")?.selectedText,
-    ).toBe([...DIFF_ANNOTATION_HEADER, "   return context;"].join("\n"));
+    ).toBe(FIRST_HUNK_BLOCK_TEXT);
+    expect(resolveDiffSelectionFromVisualLine(FILE_PATH, fileDiff, 5, "additions")).toEqual({
+      filePath: FILE_PATH,
+      range: { startLine: 5, endLine: 5 },
+      selectedText: [
+        "Diff annotation (unchanged lines)",
+        "",
+        "Unchanged lines (new line 5):",
+        "   return context;",
+      ].join("\n"),
+    });
   });
 });

@@ -9,7 +9,6 @@ import { render } from "vitest-browser-react";
 
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import type { PendingDiffAnnotation } from "./DiffPanel.annotations";
-import { DIFF_ANNOTATION_HEADER } from "./diffSelection.logic";
 import { useDiffAnnotateContextMenu } from "./useDiffAnnotateContextMenu";
 import { useDiffAnnotateSelection } from "./useDiffAnnotateSelection";
 
@@ -25,6 +24,17 @@ const PATCH = [
   "-const removed = true;",
   "+const added = true;",
   " const after = true;",
+].join("\n");
+
+const CHANGE_BLOCK_TEXT = [
+  "Diff annotation (both states)",
+  "",
+  "Before (old lines 2-3):",
+  "-const obsolete = true;",
+  "-const removed = true;",
+  "",
+  "After (new line 2):",
+  "+const added = true;",
 ].join("\n");
 
 function DiffAnnotationHarness({
@@ -190,7 +200,7 @@ describe("DiffPanel native text annotation", () => {
     expect(items.map((item) => item.label)).toContain("Annotate selection");
   });
 
-  it("preserves partial native text across deletion and addition rows", async () => {
+  it("expands a partial native text selection to the surrounding change block", async () => {
     const showContextMenu = vi
       .fn<NativeApi["contextMenu"]["show"]>()
       .mockResolvedValue("annotate-selection");
@@ -243,19 +253,16 @@ describe("DiffPanel native text annotation", () => {
     const items = showContextMenu.mock.calls[0]![0] as ReadonlyArray<ContextMenuItem>;
     expect(items.map((item) => item.label)).toContain("Annotate selection");
     await vi.waitFor(() => expect(onAnnotateRequest).toHaveBeenCalledOnce());
-    const expectedDiffText = [...DIFF_ANNOTATION_HEADER, "-removed = true;", "+const added"].join(
-      "\n",
-    );
     expect(onAnnotateRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         filePath: FILE_PATH,
-        range: { startLine: 2, endLine: 3 },
-        selectedText: expectedDiffText,
+        range: { startLine: 2, endLine: 2 },
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
     );
   });
 
-  it("serializes a context-only native selection as unified diff context", async () => {
+  it("labels a context-only native selection as unchanged new-state lines", async () => {
     const showContextMenu = vi
       .fn<NativeApi["contextMenu"]["show"]>()
       .mockResolvedValue("annotate-selection");
@@ -286,7 +293,13 @@ describe("DiffPanel native text annotation", () => {
     await vi.waitFor(() => expect(onAnnotateRequest).toHaveBeenCalledOnce());
     expect(onAnnotateRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        selectedText: [...DIFF_ANNOTATION_HEADER, " const after = true;"].join("\n"),
+        range: { startLine: 3, endLine: 3 },
+        selectedText: [
+          "Diff annotation (unchanged lines)",
+          "",
+          "Unchanged lines (new line 3):",
+          " const after = true;",
+        ].join("\n"),
       }),
     );
   });
@@ -324,7 +337,7 @@ describe("DiffPanel native text annotation", () => {
     expect(onAnnotateRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         range: { startLine: 2, endLine: 2 },
-        selectedText: [...DIFF_ANNOTATION_HEADER, "+const added = true;"].join("\n"),
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
     );
   });
@@ -379,7 +392,7 @@ describe("DiffPanel native text annotation", () => {
       expect.objectContaining({
         filePath: FILE_PATH,
         range: { startLine: 2, endLine: 2 },
-        selectedText: [...DIFF_ANNOTATION_HEADER, `+${selectedCode}`].join("\n"),
+        selectedText: CHANGE_BLOCK_TEXT,
       }),
     );
   });
