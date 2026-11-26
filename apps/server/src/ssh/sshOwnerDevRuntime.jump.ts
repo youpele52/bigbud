@@ -19,9 +19,13 @@ const alias = "workspace";
 const loopback = "127.0.0.1";
 const port = 22223;
 const targetId = `ssh:${new URLSearchParams({ host: alias, auth: "ssh-key", transport: "direct-ssh" })}`;
-const fixtureScript = fileURLToPath(
-  new URL("../../../../protocol/ssh-owner/live-jump-fixture.sh", import.meta.url),
-);
+// A source-checkout path, resolved only when the dev jump binds. It is not a module asset: a
+// `new URL(literal, import.meta.url)` here made the release backend graph require the fixture.
+const fixtureScript = () =>
+  path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../protocol/ssh-owner/live-jump-fixture.sh",
+  );
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 export async function linuxDevJumpMode(
@@ -93,7 +97,7 @@ export async function bindLinuxDevJump(
     if (ownsWrapper) await rm(wrapper, { force: true });
   };
   try {
-    const args = [fixtureScript, firstUse ? "--serve-first-use" : "--serve", root, source]
+    const args = [fixtureScript(), firstUse ? "--serve-first-use" : "--serve", root, source]
       .map(quote)
       .join(" ");
     await writeFile(

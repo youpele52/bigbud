@@ -281,8 +281,11 @@ jobs:
             import { assertSshOwnerBinary, findDesktopSshOwnerTarget } from './scripts/lib/packaged-ssh-owner.ts';
             assertSshOwnerBinary(process.argv[1], findDesktopSshOwnerTarget('linux', process.argv[2]));
           " "$owner" "${{ matrix.arch }}"
+          # Pull first: docker run's own pull progress goes to stderr and would pollute the
+          # owner's exact rejection message.
+          docker pull --quiet --platform "${{ matrix.platform }}" debian:bookworm-slim > /dev/null
           status=0
-          docker run --rm --network none --read-only --platform "${{ matrix.platform }}" \
+          docker run --rm --pull never --network none --read-only --platform "${{ matrix.platform }}" \
             -v "$PWD/$owner:/opt/bigbud-ssh-owner:ro" debian:bookworm-slim \
             /opt/bigbud-ssh-owner > owner-smoke.out 2> owner-smoke.err || status=$?
           if [[ "$status" != 1 || -s owner-smoke.out ]] ||
