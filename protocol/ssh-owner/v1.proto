@@ -14,6 +14,8 @@ import "v1.transfer.proto";
 import "v1.provider_lease.proto";
 import "v1.remote_backend.proto";
 import "v1.agent_control.proto";
+import "v1.system_status.proto";
+import "v1.credential.proto";
 
 // Private local owner proof; no caller-supplied SSH argv, env, auth flags or forwarding.
 //
@@ -348,6 +350,15 @@ message Request {
     AgentProxyLeaseOpen agent_proxy_lease_open = 143;
     ClientRelayLease agent_proxy_lease_status = 144;
     ClientRelayLease agent_proxy_lease_close = 145;
+    // W7 remote system stats (see v1.system_status.proto). Per target; one fixed
+    // read-only owner recipe over the target's verified master, no operands.
+    SampleSystemStatus sample_system_status = 180;
+    // In-app password and key-passphrase entry (see v1.credential.proto). The
+    // secret travels only over the owner-made per-lease socket, never a frame.
+    InspectCredential inspect_credential = 190;
+    CredentialUnlockOpen credential_unlock_open = 191;
+    CredentialUnlockCommit credential_unlock_commit = 192;
+    CredentialLock credential_lock = 193;
   }
 }
 
@@ -552,6 +563,11 @@ message Reply {
     // U25 remote-agent control lease state (v1.agent_control.proto).
     AgentControlState agent_control = 81;
     ClientRelayLeaseState agent_proxy_lease = 82;
+    // W7 remote system stats sample (v1.system_status.proto).
+    SystemStatusSample system_status_sample = 101;
+    // In-app credential entry (v1.credential.proto).
+    CredentialState credential_state = 106;
+    CredentialUnlockLease credential_unlock_lease = 107;
   }
 }
 
@@ -643,6 +659,16 @@ enum ErrorCode {
   // U24: the coordinator key no longer matches the one bound at approval, or
   // the worker refused it.
   ERROR_CODE_PEER_AUTH_REFUSED = 62;
+  // In-app credentials (v1.credential.proto): the target needs a password or
+  // key passphrase and has no unlocked credential master. No SSH process was
+  // started.
+  ERROR_CODE_CREDENTIAL_REQUIRED = 79;
+  // The server rejected the password or the passphrase did not decrypt the
+  // key. The secret was wiped; attempts remain.
+  ERROR_CODE_CREDENTIAL_REJECTED = 80;
+  // Three rejected attempts for this target generation. Connect or Disconnect
+  // rotates the generation before another attempt.
+  ERROR_CODE_CREDENTIAL_ATTEMPTS_EXHAUSTED = 81;
 }
 
 message Trust {

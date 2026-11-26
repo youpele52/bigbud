@@ -7,7 +7,10 @@ use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 
-use super::{ErrorCode, Transport, process, ssh_failure, workspace::configured_root};
+use super::{
+    ErrorCode, Transport, process, ssh_failure,
+    workspace::{configured_root, root_authority},
+};
 
 const SCRIPT: &str = include_str!("workspace_mode/inspect.sh");
 const MARKER: &str = "bigbud.workspace-mode.inspect.v1";
@@ -54,11 +57,10 @@ impl Transport {
         &self,
         requested_root: &str,
     ) -> Result<Inspection, ErrorCode> {
+        // Fixture: the startup root only. Production: the request's own root under the
+        // production root rule, resolved again on the host.
         let remote = command(
-            self.config
-                .workspace_root
-                .as_deref()
-                .and_then(configured_root),
+            root_authority(self, requested_root).and_then(configured_root),
             requested_root,
         )?;
         let deadline = Instant::now() + TIMEOUT;

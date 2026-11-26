@@ -8,7 +8,10 @@ import {
   recordSshMonitorSample,
   sshMonitorLease,
 } from "../ssh/sshMonitor.connections.ts";
-import type { SelectedSshMonitorHealth } from "../ssh/sshMonitor.healthOwner.ts";
+import type {
+  SelectedSshMonitorHealth,
+  SshMonitorHealthOwner,
+} from "../ssh/sshMonitor.healthOwner.ts";
 import { validSshMonitorTarget } from "../ssh/sshMonitor.target.ts";
 
 function activeTarget(project: {
@@ -25,6 +28,7 @@ export const sampleSshMonitorEffect = Effect.fn("sampleSshMonitorEffect")(functi
   input: { projectId: ProjectId },
   projects: ProjectionProjectRepositoryShape,
   callerId: string,
+  owner: SshMonitorHealthOwner,
 ) {
   const project = yield* projects
     .getById({ projectId: input.projectId })
@@ -36,7 +40,7 @@ export const sampleSshMonitorEffect = Effect.fn("sampleSshMonitorEffect")(functi
   const snapshot = yield* Effect.tryPromise({
     try: async () => {
       if (
-        !(await isConnectedSshMonitorTarget(target, callerId)) ||
+        !(await isConnectedSshMonitorTarget(target, callerId, owner)) ||
         !isHealthySshMonitorTarget(target, callerId, lease)
       )
         throw new Error("SSH monitor connection unavailable");
@@ -70,13 +74,15 @@ export const listConnectedSshMonitorsEffect = Effect.fn("listConnectedSshMonitor
   function* (
     projects: ProjectionProjectRepositoryShape,
     callerId: string,
-    owner?: SelectedSshMonitorHealth,
+    owner: SshMonitorHealthOwner | SelectedSshMonitorHealth,
   ) {
     const monitorTarget = (
       project: Parameters<typeof activeTarget>[0] & { workspaceRoot: string | null },
     ) => {
       const target = activeTarget(project);
-      return !owner || (target === owner.targetId && project.workspaceRoot === owner.workspaceRoot)
+      // A selected (single-target) owner serves only its exact target and root.
+      return !("targetId" in owner) ||
+        (target === owner.targetId && project.workspaceRoot === owner.workspaceRoot)
         ? target
         : null;
     };

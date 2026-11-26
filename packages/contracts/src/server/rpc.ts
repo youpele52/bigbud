@@ -33,6 +33,7 @@ import {
   WsOrchestrationGetThreadBranchCopyRpc,
   WsOrchestrationStartThreadBranchRpc,
 } from "./rpc.branchCopy";
+import { WsGitGetCommitFileDiffRpc } from "./rpc.gitHistory";
 import {
   WsKanbanCreateRpc,
   WsKanbanDeleteRpc,
@@ -183,6 +184,7 @@ export * from "./rpc.browser";
 export * from "./rpc.core";
 export * from "./rpc.detailPaging";
 export * from "./rpc.branchCopy";
+export * from "./rpc.gitHistory";
 export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
@@ -330,6 +332,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitListBranchesRpc,
   WsGitListCommitsRpc,
   WsGitGetCommitDetailsRpc,
+  WsGitGetCommitFileDiffRpc,
   WsGitReadWorkingTreeDiffRpc,
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,

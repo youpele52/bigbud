@@ -10,7 +10,7 @@ import { makeGitStatusOps } from "./GitStatus.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
 import { makeGitWorktreeOps, type GitWorktreeOps } from "./GitWorktree.ts";
 import { pushInitiatingBranch } from "./GitCore.initiatingPush.ts";
-import { makeGitHistoryOps } from "./GitHistory.ts";
+import { makeGitHistoryOps, type GitHistoryOps } from "./GitHistory.ts";
 import {
   formatRemoteExecutionTargetDetail,
   isLocalExecutionTarget,
@@ -56,6 +56,19 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       : undefined;
 
   const remoteOpsForTarget = yield* makeRemoteGitOps(remoteExecute, path, worktreesDir);
+  // History reads route to the target's ops (owner or agent) or stay local.
+  const routeHistory = <A>(
+    name: keyof GitHistoryOps,
+    input: { readonly cwd: string; readonly executionTargetId?: string | undefined },
+    run: (ops: GitHistoryOps) => Effect.Effect<A, GitCommandError>,
+  ): Effect.Effect<A, GitCommandError> =>
+    !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
+      ? remoteOpsForTarget(input.executionTargetId!).pipe(
+          Effect.flatMap(({ historyOps: target }) => run(target)),
+        )
+      : assertLocalExecutionTarget(`git.${name}`, input.cwd, input.executionTargetId).pipe(
+          Effect.andThen(run(historyOps)),
+        );
   const routeWorktreeOp = <A>(input: {
     cwd: string;
     executionTargetId?: string;
@@ -208,40 +221,13 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
         : assertLocalExecutionTarget("git.listBranches", input.cwd, input.executionTargetId).pipe(
             Effect.andThen(branchOps.listBranches(input)),
           ),
-    listCommits: (input) =>
-      !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? remoteOpsForTarget(input.executionTargetId!).pipe(
-            Effect.flatMap(({ historyOps: targetHistoryOps }) =>
-              targetHistoryOps.listCommits(input),
-            ),
-          )
-        : assertLocalExecutionTarget("git.listCommits", input.cwd, input.executionTargetId).pipe(
-            Effect.andThen(historyOps.listCommits(input)),
-          ),
+    listCommits: (input) => routeHistory("listCommits", input, (ops) => ops.listCommits(input)),
     getCommitDetails: (input) =>
-      !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? remoteOpsForTarget(input.executionTargetId!).pipe(
-            Effect.flatMap(({ historyOps: targetHistoryOps }) =>
-              targetHistoryOps.getCommitDetails(input),
-            ),
-          )
-        : assertLocalExecutionTarget(
-            "git.getCommitDetails",
-            input.cwd,
-            input.executionTargetId,
-          ).pipe(Effect.andThen(historyOps.getCommitDetails(input))),
+      routeHistory("getCommitDetails", input, (ops) => ops.getCommitDetails(input)),
+    getCommitFileDiff: (input) =>
+      routeHistory("getCommitFileDiff", input, (ops) => ops.getCommitFileDiff(input)),
     readWorkingTreeDiff: (input) =>
-      !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
-        ? remoteOpsForTarget(input.executionTargetId!).pipe(
-            Effect.flatMap(({ historyOps: targetHistoryOps }) =>
-              targetHistoryOps.readWorkingTreeDiff(input),
-            ),
-          )
-        : assertLocalExecutionTarget(
-            "git.readWorkingTreeDiff",
-            input.cwd,
-            input.executionTargetId,
-          ).pipe(Effect.andThen(historyOps.readWorkingTreeDiff(input))),
+      routeHistory("readWorkingTreeDiff", input, (ops) => ops.readWorkingTreeDiff(input)),
     checkoutBranch: (input) =>
       !isLocalExecutionTarget(input.executionTargetId) && remoteExecute
         ? remoteOpsForTarget(input.executionTargetId!).pipe(

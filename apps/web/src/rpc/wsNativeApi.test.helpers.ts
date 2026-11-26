@@ -140,6 +140,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     refreshStatus: vi.fn(),
     listCommits: vi.fn(),
     getCommitDetails: vi.fn(),
+    getCommitFileDiff: vi.fn(),
     readWorkingTreeDiff: vi.fn(),
     runStackedAction: vi.fn(),
     listBranches: vi.fn(),

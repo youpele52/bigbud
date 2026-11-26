@@ -63,6 +63,7 @@ impl Fixture {
                 },
                 paths: PrivatePaths::new().expect("new master directory"),
                 child: Some(child),
+                death_watch: None,
                 connector: None,
                 recovery: None,
                 socket: None,
@@ -70,6 +71,7 @@ impl Fixture {
                 retirement: None,
                 master_record: None,
                 connector_record: None,
+                published: None,
                 _pin: self
                     .transport
                     .pinned_ssh("-T")

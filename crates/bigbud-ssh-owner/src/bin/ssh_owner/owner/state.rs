@@ -3,10 +3,7 @@ use super::retirement::Retirement;
 use super::targets::{Lanes, Registry as TargetRegistry, TargetAuthority};
 #[cfg(target_os = "linux")]
 use super::tracked_push;
-use super::{
-    DeploymentOperation, SnapshotCancelInbox, StageBinding, guarded_write, picker_cancel,
-    workspace_mode,
-};
+use super::{DeploymentOperation, SnapshotCancelInbox, StageBinding, guarded_write, picker_cancel};
 use crate::{
     Token, owner_agent_proxy::AgentProxyFixture, owner_grants::Grants, owner_storage::Storage,
     owner_trust::TrustApproval, transport::Transport,
@@ -57,7 +54,6 @@ pub(crate) struct Owner {
     pub(super) stage: Option<StageBinding>,
     pub(super) deployment_operation: Option<DeploymentOperation>,
     pub(super) guarded_write: Option<guarded_write::GuardedWrite>,
-    pub(super) workspace_mode_observation: Option<workspace_mode::Observation>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) workspace_readiness_fixture: bool,
     #[cfg(any(target_os = "macos", target_os = "linux"))]

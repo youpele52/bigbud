@@ -58,6 +58,48 @@ impl MasterPicker {
             .open_and_list_production_folders(transport, generation, path, deadline, root)
     }
 
+    /// v1.credential.proto: open this target's master with an in-app secret.
+    /// The fixture lanes keep their own synthetic unlock and refuse this.
+    pub(crate) fn unlock_credential(
+        &mut self,
+        transport: &Transport,
+        generation: Token,
+        passphrase: bool,
+        secret: &mut [u8],
+    ) -> Result<(), ErrorCode> {
+        if !matches!(self.mode, MasterMode::Production) {
+            for byte in secret.iter_mut() {
+                *byte = 0;
+            }
+            return Err(ErrorCode::OperationDenied);
+        }
+        self.admit(generation)?;
+        let deadline = Instant::now() + PICKER_DEADLINE;
+        let root = self
+            .production_root
+            .as_deref()
+            .ok_or(ErrorCode::OwnerUnavailable)?;
+        let result = self.slot.unlock_production_credential(
+            transport, generation, passphrase, secret, deadline, root,
+        );
+        // A refused secret is not a transport fault or a retry trigger.
+        let observed = result
+            .as_ref()
+            .err()
+            .copied()
+            .filter(|error| *error != ErrorCode::CredentialRejected);
+        self.record_observation(generation, observed);
+        result
+    }
+
+    /// Closes this target's credential master; later leases need a new entry.
+    pub(crate) fn lock_credential(&mut self, generation: Token) -> Result<(), ErrorCode> {
+        if !matches!(self.mode, MasterMode::Production) {
+            return Err(ErrorCode::OperationDenied);
+        }
+        self.slot.invalidate(generation)
+    }
+
     /// Open one per-target agent session over the target's verified master. The
     /// master is reused across folder lists and agent sessions; only this
     /// session's control stream and private pipes belong to the caller.

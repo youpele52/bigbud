@@ -5,6 +5,7 @@ mod auth_methods;
 mod command;
 #[cfg(unix)]
 mod connector;
+pub(crate) mod credential;
 #[cfg(unix)]
 pub(super) use connector::ConnectorApproval;
 mod deployment;
@@ -128,6 +129,9 @@ pub(super) struct Transport {
     connector: Option<Result<connector::PinnedConnector, ErrorCode>>,
     /// One bounded staged overwrite draft, held without remote work.
     pub(super) workspace_write_stage: workspace::staged_write::Stage,
+    /// In-app credential need and the unlocked master's control path.
+    credential: credential::CredentialMode,
+    mux: credential::MuxPath,
 }
 
 // Keep the exact pin alive while the SSH client can still be authenticating.
@@ -193,7 +197,7 @@ impl Transport {
                 .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
             || !config.ssh.is_absolute()
             || !config.keyscan.is_absolute()
-            || !identity::literal_path(&config.identity)
+            || !(config.identity.as_os_str().is_empty() || identity::literal_path(&config.identity))
             || !(if config.alias_config.is_some() {
                 config::valid_configured_trust_path(&config.known_hosts)
             } else {
@@ -228,14 +232,16 @@ impl Transport {
         } else if config.system_config.is_some() {
             return Err(ErrorCode::ConfigUnsupported);
         }
-        let identities = identity::IdentityFiles::bind(
-            std::iter::once(config.identity.as_path()).chain(
-                policy
-                    .iter()
-                    .flat_map(|policy| policy.additional_identities.iter().map(PathBuf::as_path)),
-            ),
-        )?;
+        let identities =
+            identity::IdentityFiles::bind(
+                std::iter::once(config.identity.as_path())
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .chain(policy.iter().flat_map(|policy| {
+                        policy.additional_identities.iter().map(PathBuf::as_path)
+                    })),
+            )?;
         let proof_agent = agent_identity::ProofAgent::from_policy(policy.as_ref())?;
+        let credential = credential::CredentialMode::of_identity(&config.identity);
         let host = config.host.to_string();
         let scan_label = if config.port == 22 {
             host.clone()
@@ -264,6 +270,8 @@ impl Transport {
             #[cfg(unix)]
             connector: None,
             workspace_write_stage: workspace::staged_write::Stage::new(),
+            credential,
+            mux: credential::MuxPath::default(),
         })
     }
 

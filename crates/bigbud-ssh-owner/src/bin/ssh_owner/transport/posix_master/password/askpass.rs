@@ -1,9 +1,11 @@
-use super::super::{PrivatePaths, Transport, UNAVAILABLE, paths, probe};
-#[cfg(target_os = "linux")]
+#[cfg(any(test, target_os = "linux"))]
+use super::super::Transport;
+use super::super::{PrivatePaths, UNAVAILABLE, paths, probe};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::{PASSWORD_CAP, valid_password};
 use super::{Secret, process};
 use crate::v1::ErrorCode;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::{env, process::ExitCode};
 use std::{
     ffi::OsStr,
@@ -53,19 +55,30 @@ impl Listener {
         Ok(result)
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub(super) fn configure(
         &self,
         command: &mut Command,
         transport: &Transport,
     ) -> Result<(), ErrorCode> {
-        if process::Image::at(&self.image_path)? != self.image {
-            return Err(UNAVAILABLE);
-        }
         let prompt = format!(
             "{}@{}'s password: ",
             transport.config.user,
             transport.host()
         );
+        self.configure_prompt(command, OsStr::new(&prompt))
+    }
+
+    /// The exact prompt OpenSSH will pass the helper; any other prompt (OTP,
+    /// keyboard-interactive, confirmation) makes the helper refuse (U2).
+    pub(super) fn configure_prompt(
+        &self,
+        command: &mut Command,
+        prompt: &OsStr,
+    ) -> Result<(), ErrorCode> {
+        if process::Image::at(&self.image_path)? != self.image {
+            return Err(UNAVAILABLE);
+        }
         command
             .env("SSH_ASKPASS", &self.image_path)
             .env("SSH_ASKPASS_REQUIRE", "force")
@@ -129,7 +142,7 @@ pub(super) fn release(
     probe::write(&mut &stream, secret.0, deadline)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(in super::super::super::super) fn maybe_run_password_helper() -> Option<ExitCode> {
     let socket = PathBuf::from(env::var_os(SOCKET)?);
     Some(match run(&socket) {
@@ -142,7 +155,7 @@ fn allowed_prompt(actual: &OsStr, expected: &OsStr, hint: Option<&OsStr>) -> boo
     hint.is_none() && actual == expected
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn run(socket: &Path) -> Result<(), ErrorCode> {
     let deadline = Instant::now() + super::super::CHECK_LIMIT;
     let mut args = env::args_os().skip(1);
@@ -201,7 +214,7 @@ fn run(socket: &Path) -> Result<(), ErrorCode> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn prepare_output_pipe() -> Result<(), ErrorCode> {
     let fd = libc::STDOUT_FILENO;
     let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();

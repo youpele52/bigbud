@@ -228,6 +228,7 @@ fn launch_outside(transport: &Transport) -> PosixMasterSlot {
                     .spawn()
                     .expect("independent stock client"),
             ),
+            death_watch: None,
             connector: None,
             recovery: None,
             socket: None,
@@ -236,6 +237,7 @@ fn launch_outside(transport: &Transport) -> PosixMasterSlot {
             retirement: None,
             master_record: None,
             connector_record: None,
+            published: None,
             _pin: pinned._snapshot,
         }),
         retirement: None,

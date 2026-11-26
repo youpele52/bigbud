@@ -39,23 +39,41 @@ export function writeTextFile(
   });
 }
 
-/** Run a raw git command for test setup (not under test). */
+/**
+ * Run a raw git command for test setup (not under test). It runs outside the product executor:
+ * fixture setup (pushing to a local bare remote, fetching) is not product Git and must not need
+ * the W7 initiating fence's owner transport.
+ */
 export function git(
   cwd: string,
   args: ReadonlyArray<string>,
   env?: NodeJS.ProcessEnv,
 ): Effect.Effect<string, GitCommandError, GitCore> {
-  return Effect.gen(function* () {
-    const gitCore = yield* GitCore;
-    const result = yield* gitCore.execute({
-      operation: "GitCore.test.git",
-      cwd,
-      args,
-      ...(env ? { env } : {}),
-      timeoutMs: 10_000,
-    });
-    return result.stdout.trim();
-  });
+  return runFixtureGit("GitCore.test.git", cwd, args, env);
+}
+
+export function runFixtureGit(
+  operation: string,
+  cwd: string,
+  args: ReadonlyArray<string>,
+  env?: NodeJS.ProcessEnv,
+): Effect.Effect<string, GitCommandError> {
+  return Effect.tryPromise({
+    try: () =>
+      runProcess("git", [...args], {
+        cwd,
+        timeoutMs: 10_000,
+        ...(env ? { env: { ...process.env, ...env } } : {}),
+      }),
+    catch: (cause) =>
+      new GitCommandError({
+        operation,
+        command: `git ${args.join(" ")}`,
+        cwd,
+        detail: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+  }).pipe(Effect.map((result: ProcessRunResult) => result.stdout.trim()));
 }
 
 export function configureRemote(

@@ -49,10 +49,38 @@
       "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md \u00a7a row 21"
     },
     {
+      "path": "apps/server/src/tool-transport/toolTransport.ts",
+      "rule": 1,
+      "symbol": "ssh",
+      "reason": "W7: `\"ssh\"` is the ToolExecutionTransport kind label (direct SSH vs agent vs local); no process is started here. A direct SSH tool command runs only as the owner's provider workspace shell grant (toolTransport.ssh.ts).",
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a73 W7 non-Git consumer slice"
+    },
+    {
       "path": "crates/bigbud-ssh-owner/",
       "rule": 5,
       "reason": "The owner crate is the single reviewed Rust SSH owner, not a second owner.",
       "reference": "docs/plans/2026-11-23-rust-ssh-ownership-s4-cutover-design.md \u00a7e rule 5"
+    },
+    {
+      "path": "apps/server/src/git/Layers/GitHubCli.owner.production.ts",
+      "rule": 1,
+      "symbol": "ssh",
+      "reason": "U7 reviewed path: `gh pr checkout` transport choice. `ssh` is the remote-route kind from classifyRemoteUrl; third-party SSH hosts use the U14 fence (ordinaryGitTransport), a single bigbud-target remote uses one U15 owner upload lease with the shim pinned to its exact upload-pack command, and anything else (unknown target set, several target remotes, unsupported URLs) is refused before gh starts. No TypeScript SSH launch.",
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a74 U7"
+    },
+    {
+      "path": "apps/server/src/git/Layers/GitCore.selectedStream.ts",
+      "rule": 2,
+      "symbol": "GIT_SSH_COMMAND",
+      "reason": "U15 owner stream bridge: GIT_SSH_COMMAND points local Git at the generated Node shim, which only pipes stdio to one private owner socket for an already-open upload/receive lease (and, for gh pr checkout, only for the pinned upload-pack command). It never launches ssh; the owner holds the only SSH session.",
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a74 U15"
+    },
+    {
+      "path": "apps/server/src/git/Layers/GitCore.selectedStream.ts",
+      "rule": 1,
+      "symbol": "ssh",
+      "reason": "U15 owner stream bridge: `GIT_SSH_VARIANT: \"ssh\"` tells Git how to format arguments for the shim; no ssh process is started from TypeScript.",
+      "reference": "docs/plans/2026-11-25-rust-ssh-ownership-finish-line-plan.md \u00a74 U15"
     }
   ]
 }

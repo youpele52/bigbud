@@ -34,6 +34,7 @@ import {
 import { makeLocalWorkspaceModeStore } from "./workspaceMode.local.ts";
 import { reserveWorkspaceMode } from "./workspaceMode.reserve.ts";
 import { makeSshWorkspaceModeStore } from "./workspaceMode.ssh.ts";
+import { makeProductionSshWorkspaceModeStore } from "./workspaceMode.ssh.production.ts";
 import type { WorkspaceModeSshOwner } from "./workspaceMode.ssh.owner.ts";
 
 export interface WorkspaceModeRequest {
@@ -221,6 +222,8 @@ export const WorkspaceModeGateLive = Layer.effect(
     return makeWorkspaceModeGate({
       serverMode: config.mode,
       owner: workspaceModeOwnerId(machineIdentity() ?? os.hostname(), config.stateDir),
+      // W7: SSH reservations run through the live production owner (Request 47/48).
+      sshStore: (target) => makeProductionSshWorkspaceModeStore(target),
     });
   }),
 );

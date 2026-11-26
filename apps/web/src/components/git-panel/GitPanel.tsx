@@ -16,6 +16,7 @@ import {
 import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
+import { useCommitSelection } from "./GitPanelHistory.selection";
 import { GitPanelNotRepository } from "./GitPanelNotRepository";
 import { GitPanelSyncControl } from "./GitPanelSyncControl";
 import { StatusBanner } from "../common/StatusBanner";
@@ -35,7 +36,11 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   const activeView = useGitPanelViewStore((state) => state.activeView);
   const setActiveView = useGitPanelViewStore((state) => state.setActiveView);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [selectedCommitSha, setSelectedCommitSha] = useState<string | null>(null);
+  const {
+    selectedSha: selectedCommitSha,
+    detailsSha: detailsCommitSha,
+    select: selectCommit,
+  } = useCommitSelection();
 
   const gitStatusQuery = useQuery({
     ...gitStatusQueryOptions(cwd, executionTargetId),
@@ -74,16 +79,17 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   const commitDetailsQuery = useQuery(
     gitCommitDetailsQueryOptions({
       cwd: cwd ?? "",
-      commit: selectedCommitSha ?? "",
+      // Keyboard navigation settles before fetching; the highlight moves at once.
+      commit: detailsCommitSha ?? "",
       ...(executionTargetId ? { executionTargetId } : {}),
-      enabled: visible && activeView === "history" && isGitRepo && selectedCommitSha !== null,
+      enabled: visible && activeView === "history" && isGitRepo && detailsCommitSha !== null,
     }),
   );
 
   useEffect(() => {
     setSelectedFilePath(null);
-    setSelectedCommitSha(null);
-  }, [cwd, executionTargetId]);
+    selectCommit(null);
+  }, [cwd, executionTargetId, selectCommit]);
 
   useEffect(() => {
     const files = gitStatus?.workingTree.files ?? [];
@@ -99,14 +105,14 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
 
   useEffect(() => {
     if (commitHistory.length === 0) {
-      setSelectedCommitSha(null);
+      selectCommit(null);
       return;
     }
     if (selectedCommitSha && commitHistory.some((commit) => commit.sha === selectedCommitSha)) {
       return;
     }
-    setSelectedCommitSha(commitHistory[0]?.sha ?? null);
-  }, [commitHistory, selectedCommitSha]);
+    selectCommit(commitHistory[0]?.sha ?? null);
+  }, [commitHistory, selectedCommitSha, selectCommit]);
 
   if (!cwd) {
     return (
@@ -236,7 +242,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
 
             return commitHistoryQuery.fetchNextPage();
           }}
-          onSelectCommit={setSelectedCommitSha}
+          onSelectCommit={selectCommit}
           selectedCommitSha={selectedCommitSha}
           selectedCommitSummary={
             commitHistory.find((commit) => commit.sha === selectedCommitSha) ?? null

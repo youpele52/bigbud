@@ -55,24 +55,19 @@ it.layer(TestLayer)("git integration", (it) => {
               input.cwd === "/repo/worktrees/pr-123" ? "origin/feature/pr-123\n" : "origin/main\n",
             );
           }
-          if (input.args[0] === "remote") {
+          if (input.args[0] === "remote" && input.args[1] !== "get-url") {
             return ok("origin\n");
           }
           if (input.args[0] === "rev-parse" && input.args[1] === "--git-common-dir") {
             return ok("/repo/.git\n");
           }
-          if (input.args[0] === "--git-dir" && input.args[2] === "fetch") {
+          // B: one refresh per shared remote resolves its URL, then routes the fetch. An
+          // unsupported URL is refused before any process starts.
+          if (input.operation === "GitCore.initiating.remoteUrl") {
             fetchCount += 1;
             expect(input.cwd).toBe("/repo");
-            expect(input.args).toEqual([
-              "--git-dir",
-              "/repo/.git",
-              "fetch",
-              "--quiet",
-              "--no-tags",
-              "origin",
-            ]);
-            return ok();
+            expect(input.args).toEqual(["remote", "get-url", "origin"]);
+            return ok("ext::unsupported\n");
           }
           if (input.operation === "GitCore.statusDetails.status") {
             return ok(
@@ -129,13 +124,13 @@ it.layer(TestLayer)("git integration", (it) => {
             ) {
               return ok("origin/main\n");
             }
-            if (input.args[0] === "remote") {
+            if (input.args[0] === "remote" && input.args[1] !== "get-url") {
               return ok("origin\n");
             }
             if (input.args[0] === "rev-parse" && input.args[1] === "--git-common-dir") {
               return ok("/repo/.git\n");
             }
-            if (input.args[0] === "--git-dir" && input.args[2] === "fetch") {
+            if (input.operation === "GitCore.initiating.remoteUrl") {
               fetchCount += 1;
               return Effect.fail(
                 new GitCommandError({
@@ -245,15 +240,8 @@ it.layer(TestLayer)("git integration", (it) => {
         const realGitCore = yield* GitCore;
         let fetchArgs: readonly string[] | null = null;
         const core = yield* makeIsolatedGitCore((input) => {
-          if (input.args[0] === "--git-dir" && input.args[2] === "fetch") {
-            fetchArgs = [...input.args];
-            return Effect.succeed({
-              code: 0,
-              stdout: "",
-              stderr: "",
-              stdoutTruncated: false,
-              stderrTruncated: false,
-            });
+          if (input.operation === "GitCore.initiating.remoteUrl") {
+            fetchArgs = [input.cwd, ...input.args];
           }
           return realGitCore.execute(input);
         });
@@ -261,14 +249,8 @@ it.layer(TestLayer)("git integration", (it) => {
         const status = yield* core.statusDetails(source);
         expect(status.branch).toBe("upstream/feature");
         expect(status.upstreamRef).toBe(`${remoteName}/${featureBranch}`);
-        expect(fetchArgs).toEqual([
-          "--git-dir",
-          path.join(source, ".git"),
-          "fetch",
-          "--quiet",
-          "--no-tags",
-          remoteName,
-        ]);
+        // B: the refresh resolves the slash-named remote's URL (then routes a local fetch).
+        expect(fetchArgs).toEqual([source, "remote", "get-url", remoteName]);
       }),
     );
 

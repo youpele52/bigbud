@@ -45,6 +45,10 @@ impl Class {
             | Operation::TerminalReplay(_)
             | Operation::TerminalCwd(_)
             | Operation::UnlockPosixPassword(_)
+            | Operation::InspectCredential(_)
+            | Operation::CredentialUnlockOpen(_)
+            | Operation::CredentialUnlockCommit(_)
+            | Operation::CredentialLock(_)
             | Operation::ProofRunAcpCommand(_)
             | Operation::RunAcpCommand(_)
             | Operation::RunAcpShell(_) => Self::Interactive,

@@ -12,6 +12,8 @@ mod attachment_vectors;
 mod consumer_vectors;
 #[path = "support/control_vectors.rs"]
 mod control_vectors;
+#[path = "support/credential_vectors.rs"]
+mod credential_vectors;
 #[path = "support/git_upload_vectors.rs"]
 mod git_upload_vectors;
 #[path = "support/grant_vectors.rs"]
@@ -38,6 +40,8 @@ mod terminal_vectors;
 mod transfer_vectors;
 #[path = "support/wire_helpers.rs"]
 mod wire_helpers;
+#[path = "support/workspace_git_production_vectors.rs"]
+mod workspace_git_production_vectors;
 #[path = "support/workspace_vectors.rs"]
 mod workspace_vectors;
 use operands::operand_preimage;
@@ -172,6 +176,7 @@ fn s1_wire_goldens() {
     attachment_vectors::verify(&mut values);
     consumer_vectors::verify(&mut values);
     control_vectors::verify(&mut values);
+    credential_vectors::verify(&mut values);
     native_lease_vectors::verify(&mut values);
     peer_enrollment_vectors::verify(&mut values);
     shell_vectors::verify(&mut values);
@@ -179,6 +184,7 @@ fn s1_wire_goldens() {
     terminal_vectors::verify(&mut values);
     transfer_vectors::verify(&mut values);
     workspace_vectors::verify(&mut values);
+    workspace_git_production_vectors::verify(&mut values);
     for (name, payload) in [
         ("hello", hello(1)),
         ("incompatible_major", hello(2)),

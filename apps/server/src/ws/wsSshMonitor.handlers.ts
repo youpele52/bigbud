@@ -5,7 +5,11 @@ import { observeRpcEffect } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext.ts";
 import { sampleSshMonitorEffect, listConnectedSshMonitorsEffect } from "./wsSshMonitor.ts";
 import { sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
-import type { SelectedSshMonitorHealth } from "../ssh/sshMonitor.healthOwner.ts";
+import type {
+  SelectedSshMonitorHealth,
+  SshMonitorHealthOwner,
+} from "../ssh/sshMonitor.healthOwner.ts";
+import { makeProductionSshMonitorHealth } from "../ssh/sshMonitor.productionHealth.ts";
 
 export interface SshMonitorRpcOptions {
   readonly clientId: number;
@@ -13,7 +17,8 @@ export interface SshMonitorRpcOptions {
 
 export function makeSshMonitorHandlers(
   context: Pick<WsRpcContext, "projectionProjectRepository" | "monitorInstanceId">,
-  owner?: SelectedSshMonitorHealth,
+  // W7: reachability comes only from the owner; production reads the live one per probe.
+  owner: SshMonitorHealthOwner | SelectedSshMonitorHealth = makeProductionSshMonitorHealth(),
 ) {
   const projects = context.projectionProjectRepository;
   const caller = (options?: SshMonitorRpcOptions) =>
@@ -27,7 +32,7 @@ export function makeSshMonitorHandlers(
       return observeRpcEffect(
         WS_METHODS.serverSampleSshMonitor,
         Option.isSome(projects) && callerId
-          ? sampleSshMonitorEffect(input, projects.value, callerId)
+          ? sampleSshMonitorEffect(input, projects.value, callerId, owner)
           : Effect.fail("SSH monitor caller or persistence unavailable"),
         { "rpc.aggregate": "server" },
       );

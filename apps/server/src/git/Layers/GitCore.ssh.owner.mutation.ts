@@ -81,7 +81,7 @@ export class DirectWorkspaceGitOutcomeUnknown extends Error {
   }
 }
 
-function isSafeRelativePath(path: string): boolean {
+export function isSafeRelativePath(path: string): boolean {
   if (path.length === 0 || Buffer.byteLength(path) > MAX_RELATIVE_PATH_BYTES) return false;
   if (path.includes("\0") || path.includes("\\") || path.startsWith("/")) return false;
   if (path.startsWith("-")) return false;

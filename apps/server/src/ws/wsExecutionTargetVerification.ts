@@ -19,7 +19,10 @@ import type {
 } from "../remote-agent/remoteAgentServerLayer.ts";
 import type { RemoteAgentUpdateCoordinatorShape } from "../remote-agent/remoteAgentUpdate.coordinator.ts";
 
-import { verifyProductionTarget } from "../ssh/sshOwnerProductionPicker.ts";
+import {
+  unlockProductionSshCredential,
+  verifyProductionTarget,
+} from "../ssh/sshOwnerProductionPicker.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import { remoteAgentFailureMessage } from "../remote-agent/remoteAgentFailure.ts";
 import type {
@@ -206,25 +209,59 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
   };
 });
 
+/** The user-facing text for a refused in-app credential; the web re-prompts on it. */
+function credentialFailureMessage(
+  cause: unknown,
+  executionTargetId: string,
+  credential: "password" | "keyPassphrase",
+): string {
+  const code = (cause as { readonly code?: unknown } | undefined)?.code;
+  if (code === "credentialRejected")
+    return credential === "password"
+      ? `Incorrect password for ${executionTargetId}.`
+      : "Incorrect passphrase for this SSH key.";
+  return cause instanceof Error && cause.message
+    ? cause.message
+    : "The SSH owner could not unlock this target.";
+}
+
 /**
- * Key passphrases and passwords are owner credentials: the Rust owner authenticates with the
- * user's agent and keys, and the app never collects a secret for a TypeScript SSH process.
+ * Key passphrases and passwords are entered in the app and handed to the Rust owner over its
+ * private per-lease socket (v1.credential.proto); the owner feeds them once to its own `ssh`
+ * through its askpass helper and keeps only the authenticated master. Windows owners stay
+ * key-only (U3) and keyboard-interactive stays refused (U2).
  */
 export const unlockSshKeyEffect = Effect.fn("unlockSshKeyEffect")(function* (
-  _input: ServerUnlockSshKeyInput,
+  input: ServerUnlockSshKeyInput,
 ): Effect.fn.Return<ServerUnlockSshKeyResult, ServerUnlockSshKeyError> {
-  return yield* new ServerUnlockSshKeyError({
-    message:
-      "Unlocking an SSH key in the app is unavailable: load the key into your SSH agent (ssh-add) and retry.",
+  return yield* Effect.tryPromise({
+    try: () =>
+      unlockProductionSshCredential({
+        executionTargetId: input.executionTargetId,
+        credential: "keyPassphrase",
+        secret: Buffer.from(input.passphrase, "utf8"),
+      }),
+    catch: (cause) =>
+      new ServerUnlockSshKeyError({
+        message: credentialFailureMessage(cause, input.executionTargetId, "keyPassphrase"),
+      }),
   });
 });
 
 export const unlockSshPasswordEffect = Effect.fn("unlockSshPasswordEffect")(function* (
-  _input: ServerUnlockSshPasswordInput,
+  input: ServerUnlockSshPasswordInput,
 ): Effect.fn.Return<ServerUnlockSshPasswordResult, ServerUnlockSshPasswordError> {
-  return yield* new ServerUnlockSshPasswordError({
-    message:
-      "Password sign-in through the app is unavailable for this SSH owner build. Use key or agent authentication.",
+  return yield* Effect.tryPromise({
+    try: () =>
+      unlockProductionSshCredential({
+        executionTargetId: input.executionTargetId,
+        credential: "password",
+        secret: Buffer.from(input.password, "utf8"),
+      }),
+    catch: (cause) =>
+      new ServerUnlockSshPasswordError({
+        message: credentialFailureMessage(cause, input.executionTargetId, "password"),
+      }),
   });
 });
 

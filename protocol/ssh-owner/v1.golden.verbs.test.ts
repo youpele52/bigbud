@@ -119,6 +119,13 @@ test("W7 promoted every frozen proof_* operation to its production name", () => 
       { name: "agent_proxy_lease_open", field: 143 },
       { name: "agent_proxy_lease_status", field: 144 },
       { name: "agent_proxy_lease_close", field: 145 },
+      // W7 remote system stats (one fixed owner recipe over the target master).
+      { name: "sample_system_status", field: 180 },
+      // In-app password and key passphrase (v1.credential.proto).
+      { name: "inspect_credential", field: 190 },
+      { name: "credential_unlock_open", field: 191 },
+      { name: "credential_unlock_commit", field: 192 },
+      { name: "credential_lock", field: 193 },
     ],
   );
 

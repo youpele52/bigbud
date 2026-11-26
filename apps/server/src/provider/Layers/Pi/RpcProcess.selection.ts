@@ -1,11 +1,9 @@
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
-import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import type { PiRpcProcessOptions } from "./RpcProcess.types.ts";
 
 const capabilityLabels = {
   "remote-rpc-start": "remote RPC start",
   "remote-version-probe": "remote version probing",
-  "remote-workspace-bridge": "local-runtime remote workspace bridge",
 } as const;
 
 class SelectedSshOwnerPiCapabilityError extends Error {
@@ -19,7 +17,9 @@ class SelectedSshOwnerPiCapabilityError extends Error {
 
 /**
  * `ownerAvailable` means the live production owner already resolved a typed Pi port bound to
- * this runtime. Without it the start refuses; there is no TypeScript SSH launch.
+ * this runtime. Without it the start refuses; there is no TypeScript SSH launch. A local
+ * runtime with a remote workspace is admitted: its bridge tools run through the server's
+ * typed tool transport (the owner's workspace verbs for a direct SSH workspace).
  */
 export function getPiRpcCapabilityDenial(
   targets: Pick<PiRpcProcessOptions, "providerRuntimeTarget" | "workspaceTarget">,
@@ -34,9 +34,6 @@ export function getPiRpcCapabilityDenial(
       : new SelectedSshOwnerPiCapabilityError(
           operation === "rpc-start" ? "remote-rpc-start" : "remote-version-probe",
         );
-  }
-  if (operation === "rpc-start" && isRemoteWorkspaceTarget(targets.workspaceTarget)) {
-    return new SelectedSshOwnerPiCapabilityError("remote-workspace-bridge");
   }
   return undefined;
 }

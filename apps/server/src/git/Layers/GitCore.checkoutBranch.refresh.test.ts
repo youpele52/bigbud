@@ -96,7 +96,7 @@ it.layer(TestLayer)("git integration", (it) => {
         const realGitCore = yield* GitCore;
         let refreshFetchAttempts = 0;
         const core = yield* makeIsolatedGitCore((input) => {
-          if (input.args[0] === "--git-dir" && input.args[2] === "fetch") {
+          if (input.operation === "GitCore.initiating.remoteUrl") {
             refreshFetchAttempts += 1;
             return Effect.fail(
               new GitCommandError({
@@ -142,15 +142,10 @@ it.layer(TestLayer)("git integration", (it) => {
         const realGitCore = yield* GitCore;
         let refreshFetchAttempts = 0;
         const core = yield* makeIsolatedGitCore((input) => {
-          if (input.args[0] === "--git-dir" && input.args[2] === "fetch") {
+          if (input.operation === "GitCore.initiating.remoteUrl") {
+            // B: each refresh resolves the remote URL, then routes the fetch (U14/U15).
             refreshFetchAttempts += 1;
-            return Effect.succeed({
-              code: 0,
-              stdout: "",
-              stderr: "",
-              stdoutTruncated: false,
-              stderrTruncated: false,
-            });
+            return realGitCore.execute(input);
           }
           return realGitCore.execute(input);
         });

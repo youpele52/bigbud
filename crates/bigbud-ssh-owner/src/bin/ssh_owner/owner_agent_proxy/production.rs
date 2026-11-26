@@ -330,7 +330,12 @@ impl ProductionProxy {
             self.uncertain = true;
             return;
         };
-        match read_exit(&mut control, &mut self.packet, &mut self.packet_used) {
+        match read_exit(
+            &mut control,
+            &mut self.packet,
+            &mut self.packet_used,
+            self.io.session,
+        ) {
             Ok(exit) => {
                 if exit.is_some() {
                     self.exit = exit;

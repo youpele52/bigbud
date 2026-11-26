@@ -95,6 +95,18 @@ export const GitGetCommitDetailsInput = Schema.Struct({
   commit: TrimmedNonEmptyStringSchema,
 });
 export type GitGetCommitDetailsInput = typeof GitGetCommitDetailsInput.Type;
+/** One file of one commit, loaded on demand (History panel). */
+export const GitGetCommitFileDiffInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+  commit: TrimmedNonEmptyStringSchema,
+  path: TrimmedNonEmptyStringSchema,
+  /** Rename/copy source, so the diff pairs both sides. */
+  oldPath: Schema.optional(TrimmedNonEmptyStringSchema),
+  /** "large" raises the per-file cap after the user asks to load a too-large diff. */
+  limit: Schema.optional(Schema.Literals(["default", "large"])),
+});
+export type GitGetCommitFileDiffInput = typeof GitGetCommitFileDiffInput.Type;
 
 export const GitReadWorkingTreeDiffInput = Schema.Struct({
   ...ExecutionTargetInputShape,

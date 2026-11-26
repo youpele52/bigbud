@@ -72,6 +72,12 @@ pub(crate) struct Lanes {
     pub(crate) git_receive: Option<crate::owner::git_receive::Lease>,
     /// W2 T-files production guarded-write lane (in-memory draft, no process).
     pub(crate) guarded_write: Option<crate::owner::guarded_write::GuardedWrite>,
+    /// W7 workspace-mode observation: single use, bound to this target's
+    /// generation and root, so another target's inspection cannot consume it.
+    pub(in crate::owner) workspace_mode: Option<crate::owner::workspace_mode::Observation>,
+    /// In-app credential entry channel and bounded attempts (v1.credential.proto).
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) credential: crate::owner::credential::CredentialLane,
 }
 
 impl Lanes {

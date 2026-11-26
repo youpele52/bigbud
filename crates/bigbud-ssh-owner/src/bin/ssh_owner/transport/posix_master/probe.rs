@@ -224,7 +224,7 @@ pub(super) fn alive_with(
     Ok(())
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn write(
     stream: &mut &UnixStream,
     bytes: &[u8],
@@ -246,7 +246,7 @@ pub(super) fn write_with(
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn read(
     stream: &mut &UnixStream,
     bytes: &mut [u8],

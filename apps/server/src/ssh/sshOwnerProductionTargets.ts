@@ -17,8 +17,9 @@ import { firstDefaultIdentity } from "./sshOwnerProductionTargets.identities.ts"
  * host (`~/.ssh/config`, read through the bounded, no-spawn alias resolver), or
  * from the target's explicit `keyPath`. A DNS host name is passed through
  * unchanged: the owner resolves it, never this process. Anything that cannot be
- * determined, or that needs password or agent authentication, is a typed
- * refusal rather than a guess.
+ * determined, or that needs agent authentication, is a typed refusal rather
+ * than a guess. A password target names an identity only when one is configured;
+ * its master authenticates only with the password entered in the app.
  *
  * @module sshOwnerProductionTargets
  */
@@ -135,15 +136,19 @@ export async function resolveProductionTargetDescriptor(
 ): Promise<SshOwnerTargetDescriptor> {
   const target = parseSshExecutionTarget(targetId);
   if (!target) throw new SshOwnerTargetRefusal("not-ssh-target");
-  if (target.authMode === "password") throw new SshOwnerTargetRefusal("password-auth");
+  // Password targets are entered in the app (v1.credential.proto); a structured target only,
+  // and Windows owners refuse them typed before any prompt (U3).
+  const password = target.authMode === "password";
   const home = options.home ?? OS.homedir();
   // A bare `ssh:<alias>` names a config alias; parameters name a structured target.
   const kind = target.executionTargetId.includes("=") ? "structured" : "alias";
+  if (password && kind !== "structured") throw new SshOwnerTargetRefusal("password-auth");
   const { hint, auth, scope } = await readHostConfig(home, target.host, kind === "alias");
   if (kind === "alias" && !hint) throw new SshOwnerTargetRefusal("config-refused");
   // U17: no IdentityFile means OpenSSH's default keys, as the owner resolves them.
   const identity = target.keyPath ?? auth.identityFile ?? (await firstDefaultIdentity(home));
-  if (!identity) {
+  // A password target needs no key: the owner's password master never offers one.
+  if (!identity && !password) {
     const agent = auth.identityAgent;
     throw new SshOwnerTargetRefusal(
       agent && agent.toLowerCase() !== "none" ? "agent-auth" : "no-identity",
@@ -167,8 +172,8 @@ export async function resolveProductionTargetDescriptor(
     host,
     port: Number(target.port ?? hint?.port ?? "22"),
     user,
-    authMode: "key",
-    identityFile: ownerPath(expandHome(identity, home)),
+    authMode: password ? "password" : "key",
+    identityFile: identity ? ownerPath(expandHome(identity, home)) : "",
     knownHostsFile: ownerPath(knownHostsFile),
     ...(hint?.hostKeyAlias ? { hostKeyAlias: hint.hostKeyAlias } : {}),
   };

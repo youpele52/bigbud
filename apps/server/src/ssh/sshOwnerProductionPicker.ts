@@ -17,6 +17,11 @@ import {
   type SshOwnerProductionRegistration,
 } from "./sshOwnerProductionRegistry.ts";
 import { descriptorServesTarget } from "./sshOwnerProductionTargets.ts";
+import {
+  credentialRequiredError,
+  type InAppCredential,
+  unlockProductionCredential,
+} from "./sshOwnerProductionCredential.ts";
 import { RemoteTargetDisconnectedError } from "./sshTargetDisconnects.ts";
 import {
   buildSshHostTrustRequiredMessage,
@@ -56,10 +61,14 @@ export async function withProductionTarget<A>(
   if (!descriptorServesTarget(descriptor, targetId))
     throw ownerFailure(new PickerProofOwnerError("targetMismatch"));
   signal?.throwIfAborted();
+  const target = live.handle.target(descriptor);
   try {
-    return await use(live.handle.target(descriptor));
+    return await use(target);
   } catch (error) {
     if (error instanceof SshTargetAuthRequiredError) throw error;
+    // A password or encrypted-key target without its unlocked master: prompt in the app.
+    if (error instanceof PickerProofOwnerError && error.code === "credentialRequired")
+      throw (await credentialRequiredError(target, targetId)) ?? ownerFailure(error);
     if (error instanceof PickerProofOwnerError && error.code === "targetDisconnected")
       throw new RemoteTargetDisconnectedError(targetId);
     throw error instanceof PickerProofOwnerError ? ownerFailure(error) : error;
@@ -175,4 +184,21 @@ export function transitionProductionTarget(
 /** Test-only reset of the pending challenge map. */
 export function resetProductionPickerChallengesForTest(): void {
   challenges.clear();
+}
+
+/**
+ * In-app password or key passphrase for one target (v1.credential.proto). The owner reads the
+ * secret from its private per-lease socket; the buffer is zeroed after the write.
+ */
+export function unlockProductionSshCredential(input: {
+  readonly executionTargetId: string;
+  readonly credential: InAppCredential;
+  readonly secret: Buffer;
+}): Promise<{ readonly message: string }> {
+  return withProductionTarget(input.executionTargetId, async (target) => {
+    await unlockProductionCredential(target, input.credential, input.secret);
+    return {
+      message: input.credential === "password" ? "SSH password accepted." : "SSH key unlocked.",
+    };
+  }).finally(() => input.secret.fill(0));
 }

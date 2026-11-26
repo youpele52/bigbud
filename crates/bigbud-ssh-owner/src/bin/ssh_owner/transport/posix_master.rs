@@ -15,9 +15,8 @@ mod launch;
 mod lease;
 mod link;
 mod master;
-#[cfg(any(test, target_os = "linux"))]
+mod owner_death;
 mod password;
-#[cfg(target_os = "linux")]
 pub(in super::super) use password::maybe_run_password_helper;
 mod paths;
 mod probe;
@@ -230,6 +229,10 @@ impl PosixMasterSlot {
             // Close admission before any potentially failing cleanup. Uncertain
             // cleanup retains this slot and blocks a replacement.
             master.closing = true;
+            // New clients of a credential target stop routing here at once.
+            if let Some(published) = master.published.take() {
+                published.clear();
+            }
             master.reap()?;
             master.paths.remove(master.socket)?;
             self.master = None;

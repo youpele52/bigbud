@@ -11,6 +11,7 @@ import {
   GitCoreDependenciesLayer,
   makeIsolatedGitCoreWithRemote,
   makeTmpDir,
+  runFixtureGit,
   TestLayer,
 } from "./GitCore.test.helpers.ts";
 
@@ -72,21 +73,9 @@ it.layer(TestLayer)("GitCore remote read-only composition", (it) => {
         const remoteDir = yield* makeTmpDir("git-remote-");
         const { initialBranch } = yield* initRepoWithCommit(cwd);
         const local = yield* GitCore;
-        yield* local.execute({
-          operation: "GitCore.test.initBare",
-          cwd: remoteDir,
-          args: ["init", "--bare"],
-        });
-        yield* local.execute({
-          operation: "GitCore.test.addRemote",
-          cwd,
-          args: ["remote", "add", "origin", remoteDir],
-        });
-        yield* local.execute({
-          operation: "GitCore.test.push",
-          cwd,
-          args: ["push", "-u", "origin", initialBranch],
-        });
+        yield* runFixtureGit("GitCore.test.initBare", remoteDir, ["init", "--bare"]);
+        yield* runFixtureGit("GitCore.test.addRemote", cwd, ["remote", "add", "origin", remoteDir]);
+        yield* runFixtureGit("GitCore.test.push", cwd, ["push", "-u", "origin", initialBranch]);
         let statusFetches = 0;
         const remote = yield* makeIsolatedGitCoreWithRemote({
           execute: local.execute,

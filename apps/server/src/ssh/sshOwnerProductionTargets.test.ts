@@ -136,15 +136,32 @@ describe("production SSH owner target descriptors", () => {
     ).toBe("no-identity");
   });
 
-  it("refuses password authentication before reading any config", async () => {
+  it("resolves a structured password target for in-app entry (v1.credential.proto)", async () => {
+    const root = await home(undefined, ["known_hosts", "id_ed25519"]);
+    const descriptor = await resolveProductionTargetDescriptor(
+      "ssh:host=10.0.0.9&user=ops&auth=password",
+      { home: root },
+    );
+    expect(descriptor.authMode).toBe("password");
+    expect(descriptor.identityFile).toBe(path.join(root, ".ssh/id_ed25519"));
+  });
+
+  it("resolves a password target without any identity file", async () => {
+    const root = await home(undefined, ["known_hosts"]);
+    const descriptor = await resolveProductionTargetDescriptor(
+      "ssh:host=10.0.0.9&user=ops&auth=password",
+      { home: root },
+    );
+    expect(descriptor).toMatchObject({ authMode: "password", identityFile: "" });
+  });
+
+  it("still refuses a key target with no identity", async () => {
     const root = await home(undefined, ["known_hosts"]);
     expect(
       await refusal(
-        resolveProductionTargetDescriptor("ssh:host=10.0.0.9&user=ops&auth=password", {
-          home: root,
-        }),
+        resolveProductionTargetDescriptor("ssh:host=10.0.0.9&user=ops", { home: root }),
       ),
-    ).toBe("password-auth");
+    ).toBe("no-identity");
   });
 
   it("refuses an agent-only alias", async () => {

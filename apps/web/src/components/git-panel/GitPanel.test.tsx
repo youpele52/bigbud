@@ -275,7 +275,6 @@ describe("GitPanelContent", () => {
           body: "",
           parents: [],
           files: [],
-          diff: "",
         }}
         detailError={null}
         hasMoreHistory={false}

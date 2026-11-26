@@ -7,6 +7,19 @@ message ProofWorkspaceGit {
   ProofWorkspaceGitAction action = 2;
   // Validated repository-relative operands for the fixed mutation recipes only.
   repeated string paths = 3;
+  // History recipes (actions 20-25) only: a full or abbreviated lowercase hex
+  // commit (summary, numstat, file diff) or an upstream ref name (unpushed).
+  string revision = 4;
+  // COMMIT_LOG page size (1-101) and offset (0-1000000).
+  uint32 limit = 5;
+  uint32 skip = 6;
+  // COMMIT_FILE_DIFF byte cap (1-1000000); output past it is cut and flagged.
+  uint32 max_output_bytes = 7;
+  // Actions 26-74 only: the typed slot values of that action's fixed argv
+  // template, in order (refs, `<ref>..HEAD`, messages, repository-relative
+  // paths, a worktree directory beside the workspace root). See
+  // transport/workspace/git.templates.rs.
+  repeated string operands = 8;
 }
 
 enum ProofWorkspaceGitAction {
@@ -24,6 +37,79 @@ enum ProofWorkspaceGitAction {
   PROOF_WORKSPACE_GIT_ACTION_CLEAN_UNTRACKED_PATHS = 10;
   PROOF_WORKSPACE_GIT_ACTION_STAGE_PATHS = 11;
   PROOF_WORKSPACE_GIT_ACTION_UNTRACKED_NUMSTAT = 12;
+  // Production read recipes for the diff panel and branch list (C06, B).
+  // Diff recipes take zero or one repository-relative path; the untracked
+  // file diff takes exactly one. Production admits this verb under the
+  // request's own workspace root (root authority) with a tolerant, still
+  // fail-closed local-config allowlist; see transport/workspace/git.guard.rs.
+  PROOF_WORKSPACE_GIT_ACTION_DIFF_STATUS = 13;
+  PROOF_WORKSPACE_GIT_ACTION_HAS_HEAD = 14;
+  PROOF_WORKSPACE_GIT_ACTION_DIFF_AGAINST_HEAD = 15;
+  PROOF_WORKSPACE_GIT_ACTION_DIFF_STAGED = 16;
+  PROOF_WORKSPACE_GIT_ACTION_DIFF_UNSTAGED = 17;
+  PROOF_WORKSPACE_GIT_ACTION_UNTRACKED_FILE_DIFF = 18;
+  PROOF_WORKSPACE_GIT_ACTION_LOCAL_BRANCHES = 19;
+  // History panel (B): commit list, unpushed marks, one commit's summary and
+  // changed files (NUL numstat), and one file's patch with a byte cap.
+  PROOF_WORKSPACE_GIT_ACTION_COMMIT_LOG = 20;
+  PROOF_WORKSPACE_GIT_ACTION_UPSTREAM_REF = 21;
+  PROOF_WORKSPACE_GIT_ACTION_UNPUSHED_SHAS = 22;
+  PROOF_WORKSPACE_GIT_ACTION_COMMIT_SUMMARY = 23;
+  PROOF_WORKSPACE_GIT_ACTION_COMMIT_NUMSTAT = 24;
+  PROOF_WORKSPACE_GIT_ACTION_COMMIT_FILE_DIFF = 25;
+  // Branch, checkout, commit (repository hooks run), worktree and range
+  // recipes; operands in `operands`. Reads 26-42, mutations 43-58.
+  PROOF_WORKSPACE_GIT_ACTION_SHOW_REF_HEAD = 26;
+  PROOF_WORKSPACE_GIT_ACTION_SHOW_REF_REMOTE = 27;
+  PROOF_WORKSPACE_GIT_ACTION_TRACKING_REFS = 28;
+  PROOF_WORKSPACE_GIT_ACTION_CURRENT_BRANCH = 29;
+  PROOF_WORKSPACE_GIT_ACTION_ORIGIN_HEAD_SHORT = 30;
+  PROOF_WORKSPACE_GIT_ACTION_WORKTREE_LIST = 31;
+  PROOF_WORKSPACE_GIT_ACTION_LOCAL_BRANCH_LIST = 32;
+  PROOF_WORKSPACE_GIT_ACTION_REMOTE_BRANCH_LIST = 33;
+  PROOF_WORKSPACE_GIT_ACTION_REMOTE_NAMES = 34;
+  PROOF_WORKSPACE_GIT_ACTION_REMOTE_URLS = 35;
+  PROOF_WORKSPACE_GIT_ACTION_BRANCH_METADATA = 36;
+  PROOF_WORKSPACE_GIT_ACTION_RANGE_LOG = 37;
+  PROOF_WORKSPACE_GIT_ACTION_RANGE_DIFF_STAT = 38;
+  PROOF_WORKSPACE_GIT_ACTION_RANGE_DIFF_PATCH = 39;
+  PROOF_WORKSPACE_GIT_ACTION_STAGED_SUMMARY = 40;
+  PROOF_WORKSPACE_GIT_ACTION_STAGED_PATCH = 41;
+  PROOF_WORKSPACE_GIT_ACTION_REV_PARSE_HEAD = 42;
+  PROOF_WORKSPACE_GIT_ACTION_RESET_INDEX = 43;
+  PROOF_WORKSPACE_GIT_ACTION_ADD_ALL = 44;
+  PROOF_WORKSPACE_GIT_ACTION_ADD_SELECTED = 45;
+  PROOF_WORKSPACE_GIT_ACTION_COMMIT = 46;
+  PROOF_WORKSPACE_GIT_ACTION_COMMIT_WITH_BODY = 47;
+  PROOF_WORKSPACE_GIT_ACTION_CHECKOUT = 48;
+  PROOF_WORKSPACE_GIT_ACTION_CHECKOUT_TRACK = 49;
+  PROOF_WORKSPACE_GIT_ACTION_BRANCH_CREATE = 50;
+  PROOF_WORKSPACE_GIT_ACTION_BRANCH_RENAME_CURRENT = 51;
+  PROOF_WORKSPACE_GIT_ACTION_BRANCH_RENAME = 52;
+  PROOF_WORKSPACE_GIT_ACTION_BRANCH_DELETE = 53;
+  PROOF_WORKSPACE_GIT_ACTION_SET_UPSTREAM = 54;
+  PROOF_WORKSPACE_GIT_ACTION_WORKTREE_ADD = 55;
+  PROOF_WORKSPACE_GIT_ACTION_WORKTREE_ADD_NEW_BRANCH = 56;
+  PROOF_WORKSPACE_GIT_ACTION_WORKTREE_REMOVE = 57;
+  PROOF_WORKSPACE_GIT_ACTION_WORKTREE_REMOVE_FORCE = 58;
+  PROOF_WORKSPACE_GIT_ACTION_ORIGIN_HEAD_REF = 59;
+  // Force delete of the named branch, new branches, stash, init, remote add
+  // and worktree creation at a fixed commit (operands typed per action).
+  PROOF_WORKSPACE_GIT_ACTION_BRANCH_FORCE_DELETE = 60;
+  PROOF_WORKSPACE_GIT_ACTION_CHECKOUT_NEW_BRANCH = 61;
+  PROOF_WORKSPACE_GIT_ACTION_CHECKOUT_NEW_BRANCH_FROM = 62;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_PUSH = 63;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_PUSH_MESSAGE = 64;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_POP = 65;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_POP_REF = 66;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_APPLY = 67;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_APPLY_REF = 68;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_LIST = 69;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_DROP = 70;
+  PROOF_WORKSPACE_GIT_ACTION_STASH_DROP_REF = 71;
+  PROOF_WORKSPACE_GIT_ACTION_INIT = 72;
+  PROOF_WORKSPACE_GIT_ACTION_REMOTE_ADD = 73;
+  PROOF_WORKSPACE_GIT_ACTION_WORKTREE_ADD_NEW_BRANCH_AT = 74;
 }
 
 message ProofWorkspaceGitResult {
@@ -32,6 +118,8 @@ message ProofWorkspaceGitResult {
   string stderr = 3;
   // Additive: an ambiguous mutation outcome is explicit instead of inferred from a missing exit.
   ProofWorkspaceGitOutcome outcome = 4;
+  // COMMIT_FILE_DIFF only: stdout was cut at max_output_bytes.
+  bool stdout_truncated = 5;
 }
 
 enum ProofWorkspaceGitOutcome {

@@ -13,7 +13,8 @@ import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { showGitCommitCopyMenu } from "./GitPanel.copy";
 import { formatGitCommitAuthorNames, GitPanelAuthors } from "./GitPanelAuthors";
-import { GitPatchViewer } from "./GitPatchViewer";
+import { GitPanelCommitChanges } from "./GitPanelCommitChanges";
+import type { CommitSelectionSource } from "./GitPanelHistory.selection";
 import { GitPanelSplitView } from "./GitPanelSplitView";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -27,7 +28,7 @@ interface GitPanelHistoryProps {
   isLoadingHistory: boolean;
   isLoadingMoreHistory: boolean;
   onLoadMoreHistory: () => Promise<unknown>;
-  onSelectCommit: (sha: string) => void;
+  onSelectCommit: (sha: string, source: CommitSelectionSource) => void;
   selectedCommitSummary: GitCommitSummary | null;
   selectedCommitSha: string | null;
   /** The repository folder commit patch paths are relative to. */
@@ -131,11 +132,12 @@ export function GitPanelHistory({
       resizeAriaLabel="Resize git history list"
       sidebar={
         <div>
-          {history.map((commit) => {
+          {history.map((commit, index) => {
             const isSelected = commit.sha === selectedCommitSha;
             return (
               <div
                 key={commit.sha}
+                data-commit-sha={commit.sha}
                 role="button"
                 tabIndex={0}
                 className={cn(
@@ -144,7 +146,13 @@ export function GitPanelHistory({
                     ? "bg-accent text-accent-foreground"
                     : "text-foreground hover:bg-accent/40",
                 )}
-                onClick={() => onSelectCommit(commit.sha)}
+                onClick={() => onSelectCommit(commit.sha, "pointer")}
+                onFocus={(event) => {
+                  // Tabbing into a row selects it like arrow keys (debounced details).
+                  if (!isSelected && event.currentTarget.matches(":focus-visible")) {
+                    onSelectCommit(commit.sha, "keyboard");
+                  }
+                }}
                 onContextMenu={(event) => {
                   event.preventDefault();
                   void showGitCommitCopyMenu({
@@ -155,8 +163,22 @@ export function GitPanelHistory({
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    onSelectCommit(commit.sha);
+                    onSelectCommit(commit.sha, "pointer");
+                    return;
                   }
+                  const next =
+                    event.key === "ArrowDown"
+                      ? history[index + 1]
+                      : event.key === "ArrowUp"
+                        ? history[index - 1]
+                        : undefined;
+                  if (!next) return;
+                  event.preventDefault();
+                  onSelectCommit(next.sha, "keyboard");
+                  const row = event.currentTarget.parentElement?.querySelector<HTMLElement>(
+                    `[data-commit-sha="${next.sha}"]`,
+                  );
+                  row?.focus();
                 }}
               >
                 <span className="truncate text-sm font-medium">{commit.subject}</span>
@@ -261,9 +283,10 @@ export function GitPanelHistory({
               aria-orientation="horizontal"
               onPointerDown={handleDetailResizePointerDown}
             />
-            <GitPatchViewer
-              emptyLabel="No patch available for this commit."
-              patch={commitDetails.diff}
+            <GitPanelCommitChanges
+              key={commitDetails.sha}
+              cwd={workspaceRoot}
+              commit={commitDetails}
               workspaceRoot={workspaceRoot}
               executionTargetId={executionTargetId}
             />

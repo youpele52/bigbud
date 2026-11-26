@@ -129,7 +129,7 @@ fn run() -> RunResult<()> {
 
 #[cfg(unix)]
 fn main() -> ExitCode {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if let Some(result) = transport::posix_master::maybe_run_password_helper() {
         return result;
     }

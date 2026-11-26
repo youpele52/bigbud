@@ -111,3 +111,28 @@ fn fixture_keeps_its_startup_root_and_an_unrooted_fixture_denies() {
     let unrooted = fixture.transport(None, false);
     assert_eq!(root_authority(&unrooted, other), None);
 }
+
+/// W7: workspace-mode reservation names the request's own root in production
+/// (re-resolved on the host); it is refused before any launch without a pin,
+/// and an unrooted fixture still denies every root.
+#[test]
+fn production_workspace_mode_admits_the_request_root_before_trust() {
+    let fixture = Fixture::new();
+    let production = fixture.transport(None, true);
+    assert_eq!(
+        production.inspect_workspace_mode("/home/dev/project"),
+        Err(ErrorCode::TrustRequired)
+    );
+    for root in ["/", "relative", "/a/../b"] {
+        assert_eq!(
+            production.inspect_workspace_mode(root),
+            Err(ErrorCode::WorkspacePathDenied),
+            "{root:?}"
+        );
+    }
+    let unrooted = fixture.transport(None, false);
+    assert_eq!(
+        unrooted.inspect_workspace_mode("/home/dev/project"),
+        Err(ErrorCode::WorkspacePathDenied)
+    );
+}

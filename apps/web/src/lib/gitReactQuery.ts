@@ -3,6 +3,7 @@ import {
   resolveExecutionTargetId,
   type ExecutionTargetId,
   type GitGetCommitDetailsInput,
+  type GitGetCommitFileDiffInput,
   type GitReadWorkingTreeDiffInput,
 } from "@bigbud/contracts";
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
@@ -42,6 +43,21 @@ export const gitQueryKeys = {
     executionTargetId: ExecutionTargetId | null | undefined,
     commit: string | null,
   ) => ["git", "commit-details", resolveExecutionTargetId(executionTargetId), cwd, commit] as const,
+  commitFileDiff: (
+    input: Pick<GitGetCommitFileDiffInput, "cwd" | "commit" | "path" | "oldPath" | "limit"> & {
+      readonly executionTargetId?: ExecutionTargetId | null | undefined;
+    },
+  ) =>
+    [
+      "git",
+      "commit-file-diff",
+      resolveExecutionTargetId(input.executionTargetId),
+      input.cwd,
+      input.commit,
+      input.path,
+      input.oldPath ?? null,
+      input.limit ?? "default",
+    ] as const,
   workingTreeDiff: (
     cwd: string | null,
     executionTargetId: ExecutionTargetId | null | undefined,
@@ -230,6 +246,21 @@ export function gitCommitDetailsQueryOptions(
       return api.git.getCommitDetails(input);
     },
     enabled: Boolean(input.cwd && input.commit) && (input.enabled ?? true),
+    staleTime: GIT_HISTORY_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
+}
+
+/** One file of one commit, fetched only when the user selects that file. */
+export function gitCommitFileDiffQueryOptions(
+  input: GitGetCommitFileDiffInput & { enabled?: boolean },
+) {
+  const { enabled, ...request } = input;
+  return queryOptions({
+    queryKey: gitQueryKeys.commitFileDiff(request),
+    queryFn: async () => ensureNativeApi().git.getCommitFileDiff(request),
+    enabled: Boolean(request.cwd && request.commit && request.path) && (enabled ?? true),
     staleTime: GIT_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,

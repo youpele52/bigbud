@@ -22,6 +22,9 @@ const MAX_COMMAND: usize = 64 * 1024;
 /// `stderr` read the remote stdout and stderr independently.
 pub(crate) struct AgentIo {
     pub(crate) control: UnixStream,
+    /// The master's channel id for this session, from `SESSION_OPENED`. OpenSSH
+    /// names the session by this id (not the request id) in `EXIT_MESSAGE`.
+    pub(crate) session: u32,
     pub(crate) input: PipeWriter,
     pub(crate) output: PipeReader,
     pub(crate) stderr: PipeReader,
@@ -95,12 +98,13 @@ pub(crate) fn open(
     let mut reply = [0; 16];
     let mut channel = &control;
     probe::read_with(&mut channel, &mut reply, deadline, None)?;
-    let [reply_length, kind, request, _session] = words(&reply);
+    let [reply_length, kind, request, session] = words(&reply);
     if (reply_length, kind, request) != (12, SESSION_OPENED, REQUEST_ID) {
         return Err(LOST);
     }
     Ok(AgentIo {
         control,
+        session,
         input,
         output,
         stderr,
@@ -114,10 +118,13 @@ pub(crate) fn read_exit(
     control: &mut UnixStream,
     packet: &mut [u8; 16],
     used: &mut usize,
+    session: u32,
 ) -> Result<Option<RemoteExit>, ErrorCode> {
     if *used == packet.len() {
-        let [length, kind, request, _status] = words(packet);
-        if (length, kind, request) != (12, EXIT_MESSAGE, REQUEST_ID) {
+        // `EXIT_MESSAGE` carries the session's channel id; the id depends on how
+        // many channels the master still holds, so it is never assumed.
+        let [length, kind, exited, _status] = words(packet);
+        if (length, kind, exited) != (12, EXIT_MESSAGE, session) {
             return Err(LOST);
         }
         let status: [u8; 4] = packet
@@ -136,5 +143,57 @@ pub(crate) fn read_exit(
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(None),
         Err(error) if error.kind() == io::ErrorKind::Interrupted => Ok(None),
         Err(_) => Err(LOST),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn exit_packet(session: u32, status: i32) -> Vec<u8> {
+        [12, EXIT_MESSAGE, session]
+            .into_iter()
+            .flat_map(u32::to_be_bytes)
+            .chain(status.to_be_bytes())
+            .collect()
+    }
+
+    fn read(bytes: &[u8], session: u32) -> Result<Option<RemoteExit>, ErrorCode> {
+        let (mut ours, mut theirs) = UnixStream::pair().map_err(|_| LOST)?;
+        theirs.write_all(bytes).map_err(|_| LOST)?;
+        let mut packet = [0; 16];
+        let mut used = 0;
+        while used < packet.len() {
+            if read_exit(&mut ours, &mut packet, &mut used, session)?.is_some() {
+                return Err(ErrorCode::InvalidOperands);
+            }
+        }
+        read_exit(&mut ours, &mut packet, &mut used, session)
+    }
+
+    /// Regression: OpenSSH names the session by its master channel id in
+    /// `EXIT_MESSAGE`, which is not the request id and varies with how many
+    /// channels the master still holds. Matching the request id made
+    /// back-to-back sessions fail as `transportLost` whenever the id was not 2.
+    #[test]
+    fn exit_message_matches_the_opened_session_channel_id() {
+        for session in [2, 3, 7] {
+            assert_eq!(
+                read(&exit_packet(session, 0), session),
+                Ok(Some(RemoteExit {
+                    code: Some(0),
+                    signal: None
+                }))
+            );
+        }
+        assert_eq!(read(&exit_packet(REQUEST_ID, 0), 5), Err(LOST));
+        assert_eq!(
+            read(&exit_packet(4, -9), 4),
+            Ok(Some(RemoteExit {
+                code: None,
+                signal: Some(9)
+            }))
+        );
     }
 }

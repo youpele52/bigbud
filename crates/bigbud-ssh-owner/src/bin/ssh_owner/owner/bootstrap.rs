@@ -310,7 +310,6 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         stage,
         deployment_operation: None,
         guarded_write,
-        workspace_mode_observation: None,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         workspace_readiness_fixture,
         #[cfg(any(target_os = "macos", target_os = "linux"))]

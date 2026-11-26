@@ -50,6 +50,9 @@ impl Owner {
             Operation::ListTerminalShells(_) => {
                 self.list_terminal_shells().map(Outcome::TerminalShells)
             }
+            Operation::SampleSystemStatus(_) => {
+                self.sample_system_status().map(Outcome::SystemStatusSample)
+            }
             _ => Err(ErrorCode::OperationDenied),
         }
     }

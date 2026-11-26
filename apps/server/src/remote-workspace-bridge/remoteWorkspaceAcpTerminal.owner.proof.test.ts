@@ -5,7 +5,6 @@ import { expect, it, vi } from "vitest";
 
 import { makePickerProofTerminalClient } from "../ssh/sshOwnerPickerProof.client.terminal.ts";
 import type { Outcome } from "../ssh/sshOwnerPickerProof.codec.outcome.ts";
-import type { ProofTerminalOperation } from "../ssh/sshOwnerPickerProof.codec.terminal.ts";
 import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.codec.wire.ts";
 import { makeAcpTerminalCwdProofObserver } from "./remoteWorkspaceAcpTerminal.owner.proof.ts";
 import type { AcpOwnerCommand } from "./remoteWorkspaceAcpTerminal.owner.ts";
@@ -28,7 +27,7 @@ const approved = {
 } satisfies AcpOwnerCommand;
 
 function fixture(beforeAdmission?: Promise<void>) {
-  const execute = vi.fn<(operation: ProofTerminalOperation) => Promise<Outcome>>();
+  const execute = vi.fn<Parameters<typeof makePickerProofTerminalClient>[0]>();
   execute.mockImplementation(async (operation) => {
     if (operation.kind !== "proofTerminalCwd") throw new Error("Unexpected native operation");
     return { kind: "proofTerminalCwd", value: operation.cwd };

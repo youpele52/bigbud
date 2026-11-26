@@ -305,6 +305,8 @@ fn valid_remote_cwd(cwd: &str) -> bool {
 mod dispatch;
 #[path = "terminal_inspect.rs"]
 mod inspect;
+#[path = "system_status.rs"]
+mod system_status;
 
 #[cfg(test)]
 #[path = "production_terminal_tests.rs"]

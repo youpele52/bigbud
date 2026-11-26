@@ -14,7 +14,29 @@ import {
   type DirectWorkspaceGitMutationOwner,
   type DirectWorkspaceGitPathReadOwner,
 } from "./GitCore.ssh.owner.mutation.ts";
+import { selectDiffRead, type DirectWorkspaceGitDiffReadOwner } from "./GitCore.ssh.owner.reads.ts";
+import {
+  selectTemplate,
+  type DirectWorkspaceGitTemplateOwner,
+} from "./GitCore.ssh.owner.templates.ts";
+import {
+  selectHistoryRead,
+  type DirectWorkspaceGitHistoryOwner,
+} from "./GitCore.ssh.owner.history.ts";
 
+export type {
+  DirectWorkspaceGitTemplateOwner,
+  DirectWorkspaceGitTemplateRequest,
+} from "./GitCore.ssh.owner.templates.ts";
+export type {
+  DirectWorkspaceGitHistoryOwner,
+  DirectWorkspaceGitHistoryRequest,
+} from "./GitCore.ssh.owner.history.ts";
+export type {
+  DirectWorkspaceGitDiffReadAction,
+  DirectWorkspaceGitDiffReadOwner,
+  DirectWorkspaceGitDiffReadRequest,
+} from "./GitCore.ssh.owner.reads.ts";
 export type {
   DirectWorkspaceGitMutationAction,
   DirectWorkspaceGitMutationOwner,
@@ -103,6 +125,12 @@ export interface DirectWorkspaceGitOwner {
   readonly mutation?: DirectWorkspaceGitMutationOwner;
   /** Optional fixed single-path read used for bounded untracked line counts. */
   readonly pathRead?: DirectWorkspaceGitPathReadOwner;
+  /** Optional fixed diff-panel and branch-list reads (C06, B). */
+  readonly diffRead?: DirectWorkspaceGitDiffReadOwner;
+  /** Optional History panel reads (B). */
+  readonly history?: DirectWorkspaceGitHistoryOwner;
+  /** Optional branch, checkout, commit, worktree and range recipes (B). */
+  readonly template?: DirectWorkspaceGitTemplateOwner;
 }
 
 function exactArgs(actual: readonly string[], expected: readonly string[]): boolean {
@@ -187,6 +215,25 @@ export function executeOwnedWorkspaceGit(
   const mutation = action === undefined ? selectMutation(input) : undefined;
   const pathRead =
     action === undefined && mutation === undefined ? selectPathRead(input) : undefined;
+  const diffRead =
+    action === undefined && mutation === undefined && pathRead === undefined
+      ? selectDiffRead(input)
+      : undefined;
+  const diffReadOwner = owner.diffRead;
+  const history =
+    action === undefined && mutation === undefined && pathRead === undefined && !diffRead
+      ? selectHistoryRead(input)
+      : undefined;
+  const historyOwner = owner.history;
+  const template =
+    action === undefined &&
+    mutation === undefined &&
+    pathRead === undefined &&
+    !diffRead &&
+    history === undefined
+      ? selectTemplate(input)
+      : undefined;
+  const templateOwner = owner.template;
   const statusMetadata = owner.statusMetadata;
   const mutationOwner = owner.mutation;
   const pathReadOwner = owner.pathRead;
@@ -206,6 +253,20 @@ export function executeOwnedWorkspaceGit(
           cwd,
           path: pathRead.path,
         },
+        signal,
+      );
+  } else if (template !== undefined && templateOwner !== undefined) {
+    execute = (signal) =>
+      templateOwner.execute(
+        { action: template.action, operands: template.operands, executionTargetId, cwd },
+        signal,
+      );
+  } else if (history !== undefined && historyOwner !== undefined) {
+    execute = (signal) => historyOwner.execute({ ...history, executionTargetId, cwd }, signal);
+  } else if (diffRead !== undefined && diffReadOwner !== undefined) {
+    execute = (signal) =>
+      diffReadOwner.execute(
+        { action: diffRead.action, executionTargetId, cwd, paths: diffRead.paths },
         signal,
       );
   } else if (mutation !== undefined && mutationOwner !== undefined) {
@@ -239,7 +300,11 @@ export function executeOwnedWorkspaceGit(
         : fail("The direct workspace Git owner could not complete the request.", cause),
   }).pipe(
     Effect.flatMap((result) => {
-      if (result.stdoutTruncated || result.stderrTruncated) {
+      // Only the per-file commit diff reports a cut instead of failing (typed "too large").
+      const capped =
+        (history?.action === "commitFileDiff" || template?.capped === true) &&
+        !result.stderrTruncated;
+      if (!capped && (result.stdoutTruncated || result.stderrTruncated)) {
         return Effect.fail(fail("The direct workspace Git owner exceeded the output limit."));
       }
       if (!Number.isInteger(result.code) || result.code < 0 || result.code >= 255) {

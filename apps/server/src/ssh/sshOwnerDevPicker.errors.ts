@@ -1,5 +1,6 @@
 import { ServerListRemoteFoldersError } from "@bigbud/contracts/server/server.remoteFolders";
 
+import { SshTargetAuthRequiredError } from "./sshTargetUnavailable.ts";
 import {
   PickerProofStartupConfigError,
   PickerProofStartupRetirementError,
@@ -28,6 +29,11 @@ const ownerMessages: Partial<Record<PickerProofOwnerErrorCode, string>> = {
   ownerRetirementUnverified:
     "The previous SSH owner's process could not be verified. Stop bigbud and inspect the retirement record; use the explicit recovery command only when the recorded process is provably gone or its PID is provably reused.",
   windowsPasswordUnsupported: "Use an SSH key for this host.",
+  credentialRequired:
+    "This SSH target needs its password or key passphrase. Enter it in the app before retrying.",
+  credentialRejected: "The SSH password or key passphrase was not accepted.",
+  credentialAttemptsExhausted:
+    "Too many incorrect SSH password or passphrase attempts. Disconnect and reconnect the target before trying again.",
   sessionQuota:
     "The SSH server reached its session limit. Close another SSH session for this host and retry.",
   transportLost:
@@ -92,6 +98,8 @@ function jumpFailureMessage(
 }
 
 export function ownerFailure(error: unknown) {
+  // The typed in-app credential prompt keeps its text and auth mode for the web.
+  if (error instanceof SshTargetAuthRequiredError) return error;
   if (error instanceof PickerProofOwnerError) {
     const message =
       ownerMessages[error.code] ?? "The development SSH owner rejected this operation.";

@@ -118,7 +118,27 @@ export function makeRemoteWorkspaceReadinessProbe(
   };
 }
 
-export const probeRemoteWorkspaceReadiness = makeRemoteWorkspaceReadinessProbe();
+const probeRemoteAgentWorkspaceReadiness = makeRemoteWorkspaceReadinessProbe();
+
+/**
+ * Default readiness. A direct SSH workspace asks the production owner's typed readiness
+ * verb (loaded lazily, so a local-only graph never loads the owner client); a remote-agent
+ * workspace keeps its agent tool runner. Neither launches a TypeScript SSH process.
+ */
+export const probeRemoteWorkspaceReadiness: RemoteWorkspaceReadinessProbe = async (
+  workspaceTarget,
+) => {
+  if (
+    workspaceTarget.location === "remote" &&
+    workspaceTarget.executionTargetId.startsWith("ssh:") &&
+    !isRemoteAgentExecutionTarget(workspaceTarget.executionTargetId)
+  ) {
+    const { probeProductionWorkspaceReadiness } =
+      await import("./remoteWorkspaceReadiness.production.ts");
+    return probeProductionWorkspaceReadiness(workspaceTarget);
+  }
+  return probeRemoteAgentWorkspaceReadiness(workspaceTarget);
+};
 
 /** A selected caller supplies its admitted owner capability, never a shell runner. */
 export async function probeSelectedSshOwnerWorkspaceReadiness(

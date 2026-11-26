@@ -6,6 +6,7 @@ import { makeGitStatusOps } from "./GitStatus.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
 import { makeGitWorktreeOps } from "./GitWorktree.ts";
 import { makeGitHistoryOps } from "./GitHistory.ts";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 
 /** Cache target-specific operation bundles without capturing a mutable runtime selection. */
 export const makeRemoteGitOps = Effect.fn("makeRemoteGitOps")(function* (
@@ -23,7 +24,10 @@ export const makeRemoteGitOps = Effect.fn("makeRemoteGitOps")(function* (
             executionTargetId: input.executionTargetId ?? executionTargetId,
           }),
         );
-        const statusOps = yield* makeGitStatusOps(helpers, path, "target");
+        // Direct SSH targets run through the owner's fixed recipes (C06, B).
+        const statusOps = yield* makeGitStatusOps(helpers, path, "target", undefined, {
+          boundedUntrackedCounts: !isRemoteAgentExecutionTarget(executionTargetId),
+        });
         return {
           statusOps,
           branchOps: makeGitBranchOps(helpers, statusOps),

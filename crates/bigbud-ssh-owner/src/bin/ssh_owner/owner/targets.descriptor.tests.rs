@@ -110,12 +110,42 @@ fn refuses_descriptor_bounds_and_unsupported_auth_modes() {
         &fixture.trust,
         &[],
     );
+    // In-app password (v1.credential.proto): a structured POSIX target is
+    // admitted and marked; an alias password target stays unsupported policy.
     let mut password = base.clone();
     password.auth_mode = TargetAuthMode::Password as i32;
+    #[cfg(unix)]
+    assert!(Descriptor::parse(&password).unwrap().password);
+    // A password target may name no identity at all; a key target may not.
+    let mut keyless = password.clone();
+    keyless.identity_reference = String::new();
+    #[cfg(unix)]
+    assert!(
+        Descriptor::parse(&keyless)
+            .unwrap()
+            .identity
+            .as_os_str()
+            .is_empty()
+    );
+    let mut keyless_key = base.clone();
+    keyless_key.identity_reference = String::new();
+    assert_eq!(
+        Descriptor::parse(&keyless_key).err(),
+        Some(ErrorCode::InvalidOperands)
+    );
+    #[cfg(windows)]
     assert_eq!(
         Descriptor::parse(&password).err(),
+        Some(ErrorCode::WindowsPasswordUnsupported)
+    );
+    let mut alias_password = password.clone();
+    alias_password.kind = TargetKind::Alias as i32;
+    #[cfg(unix)]
+    assert_eq!(
+        Descriptor::parse(&alias_password).err(),
         Some(ErrorCode::ConfigUnsupported)
     );
+    assert!(!Descriptor::parse(&base).unwrap().password);
     for malformed in [
         "-bad.example",
         "bad-.example",
@@ -195,18 +225,18 @@ fn unsupported_target_policy_is_refused_before_any_dial_and_other_targets_surviv
     let slot = registry.take("ssh:host=good").unwrap();
     assert_eq!(slot.transport.as_ref().unwrap().host(), "127.0.0.1");
     registry.restore(slot);
-    // A password mode is unsupported policy, not a credential prompt.
-    let mut password = descriptor(
-        "ssh:host=pw",
+    // Agent mode stays unsupported policy, not a credential prompt.
+    let mut agent = descriptor(
+        "ssh:host=agent",
         "127.0.0.1",
         2222,
         &fixture.identity,
         &fixture.trust,
         &[],
     );
-    password.auth_mode = TargetAuthMode::Password as i32;
+    agent.auth_mode = TargetAuthMode::Agent as i32;
     assert_eq!(
-        Descriptor::parse(&password).err(),
+        Descriptor::parse(&agent).err(),
         Some(ErrorCode::ConfigUnsupported)
     );
 }

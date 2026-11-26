@@ -4,6 +4,7 @@ use std::fs;
 use std::os::unix::{fs::symlink, process::ExitStatusExt};
 use std::path::Path;
 use std::process::{Command, ExitStatus, Output};
+use std::time::Duration;
 
 pub(super) fn git(root: &Path, args: &[&str]) -> Output {
     git_with(root, args, &[])
@@ -46,7 +47,7 @@ pub(super) fn local_with(
     paths: &[String],
 ) -> Result<ProofWorkspaceGitResult, ErrorCode> {
     let mut cmd = Command::new("/bin/sh");
-    let remote = recipe.command(root.to_str().unwrap(), paths);
+    let remote = recipe.command(root.to_str().unwrap(), paths, History::default(), false);
     // Exercise the same shell recipe without OpenSSH or ambient Git settings.
     cmd.args([
         "-c",

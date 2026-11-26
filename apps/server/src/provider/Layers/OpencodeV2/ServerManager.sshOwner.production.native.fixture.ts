@@ -283,9 +283,10 @@ export async function withProductionV2Owner<A>(
       targets[0] = alias.target;
       aliasConfig = alias.config;
     }
-    const owner = fileURLToPath(
-      new URL("../../../../../../target/debug/bigbud-ssh-owner", import.meta.url),
-    );
+    // BIGBUD_TEST_SSH_OWNER_BIN: an owner built elsewhere (for example a clean snapshot tree).
+    const owner =
+      process.env.BIGBUD_TEST_SSH_OWNER_BIN ??
+      fileURLToPath(new URL("../../../../../../target/debug/bigbud-ssh-owner", import.meta.url));
     const facts = resolveSshOwnerLaunchFacts({
       stateDirectory: fixture.stateDirectory,
       opencodeV2Service: options.binding ?? { binaryPath },

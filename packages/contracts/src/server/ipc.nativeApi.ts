@@ -156,6 +156,9 @@ export interface NativeApi {
     getCommitDetails: (
       input: Git.GitGetCommitDetailsInput,
     ) => Promise<Git.GitGetCommitDetailsResult>;
+    getCommitFileDiff: (
+      input: Git.GitGetCommitFileDiffInput,
+    ) => Promise<Git.GitGetCommitFileDiffResult>;
     readWorkingTreeDiff: (
       input: Git.GitReadWorkingTreeDiffInput,
     ) => Promise<Git.GitReadWorkingTreeDiffResult>;

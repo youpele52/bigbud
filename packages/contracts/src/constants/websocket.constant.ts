@@ -64,6 +64,7 @@ export const WS_METHODS = {
   gitListBranches: "git.listBranches",
   gitListCommits: "git.listCommits",
   gitGetCommitDetails: "git.getCommitDetails",
+  gitGetCommitFileDiff: "git.getCommitFileDiff",
   gitReadWorkingTreeDiff: "git.readWorkingTreeDiff",
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",

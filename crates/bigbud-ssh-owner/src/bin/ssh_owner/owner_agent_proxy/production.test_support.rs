@@ -19,6 +19,9 @@ use std::{
 
 const SESSION_OPENED: u32 = 0x8000_0006;
 const EXIT_MESSAGE: u32 = 0x8000_0004;
+/// The master channel id OpenSSH reports in `SESSION_OPENED` and names again in
+/// `EXIT_MESSAGE` (never the request id).
+const SESSION_ID: u32 = 173;
 const REQUEST_ID: u32 = 2;
 const LIMIT: Duration = Duration::from_secs(2);
 
@@ -38,7 +41,7 @@ impl RemoteChannels {
         }
         let _ = self
             .control
-            .write_all(&packet(EXIT_MESSAGE, REQUEST_ID, code));
+            .write_all(&packet(EXIT_MESSAGE, SESSION_ID, code));
         self.exited = true;
     }
 }
@@ -138,7 +141,7 @@ fn serve(mut server: UnixStream, command: &str, peer: impl FnOnce(RemoteChannels
     let stdout = File::from(receive_fd(&server));
     let stderr = File::from(receive_fd(&server));
     server
-        .write_all(&packet(SESSION_OPENED, REQUEST_ID, 173))
+        .write_all(&packet(SESSION_OPENED, REQUEST_ID, SESSION_ID))
         .expect("session opened");
     peer(RemoteChannels {
         stdin,

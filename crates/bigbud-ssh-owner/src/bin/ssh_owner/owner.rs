@@ -8,6 +8,8 @@ mod agent_proxy_lease;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod backend;
 mod bootstrap;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod credential;
 mod deployment_operation;
 mod dispatch;
 mod git_receive;
@@ -56,7 +58,7 @@ mod tracked_push;
 mod transfer_fixture;
 #[cfg(target_os = "linux")]
 pub(super) use tracked_push::Startup as TrackedPushStartup;
-mod workspace_mode;
+pub(crate) mod workspace_mode;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod workspace_readiness;
 pub(crate) use bootstrap::bootstrap;
@@ -143,7 +145,7 @@ impl Owner {
         self.trust.revoke();
         self.lanes.preparation = None;
         self.targets.clear_preparations();
-        self.workspace_mode_observation = None;
+        self.lanes.workspace_mode = None;
     }
 
     pub(super) fn rebind<R: Read, W: Write>(&mut self, pipe: &mut Pipe<R, W>) -> RunResult<()> {

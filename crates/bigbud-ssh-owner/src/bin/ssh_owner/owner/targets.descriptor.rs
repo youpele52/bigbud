@@ -38,6 +38,9 @@ pub(crate) struct Descriptor {
     pub(crate) trust: PathBuf,
     /// Explicit known-hosts name; `None` uses the host's own label.
     pub(crate) host_key_alias: Option<String>,
+    /// Password authentication entered in the app (v1.credential.proto). The
+    /// identity still binds the descriptor; the password master never offers it.
+    pub(crate) password: bool,
     generation: Vec<u8>,
     digest: [u8; 32],
 }
@@ -81,19 +84,30 @@ impl Descriptor {
         if port == 0 {
             return Err(ErrorCode::InvalidOperands);
         }
-        let identity = literal_path(&wire.identity_reference)?;
-        let trust = literal_path(&wire.trust_reference)?;
-        if identity == trust {
-            return Err(ErrorCode::InvalidOperands);
-        }
-        // v1 admits key mode only. Agent and password are typed unsupported
-        // policy, never a partial admission or a credential prompt.
-        match wire.auth_mode() {
-            TargetAuthMode::Key => {}
+        // Key mode, or (POSIX owners, structured targets) a password entered in
+        // the app. U3: Windows stays key-only, refused before any credential
+        // UI. Agent mode stays typed unsupported policy.
+        let password = match wire.auth_mode() {
+            TargetAuthMode::Key => false,
             TargetAuthMode::Unspecified => return Err(ErrorCode::InvalidOperands),
+            TargetAuthMode::Password if cfg!(windows) => {
+                return Err(ErrorCode::WindowsPasswordUnsupported);
+            }
+            TargetAuthMode::Password if kind == Kind::Structured => true,
             TargetAuthMode::Agent | TargetAuthMode::Password => {
                 return Err(ErrorCode::ConfigUnsupported);
             }
+        };
+        // A password target may name no identity: its master offers only the
+        // password, so an empty reference binds no key file.
+        let identity = if password && wire.identity_reference.is_empty() {
+            PathBuf::new()
+        } else {
+            literal_path(&wire.identity_reference)?
+        };
+        let trust = literal_path(&wire.trust_reference)?;
+        if identity == trust {
+            return Err(ErrorCode::InvalidOperands);
         }
         let digest = digest(wire);
         Ok(Self {
@@ -105,6 +119,7 @@ impl Descriptor {
             identity,
             trust,
             host_key_alias,
+            password,
             generation: wire.generation.clone(),
             digest,
         })

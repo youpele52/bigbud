@@ -171,6 +171,8 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.gitListCommits](input)),
       getCommitDetails: (input) =>
         transport.request((client) => client[WS_METHODS.gitGetCommitDetails](input)),
+      getCommitFileDiff: (input) =>
+        transport.request((client) => client[WS_METHODS.gitGetCommitFileDiff](input)),
       readWorkingTreeDiff: (input) =>
         transport.request((client) => client[WS_METHODS.gitReadWorkingTreeDiff](input)),
       onStatus: (input, listener) =>

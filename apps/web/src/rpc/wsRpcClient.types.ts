@@ -210,6 +210,7 @@ export interface WsRpcClient {
     readonly getCommitDetails: (
       input: GitGetCommitDetailsInput,
     ) => Promise<GitGetCommitDetailsResult>;
+    readonly getCommitFileDiff: RpcUnaryMethod<typeof WS_METHODS.gitGetCommitFileDiff>;
     readonly readWorkingTreeDiff: (
       input: GitReadWorkingTreeDiffInput,
     ) => Promise<GitReadWorkingTreeDiffResult>;

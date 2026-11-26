@@ -68,6 +68,9 @@ impl PosixMasterSlot {
         deadline: Instant,
         allocate: impl FnOnce() -> Result<PrivatePaths, ErrorCode>,
     ) -> Result<(), ErrorCode> {
+        // A credential target's master opens only through the in-app unlock
+        // (v1.credential.proto); a key-mode master would fail authentication.
+        transport.credential_route()?;
         let ready_by = deadline.min(Instant::now() + READY_LIMIT);
         let mut command = self.prepare_with(
             transport,

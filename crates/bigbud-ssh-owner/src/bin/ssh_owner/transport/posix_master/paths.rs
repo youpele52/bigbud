@@ -124,7 +124,7 @@ impl PrivatePaths {
         Ok(())
     }
 
-    #[cfg(any(test, target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) fn askpass_path(&self) -> Result<PathBuf, ErrorCode> {
         self.check_directory()?;
         Ok(self.directory.join("a"))

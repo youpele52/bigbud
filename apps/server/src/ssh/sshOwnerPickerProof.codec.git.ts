@@ -6,6 +6,7 @@ import {
   uintValue,
 } from "./sshOwnerPickerProof.codec.wire.ts";
 import { writeWorkspaceRoot } from "./sshOwnerPickerProof.codec.workspace.ts";
+import { TEMPLATE_ACTION_TAGS } from "../git/Layers/GitCore.ssh.owner.templates.ts";
 
 const STATUS_MAX_OUTPUT_BYTES = 1_000_000;
 const PROBE_MAX_OUTPUT_BYTES = 4_096;
@@ -24,6 +25,23 @@ const actionTags = {
   cleanUntrackedPaths: 10,
   stagePaths: 11,
   untrackedNumstat: 12,
+  // C06 (B) production diff-panel and branch-list reads.
+  diffStatus: 13,
+  hasHead: 14,
+  diffAgainstHead: 15,
+  diffStaged: 16,
+  diffUnstaged: 17,
+  untrackedFileDiff: 18,
+  localBranches: 19,
+  // History panel (B).
+  commitLog: 20,
+  upstreamRef: 21,
+  unpushedShas: 22,
+  commitSummary: 23,
+  commitNumstat: 24,
+  commitFileDiff: 25,
+  // Branch, checkout, commit, worktree and range templates (B), 26-59.
+  ...TEMPLATE_ACTION_TAGS,
 } as const;
 
 export type PickerProofWorkspaceGitAction = keyof typeof actionTags;
@@ -35,6 +53,13 @@ interface WorkspaceGitOperands {
   readonly workspaceRoot: string;
   readonly action: PickerProofWorkspaceGitAction;
   readonly paths?: ReadonlyArray<string>;
+  /** History recipes only; the owner validates each against its action. */
+  readonly revision?: string;
+  readonly limit?: number;
+  readonly skip?: number;
+  readonly maxOutputBytes?: number;
+  /** Template actions only: typed slot values in order. */
+  readonly operands?: ReadonlyArray<string>;
 }
 
 export interface PickerProofWorkspaceGitInput extends WorkspaceGitOperands {
@@ -56,6 +81,8 @@ export interface PickerProofWorkspaceGitResult {
   readonly stdout: string;
   readonly stderr: string;
   readonly outcome?: PickerProofWorkspaceGitOutcome;
+  /** `commitFileDiff` only: stdout was cut at the requested cap. */
+  readonly stdoutTruncated?: boolean;
 }
 
 function isSafeRelativePath(path: string): boolean {
@@ -74,6 +101,21 @@ export function writeWorkspaceGit(writer: WireWriter, operation: ProofWorkspaceG
   writeWorkspaceRoot(writer, operation);
   writer.fieldUint(2, tag);
   for (const path of paths) writer.fieldString(3, path);
+  const { revision, limit, skip, maxOutputBytes } = operation;
+  for (const value of [limit, skip, maxOutputBytes]) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0 || value > 1_000_000))
+      throw new PickerProofOwnerError("invalidOperands");
+  }
+  if (revision !== undefined && (revision.length === 0 || revision.length > 255))
+    throw new PickerProofOwnerError("invalidOperands");
+  if (revision !== undefined) writer.fieldString(4, revision);
+  if (limit) writer.fieldUint(5, limit);
+  if (skip) writer.fieldUint(6, skip);
+  if (maxOutputBytes) writer.fieldUint(7, maxOutputBytes);
+  const operands = operation.operands ?? [];
+  if (operands.length > 202 || operands.some((value) => value.length > 65_536))
+    throw new PickerProofOwnerError("invalidOperands");
+  for (const value of operands) writer.fieldString(8, value);
 }
 
 function decodeOutput(bytes: Uint8Array): string {
@@ -90,6 +132,7 @@ export function readWorkspaceGitResult(bytes: Uint8Array): PickerProofWorkspaceG
   let stdout: string | undefined;
   let stderr: string | undefined;
   let outcome: PickerProofWorkspaceGitOutcome | undefined;
+  let stdoutTruncated: boolean | undefined;
   decodeMessage(bytes, (field, wire, reader) => {
     if (field === 1) {
       if (code !== undefined) return invalid();
@@ -107,6 +150,9 @@ export function readWorkspaceGitResult(bytes: Uint8Array): PickerProofWorkspaceG
       const value = uintValue(wire, reader);
       if (value > 3) return invalid();
       outcome = (["unspecified", "exited", "cancelled", "outcomeUnknown"] as const)[value];
+    } else if (field === 5) {
+      if (stdoutTruncated !== undefined) return invalid();
+      stdoutTruncated = uintValue(wire, reader) === 1;
     } else reader.skip(wire);
   });
   // A mutation may report an ambiguous outcome without an ordinary exit code.
@@ -118,6 +164,7 @@ export function readWorkspaceGitResult(bytes: Uint8Array): PickerProofWorkspaceG
     stdout: stdout ?? "",
     stderr: stderr ?? "",
     ...(outcome !== undefined ? { outcome } : {}),
+    ...(stdoutTruncated ? { stdoutTruncated } : {}),
   };
 }
 

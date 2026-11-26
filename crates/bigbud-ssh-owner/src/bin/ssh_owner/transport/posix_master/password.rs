@@ -3,19 +3,23 @@
 
 mod askpass;
 mod process;
+mod production;
 #[cfg(test)]
 mod tests;
 
 #[cfg(target_os = "linux")]
 use super::paths;
+#[cfg(any(test, target_os = "linux"))]
 use super::{
     CHECK_LIMIT, ErrorCode, Folders, LOST, Master, PosixMasterSlot, PrivatePaths, READY_LIMIT,
     Transport, UNAVAILABLE, pause, session,
 };
+#[cfg(any(test, target_os = "linux"))]
 use crate::Token;
+#[cfg(any(test, target_os = "linux"))]
 use std::{net::Ipv4Addr, path::Path, time::Instant};
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(in super::super::super) use askpass::maybe_run_password_helper;
 
 const AUTH_OPTIONS: &[&str] = &[
@@ -77,6 +81,7 @@ impl Drop for Secret<'_> {
     }
 }
 
+#[cfg(any(test, target_os = "linux"))]
 impl PosixMasterSlot {
     /// Requires explicit approval by the startup-bound disposable picker lane.
     /// The passed bytes are always wiped (including refusal and early failure).
@@ -148,6 +153,7 @@ impl PosixMasterSlot {
     }
 }
 
+#[cfg(any(test, target_os = "linux"))]
 fn await_password(
     master: &mut Master,
     transport: &Transport,
@@ -182,6 +188,7 @@ fn await_password(
     Err(LOST)
 }
 
+#[cfg(any(test, target_os = "linux"))]
 fn fixture_root(transport: &Transport) -> Result<&Path, ErrorCode> {
     let config = &transport.config;
     let unsupported = ErrorCode::ConfigUnsupported;
@@ -217,6 +224,7 @@ fn fixture_root(transport: &Transport) -> Result<&Path, ErrorCode> {
     Ok(root)
 }
 
+#[cfg(any(test, target_os = "linux"))]
 pub(super) fn validate_target(transport: &Transport) -> Result<(), ErrorCode> {
     let root = fixture_root(transport)?;
     #[cfg(target_os = "linux")]

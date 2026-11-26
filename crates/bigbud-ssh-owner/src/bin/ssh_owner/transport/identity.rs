@@ -31,6 +31,11 @@ impl IdentityFiles {
             .map(Self)
     }
 
+    /// The first `-i` path, as OpenSSH names it in a passphrase prompt.
+    pub(super) fn first_path(&self) -> Option<&Path> {
+        self.0.first().map(|identity| identity.path.as_path())
+    }
+
     pub(super) fn apply_to(&self, ssh: &mut Command) -> Result<(), ErrorCode> {
         for identity in &self.0 {
             identity.revalidate()?;

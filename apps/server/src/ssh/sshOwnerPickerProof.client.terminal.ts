@@ -5,6 +5,7 @@ import type {
   PickerProofTerminalReplay,
   ProofTerminalOperation,
 } from "./sshOwnerPickerProof.codec.terminal.ts";
+import type { SystemStatusOperation } from "./sshOwnerPickerProof.codec.systemStatus.ts";
 import type { TerminalProcessSnapshot } from "./sshOwnerPickerProof.codec.terminalOutcome.ts";
 import {
   invalid,
@@ -39,6 +40,8 @@ export interface PickerProofTerminalClient {
   inspectTerminal(lease: Uint8Array): Promise<TerminalProcessSnapshot>;
   /** U16 (production): absolute shells from the target's `/etc/shells`. */
   listTerminalShells(): Promise<ReadonlyArray<string>>;
+  /** W7 (production): one fixed read-only stats sample over the target's master. */
+  sampleSystemStatus(): Promise<string>;
 }
 
 function copyLease(lease: Uint8Array) {
@@ -47,7 +50,7 @@ function copyLease(lease: Uint8Array) {
 }
 
 export function makePickerProofTerminalClient(
-  execute: (operation: ProofTerminalOperation) => Promise<Outcome>,
+  execute: (operation: ProofTerminalOperation | SystemStatusOperation) => Promise<Outcome>,
   copyEpochAndGeneration: () => Omit<PickerProofTerminalReservation, "lease">,
 ): PickerProofTerminalClient {
   const terminal = async (operation: ProofTerminalOperation) => {
@@ -113,6 +116,10 @@ export function makePickerProofTerminalClient(
     async listTerminalShells() {
       const outcome = await execute({ kind: "listTerminalShells" });
       return outcome.kind === "terminalShells" ? outcome.value : invalid();
+    },
+    async sampleSystemStatus() {
+      const outcome = await execute({ kind: "sampleSystemStatus" });
+      return outcome.kind === "systemStatusSample" ? outcome.value : invalid();
     },
   };
 }

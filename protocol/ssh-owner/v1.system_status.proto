@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package bigbud.ssh_owner.v1;
+
+// W7 remote system stats (Request 180 `sample_system_status` / Reply 101).
+//
+// The owner runs one fixed, read-only recipe as a mux session over the exact
+// target's verified production master: kernel and user-visible metadata only
+// (`uname`, `/proc/stat`, `/proc/meminfo`, `/proc/uptime`, `df -Pk`,
+// `/proc/net/dev`, a bounded `ps`, thermal zones). No command, argv, path or
+// environment is ever sent; the request has no operands. Output and time are
+// owner-bounded, and nothing on the target is created or modified.
+//
+// Sequencing, fan-out to subscribers and rate derivation stay in the consumer
+// (the reserved `subscribe_status` name is not allocated by this verb).
+message SampleSystemStatus {}
+
+// Reply 101: the recipe's sectioned text (`###NAME###` markers: OS, HOST,
+// ARCH, KERNEL, CPU, MEM, UPTIME, DF, NET, PROCESS, TEMP, END), at most
+// 512 KiB, decoded lossily as UTF-8. A sample without the END marker is
+// incomplete and must not be presented as live.
+message SystemStatusSample {
+  string sections = 1;
+}

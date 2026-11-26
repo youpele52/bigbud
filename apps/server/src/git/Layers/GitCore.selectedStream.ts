@@ -19,7 +19,14 @@ import {
   type InitiatingFetchOperands,
 } from "./GitCore.initiatingTransport.ts";
 
+// With BIGBUD_GIT_STREAM_EXPECT set (`gh pr checkout`), the shim bridges only that exact remote
+// command; any other SSH remote Git dials fails here instead of reaching this lease.
 const SHIM_SOURCE = `const { connect } = require("node:net");
+const expected = process.env.BIGBUD_GIT_STREAM_EXPECT;
+if (expected !== undefined && process.argv[process.argv.length - 1] !== expected) {
+  process.stderr.write("bigbud: this SSH remote is not served by the owner Git stream\\n");
+  process.exit(1);
+}
 const socket = connect(process.env.BIGBUD_GIT_STREAM_SOCKET);
 socket.on("error", () => process.exit(1));
 socket.on("end", () => process.stdin.pause());

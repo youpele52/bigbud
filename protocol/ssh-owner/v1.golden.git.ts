@@ -1,10 +1,12 @@
 import type { Message } from "./v1.golden.codec.ts";
+import { workspaceGitProductionCases } from "./v1.golden.workspaceGitProduction.ts";
 
 type Frame = (tag: number, body: Message) => Message;
 
 export function workspaceGitCases(request: Frame, reply: Frame): Record<string, Message> {
   const root = "/tmp/bigbud-picker-linux-Fixture/client";
   return {
+    ...workspaceGitProductionCases(request),
     proof_git_tracked_push: request(49, [
       [
         1,

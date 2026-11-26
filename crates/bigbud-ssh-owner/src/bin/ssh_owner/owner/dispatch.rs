@@ -219,6 +219,17 @@ impl Owner {
             | Operation::AgentProxyLeaseOpen(_)
             | Operation::AgentProxyLeaseStatus(_)
             | Operation::AgentProxyLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            // In-app password and key passphrase (owner/credential.rs).
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            operation @ (Operation::InspectCredential(_)
+            | Operation::CredentialUnlockOpen(_)
+            | Operation::CredentialUnlockCommit(_)
+            | Operation::CredentialLock(_)) => Ok(self.execute_credential(operation)),
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            Operation::InspectCredential(_)
+            | Operation::CredentialUnlockOpen(_)
+            | Operation::CredentialUnlockCommit(_)
+            | Operation::CredentialLock(_) => Ok(Err(ErrorCode::OperationDenied)),
             // W2 T-prov production provider leases (owner/provider_lease.rs).
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             operation @ (Operation::ProbeProvider(_)
@@ -308,7 +319,8 @@ impl Owner {
             | Operation::TerminalInput(_)
             | Operation::TerminalResize(_)
             | Operation::TerminalInspect(_)
-            | Operation::ListTerminalShells(_)) => Ok(self.dispatch_terminal(operation)),
+            | Operation::ListTerminalShells(_)
+            | Operation::SampleSystemStatus(_)) => Ok(self.dispatch_terminal(operation)),
             Operation::ProofRunThreadShell(operand) => Ok(transport!()
                 .run_thread_shell(&operand)
                 .map(Outcome::ProofThreadShell)),

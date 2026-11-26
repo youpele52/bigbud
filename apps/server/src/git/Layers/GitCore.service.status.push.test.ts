@@ -85,7 +85,9 @@ it.layer(TestLayer)("git integration", (it) => {
         }),
     );
 
-    it.effect("skips push when no upstream is configured and branch is not ahead of base", () =>
+    // B: a push is routed by its destination (pushRoute) before any ahead/upstream shortcut,
+    // so a repository with no remote is refused typed instead of reported as up to date.
+    it.effect("refuses push with a typed error when no remote is configured", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
         yield* initRepoWithCommit(tmp);
@@ -94,10 +96,9 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* core.createBranch({ cwd: tmp, branch: "feature/no-upstream-no-ahead" });
         yield* core.checkoutBranch({ cwd: tmp, branch: "feature/no-upstream-no-ahead" });
 
-        const pushed = yield* core.pushCurrentBranch(tmp, null);
-        expect(pushed.status).toBe("skipped_up_to_date");
-        expect(pushed.branch).toBe("feature/no-upstream-no-ahead");
-        expect(pushed.setUpstream).toBeUndefined();
+        const error = yield* Effect.flip(core.pushCurrentBranch(tmp, null));
+        expect(error).toMatchObject({ _tag: "GitCommandError" });
+        expect(error.message).toContain("no git remote is configured");
       }),
     );
 

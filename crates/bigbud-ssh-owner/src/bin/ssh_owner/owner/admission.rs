@@ -234,12 +234,18 @@ fn production_verb(operation: &Operation) -> bool {
     let providers = super::provider_lease::production_verb(operation);
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let providers = false;
+    // In-app password and key passphrase (v1.credential.proto), per target.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let credential = super::credential::production_verb(operation);
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    let credential = false;
     // U24: owner-wide peer enrollment and relay.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let peer = super::peer_store::owner_wide_verb(operation);
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let peer = false;
     peer || agent
+        || credential
         || opencode
         || git_upload
         || shell

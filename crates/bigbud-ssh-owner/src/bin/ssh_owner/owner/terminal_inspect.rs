@@ -77,7 +77,11 @@ impl Owner {
         })
     }
 
-    fn run_on_master(&mut self, command: &str, limit: usize) -> Result<Vec<u8>, ErrorCode> {
+    pub(super) fn run_on_master(
+        &mut self,
+        command: &str,
+        limit: usize,
+    ) -> Result<Vec<u8>, ErrorCode> {
         let transport = super::super::present(&self.transport)?;
         let generation = self.generation;
         let picker = self
@@ -95,6 +99,7 @@ impl Owner {
 fn collect(io: AgentIo, deadline: Instant, limit: usize) -> Result<Vec<u8>, ErrorCode> {
     let AgentIo {
         mut control,
+        session,
         input,
         mut output,
         stderr,
@@ -127,7 +132,7 @@ fn collect(io: AgentIo, deadline: Instant, limit: usize) -> Result<Vec<u8>, Erro
     let mut packet = [0; 16];
     let mut used = 0;
     loop {
-        if let Some(exit) = read_exit(&mut control, &mut packet, &mut used)? {
+        if let Some(exit) = read_exit(&mut control, &mut packet, &mut used, session)? {
             return if exit.code == Some(0) {
                 Ok(bytes)
             } else {

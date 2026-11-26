@@ -17,8 +17,8 @@
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 
 export const RESERVED_TRANSFER_VERBS = [
-  { wire: "proof_transfer_stream", production: "transferStream", field: 74 },
-  { wire: "proof_packaged_rsync", production: "packagedRsync", field: 75 },
+  { wire: "transfer_stream", production: "transferStream", field: 74 },
+  { wire: "packaged_rsync", production: "packagedRsync", field: 75 },
 ] as const;
 
 export const RESERVED_TRANSFER_OUTCOMES = [

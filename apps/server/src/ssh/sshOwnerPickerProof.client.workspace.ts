@@ -360,13 +360,8 @@ export function makePickerProofWorkspaceClient(
     },
     async executeProofWorkspaceGit(input) {
       requireTarget(input);
-      const { workspaceRoot, action, paths } = input;
-      const outcome = await execute({
-        kind: "proofWorkspaceGit",
-        workspaceRoot,
-        action,
-        ...(paths !== undefined ? { paths } : {}),
-      });
+      const { executionTargetId: _target, ...operands } = input;
+      const outcome = await execute({ kind: "proofWorkspaceGit", ...operands });
       return outcome.kind === "proofWorkspaceGit" ? outcome.value : invalid();
     },
   };

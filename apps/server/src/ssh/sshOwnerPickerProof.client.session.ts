@@ -24,6 +24,7 @@ import { makePickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.clien
 import { makePickerProofAliasClient } from "./sshOwnerPickerProof.client.aliases.ts";
 import type { ProofAgentProxyOperation } from "./sshOwnerPickerProof.codec.agentProxy.ts";
 import { invalid as invalidProtocol } from "./sshOwnerPickerProof.codec.wire.ts";
+import { credentialPromptFor } from "./sshOwnerPickerProof.client.credentialPrompt.ts";
 import type { PickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
 import { makePickerProofDeploymentClient } from "./sshOwnerPickerProof.deployment.ts";
 import { makeProofTrackedGitClient } from "./sshOwnerPickerProof.client.trackedPush.ts";
@@ -225,6 +226,10 @@ export async function openPickerProofSession(
       activeKind = operation.kind;
       try {
         return await current;
+      } catch (error) {
+        active = undefined;
+        // A credential target without its unlocked master: the typed in-app prompt.
+        throw await credentialPromptFor(error, operation, state.targetId, (op) => runBound(op));
       } finally {
         active = undefined;
         activeKind = undefined;

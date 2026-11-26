@@ -11,6 +11,14 @@ use super::{
 use crate::v1::ErrorCode;
 
 impl Transport {
+    /// A master's own pinned command: always a direct connection that
+    /// authenticates itself, never routed over another master.
+    pub(super) fn pinned_master_ssh(&self, tty: &str) -> Result<PinnedSsh, ErrorCode> {
+        let pin = self.pin()?.ok_or(ErrorCode::TrustRequired)?;
+        self.require_direct_route()?;
+        self.build_ssh_with_route(tty, None, false, &pin, HostVerification::Ed25519Key, true)
+    }
+
     pub(super) fn build_ssh_for_pin(
         &self,
         tty: &str,
@@ -19,6 +27,26 @@ impl Transport {
         pin: &trust_store::Pin,
         verification: HostVerification,
     ) -> Result<PinnedSsh, ErrorCode> {
+        self.build_ssh_with_route(tty, timers, fixed_forward, pin, verification, false)
+    }
+
+    /// `direct` is only for a master's own command. Every other command of a
+    /// credential target multiplexes over its unlocked master, or is refused
+    /// typed (`credential_required`) before any SSH process starts.
+    pub(super) fn build_ssh_with_route(
+        &self,
+        tty: &str,
+        timers: Option<&SshTimers>,
+        fixed_forward: bool,
+        pin: &trust_store::Pin,
+        verification: HostVerification,
+        direct: bool,
+    ) -> Result<PinnedSsh, ErrorCode> {
+        let mux = if direct {
+            None
+        } else {
+            self.credential_route()?
+        };
         // OpenSSH sees only this operation's exact trust record. The real
         // handshake validates it before user auth, with no algorithm fallback.
         let snapshot = trust_store::Snapshot::new(&self.config.known_hosts, pin)?;
@@ -51,12 +79,19 @@ impl Transport {
         for option in AUTH_METHOD_OPTIONS {
             ssh.args(["-o", option]);
         }
+        // A credential target's unlocked master carries this command; the
+        // client never authenticates on its own and never becomes a master.
+        let mut control_path = std::ffi::OsString::from("ControlPath=");
+        match &mux {
+            Some(path) => control_path.push(path),
+            None => control_path.push("none"),
+        }
+        ssh.arg("-o").arg(control_path);
         for option in [
             "ProxyCommand=none",
             "ProxyJump=none",
             "CanonicalizeHostname=no",
             "ControlMaster=no",
-            "ControlPath=none",
             "ControlPersist=no",
             "PermitLocalCommand=no",
             if fixed_forward {

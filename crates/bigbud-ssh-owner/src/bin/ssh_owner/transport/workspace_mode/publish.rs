@@ -26,10 +26,7 @@ impl Transport {
     ) -> Result<Publication, ErrorCode> {
         let deadline = Instant::now() + TIMEOUT;
         let remote = command(
-            self.config
-                .workspace_root
-                .as_deref()
-                .and_then(configured_root),
+            super::super::workspace::root_authority(self, requested_root).and_then(configured_root),
             requested_root,
             observed,
             next_record,

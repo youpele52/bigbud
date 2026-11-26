@@ -194,6 +194,12 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
       observeRpcEffect(WS_METHODS.gitGetCommitDetails, context.git.getCommitDetails(input), {
         "rpc.aggregate": "git",
       }),
+    [WS_METHODS.gitGetCommitFileDiff]: (
+      input: Parameters<WsRpcContext["git"]["getCommitFileDiff"]>[0],
+    ) =>
+      observeRpcEffect(WS_METHODS.gitGetCommitFileDiff, context.git.getCommitFileDiff(input), {
+        "rpc.aggregate": "git",
+      }),
     [WS_METHODS.gitReadWorkingTreeDiff]: (
       input: Parameters<WsRpcContext["git"]["readWorkingTreeDiff"]>[0],
     ) =>

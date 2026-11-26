@@ -166,6 +166,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 workspace_root: "/fixture/root".into(),
                 action: action.into(),
                 paths: Vec::new(),
+                ..Default::default()
             })),
         );
     }
@@ -208,6 +209,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 workspace_root: "/tmp/bigbud-picker-linux-Fixture/client".into(),
                 action: action.into(),
                 paths,
+                ..Default::default()
             })),
         );
     }
@@ -223,6 +225,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 stdout: stdout.into(),
                 stderr: stderr.into(),
                 outcome: 0,
+                ..Default::default()
             })),
         );
     }
@@ -244,6 +247,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
                 stdout: String::new(),
                 stderr: String::new(),
                 outcome: outcome as i32,
+                ..Default::default()
             })),
         );
     }

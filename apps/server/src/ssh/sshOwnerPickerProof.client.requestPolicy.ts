@@ -1,3 +1,4 @@
+import { isTemplateMutation } from "../git/Layers/GitCore.ssh.owner.templates.ts";
 import type { PickerProofOperation } from "./sshOwnerPickerProof.codec.ts";
 
 export function proofRequestPolicy(operation: PickerProofOperation) {
@@ -27,6 +28,8 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "gitReceiveClose" ||
     operation.kind === "providerLeaseOpen" ||
     operation.kind === "providerLeaseClose" ||
+    operation.kind === "credentialUnlockCommit" ||
+    operation.kind === "credentialLock" ||
     operation.kind === "runThreadShell" ||
     operation.kind === "runProviderWorkspaceShell" ||
     operation.kind === "runAcpCommand" ||
@@ -72,6 +75,8 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "proofWorkspaceIndex" ||
     operation.kind === "proofWorkspaceContentSearch" ||
     operation.kind === "proofDeploymentHostProbe" ||
+    // The credential master's handshake (10 s ready bound) runs before the reply.
+    operation.kind === "credentialUnlockCommit" ||
     operation.kind === "proofDeploymentCompletion" ||
     operation.kind === "proofDeploymentAction" ||
     operation.kind === "proofRunThreadShell" ||
@@ -102,7 +107,9 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
           ? deploymentReply
           : deploymentStage
             ? 65_000
-            : (grantTimeout ?? (longWorkspaceOperation ? "workspace" : undefined));
+            : operation.kind === "proofWorkspaceGit" && isTemplateMutation(operation.action)
+              ? 125_000
+              : (grantTimeout ?? (longWorkspaceOperation ? "workspace" : undefined));
   return { proofMutation, grantTimeout, replyTimeout } as const;
 }
 

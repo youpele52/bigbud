@@ -80,7 +80,6 @@ describe("GitPanel.copy", () => {
         body: "Body text",
         parents: [],
         files: [],
-        diff: "",
         tags: [],
       },
       body: "Body text",

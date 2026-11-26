@@ -257,7 +257,12 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(result.commit.authors).toEqual([{ name: "Test", email: "test@test.com" }]);
         expect(result.commit.tags).toEqual(["release-candidate", "v0.1.642-beta-1"]);
         expect(result.commit.files.some((file) => file.path === "history.txt")).toBe(true);
-        expect(result.commit.diff).toContain("diff --git a/history.txt b/history.txt");
+        const file = yield* (yield* GitCore).getCommitFileDiff({
+          cwd: tmp,
+          commit: sha,
+          path: "history.txt",
+        });
+        expect(file.diff).toContain("diff --git a/history.txt b/history.txt");
       }),
     );
 

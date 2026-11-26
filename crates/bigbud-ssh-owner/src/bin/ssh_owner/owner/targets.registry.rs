@@ -164,11 +164,7 @@ impl Registry {
                     match verified {
                         Ok(config) => {
                             if entry.transport.is_none() {
-                                let transport = Transport::new_with_facts(
-                                    config,
-                                    &RouteFacts::default().with_production(),
-                                )
-                                .map_err(|_| ErrorCode::ConfigUnsupported)?;
+                                let transport = production_transport(config, &descriptor)?;
                                 entry.transport = Some(transport);
                                 entry.storage = None;
                             }
@@ -196,11 +192,7 @@ impl Registry {
             return Err(ErrorCode::OwnerUnavailable);
         }
         let authority = authority.ok_or(ErrorCode::ConfigUnsupported)?;
-        let transport = Transport::new_with_facts(
-            authority.bind(&descriptor)?,
-            &RouteFacts::default().with_production(),
-        )
-        .map_err(|_| ErrorCode::ConfigUnsupported)?;
+        let transport = production_transport(authority.bind(&descriptor)?, &descriptor)?;
         let generation = random_token().map_err(|_| ErrorCode::OwnerUnavailable)?;
         let target_id = descriptor.target_id.clone();
         self.entries.insert(
@@ -320,4 +312,22 @@ impl Registry {
             entry.storage = None;
         }
     }
+}
+
+/// A production target's transport, carrying the descriptor's credential need
+/// (password mode; an encrypted identity is detected by the transport itself).
+fn production_transport(
+    config: crate::transport::TransportConfig,
+    descriptor: &Descriptor,
+) -> Result<Transport, ErrorCode> {
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut transport = Transport::new_with_facts(config, &RouteFacts::default().with_production())
+        .map_err(|_| ErrorCode::ConfigUnsupported)?;
+    #[cfg(unix)]
+    if descriptor.password {
+        transport.require_password_credential();
+    }
+    #[cfg(not(unix))]
+    let _ = descriptor;
+    Ok(transport)
 }

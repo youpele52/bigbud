@@ -91,7 +91,11 @@ export function validateTargetDescriptor(input: ProofTargetDescriptorInput): voi
     input.port < 1 ||
     input.port > 65_535 ||
     !USER_PATTERN.test(input.user) ||
-    !literalPath(input.identityFile) ||
+    // A password target may carry no identity (its master never offers a key).
+    !(
+      literalPath(input.identityFile) ||
+      (input.authMode === "password" && input.identityFile === "")
+    ) ||
     !literalPath(input.knownHostsFile) ||
     input.identityFile === input.knownHostsFile ||
     (input.hostKeyAlias !== undefined && !HOST_KEY_ALIAS.test(input.hostKeyAlias)) ||

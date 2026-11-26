@@ -106,8 +106,12 @@ export type GitCommitSummary = typeof GitCommitSummary.Type;
 
 export const GitCommitFileStat = Schema.Struct({
   path: TrimmedNonEmptyStringSchema,
+  /** Rename or copy source path, when Git detected one. */
+  oldPath: Schema.optional(TrimmedNonEmptyStringSchema),
   insertions: NonNegativeInt,
   deletions: NonNegativeInt,
+  /** Git reported the file as binary (no line counts). */
+  binary: Schema.optional(Schema.Boolean),
 });
 export type GitCommitFileStat = typeof GitCommitFileStat.Type;
 
@@ -126,8 +130,8 @@ export const GitCommitDetails = Schema.Struct({
   tags: Schema.Array(TrimmedNonEmptyStringSchema),
   body: Schema.String,
   parents: Schema.Array(TrimmedNonEmptyStringSchema),
+  /** Changed files only; each file's patch is loaded with `git.getCommitFileDiff`. */
   files: Schema.Array(GitCommitFileStat),
-  diff: Schema.String,
 });
 export type GitCommitDetails = typeof GitCommitDetails.Type;
 
@@ -135,6 +139,19 @@ export const GitGetCommitDetailsResult = Schema.Struct({
   commit: GitCommitDetails,
 });
 export type GitGetCommitDetailsResult = typeof GitGetCommitDetailsResult.Type;
+
+/** Per-file patch caps: a too-large file is a typed state, never a failed commit. */
+export const GIT_COMMIT_FILE_DIFF_LIMIT_BYTES = 256 * 1024;
+export const GIT_COMMIT_FILE_DIFF_LARGE_LIMIT_BYTES = 960 * 1024;
+
+export const GitGetCommitFileDiffResult = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  /** The patch, or null when it exceeded `limitBytes`. */
+  diff: Schema.NullOr(Schema.String),
+  tooLarge: Schema.Boolean,
+  limitBytes: NonNegativeInt,
+});
+export type GitGetCommitFileDiffResult = typeof GitGetCommitFileDiffResult.Type;
 
 export const GitReadWorkingTreeDiffResult = Schema.Struct({
   diff: Schema.String,

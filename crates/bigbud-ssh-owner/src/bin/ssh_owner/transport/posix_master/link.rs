@@ -69,7 +69,9 @@ impl PosixMasterSlot {
         if self.master.is_some() || forwarded && !auth_options.is_empty() {
             return Err(UNAVAILABLE);
         }
-        let password = !auth_options.is_empty();
+        // A production credential master serves the production list lane;
+        // only the disposable fixture keeps its password-only listing fence.
+        let password = !auth_options.is_empty() && !production;
         let executable = if production {
             launch::validate_production(transport)?
         } else {
@@ -113,6 +115,7 @@ impl PosixMasterSlot {
             binding,
             paths: path,
             child: None,
+            death_watch: None,
             connector: None,
             recovery: None,
             socket: None,
@@ -121,6 +124,7 @@ impl PosixMasterSlot {
             retirement: self.retirement.clone(),
             master_record: None,
             connector_record: None,
+            published: None,
         });
         Ok(command)
     }
@@ -163,7 +167,7 @@ impl TrustRead {
 
     pub(super) fn pinned(self, transport: &Transport) -> Result<PinnedSsh, ErrorCode> {
         match self {
-            Self::Default => transport.pinned_ssh("-T"),
+            Self::Default => transport.pinned_master_ssh("-T"),
             #[cfg(target_os = "macos")]
             Self::PlainFixture => {
                 let pin = self.pin(transport)?.ok_or(ErrorCode::TrustRequired)?;

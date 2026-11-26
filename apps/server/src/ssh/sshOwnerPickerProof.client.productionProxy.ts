@@ -25,6 +25,10 @@ import {
   type PickerProofProductionProviderClient,
 } from "./sshOwnerPickerProof.client.productionProvider.ts";
 import {
+  makePickerProofProductionCredentialClient,
+  type PickerProofProductionCredentialClient,
+} from "./sshOwnerPickerProof.client.productionCredential.ts";
+import {
   makePickerProofProductionGitReceiveClient,
   type PickerProofProductionGitReceiveClient,
 } from "./sshOwnerPickerProof.client.productionGitReceive.ts";
@@ -45,6 +49,7 @@ export interface PickerProofProductionProxyClient
     PickerProofProductionShellClient,
     PickerProofProductionProviderClient,
     PickerProofProductionGitReceiveClient,
+    PickerProofProductionCredentialClient,
     PickerProofProductionAgentControlClient {
   /** Open the target's owner-selected agent proxy over its verified master. */
   openAgentProxy(): Promise<ProofAgentProxyStatus>;
@@ -117,6 +122,8 @@ export function makePickerProofProductionProxyClient(
     ...makePickerProofProductionShellClient(queued),
     ...makePickerProofProductionProviderClient(queued),
     ...makePickerProofProductionGitReceiveClient(queued),
+    // In-app password and key passphrase (v1.credential.proto).
+    ...makePickerProofProductionCredentialClient(queued),
     // U25 remote-agent control leases poll their status, so they queue too.
     ...makePickerProofProductionAgentControlClient(queued),
     // An empty binding is the production request: the owner refuses it unless

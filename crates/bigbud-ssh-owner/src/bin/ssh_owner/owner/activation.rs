@@ -23,7 +23,9 @@ impl Owner {
             return Ok(());
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        let production_master = if self.production && self.lanes.master.is_none() {
+        // The state root is read before any slot is taken; whether a master
+        // lane is created is decided on the incoming target's own lanes below.
+        let production_master = if self.production {
             // Prepared before any slot is taken, so a missing state root cannot
             // strand a half-swapped target.
             Some(
@@ -66,8 +68,12 @@ impl Owner {
         };
         self.targets.suspend(previous);
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if let Some(root) = production_master {
-            // A production target gets its own master lane here. The control
+        if let Some(root) = production_master
+            && self.lanes.master.is_none()
+        {
+            // A production target gets its own master lane here, once. A
+            // resolved target re-entered for a later request keeps its live
+            // master (folder lists, agent sessions, a credential master). The control
             // path is allocated under the owner's private state root on first
             // list; no fixture root or pinned loopback target is involved.
             self.lanes.master = Some(super::posix_picker::MasterPicker::production(

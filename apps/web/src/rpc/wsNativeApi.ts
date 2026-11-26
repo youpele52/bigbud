@@ -135,6 +135,7 @@ export function createWsNativeApiContext({
       refreshStatus: rpcClient.git.refreshStatus,
       listCommits: rpcClient.git.listCommits,
       getCommitDetails: rpcClient.git.getCommitDetails,
+      getCommitFileDiff: rpcClient.git.getCommitFileDiff,
       readWorkingTreeDiff: rpcClient.git.readWorkingTreeDiff,
       onStatus: (input, callback) => rpcClient.git.onStatus(input, callback),
       listBranches: rpcClient.git.listBranches,

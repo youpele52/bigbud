@@ -34,6 +34,12 @@ const row = (
   workspaceRoot: "/fixture",
 });
 const id = (value: string) => value as ProjectId;
+// W7: reachability comes only from the owner's typed health sample.
+const health = {
+  sampleHealth: vi.fn<
+    (target: string, signal: AbortSignal) => Promise<"reachable" | "unreachable" | "unavailable">
+  >(async () => "reachable"),
+};
 
 function repository(
   saved: Record<string, ReturnType<typeof row>>,
@@ -62,6 +68,8 @@ afterEach(() => {
   forgetSshMonitorTarget(unverified);
   vi.mocked(sampleSshMonitor).mockReset();
   vi.mocked(runProcess).mockReset();
+  health.sampleHealth.mockReset();
+  health.sampleHealth.mockResolvedValue("reachable");
   vi.useRealTimers();
 });
 
@@ -138,11 +146,13 @@ describe("SSH monitor server authorization", () => {
     recordVerifiedSshMonitorTarget(target, clientA);
     for (const projectId of ["unknown", "deleted", "deleting", "offline", "malformed"])
       await expect(
-        Effect.runPromise(sampleSshMonitorEffect({ projectId: id(projectId) }, saved, clientA)),
+        Effect.runPromise(
+          sampleSshMonitorEffect({ projectId: id(projectId) }, saved, clientA, health),
+        ),
       ).rejects.toBeDefined();
     expect(sampleSshMonitor).not.toHaveBeenCalled();
     await expect(
-      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientA)),
+      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientA, health)),
     ).resolves.toEqual([]);
   });
 
@@ -156,7 +166,7 @@ describe("SSH monitor server authorization", () => {
     for (const projectId of ["first", "second"]) {
       const supplied = { projectId: id(projectId), executionTargetId: unverified };
       await expect(
-        Effect.runPromise(sampleSshMonitorEffect(supplied, saved, clientA)),
+        Effect.runPromise(sampleSshMonitorEffect(supplied, saved, clientA, health)),
       ).resolves.toContain("ready");
     }
     expect(sampleSshMonitor).toHaveBeenCalledTimes(2);
@@ -165,7 +175,7 @@ describe("SSH monitor server authorization", () => {
       target,
     ]);
     await expect(
-      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientA)),
+      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientA, health)),
     ).resolves.toEqual([
       { projectId: id("first"), name: "Production", target },
       { projectId: id("second"), name: "Production", target },
@@ -176,15 +186,15 @@ describe("SSH monitor server authorization", () => {
     const saved = repository({ first: row(target) });
     recordVerifiedSshMonitorTarget(target, clientA);
     await expect(
-      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientB)),
+      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientB, health)),
     ).resolves.toEqual([]);
     await expect(
-      Effect.runPromise(sampleSshMonitorEffect({ projectId: id("first") }, saved, clientB)),
+      Effect.runPromise(sampleSshMonitorEffect({ projectId: id("first") }, saved, clientB, health)),
     ).rejects.toBeDefined();
     expect(sampleSshMonitor).not.toHaveBeenCalled();
     recordVerifiedSshMonitorTarget(target, clientB);
     await expect(
-      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientB)),
+      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientB, health)),
     ).resolves.toEqual([{ projectId: id("first"), name: "Production", target }]);
   });
 
@@ -204,7 +214,7 @@ describe("SSH monitor server authorization", () => {
     };
     recordVerifiedSshMonitorTarget(target, clientA);
     await expect(
-      Effect.runPromise(listConnectedSshMonitorsEffect(projects, clientA)),
+      Effect.runPromise(listConnectedSshMonitorsEffect(projects, clientA, health)),
     ).resolves.toEqual([{ projectId: id("second"), name: "Beta", target }]);
   });
 
@@ -222,7 +232,7 @@ describe("SSH monitor server authorization", () => {
           }),
       );
       const result = Effect.runPromise(
-        sampleSshMonitorEffect({ projectId: id("first") }, projects, clientA),
+        sampleSshMonitorEffect({ projectId: id("first") }, projects, clientA, health),
       );
       await vi.waitFor(() => expect(finishSample).toBeDefined());
       if (change === "deleted") saved.first = row(target, "2026-01-02");
@@ -245,13 +255,13 @@ describe("SSH monitor server authorization", () => {
       summaryStatus: "ready",
       sampledAtMs: 1_000,
     } as Awaited<ReturnType<typeof sampleSshMonitor>>);
-    vi.mocked(runProcess).mockRejectedValue(new Error("temporary outage"));
+    health.sampleHealth.mockResolvedValue("unreachable");
     vi.setSystemTime(6_000);
     await expect(
-      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientA)),
+      Effect.runPromise(listConnectedSshMonitorsEffect(saved, clientA, health)),
     ).resolves.toEqual([]);
     await expect(
-      Effect.runPromise(sampleSshMonitorEffect({ projectId: id("first") }, saved, clientA)),
+      Effect.runPromise(sampleSshMonitorEffect({ projectId: id("first") }, saved, clientA, health)),
     ).rejects.toBeDefined();
     expect(sampleSshMonitor).not.toHaveBeenCalled();
   });

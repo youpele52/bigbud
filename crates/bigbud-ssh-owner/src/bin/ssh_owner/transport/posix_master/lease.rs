@@ -44,6 +44,24 @@ impl Master {
             }
             return Err(error);
         }
+        // A master that cannot be tied to the owner's lifetime is not started.
+        match super::owner_death::arm(child.id()) {
+            Ok(watch) => self.death_watch = Some(watch),
+            Err(_) => {
+                if child.kill().is_ok() && child.wait().is_ok() {
+                    if let (Some(retirement), Some(instance)) =
+                        (&self.retirement, &self.master_record)
+                    {
+                        let _ = retirement.clear(instance);
+                    }
+                    self.master_record = None;
+                } else {
+                    self.child = Some(child);
+                    self.closing = true;
+                }
+                return Err(UNAVAILABLE);
+            }
+        }
         self.child = Some(child);
         Ok(())
     }
@@ -133,7 +151,7 @@ impl Master {
         self.connect_with(transport, deadline, TrustRead::Default, None)
     }
 
-    #[cfg(any(test, target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(super) fn verify(&mut self, deadline: Instant) -> Result<UnixStream, ErrorCode> {
         self.verify_with(deadline, None)
     }
@@ -254,6 +272,9 @@ impl Master {
             }
         }
         self.child = None;
+        if let Some(watch) = self.death_watch.take() {
+            watch.disarm();
+        }
         if let Some(recovery) = &mut self.recovery {
             recovery.record_reap();
         }

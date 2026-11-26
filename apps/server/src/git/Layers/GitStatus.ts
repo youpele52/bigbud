@@ -46,6 +46,11 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
   path: Path.Path,
   lane: GitExecutionLane,
   trashOverride?: WorkspaceTrash,
+  /**
+   * Direct SSH targets (C06, B): count untracked lines through the owner's bounded single-path
+   * recipe instead of an unbounded per-path numstat the owner does not serve.
+   */
+  options?: { readonly boundedUntrackedCounts?: boolean },
 ) {
   const { executeGit, runGit, runGitStdout } = helpers;
   const initiatingTransportDisabled = () => isInitiatingGitTransportDisabled(lane);
@@ -73,8 +78,8 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     runGitStdout,
     originRemoteExists,
     computeAheadCountAgainstBase,
-    allowPathNumstat: () => true,
-    allowUntrackedCount: () => false,
+    allowPathNumstat: () => options?.boundedUntrackedCounts !== true,
+    allowUntrackedCount: () => options?.boundedUntrackedCounts === true,
   });
 
   const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {

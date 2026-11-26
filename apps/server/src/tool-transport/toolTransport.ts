@@ -88,6 +88,7 @@ export function runToolCommand(input: RunToolCommandInput): Promise<ProcessRunRe
 
   return runSshToolCommand({
     executionTargetId: input.target.executionTargetId,
+    ...(input.invocationId !== undefined ? { invocationId: input.invocationId } : {}),
     ...(input.signal ? { signal: input.signal } : {}),
     command: input.command,
     ...(input.args !== undefined ? { args: input.args } : {}),

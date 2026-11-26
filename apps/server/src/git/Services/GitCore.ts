@@ -19,6 +19,8 @@ import type {
   GitFetchResult,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
+  GitGetCommitFileDiffInput,
+  GitGetCommitFileDiffResult,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
@@ -259,11 +261,16 @@ export interface GitCoreShape {
   ) => Effect.Effect<GitListCommitsResult, GitCommandError>;
 
   /**
-   * Read commit metadata and patch details for a specific commit.
+   * Read commit metadata and the changed-file list for a specific commit.
    */
   readonly getCommitDetails: (
     input: GitGetCommitDetailsInput,
   ) => Effect.Effect<GitGetCommitDetailsResult, GitCommandError>;
+
+  /** One file's patch of one commit, capped per file (typed `tooLarge`, not an error). */
+  readonly getCommitFileDiff: (
+    input: GitGetCommitFileDiffInput,
+  ) => Effect.Effect<GitGetCommitFileDiffResult, GitCommandError>;
 
   /**
    * Read the current working tree patch, optionally scoped to a single file.

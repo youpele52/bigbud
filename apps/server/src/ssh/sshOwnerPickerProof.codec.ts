@@ -32,6 +32,11 @@ import {
 } from "./sshOwnerPickerProof.codec.opencode.ts";
 import { writeGitLease, type GitLeaseOperation } from "./sshOwnerPickerProof.codec.gitLease.ts";
 import {
+  isCredentialOperation,
+  writeCredential,
+  type CredentialOperation,
+} from "./sshOwnerPickerProof.codec.credential.ts";
+import {
   writeProviderLease,
   type ProviderLeaseOperation,
 } from "./sshOwnerPickerProof.codec.providerLease.ts";
@@ -150,6 +155,7 @@ export type PickerProofOperation =
   | ProofOpencodeOperation
   | GitLeaseOperation
   | ProviderLeaseOperation
+  | CredentialOperation
   | ShellLeaseOperation
   | BackendLeaseOperation
   | { readonly kind: "unlockSyntheticPosixPassword" }
@@ -387,7 +393,8 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
       case "proofInspectPeerHostKey":
         writeProofPeerEnrollment(writer, operands, operation);
         break;
-      default: // W2 T-backend deployment step and client relay leases (100-105).
-        writeBackendLease(writer, operation);
+      default: // W2 T-backend leases (100-105); in-app credentials (190-193).
+        if (isCredentialOperation(operation)) writeCredential(writer, operation);
+        else writeBackendLease(writer, operation);
     }
   });
