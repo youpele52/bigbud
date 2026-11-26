@@ -1,17 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
 
-vi.mock("../../ssh/sshProcess", () => ({
-  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
-    stdout: `\x1e${input.args[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  })),
-}));
 import { wslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { ShellProfileDiscoveryError } from "../Services/ShellProfiles";
 import { createManager, openInput, restartInput, waitFor } from "./Manager.test.helpers";

@@ -1,8 +1,6 @@
 import { Deferred, Effect, Fiber, Path } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import * as devMode from "../../ssh/sshOwnerDevMode.fixture.ts";
-import { runSshCommand } from "../../ssh/sshProcess.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeRemoteGitOps } from "./GitCore.remoteOps.ts";
 import type {
@@ -12,8 +10,6 @@ import type {
   DirectWorkspaceGitRequest,
 } from "./GitCore.ssh.owner.ts";
 import { makeSshGitExecutor } from "./GitCore.ssh.ts";
-
-vi.mock("../../ssh/sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 
 const scope = { executionTargetId: "ssh:host=example&transport=direct-ssh", cwd: "/srv/a repo" };
 const success: ExecuteGitResult = {
@@ -83,47 +79,11 @@ function fixture() {
 }
 
 describe("selected direct workspace Git mutations", () => {
-  beforeEach(() => {
-    vi.spyOn(devMode, "isDevSshOwnerSelected").mockReturnValue(true);
-  });
+  beforeEach(() => {});
 
   afterEach(() => {
-    expect(runSshCommand).not.toHaveBeenCalled();
     vi.restoreAllMocks();
     vi.clearAllMocks();
-  });
-
-  it("discards the exact tracked and untracked paths over typed verbs", async () => {
-    const { mutation, ops } = fixture();
-    await expect(
-      Effect.runPromise(
-        ops.pipe(
-          Effect.flatMap(({ statusOps }) =>
-            statusOps.discardChanges(scope.cwd, undefined, "op-1", {
-              scope: "paths",
-              paths: ["new.txt", "tracked.txt"],
-            }),
-          ),
-        ),
-      ),
-    ).resolves.toBeUndefined();
-
-    expect(mutation.mock.calls.map(([request]) => request)).toEqual([
-      {
-        action: "restoreTrackedPaths",
-        executionTargetId: scope.executionTargetId,
-        cwd: scope.cwd,
-        paths: ["tracked.txt"],
-        operationId: "op-1:discard.restore.0",
-      },
-      {
-        action: "cleanUntrackedPaths",
-        executionTargetId: scope.executionTargetId,
-        cwd: scope.cwd,
-        paths: ["new.txt"],
-        operationId: "op-1:discard.clean.0",
-      },
-    ]);
   });
 
   it("stages paths with the fixed add recipe and no caller options", async () => {

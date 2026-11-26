@@ -146,40 +146,4 @@ describe("production SSH owner profile derivation", () => {
       ).toEqual(derived);
     }
   });
-
-  it("accepts a fixture binding only for a gated dev build", async () => {
-    const directory = await stateDirectory();
-    const override = `bbso1:desktop-dev:${"b".repeat(64)}`;
-    const derived = deriveSshOwnerProfileBinding({
-      kind: "desktop-dev",
-      stateDirectory: directory,
-    });
-    expect(
-      deriveSshOwnerProfileBinding({
-        kind: "desktop-dev",
-        stateDirectory: directory,
-        environment: { [SSH_OWNER_PROFILE_BINDING_ENV]: override },
-        devFixtureGate: false,
-      }),
-    ).toEqual(derived);
-    const fixture = deriveSshOwnerProfileBinding({
-      kind: "desktop-dev",
-      stateDirectory: directory,
-      environment: { [SSH_OWNER_PROFILE_BINDING_ENV]: override },
-      devFixtureGate: true,
-    });
-    expect(fixture.digest).toEqual(Buffer.alloc(32, 0xbb));
-    expect(fixture.text).toBe(
-      encodeSshOwnerProfileBinding("desktop-dev", directory, fixture.digest),
-    );
-    // A gated packaged build still ignores the dev-only fixture value.
-    expect(
-      deriveSshOwnerProfileBinding({
-        kind: "desktop-packaged",
-        stateDirectory: directory,
-        environment: { [SSH_OWNER_PROFILE_BINDING_ENV]: override },
-        devFixtureGate: true,
-      }).digest,
-    ).not.toEqual(Buffer.alloc(32, 0xbb));
-  });
 });

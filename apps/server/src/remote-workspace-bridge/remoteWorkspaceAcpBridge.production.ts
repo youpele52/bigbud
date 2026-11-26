@@ -1,12 +1,9 @@
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
-
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import type { PickerProofBoundTarget } from "../ssh/sshOwnerPickerProof.client.session.types.ts";
 import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.codec.wire.ts";
 import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
 import { descriptorServesTarget } from "../ssh/sshOwnerProductionTargets.ts";
 import type { ProductionOwnerSource } from "../ssh/sshShellRunner.production.ts";
-import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import {
   makeAcpTerminalApprovalProducer,
@@ -34,13 +31,8 @@ export interface ProductionAcpWorkspace {
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
 
 /** True when this workspace must use the production owner bridge. */
-export function usesProductionAcpBridge(
-  target: WorkspaceTarget,
-  activation: boolean = SSH_OWNER_PRODUCTION_ACTIVATION,
-): boolean {
+export function usesProductionAcpBridge(target: WorkspaceTarget): boolean {
   return (
-    activation &&
-    !isSshOwnerDevFixtureSelected() &&
     target.location === "remote" &&
     target.executionTargetId.startsWith("ssh:") &&
     !isRemoteAgentExecutionTarget(target.executionTargetId)

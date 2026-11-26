@@ -1,10 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  discoverRemoteShellProfiles,
-  type RemoteShellDiscoveryDependencies,
-} from "./ShellProfiles.remote";
+import { discoverRemoteShellProfiles } from "./ShellProfiles.remote";
 import { remoteShellHost, RemoteShellDiscoveryError } from "./ShellProfiles.remote.identity";
 import { inventory, result } from "./ShellProfiles.remote.test.helpers";
 import {
@@ -18,10 +14,6 @@ const wsl = {
   executionTargetId: `wsl:${encodeURIComponent(identity.distribution)}`,
   wslIdentity: identity,
 };
-const discover = (dependencies: RemoteShellDiscoveryDependencies = {}) =>
-  discoverRemoteShellProfiles(ssh, dependencies);
-const failure = (dependencies: RemoteShellDiscoveryDependencies) =>
-  Effect.runPromise(discover(dependencies).pipe(Effect.flip));
 
 // These cases exercise legacy targets explicitly configured for direct SSH.
 beforeEach(() => vi.stubEnv("BIGBUD_REMOTE_AGENT_TRANSPORT", "direct-ssh"));
@@ -100,168 +92,16 @@ describe("remote shell host identity", () => {
     { ...ssh, wslIdentity: identity },
   ])("rejects unsupported or malformed identity %# without transport", async (input) => {
     expect(() => remoteShellHost(input)).toThrow(RemoteShellDiscoveryError);
-    const runSshCommand = vi.fn(async () => result());
     const runWslProcess = vi.fn(async () => result());
     const error = await Effect.runPromise(
-      discoverRemoteShellProfiles(input, { runSshCommand, runWslProcess }).pipe(Effect.flip),
+      discoverRemoteShellProfiles(input, { runWslProcess }).pipe(Effect.flip),
     );
     expect(error.reason).toBe("unsupported-target");
-    expect(runSshCommand).not.toHaveBeenCalled();
     expect(runWslProcess).not.toHaveBeenCalled();
   });
 });
 
 describe("bounded execution-host shell discovery", () => {
-  it("uses authenticated SSH helper with static source, strict bounds, signal and no workspace context", async () => {
-    const runSshCommand = vi.fn(async () => result());
-    const profiles = await Effect.runPromise(discover({ runSshCommand }));
-    expect(profiles[0]?.host).toEqual(remoteShellHost(ssh));
-    const invocation = runSshCommand.mock.calls[0] as unknown as [Record<string, unknown>];
-    expect(invocation[0]).toEqual({
-      executionTargetId: ssh.executionTargetId,
-      command: "/usr/bin/env",
-      args: [
-        "-i",
-        "PATH=/usr/bin:/bin",
-        "LC_ALL=C",
-        "/bin/sh",
-        "-c",
-        REMOTE_SHELL_PROBE_SCRIPT,
-        "sh",
-        "ssh",
-        "alice",
-      ],
-      signal: expect.any(AbortSignal),
-      allocateTty: false,
-      shellMode: "clean-posix",
-      allowNonZeroExit: true,
-      timeoutMs: 10000,
-      maxBufferBytes: REMOTE_SHELL_OUTPUT_BYTES,
-      outputMode: "error",
-    });
-  });
-
-  it("passes the legacy user as argv without interpolating shell-like account text", async () => {
-    const username = "alice'$(not-source)";
-    const runSshCommand = vi.fn(async () => result());
-    await Effect.runPromise(
-      discoverRemoteShellProfiles(
-        {
-          executionTargetId: `ssh:${username}@example.test`,
-        },
-        { runSshCommand },
-      ),
-    );
-    expect(runSshCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        args: [
-          "-i",
-          "PATH=/usr/bin:/bin",
-          "LC_ALL=C",
-          "/bin/sh",
-          "-c",
-          REMOTE_SHELL_PROBE_SCRIPT,
-          "sh",
-          "ssh",
-          username,
-        ],
-      }),
-    );
-    expect(REMOTE_SHELL_PROBE_SCRIPT).not.toContain(username);
-  });
-
-  it("keeps profile IDs host/account scoped with identical executables", async () => {
-    const dependencies = { runSshCommand: async () => result() };
-    const left = await Effect.runPromise(discover(dependencies));
-    const right = await Effect.runPromise(
-      discoverRemoteShellProfiles({ executionTargetId: "ssh:bob@example.test" }, dependencies),
-    );
-    expect(left[0]?.profileId).not.toBe(right[0]?.profileId);
-  });
-
-  it.each([
-    { code: 79 },
-    { code: null },
-    { signal: "SIGTERM" as const },
-    { stdoutTruncated: true },
-    { stderrTruncated: true },
-    { stdout: "startup noise\n" + inventory() },
-    { stdout: "" },
-    { stdout: inventory().slice(0, -1) },
-    { stdout: "x".repeat(REMOTE_SHELL_OUTPUT_BYTES + 1) },
-    { stderr: "x".repeat(REMOTE_SHELL_OUTPUT_BYTES + 1) },
-  ])("does not turn transport/protocol failure %# into empty success", async (overrides) => {
-    const error = await failure({ runSshCommand: async () => result(overrides) });
-    expect(error).toBeInstanceOf(RemoteShellDiscoveryError);
-    expect(error.reason).toBe("probe-failed");
-    expect(Object.keys(error)).not.toContain("stdout");
-  });
-
-  it("maps process timeout and trust/auth failures to bounded reasons only", async () => {
-    expect((await failure({ runSshCommand: async () => result({ timedOut: true }) })).reason).toBe(
-      "timed-out",
-    );
-    for (const message of [
-      "Process execution timed out.",
-      "private host key failure",
-      "private auth failure",
-    ]) {
-      const error = await failure({
-        runSshCommand: async () => {
-          throw new Error(message);
-        },
-      });
-      expect(error.reason).toBe(message.includes("timed out") ? "timed-out" : "probe-failed");
-      expect(JSON.stringify(error)).not.toContain("private");
-    }
-  });
-
-  it.each(["ssh", "wsl"])(
-    "enforces the overall %s deadline even if transport never settles",
-    async (kind) => {
-      vi.useFakeTimers();
-      let signal: AbortSignal | undefined;
-      const operation = discoverRemoteShellProfiles(kind === "ssh" ? ssh : wsl, {
-        platform: "win32",
-        runSshCommand: (input) => {
-          signal = input.signal;
-          return new Promise(() => {});
-        },
-        runWslProcess: (_args, options) => {
-          signal = options?.signal;
-          return new Promise(() => {});
-        },
-      });
-      const pending = Effect.runPromise(operation.pipe(Effect.flip));
-      await vi.advanceTimersByTimeAsync(10001);
-      expect((await pending).reason).toBe("timed-out");
-      expect(signal?.aborted).toBe(true);
-    },
-  );
-
-  it.each(["ssh", "wsl"])("forwards Effect interruption to the %s transport", async (kind) => {
-    let started!: (signal: AbortSignal) => void;
-    const ready = new Promise<AbortSignal>((resolve) => {
-      started = resolve;
-    });
-    const fiber = Effect.runFork(
-      discoverRemoteShellProfiles(kind === "ssh" ? ssh : wsl, {
-        platform: "win32",
-        runSshCommand: (input) => {
-          started(input.signal!);
-          return new Promise(() => {});
-        },
-        runWslProcess: (_args, options) => {
-          started(options!.signal!);
-          return new Promise(() => {});
-        },
-      }),
-    );
-    const signal = await ready;
-    await Effect.runPromise(Fiber.interrupt(fiber));
-    expect(signal.aborted).toBe(true);
-  });
-
   it("pins WSL distro, user, UID argv and clean environment; decodes guest UTF-8, never UTF-16", async () => {
     const runWslProcess = vi.fn(async () =>
       result({
@@ -297,35 +137,5 @@ describe("bounded execution-host shell discovery", () => {
         outputMode: "error",
       },
     );
-  });
-
-  it("fails WSL UID mismatch, malformed UTF-8 and non-Windows support without SSH fallback", async () => {
-    const runSshCommand = vi.fn(async () => result());
-    for (const response of [
-      result({ code: 79 }),
-      result({ stdout: "\xff" }),
-      result({ stdout: "\xef\xbb\xbf" + inventory() }),
-      result({ stdout: "\xff\xfe" + inventory() }),
-      result({ timedOut: true }),
-      result({ stdoutTruncated: true }),
-    ]) {
-      const error = await Effect.runPromise(
-        discoverRemoteShellProfiles(wsl, {
-          platform: "win32",
-          runWslProcess: async () => response,
-          runSshCommand,
-        }).pipe(Effect.flip),
-      );
-      expect(error.reason).toBe(response.timedOut ? "timed-out" : "probe-failed");
-    }
-    const runWslProcess = vi.fn(async () => result());
-    const error = await Effect.runPromise(
-      discoverRemoteShellProfiles(wsl, { platform: "darwin", runWslProcess, runSshCommand }).pipe(
-        Effect.flip,
-      ),
-    );
-    expect(error.reason).toBe("unsupported-target");
-    expect(runWslProcess).not.toHaveBeenCalled();
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 });

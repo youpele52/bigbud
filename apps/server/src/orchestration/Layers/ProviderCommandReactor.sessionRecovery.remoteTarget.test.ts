@@ -2,8 +2,10 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { ProviderAdapterProcessError } from "../../provider/Errors.ts";
-import { formatSshPasswordRequiredMessage } from "../../ssh/sshSession.ts";
-import { SshTargetAuthRequiredError } from "../../ssh/sshTargetUnavailable.ts";
+import {
+  buildSshPasswordRequiredMessage,
+  SshTargetAuthRequiredError,
+} from "../../ssh/sshTargetUnavailable.ts";
 import {
   createHarness,
   registerProviderCommandReactorTestCleanup,
@@ -25,11 +27,11 @@ const passwordRequired = () =>
     new ProviderAdapterProcessError({
       provider: "codex",
       threadId: THREAD,
-      detail: formatSshPasswordRequiredMessage(TARGET),
+      detail: buildSshPasswordRequiredMessage("ice-2-kg"),
       cause: new SshTargetAuthRequiredError(
         TARGET,
         "password",
-        formatSshPasswordRequiredMessage(TARGET),
+        buildSshPasswordRequiredMessage("ice-2-kg"),
       ),
     }),
   );

@@ -1,5 +1,3 @@
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
-
 import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.client.ts";
 import type { PickerProofWorkspaceClient } from "../ssh/sshOwnerPickerProof.client.workspace.ts";
 import {
@@ -103,19 +101,14 @@ export interface ProductionWorkspaceContext {
   readonly workspaceMutations: WorkspaceMutationsShape | undefined;
 }
 
-/**
- * Wraps the context's Files runtime and folder mutations with the production
- * owner when activation is on; otherwise returns `undefined` (no change).
- */
+/** Wraps the context's Files runtime and folder mutations with the production owner. */
 export const withWsSshOwnerProductionWorkspace = (
   context: ProductionWorkspaceContext,
   options: {
-    readonly activation?: boolean;
     readonly read?: ProductionOwnerRead;
     readonly journal?: ProductionGuardedWriteJournal;
   } = {},
 ) => {
-  if (!(options.activation ?? SSH_OWNER_PRODUCTION_ACTIVATION)) return undefined;
   const bindingFor = productionWorkspaceBindingFor(
     options.read ?? readSshOwnerProductionOwner,
     options.journal,

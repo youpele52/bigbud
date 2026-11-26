@@ -70,7 +70,7 @@ function setup(options: { live?: boolean; refuse?: boolean } = {}) {
   } as unknown as SshOwnerProductionRegistration;
   const composed = withWsSshOwnerProductionWorkspace(
     { workspaceRuntime: original, workspaceMutations: unsupportedWorkspaceMutations },
-    { activation: true, read: () => (options.live === false ? undefined : registration) },
+    { read: () => (options.live === false ? undefined : registration) },
   );
   if (!composed) throw new Error("Expected the production composition");
   const runtime = Effect.runSync(composed.workspaceRuntime.pipe(Effect.provide(pathsLayer)));
@@ -87,11 +87,6 @@ function setup(options: { live?: boolean; refuse?: boolean } = {}) {
 const flip = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.flip(effect));
 
 describe("production SSH Files over the live owner", () => {
-  it("stays unchanged when activation is off", () => {
-    const base = { workspaceRuntime: {} as WorkspaceRuntimeShape, workspaceMutations: undefined };
-    expect(withWsSshOwnerProductionWorkspace(base, { activation: false })).toBeUndefined();
-  });
-
   it("serves reads and lists through the exact target with the request's own root", async () => {
     const { runtime, bound, descriptorFor, target, fallback } = setup();
     const input = { executionTargetId: alias, cwd };

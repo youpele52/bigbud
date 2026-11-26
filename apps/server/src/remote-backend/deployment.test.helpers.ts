@@ -8,7 +8,7 @@ import {
   canonicalBackendGraphPayload,
   decodeBackendGraphManifest,
 } from "./backendGraph.manifest.ts";
-import { runBoundedProcess } from "./deployment.ssh.ts";
+import { runBoundedProcess } from "./deployment.process.ts";
 import { SSH_HOST_KEY_DIR } from "./deployment.remoteSetup.ts";
 import type {
   DeploymentGraphSource,

@@ -28,7 +28,6 @@ export const bootActivatedStartup = (root: string, options: { readonly ownerPres
     if (options.ownerPresent) yield* Effect.promise(() => writeFile(ownerPath, "owner"));
     const config = { mode: "remote", devUrl: undefined, stateDir: root } as const;
     yield* configureSshOwner(config, "file:///unused", {
-      activation: true,
       artifactOverride: {
         profile: "remote-backend",
         path: ownerPath,

@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DevSshOwnerRuntime } from "../../../ssh/sshOwnerDevRuntime.ts";
 import type { SshOwnerProductionRegistration } from "../../../ssh/sshOwnerProductionRegistry.ts";
 import type { SshOwnerTargetDescriptor } from "../../../ssh/sshOwnerProductionClient.launch.ts";
 import { resolveSelectedV2OwnerSource } from "./ServerManager.ownerV2.source.ts";
@@ -61,34 +60,10 @@ const resolve = (options: Parameters<typeof resolveSelectedV2OwnerSource>[0]) =>
   Effect.runPromise(resolveSelectedV2OwnerSource(options));
 
 describe("OpenCode v2 owner source resolution", () => {
-  it("uses the selected dev owner session when the dev runtime is present", async () => {
-    const reads: string[] = [];
-    const session = {
-      targetId: "ssh:fixture",
-      picker: {
-        withOwner: async <A>(targetId: string, operation: (client: object) => Promise<A>) => {
-          reads.push(targetId);
-          return operation({ opencodeV2Service: { binaryPath: "/opt/remote/opencode" } });
-        },
-      },
-    };
-    const source = await Effect.runPromise(
-      resolveSelectedV2OwnerSource({
-        activation: true,
-        production: () => {
-          throw new Error("production must not be consulted when dev is selected");
-        },
-      }).pipe(Effect.provideService(DevSshOwnerRuntime, { session } as never)),
-    );
-    const target = await source?.target("ssh:fixture");
-    expect(reads).toEqual(["ssh:fixture"]);
-    expect(target?.serviceBinding).toBe("/opt/remote/opencode");
-  });
-
-  it("uses the registered production owner when activation is on", async () => {
+  it("uses the registered production owner", async () => {
     const calls: string[] = [];
     const registration = await production(true, calls);
-    const source = await resolve({ activation: true, production: () => registration });
+    const source = await resolve({ production: () => registration });
     const process = track(
       await startSelectedV2OwnerProcess(config(), source, { platform: "linux" }),
     );
@@ -97,19 +72,8 @@ describe("OpenCode v2 owner source resolution", () => {
     expect(spawnSpy).not.toHaveBeenCalled();
   });
 
-  it("stays inert with activation off even when a production owner is registered", async () => {
-    const calls: string[] = [];
-    const registration = await production(true, calls);
-    const source = await resolve({ activation: false, production: () => registration });
-    expect(source).toBeUndefined();
-    expect(
-      await refusal(startSelectedV2OwnerProcess(config(), source, { platform: "linux" })),
-    ).toBe("owner-unavailable");
-    expect(calls).toEqual([]);
-  });
-
   it("refuses as owner-unavailable, not no-binding, when no owner is open", async () => {
-    const source = await resolve({ activation: true, production: () => undefined });
+    const source = await resolve({ production: () => undefined });
     expect(
       await refusal(startSelectedV2OwnerProcess(config(), source, { platform: "linux" })),
     ).toBe("owner-unavailable");
@@ -118,7 +82,7 @@ describe("OpenCode v2 owner source resolution", () => {
   it("refuses an open production owner launched without a v2 binding as no-binding", async () => {
     const calls: string[] = [];
     const registration = await production(false, calls);
-    const source = await resolve({ activation: true, production: () => registration });
+    const source = await resolve({ production: () => registration });
     expect(
       await refusal(startSelectedV2OwnerProcess(config(), source, { platform: "linux" })),
     ).toBe("no-binding");

@@ -61,7 +61,7 @@ impl GuardedWrite {
     }
 
     pub(super) fn allows(&self, operation: &Operation) -> bool {
-        self.apply_proof || !matches!(operation, Operation::ProofWorkspaceGuardedWriteApply(_))
+        self.apply_proof || !matches!(operation, Operation::WorkspaceGuardedWriteApply(_))
     }
 
     pub(super) fn reset_attachment(&mut self, generation: Token) {
@@ -104,7 +104,7 @@ impl GuardedWrite {
     ) -> Result<result::Outcome, ErrorCode> {
         let now = Instant::now();
         match operation {
-            Operation::ProofWorkspaceGuardedWriteBegin(begin) => {
+            Operation::WorkspaceGuardedWriteBegin(begin) => {
                 let binding = binding(generation, begin.binding)?;
                 self.admit_new(&binding.operation_id)?;
                 let nonce = random_token().map_err(|_| ErrorCode::OwnerUnavailable)?;
@@ -114,7 +114,7 @@ impl GuardedWrite {
                     .map_err(stage_error)?;
                 Ok(result::Outcome::Begun(lease.to_wire()))
             }
-            Operation::ProofWorkspaceGuardedWriteChunk(chunk) => {
+            Operation::WorkspaceGuardedWriteChunk(chunk) => {
                 let binding = binding(generation, chunk.binding)?;
                 let lease = lease(&chunk.lease)?;
                 let offset =
@@ -127,14 +127,14 @@ impl GuardedWrite {
                     .map_err(|_| ErrorCode::InvalidOperands)?;
                 Ok(result::Outcome::ChunkAccepted(next))
             }
-            Operation::ProofWorkspaceGuardedWriteCommit(commit) => {
+            Operation::WorkspaceGuardedWriteCommit(commit) => {
                 let binding = binding(generation, commit.binding)?;
                 let lease = lease(&commit.lease)?;
                 // COMMIT is always validation-only, including in APPLY proof mode.
                 drop(self.take_verified(&binding, lease, now)?);
                 Ok(result::Outcome::ValidatedNotDispatched(Empty {}))
             }
-            Operation::ProofWorkspaceGuardedWriteAbort(abort) => {
+            Operation::WorkspaceGuardedWriteAbort(abort) => {
                 let binding = binding(generation, abort.binding)?;
                 let lease = lease(&abort.lease)?;
                 self.stage
@@ -150,11 +150,11 @@ impl GuardedWrite {
 pub(super) fn is_guarded_write(operation: &Operation) -> bool {
     matches!(
         operation,
-        Operation::ProofWorkspaceGuardedWriteBegin(_)
-            | Operation::ProofWorkspaceGuardedWriteChunk(_)
-            | Operation::ProofWorkspaceGuardedWriteCommit(_)
-            | Operation::ProofWorkspaceGuardedWriteAbort(_)
-            | Operation::ProofWorkspaceGuardedWriteApply(_)
+        Operation::WorkspaceGuardedWriteBegin(_)
+            | Operation::WorkspaceGuardedWriteChunk(_)
+            | Operation::WorkspaceGuardedWriteCommit(_)
+            | Operation::WorkspaceGuardedWriteAbort(_)
+            | Operation::WorkspaceGuardedWriteApply(_)
     )
 }
 
@@ -173,7 +173,7 @@ impl Owner {
         if !guarded.allows(&operation) {
             return Err(ErrorCode::OperationDenied);
         }
-        if let Operation::ProofWorkspaceGuardedWriteApply(apply) = operation {
+        if let Operation::WorkspaceGuardedWriteApply(apply) = operation {
             return self.apply_guarded_write(apply);
         }
         let generation = self.generation;

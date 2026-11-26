@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../v1.remote_backend.proto");
     println!("cargo:rerun-if-changed=../v1.agent_control.proto");
     prost_build::Config::new()
-        .boxed(".bigbud.ssh_owner.v1.Request.operation.proof_git_tracked_push")
+        .boxed(".bigbud.ssh_owner.v1.Request.operation.git_tracked_push")
         .message_attribute(
             ".bigbud.ssh_owner.v1.ProofTransferStreamControl",
             "#[allow(dead_code)]",

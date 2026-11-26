@@ -26,11 +26,7 @@ import {
   COMPUTER_USE_GUARD_BUILD_ARGS,
   devModeRequiresComputerUseGuard,
 } from "./dev-runner.computerUse.ts";
-import { withoutDevSshOwnerEnv } from "./dev-runner.sshOwner.ts";
-import {
-  prepareNormalDevSshOwner,
-  resolveNormalDevSshOwner,
-} from "./dev-runner.sshOwner.normal.ts";
+import { prepareDevSshOwnerEnv, withoutDevSshOwnerEnv } from "./dev-runner.sshOwner.ts";
 
 export {
   DEFAULT_BIGBUD_HOME,
@@ -90,9 +86,6 @@ const resolveOptionalBooleanOverride = (
 
 export function runDevRunnerWithInput(input: DevRunnerCliInput) {
   return Effect.gen(function* () {
-    const normalSshOwner = resolveNormalDevSshOwner(input.mode, process.env);
-    if (normalSshOwner instanceof DevRunnerError) return yield* normalSshOwner;
-
     const { portOffset, devInstance } = yield* OffsetConfig.asEffect().pipe(
       Effect.mapError(
         (cause) =>
@@ -160,34 +153,33 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       dryRun: input.dryRun,
     });
 
-    const baseEnv = withoutDevSshOwnerEnv(process.env);
-    const owner =
-      normalSshOwner && !input.dryRun
-        ? yield* prepareNormalDevSshOwner(baseEnv, process.env)
-        : undefined;
+    // SSH runs only through the Rust owner: every mode that starts the server builds the
+    // owner with Cargo and passes its absolute path as BIGBUD_SSH_OWNER_BIN.
+    const baseEnv =
+      !input.dryRun && devModeRequiresWorkspaceAgent(input.mode)
+        ? yield* prepareDevSshOwnerEnv(process.env)
+        : withoutDevSshOwnerEnv(process.env);
     const env = yield* createDevRunnerEnv({
       mode: input.mode,
-      baseEnv: { ...baseEnv, ...owner?.env },
+      baseEnv,
       serverOffset,
       webOffset,
       instanceOffset: offset,
       repoRoot,
       ...(webReservation === undefined ? {} : { webReservation }),
       runnerPid: process.pid,
-      t3Home: owner?.baseDir ?? input.t3Home,
+      t3Home: input.t3Home,
       authToken: input.authToken,
       noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
-      autoBootstrapProjectFromCwd: owner
-        ? false
-        : resolveOptionalBooleanOverride(
-            input.autoBootstrapProjectFromCwd,
-            envOverrides.autoBootstrapProjectFromCwd,
-          ),
+      autoBootstrapProjectFromCwd: resolveOptionalBooleanOverride(
+        input.autoBootstrapProjectFromCwd,
+        envOverrides.autoBootstrapProjectFromCwd,
+      ),
       logWebSocketEvents: resolveOptionalBooleanOverride(
         input.logWebSocketEvents,
         envOverrides.logWebSocketEvents,
       ),
-      host: owner ? "127.0.0.1" : input.host,
+      host: input.host,
       port: input.port,
       devUrl: input.devUrl,
     });
@@ -201,21 +193,9 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.BIGBUD_PORT)} webPort=${String(env.PORT)} mobileStartPort=${String(env.MOBILE_WEB_PORT)} baseDir=${String(env.BIGBUD_HOME)}`,
     );
 
-    if (input.dryRun) {
-      if (normalSshOwner)
-        yield* Effect.logInfo(
-          "[dev-runner] Normal SSH owner startup would allocate a fresh profile",
-        );
-      return;
-    }
+    if (input.dryRun) return;
 
-    const modeArgs = [...MODE_ARGS[input.mode]].filter((arg) => {
-      if (!owner) return true;
-      if (arg === "--filter=@bigbud/mobile-web") return false;
-      // The Linux picker can run in a 4 GiB guest without the contracts watcher.
-      // The normal dev task still builds contracts before starting the backend and UI.
-      return process.platform !== "linux" || arg !== "--filter=@bigbud/contracts";
-    });
+    const modeArgs = [...MODE_ARGS[input.mode]];
     const child = yield* ChildProcess.make("turbo", [...modeArgs, ...input.turboArgs], {
       stdin: "inherit",
       stdout: "inherit",

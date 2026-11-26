@@ -8,7 +8,6 @@ import { it } from "@effect/vitest";
 import { Effect, Path } from "effect";
 import { expect, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { GitCommandError } from "@bigbud/contracts/workspace/git.errors.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
@@ -129,7 +128,6 @@ function runPull(harnessed: ReturnType<typeof harness>, cwd: string) {
 
 it.effect("fast-forwards through an owner fetch and an admitted local merge", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const repo = yield* Effect.promise(() => setupRepo());
     yield* Effect.promise(() => advanceRemote(repo));
     const harnessed = harness();
@@ -149,7 +147,6 @@ it.effect("fast-forwards through an owner fetch and an admitted local merge", ()
 
 it.effect("refuses a diverged branch after the owner fetch, without merging", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const repo = yield* Effect.promise(() => setupRepo());
     yield* Effect.promise(() => advanceRemote(repo));
     yield* Effect.promise(async () => {
@@ -169,7 +166,6 @@ it.effect("refuses a diverged branch after the owner fetch, without merging", ()
 
 it.effect("refuses a dirty worktree before any owner fetch", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const repo = yield* Effect.promise(() => setupRepo());
     yield* Effect.promise(() => writeFile(join(repo.work, "tracked.txt"), "dirty\n"));
     const harnessed = harness();

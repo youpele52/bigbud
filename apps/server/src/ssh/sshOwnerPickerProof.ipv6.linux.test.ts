@@ -3,16 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { Effect } from "effect";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 
 import { listRemoteFoldersEffect } from "../ws/wsRemoteFolders.ts";
-import { runSshCommand } from "./sshProcess.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";
 import { pickerProofOptedIn, storageScope } from "./sshOwnerPickerProof.integration.ts";
 import { PickerProofStartupConfigError } from "./sshOwnerPickerProof.startupDiagnostic.ts";
 import { makeLinuxLoopbackPickerFixture } from "./sshPicker.loopback.fixture.linux.ts";
-
-vi.mock("./sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 
 it.skipIf(process.platform !== "linux" || !pickerProofOptedIn)(
   "applies scoped OpenSSH alias policy on Linux IPv6 and refuses active system GSSAPI before SSH",
@@ -135,7 +132,6 @@ it.skipIf(process.platform !== "linux" || !pickerProofOptedIn)(
             expect(await readFile(fixture.knownHosts, "utf8")).toBe(
               `${keyAlias} ${await fixture.getHostPublicKey()}\n`,
             );
-            expect(runSshCommand).not.toHaveBeenCalled();
           } finally {
             await owner.close();
           }

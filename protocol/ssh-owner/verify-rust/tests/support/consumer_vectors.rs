@@ -15,7 +15,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_git_tracked_push",
-        request(Operation::ProofGitTrackedPush(Box::new(
+        request(Operation::GitTrackedPush(Box::new(
             v1::ProofGitTrackedPush {
                 repository: Some(v1::ProofGitPushRepository {
                     worktree: worktree.into(),
@@ -52,7 +52,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_deployment_completion_request",
-        request(Operation::ProofDeploymentCompletion(
+        request(Operation::DeploymentCompletion(
             v1::ProofDeploymentCompletion {
                 deployment_request_id: "2e789a0b-6e7b-411b-8d34-4107f1c18902".into(),
                 authority_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
@@ -62,7 +62,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_deployment_request",
-        request(Operation::ProofDeploymentHostProbe(
+        request(Operation::DeploymentHostProbe(
             v1::ProofDeploymentHostProbe {
                 deployment_request_id: "2e789a0b-6e7b-411b-8d34-4107f1c18902".into(),
             },
@@ -83,26 +83,24 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_deployment_action",
-        request(Operation::ProofDeploymentAction(
-            v1::ProofDeploymentAction {
-                request_id: "2e789a0b-6e7b-411b-8d34-4107f1c18902".into(),
-                kind: v1::ProofDeploymentActionKind::Publish.into(),
-                install_name: "1.2.3-aarch64-unknown-linux-gnu-0011223344556677".into(),
-                archive_sha256: "a".repeat(64),
-                manifest_sha256: "b".repeat(64),
-                url: String::new(),
-                max_bytes: 0,
-                contents: Vec::new(),
-                authority_id: String::new(),
-                enable_boot: false,
-                node_path: "bin/node".into(),
-                entry_path: "app/entry.mjs".into(),
-                pins: vec![v1::ProofDeploymentPinnedFile {
-                    path: "bin/node".into(),
-                    sha256: "d".repeat(64),
-                }],
-            },
-        )),
+        request(Operation::DeploymentAction(v1::ProofDeploymentAction {
+            request_id: "2e789a0b-6e7b-411b-8d34-4107f1c18902".into(),
+            kind: v1::ProofDeploymentActionKind::Publish.into(),
+            install_name: "1.2.3-aarch64-unknown-linux-gnu-0011223344556677".into(),
+            archive_sha256: "a".repeat(64),
+            manifest_sha256: "b".repeat(64),
+            url: String::new(),
+            max_bytes: 0,
+            contents: Vec::new(),
+            authority_id: String::new(),
+            enable_boot: false,
+            node_path: "bin/node".into(),
+            entry_path: "app/entry.mjs".into(),
+            pins: vec![v1::ProofDeploymentPinnedFile {
+                path: "bin/node".into(),
+                sha256: "d".repeat(64),
+            }],
+        })),
     );
     assert_frame(
         values,
@@ -164,7 +162,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         assert_frame(
             values,
             name,
-            request(Operation::ProofWorkspaceGit(ProofWorkspaceGit {
+            request(Operation::WorkspaceGit(ProofWorkspaceGit {
                 workspace_root: "/fixture/root".into(),
                 action: action.into(),
                 paths: Vec::new(),
@@ -206,7 +204,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         assert_frame(
             values,
             name,
-            request(Operation::ProofWorkspaceGit(ProofWorkspaceGit {
+            request(Operation::WorkspaceGit(ProofWorkspaceGit {
                 workspace_root: "/tmp/bigbud-picker-linux-Fixture/client".into(),
                 action: action.into(),
                 paths,
@@ -252,20 +250,20 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, operation) in [
         (
             "proof_snapshot_request",
-            Operation::ProofWorkspaceSnapshot(ProofWorkspaceList {
+            Operation::WorkspaceSnapshot(ProofWorkspaceList {
                 workspace_root: "/fixture/root".into(),
                 relative_dir: "watched".into(),
             }),
         ),
         (
             "proof_index_request",
-            Operation::ProofWorkspaceIndex(ProofWorkspaceIndex {
+            Operation::WorkspaceIndex(ProofWorkspaceIndex {
                 workspace_root: "/fixture/root".into(),
             }),
         ),
         (
             "proof_write_request",
-            Operation::ProofWorkspaceWrite(ProofWorkspaceWrite {
+            Operation::WorkspaceWrite(ProofWorkspaceWrite {
                 workspace_root: "/fixture/root".into(),
                 relative_path: "dir/a.txt".into(),
                 contents: b"a\0b".to_vec(),
@@ -273,16 +271,13 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_search_request",
-            Operation::ProofWorkspaceContentSearch(ProofWorkspaceContentSearch {
+            Operation::WorkspaceContentSearch(ProofWorkspaceContentSearch {
                 workspace_root: "/fixture/root".into(),
                 query: "abc.(".into(),
                 limit: 5,
             }),
         ),
-        (
-            "proof_health_request",
-            Operation::ProofSampleHealth(Empty {}),
-        ),
+        ("proof_health_request", Operation::SampleHealth(Empty {})),
     ] {
         assert_frame(values, name, request(operation));
     }

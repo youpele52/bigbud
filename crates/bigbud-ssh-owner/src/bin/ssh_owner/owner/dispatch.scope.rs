@@ -8,10 +8,10 @@ use super::Operation;
 pub(in crate::owner) fn is_agent_control(operation: &Operation) -> bool {
     matches!(
         operation,
-        Operation::ProofAgentProxyStatus(_)
-            | Operation::ProofAgentProxyClose(_)
-            | Operation::ProofOpencodeStatus(_)
-            | Operation::ProofOpencodeClose(_)
+        Operation::AgentProxyStatus(_)
+            | Operation::AgentProxyClose(_)
+            | Operation::OpencodeStatus(_)
+            | Operation::OpencodeClose(_)
             | Operation::GitUploadStatus(_)
             | Operation::GitUploadClose(_)
             | Operation::GitReceiveStatus(_)

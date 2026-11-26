@@ -12,7 +12,6 @@ import { GitCommandError } from "@bigbud/contracts";
 import { type ExecuteGitInput, type ExecuteGitResult } from "../Services/GitCore.ts";
 import { quoteGitCommand, toGitCommandError } from "./GitCoreUtils.ts";
 import { createTrace2Monitor, StatusRemoteRefreshCacheKey } from "./GitCoreExecutor.trace2.ts";
-import { isSshOwnerSelected } from "../../ssh/sshOwnerSelection.ts";
 import {
   initiatingGitDenied,
   initiatingGitLocalEnv,
@@ -141,7 +140,7 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
               ...process.env,
               ...input.env,
               ...trace2Monitor.env,
-              ...(isSshOwnerSelected() ? initiatingGitLocalEnv : undefined),
+              ...initiatingGitLocalEnv,
             },
           }),
         )
@@ -227,7 +226,7 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
   return Effect.fnUntraced(function* (request: ExecuteGitInput) {
     const input = { ...request, args: [...request.args] };
     // Check before Trace2, the reservation identity probe, or any process creation.
-    if (isSshOwnerSelected() && !isInitiatingGitLocal(input.args)) {
+    if (!isInitiatingGitLocal(input.args)) {
       return yield* initiatingGitDenied(input);
     }
     if (

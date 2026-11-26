@@ -14,7 +14,6 @@ import {
   readExternalV2Target,
   withProductionV2Owner,
 } from "../../provider/Layers/OpencodeV2/ServerManager.sshOwner.production.native.fixture.ts";
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type { SshOwnerProductionRegistration } from "../../ssh/sshOwnerProductionRegistry.ts";
 import type { ExecuteGitInput } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
@@ -74,7 +73,6 @@ it.skipIf(external === undefined).each([false, true])(
         const trust = await bound.inspectTrust();
         if (trust.state === "approvalRequired") await bound.approveTrust(trust.challenge);
         // Selects the owner for initiating Git (as production activation does) once launched.
-        activateDevSshOwner();
         // The alias target's own fixture home (`<home>/.ssh/keys/<key>`) is the HOME, and the
         // remote is spelled with that alias; otherwise a private HOME declares `bbu15r`.
         const home = aliasTarget

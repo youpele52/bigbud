@@ -19,7 +19,6 @@ import {
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 
 const legacy = vi.hoisted(() => ({ ready: vi.fn(), spawn: vi.fn() }));
-vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReadyAsync: legacy.ready }));
 vi.mock("node:child_process", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:child_process")>()),
   spawn: legacy.spawn,
@@ -150,8 +149,7 @@ describe("RemoteAgentConnection isolated SSH proxy", () => {
         executionTargetId: installed.executionTargetId,
         binaryPath: "/legacy",
       }),
-    ).rejects.toThrow("unexpected legacy readiness");
-    expect(legacy.ready).toHaveBeenCalledExactlyOnceWith(installed.executionTargetId);
+    ).rejects.toThrow("No SSH process was started");
     expect(legacy.spawn).not.toHaveBeenCalled();
   });
 

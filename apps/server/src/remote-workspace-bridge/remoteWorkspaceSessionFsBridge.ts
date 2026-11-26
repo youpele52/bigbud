@@ -20,7 +20,6 @@ import {
   createSelectedSessionFsProvider,
   type SessionFsOwnerCapability,
 } from "./remoteWorkspaceSessionFsBridge.ownerProvider.ts";
-import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import { usesProductionAcpBridge } from "./remoteWorkspaceAcpBridge.production.ts";
 import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
 import { withProductionWorkspaceOwner } from "../ws/wsSshOwnerProduction.workspace.ts";
@@ -66,9 +65,7 @@ export async function createRemoteWorkspaceSessionFsBridge(
         }
       : undefined;
   const sessionFsOwner: SessionFsOwnerCapability | undefined = production ?? selectedOwner;
-  const selected =
-    (isSshOwnerDevFixtureSelected() || production !== undefined) &&
-    workspaceTarget.location === "remote";
+  const selected = production !== undefined && workspaceTarget.location === "remote";
   // A provider-supplied readiness probe cannot grant authority to the legacy session FS.
   assertRemoteWorkspaceBridgeOperationSupported(
     workspaceTarget,

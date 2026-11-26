@@ -2,8 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
-
 import { makeRemoteAgentRuntimeBindings } from "../../persistence/Layers/RemoteAgentRuntimeBindings.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
 import { makeLazySshOwnerProductionTerminal } from "../../ssh/sshOwnerProductionTerminal.lazy.ts";
@@ -12,14 +10,11 @@ import { makeProductionShellProfiles } from "./ShellProfiles.sshOwner.ts";
 
 /**
  * W2 T-term: the production direct-SSH terminal composition for the terminal
- * manager, or `undefined` while `SSH_OWNER_PRODUCTION_ACTIVATION` is off (the
- * dev fixture, when selected, takes precedence in the caller).
+ * manager. Every direct SSH pane runs through the live Rust owner.
  */
 export const makeProductionSshTerminal = Effect.fn("makeProductionSshTerminal")(function* (
   sql: SqlClient.SqlClient,
-  activation: boolean = SSH_OWNER_PRODUCTION_ACTIVATION,
 ) {
-  if (!activation) return undefined;
   const owners = yield* makeRemoteAgentRuntimeBindings.pipe(
     Effect.provideService(SqlClient.SqlClient, sql),
     Effect.orDie,

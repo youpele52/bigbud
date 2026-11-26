@@ -172,16 +172,12 @@ fn production_admits_agent_proxy_and_refuses_a_stale_generation() {
     fixture.bind(&mut owner);
     let epoch = owner.epoch.to_vec();
     let current = owner.generation;
-    let mut request = envelope(Operation::ProofAgentProxyOpen(
-        ProofAgentProxyOpen::default(),
-    ));
+    let mut request = envelope(Operation::AgentProxyOpen(ProofAgentProxyOpen::default()));
     request.owner_epoch = epoch.clone();
     request.target_generation = current.to_vec();
     assert!(owner.validate(&request).is_ok());
 
-    let mut stale = envelope(Operation::ProofAgentProxyStatus(
-        ProofTerminalLease::default(),
-    ));
+    let mut stale = envelope(Operation::AgentProxyStatus(ProofTerminalLease::default()));
     stale.owner_epoch = epoch;
     stale.target_generation = vec![0x99; 32];
     assert_eq!(

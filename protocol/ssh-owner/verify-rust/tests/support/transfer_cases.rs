@@ -15,7 +15,7 @@ fn transfer_scope() -> ProofTransferScope {
 }
 
 fn stream() -> Operation {
-    Operation::ProofTransferStream(ProofTransferStream {
+    Operation::TransferStream(ProofTransferStream {
         scope: Some(transfer_scope()),
         operands: None,
         launch_attempt: None,
@@ -23,7 +23,7 @@ fn stream() -> Operation {
 }
 
 fn packaged_rsync() -> Operation {
-    Operation::ProofPackagedRsync(ProofPackagedRsync {
+    Operation::PackagedRsync(ProofPackagedRsync {
         scope: Some(ProofTransferScope {
             auth_mode: 1,
             ..transfer_scope()
@@ -34,7 +34,7 @@ fn packaged_rsync() -> Operation {
 }
 
 fn pty() -> Operation {
-    Operation::ProofOpenTerminal(ProofTerminalOpen { lease: Vec::new() })
+    Operation::OpenTerminal(ProofTerminalOpen { lease: Vec::new() })
 }
 
 fn thread_shell() -> Operation {

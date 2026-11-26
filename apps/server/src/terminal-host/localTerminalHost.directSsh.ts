@@ -13,38 +13,21 @@
  *
  * @module localTerminalHost.directSsh
  */
-import { homedir } from "node:os";
-import { basename } from "node:path";
 import { Effect } from "effect";
 
 import type { RemoteAgentConnectionPool } from "../remote-agent/remoteAgentConnectionPool.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
-import { makeOwnedRemoteAgentPty } from "../remote-agent/remoteAgentOwnedPty.ts";
-import type { RemoteAgentOwner } from "../remote-agent/remoteAgentOwners.ts";
 import type { RemoteAgentPtyCreateDefaults } from "../remote-agent/remoteAgentPtyClient.lifecycle.ts";
-import type { RemoteAgentCommandLaunch } from "../remote-agent/remoteAgentTerminalLaunch.ts";
 import { parseSshExecutionTarget } from "../ssh/sshExecutionTarget.ts";
-import { isSshOwnerSelected, LegacySshDisabledError } from "../ssh/sshOwnerSelection.ts";
+import { SshOwnerRequiredError } from "../ssh/sshOwnerRequired.ts";
 import type { OwnedPtyRuntime } from "../terminal/Services/OwnedPtyRuntime.ts";
-import {
-  PtySpawnError,
-  type PtyAdapterShape,
-  type PtySpawnInput,
-} from "../terminal/Services/PTY.ts";
-import { resolveCommandPath } from "../utils/commandPath.ts";
+import { PtySpawnError, type PtyAdapterShape } from "../terminal/Services/PTY.ts";
 import type { LocalTerminalHostController } from "./localTerminalHost.host.ts";
-import {
-  LocalTerminalHostLaunchSpecError,
-  localTerminalHostLaunchEnvironment,
-  localTerminalHostPlatform,
-} from "./localTerminalHost.launchSpec.ts";
 import { makeLocalTerminalHostSshClient } from "./localTerminalHost.directSsh.client.ts";
-import { paneIdentityForOwnerKey } from "./localTerminalHost.retirement.ts";
 import {
   makeNativeDirectSshTerminal,
   type NativeDirectSshTerminalOptions,
 } from "./localTerminalHost.directSsh.owner.ts";
-import { LOCAL_TERMINAL_HOST_TARGET_ID } from "./localTerminalHost.paths.ts";
 
 /** Lifecycle-managed like every host PTY; idle facts come from the server's owner hints. */
 export const LOCAL_TERMINAL_HOST_DIRECT_SSH_LIFECYCLE: RemoteAgentPtyCreateDefaults = Object.freeze(
@@ -58,34 +41,6 @@ export function isDirectSshTerminalTarget(target: string | undefined): boolean {
     parseSshExecutionTarget(target) !== null &&
     !isRemoteAgentExecutionTarget(target)
   );
-}
-
-export type DirectSshHostLaunchPlan =
-  | { readonly kind: "host"; readonly command: RemoteAgentCommandLaunch; readonly cwd: string }
-  | { readonly kind: "in-process"; readonly reason: string };
-
-/** Whether this `ssh` launch can run in the host unchanged; it never changes the command. */
-export function planDirectSshHostLaunch(
-  input: Pick<PtySpawnInput, "shell" | "args" | "env">,
-  options: { readonly home?: string; readonly platform?: NodeJS.Platform } = {},
-): DirectSshHostLaunchPlan {
-  const home = options.home ?? homedir();
-  try {
-    const platform = localTerminalHostPlatform(options.platform);
-    if (basename(input.shell) !== "ssh")
-      return { kind: "in-process", reason: "Only an ssh client runs as a Direct SSH host PTY." };
-    const shell = input.shell.startsWith("/")
-      ? input.shell
-      : resolveCommandPath(input.shell, { platform, env: input.env });
-    if (!shell) return { kind: "in-process", reason: "The ssh client is not on PATH." };
-    // Validates the size limits the host enforces for a local launch.
-    localTerminalHostLaunchEnvironment(input.env, home);
-    return { kind: "host", command: { shell, args: [...(input.args ?? [])] }, cwd: home };
-  } catch (cause) {
-    if (cause instanceof LocalTerminalHostLaunchSpecError)
-      return { kind: "in-process", reason: cause.message };
-    throw cause;
-  }
 }
 
 export interface LocalTerminalHostDirectSshOptions {
@@ -117,7 +72,6 @@ export function makeLocalTerminalHostDirectSsh(
   const { controller, runtime: base, nativeOwner } = options;
   if (nativeOwner)
     return makeNativeDirectSshTerminal(nativeOwner, isDirectSshTerminalTarget, options.isClosed);
-  const home = options.home ?? homedir();
   const runtime: OwnedPtyRuntime = Object.freeze({
     ...base,
     localSshClient: makeLocalTerminalHostSshClient({
@@ -128,97 +82,10 @@ export function makeLocalTerminalHostDirectSsh(
       inventory: async (signal) => (await base.hostGenerations?.inventory(signal)) ?? [],
     }),
   });
-  const assertTarget = (target: string) => {
-    if (target !== LOCAL_TERMINAL_HOST_TARGET_ID)
-      throw new Error("The terminal belongs to another execution target.");
-  };
-  const spawnOwned = makeOwnedRemoteAgentPty(
-    options.pool,
-    base.owners,
-    async (target) => {
-      assertTarget(target);
-      return controller.resolveAdmittedBinding();
-    },
-    {
-      openControl: async (target) => {
-        assertTarget(target);
-        return base.control();
-      },
-      hostLifecycle: LOCAL_TERMINAL_HOST_DIRECT_SSH_LIFECYCLE,
-      localLaunchEnvironment: (input) => localTerminalHostLaunchEnvironment(input.env, input.cwd),
-      commandLaunch: (input) => ({ shell: input.shell, args: [...(input.args ?? [])] }),
-      paneIdentity: (input) =>
-        paneIdentityForOwnerKey(input.ownerKey, "managed-ssh") ?? {
-          threadId: "",
-          paneId: "",
-          kind: "managed-ssh",
-        },
-    },
-  );
-  const retainedOwner = (input: PtySpawnInput) =>
-    Effect.tryPromise({
-      try: async (): Promise<RemoteAgentOwner | undefined> => {
-        const owner = await base.owners().get(`terminal:${input.ownerKey}`);
-        return owner && owner.state !== "terminal" ? owner : undefined;
-      },
-      catch: directSshSpawnError,
-    });
-
-  const spawn: PtyAdapterShape["spawn"] = Effect.fn("localTerminalHost.directSsh.spawn")(
-    function* (input) {
-      if (isSshOwnerSelected()) return yield* directSshSpawnError(new LegacySshDisabledError());
-      if (!input.ownerKey) return yield* options.fallback.spawn(input);
-      let command: RemoteAgentCommandLaunch | undefined;
-      if (!input.recoverOnly) {
-        const retained = yield* retainedOwner(input);
-        // A local shell the host still runs for this pane is never reinterpreted as SSH.
-        if (retained?.shellLaunch)
-          return yield* new PtySpawnError({
-            adapter: "local-terminal-host",
-            message:
-              "This pane still runs a local terminal in the terminal host. Close it before opening an SSH terminal here.",
-          });
-        const plan = yield* Effect.try({
-          try: () => planDirectSshHostLaunch(input, { home }),
-          catch: directSshSpawnError,
-        });
-        if (plan.kind === "host") command = plan.command;
-        // A retained host PTY is reattached even when a new launch could not move to the host.
-        if (!retained) {
-          if (plan.kind === "in-process") {
-            options.log?.("An SSH terminal runs in-process: its launch cannot move to the host.", {
-              reason: plan.reason,
-            });
-            return yield* options.fallback.spawn(input);
-          }
-          const binding = yield* Effect.promise(() =>
-            controller.resolveAdmittedBinding().catch(() => undefined),
-          );
-          if (!binding) return yield* options.fallback.spawn(input);
-        }
-      }
-      return yield* Effect.tryPromise({
-        try: async (signal) => {
-          if (options.isClosed()) throw new Error("The local terminal host transport is closed.");
-          const { shellLaunch: _launch, shellProfile: _profile, ...rest } = input;
-          const process = await spawnOwned({
-            ...rest,
-            ...(command ? { shell: command.shell, args: [...command.args] } : {}),
-            executionTargetId: LOCAL_TERMINAL_HOST_TARGET_ID,
-            cwd: home,
-            remoteCwd: home,
-            ...(input.recoverOnly ? { recoverySignal: signal } : {}),
-          });
-          if (input.recoverOnly && signal.aborted) {
-            process.detach?.();
-            signal.throwIfAborted();
-          }
-          return process;
-        },
-        catch: directSshSpawnError,
-      });
-    },
-  );
+  // A direct SSH pane runs only through the Rust owner (`nativeOwner`). Without
+  // it the pane is refused typed: the host never launches a local `ssh` client.
+  const spawn: PtyAdapterShape["spawn"] = () =>
+    Effect.fail(directSshSpawnError(new SshOwnerRequiredError()));
   return {
     runtime,
     runtimeForTarget: (targetId: string) =>

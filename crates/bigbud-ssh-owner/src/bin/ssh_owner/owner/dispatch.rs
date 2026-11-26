@@ -32,7 +32,7 @@ impl Owner {
         // gate; the native fixture exercises them directly under cfg(test).
         if matches!(
             operation,
-            Operation::ProofTransferStream(_) | Operation::ProofPackagedRsync(_)
+            Operation::TransferStream(_) | Operation::PackagedRsync(_)
         ) {
             return Ok(Err(ErrorCode::OperationDenied));
         }
@@ -43,11 +43,11 @@ impl Owner {
             return Ok(Err(error));
         }
         match operation {
-            operation @ (Operation::ProofWorkspaceGuardedWriteBegin(_)
-            | Operation::ProofWorkspaceGuardedWriteChunk(_)
-            | Operation::ProofWorkspaceGuardedWriteCommit(_)
-            | Operation::ProofWorkspaceGuardedWriteAbort(_)
-            | Operation::ProofWorkspaceGuardedWriteApply(_)) => {
+            operation @ (Operation::WorkspaceGuardedWriteBegin(_)
+            | Operation::WorkspaceGuardedWriteChunk(_)
+            | Operation::WorkspaceGuardedWriteCommit(_)
+            | Operation::WorkspaceGuardedWriteAbort(_)
+            | Operation::WorkspaceGuardedWriteApply(_)) => {
                 Ok(self.execute_guarded_write(operation))
             }
             Operation::Connect(_) => self.transition(pipe, id, false),
@@ -79,11 +79,9 @@ impl Owner {
                     }))
             }
             #[cfg(target_os = "linux")]
-            Operation::ProofUnlockSyntheticPosixPassword(_) => {
-                Ok(self.unlock_synthetic_posix_password())
-            }
+            Operation::UnlockPosixPassword(_) => Ok(self.unlock_synthetic_posix_password()),
             #[cfg(not(target_os = "linux"))]
-            Operation::ProofUnlockSyntheticPosixPassword(_) => Ok(Err(ErrorCode::OperationDenied)),
+            Operation::UnlockPosixPassword(_) => Ok(Err(ErrorCode::OperationDenied)),
             Operation::ListFolders(list) => {
                 let path = list.path.as_deref().filter(|path| !path.is_empty());
                 #[cfg(target_os = "linux")]
@@ -107,80 +105,74 @@ impl Owner {
                 Some(authority) => Ok(authority.list_aliases().map(Outcome::ProofAliases)),
                 None => Ok(transport!().list_aliases().map(Outcome::ProofAliases)),
             },
-            Operation::ProofAgentProxyOpen(open) => {
+            Operation::AgentProxyOpen(open) => {
                 Ok(self.open_agent_proxy(&open).map(Outcome::ProofAgentProxy))
             }
-            Operation::ProofCodexProbe(probe) => Ok(self
+            Operation::CodexProbe(probe) => Ok(self
                 .probe_provider(ProviderKind::Codex, &probe)
                 .map(Outcome::ProofCodexVersion)),
-            Operation::ProofCodexOpen(open) => Ok(self
+            Operation::CodexOpen(open) => Ok(self
                 .open_provider(ProviderKind::Codex, &open)
                 .map(Outcome::ProofAgentProxy)),
-            Operation::ProofPiProbe(probe) => Ok(self
+            Operation::PiProbe(probe) => Ok(self
                 .probe_provider(ProviderKind::Pi, &probe)
                 .map(Outcome::ProofPiVersion)),
-            Operation::ProofPiOpen(open) => Ok(self
+            Operation::PiOpen(open) => Ok(self
                 .open_provider(ProviderKind::Pi, &open)
                 .map(Outcome::ProofAgentProxy)),
             Operation::ProofPeerRelayOpen(open) => Ok(self
                 .open_scoped_duplex(ScopedDuplex::Peer(open))
                 .map(Outcome::ProofAgentProxy)),
-            Operation::ProofGitAdvertisementOpen(open) => Ok(self
+            Operation::GitAdvertisementOpen(open) => Ok(self
                 .open_scoped_duplex(ScopedDuplex::Git(open))
                 .map(Outcome::ProofAgentProxy)),
             Operation::ProofGitUploadOpen(open) => Ok(self
                 .open_scoped_duplex(ScopedDuplex::GitUpload(open))
                 .map(Outcome::ProofAgentProxy)),
-            Operation::ProofClientRelayOpen(open) => {
+            Operation::ClientRelayOpen(open) => {
                 Ok(self.open_client_relay(&open).map(Outcome::ProofAgentProxy))
             }
-            Operation::ProofAgentProxyStatus(status) => Ok(self
+            Operation::AgentProxyStatus(status) => Ok(self
                 .agent_status(&status.lease)
                 .map(Outcome::ProofAgentProxy)),
-            Operation::ProofAgentProxyClose(close) => Ok(self
+            Operation::AgentProxyClose(close) => Ok(self
                 .close_agent_proxy(&close.lease, close.terminate, close.timeout_ms)
                 .map(Outcome::ProofAgentProxy)),
-            Operation::ProofDeploymentManifestPut(operand) => Ok(self
+            Operation::DeploymentManifestPut(operand) => Ok(self
                 .put_manifest(&operand)
                 .map(Outcome::ProofDeploymentHostResult)),
-            Operation::ProofDeploymentStageBegin(operand) => Ok(self
+            Operation::DeploymentStageBegin(operand) => Ok(self
                 .begin_stage(&operand)
                 .map(Outcome::ProofDeploymentHostResult)),
-            Operation::ProofDeploymentAction(operand) => Ok(self
+            Operation::DeploymentAction(operand) => Ok(self
                 .deployment_action(&operand)
                 .map(Outcome::ProofDeploymentHostResult)),
-            Operation::ProofDeploymentCompletion(operand) => Ok(transport!()
+            Operation::DeploymentCompletion(operand) => Ok(transport!()
                 .read_deployment_completion(&operand)
                 .map(Outcome::ProofDeploymentHostResult)),
-            Operation::ProofDeploymentHostProbe(operand) => Ok(transport!()
+            Operation::DeploymentHostProbe(operand) => Ok(transport!()
                 .probe_deployment_host(&operand)
                 .map(Outcome::ProofDeploymentHostResult)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Operation::ProofWorkspaceReadiness(operand) => Ok(transport!()
+            Operation::WorkspaceReadiness(operand) => Ok(transport!()
                 .probe_workspace_readiness(&operand)
                 .map(Outcome::ProofWorkspaceReadiness)),
             #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-            Operation::ProofWorkspaceReadiness(_) => Ok(Err(ErrorCode::OperationDenied)),
-            Operation::ProofWorkspaceModeInspect(operand) => {
+            Operation::WorkspaceReadiness(_) => Ok(Err(ErrorCode::OperationDenied)),
+            Operation::WorkspaceModeInspect(operand) => {
                 Ok(self.inspect_workspace_mode(operand.root))
             }
-            Operation::ProofWorkspaceModePublish(operand) => {
-                Ok(self.publish_workspace_mode(operand))
-            }
+            Operation::WorkspaceModePublish(operand) => Ok(self.publish_workspace_mode(operand)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Operation::ProofOpencodeOpen(operand) => Ok(self.open_opencode(operand)),
+            Operation::OpencodeOpen(operand) => Ok(self.open_opencode(operand)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Operation::ProofOpencodeStatus(operand) => {
-                Ok(self.observe_opencode(&operand.lease, false))
-            }
+            Operation::OpencodeStatus(operand) => Ok(self.observe_opencode(&operand.lease, false)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            Operation::ProofOpencodeClose(operand) => {
-                Ok(self.observe_opencode(&operand.lease, true))
-            }
+            Operation::OpencodeClose(operand) => Ok(self.observe_opencode(&operand.lease, true)),
             #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-            Operation::ProofOpencodeOpen(_)
-            | Operation::ProofOpencodeStatus(_)
-            | Operation::ProofOpencodeClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            Operation::OpencodeOpen(_)
+            | Operation::OpencodeStatus(_)
+            | Operation::OpencodeClose(_) => Ok(Err(ErrorCode::OperationDenied)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             Operation::GitUploadOpen(operand) => Ok(self.open_git_upload(operand)),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -238,17 +230,17 @@ impl Owner {
             | Operation::ProviderLeaseOpen(_)
             | Operation::ProviderLeaseStatus(_)
             | Operation::ProviderLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
-            Operation::ProofGitTrackedPush(operand) => Ok(Ok(self.receive_tracked_push(*operand))),
-            Operation::ProofWorkspaceGit(operand) => Ok(transport!()
+            Operation::GitTrackedPush(operand) => Ok(Ok(self.receive_tracked_push(*operand))),
+            Operation::WorkspaceGit(operand) => Ok(transport!()
                 .execute_workspace_git(&operand)
                 .map(Outcome::ProofWorkspaceGit)),
-            Operation::ProofSampleHealth(_) => {
+            Operation::SampleHealth(_) => {
                 Ok(self.sample_picker_health(id).map(Outcome::ProofHealth))
             }
-            Operation::ProofWorkspaceContentSearch(search) => Ok(transport!()
+            Operation::WorkspaceContentSearch(search) => Ok(transport!()
                 .search_workspace_contents(&search)
                 .map(Outcome::ProofWorkspaceContentMatches)),
-            Operation::ProofWorkspaceSnapshot(list) => {
+            Operation::WorkspaceSnapshot(list) => {
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
                 if let Some(inbox) = &mut self.workspace_snapshot_cancel {
                     let Some(transport) = self.transport.as_ref() else {
@@ -264,17 +256,17 @@ impl Owner {
                     .snapshot_workspace_directory(&list)
                     .map(Outcome::ProofWorkspaceSnapshot))
             }
-            Operation::ProofWorkspaceIndex(index) => Ok(transport!()
+            Operation::WorkspaceIndex(index) => Ok(transport!()
                 .index_workspace(&index)
                 .map(Outcome::ProofWorkspaceIndex)),
-            Operation::ProofWorkspaceCreate(operand) => Ok(
+            Operation::WorkspaceCreate(operand) => Ok(
                 super::super::transport::workspace::create::run(transport!(), &operand)
                     .map(Outcome::ProofWorkspaceCreateResult),
             ),
-            Operation::ProofWorkspaceCreateDirectory(operand) => Ok(transport!()
+            Operation::WorkspaceCreateDirectory(operand) => Ok(transport!()
                 .create_workspace_directory(&operand)
                 .map(Outcome::ProofWorkspaceEntryMutation)),
-            Operation::ProofWorkspaceDeleteEntry(operand) => Ok(transport!()
+            Operation::WorkspaceDeleteEntry(operand) => Ok(transport!()
                 .delete_workspace_entry(&operand)
                 .map(Outcome::ProofWorkspaceEntryMutation)),
             // W2 T-files session-FS verbs (`transport/workspace/entry_ops.rs`).
@@ -283,38 +275,38 @@ impl Owner {
             | Operation::WorkspaceAppend(_)) => Ok(
                 crate::transport::workspace::entry_ops::dispatch(transport!(), operation),
             ),
-            Operation::ProofWorkspaceWriteBegin(operand) => Ok(transport!()
+            Operation::WorkspaceWriteBegin(operand) => Ok(transport!()
                 .begin_workspace_write(&operand)
                 .map(Outcome::ProofWorkspaceWriteStage)),
-            Operation::ProofWorkspaceWriteChunk(operand) => Ok(transport!()
+            Operation::WorkspaceWriteChunk(operand) => Ok(transport!()
                 .chunk_workspace_write(&operand)
                 .map(Outcome::ProofWorkspaceWriteStage)),
-            Operation::ProofWorkspaceWriteCommit(operand) => Ok(transport!()
+            Operation::WorkspaceWriteCommit(operand) => Ok(transport!()
                 .commit_workspace_write(&operand)
                 .map(Outcome::ProofWorkspaceWriteStage)),
-            Operation::ProofWorkspaceWriteAbort(operand) => Ok(transport!()
+            Operation::WorkspaceWriteAbort(operand) => Ok(transport!()
                 .abort_workspace_write(&operand)
                 .map(Outcome::ProofWorkspaceWriteStage)),
-            Operation::ProofWorkspaceWrite(write) => Ok(transport!()
+            Operation::WorkspaceWrite(write) => Ok(transport!()
                 .write_workspace(&write)
                 .map(|()| Outcome::ProofWorkspaceWritten(crate::v1::Empty {}))),
-            Operation::ProofWorkspaceList(list) => Ok(transport!()
+            Operation::WorkspaceList(list) => Ok(transport!()
                 .list_workspace_directory(&list)
                 .map(Outcome::ProofWorkspaceDirectory)),
-            Operation::ProofWorkspaceRead(read) => Ok(transport!()
+            Operation::WorkspaceRead(read) => Ok(transport!()
                 .read_workspace(&read)
                 .map(Outcome::ProofWorkspaceFile)),
             // W2 T-term: every terminal verb, fixture and production (see
             // `owner/terminal_dispatch.rs`).
-            operation @ (Operation::ProofPrepareTerminal(_)
-            | Operation::ProofCancelTerminalReservation(_)
-            | Operation::ProofOpenTerminal(_)
-            | Operation::ProofTerminalCwd(_)
-            | Operation::ProofTerminalReplay(_)
-            | Operation::ProofTerminalStatus(_)
-            | Operation::ProofCloseTerminal(_)
-            | Operation::ProofTerminalInput(_)
-            | Operation::ProofTerminalResize(_)
+            operation @ (Operation::PrepareTerminal(_)
+            | Operation::CancelTerminalReservation(_)
+            | Operation::OpenTerminal(_)
+            | Operation::TerminalCwd(_)
+            | Operation::TerminalReplay(_)
+            | Operation::TerminalStatus(_)
+            | Operation::CloseTerminal(_)
+            | Operation::TerminalInput(_)
+            | Operation::TerminalResize(_)
             | Operation::TerminalInspect(_)
             | Operation::ListTerminalShells(_)) => Ok(self.dispatch_terminal(operation)),
             Operation::ProofRunThreadShell(operand) => Ok(transport!()
@@ -341,7 +333,7 @@ impl Owner {
             | Operation::RunAcpShell(_)
             | Operation::ShellStatus(_)
             | Operation::ShellClose(_) => Ok(Err(ErrorCode::OperationDenied)),
-            Operation::ProofAgentAction(operand) => {
+            Operation::AgentAction(operand) => {
                 Ok(self.agent_action(&operand).map(Outcome::ProofAgentAction))
             }
             Operation::ProofEnsurePeerCoordinatorKey(_) => {
@@ -375,7 +367,7 @@ impl Owner {
             | Operation::PeerRelayClose(_) => Ok(Err(ErrorCode::OperationDenied)),
             // Reserved transfer boundary (C15). Unreachable here; see the early
             // refusal above and `owner/transfer_fixture*.rs` (cfg(test)).
-            Operation::ProofTransferStream(_) | Operation::ProofPackagedRsync(_) => {
+            Operation::TransferStream(_) | Operation::PackagedRsync(_) => {
                 Ok(Err(ErrorCode::OperationDenied))
             }
         }

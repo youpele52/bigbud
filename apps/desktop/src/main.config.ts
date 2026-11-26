@@ -9,7 +9,6 @@ import {
   resolveTailscaleServeHttpsPort,
 } from "@bigbud/shared/desktopReleaseIdentity";
 
-import { resolveDesktopSshOwnerDevProfile } from "./backend/backendEnv.sshOwner";
 import { resolveCuaDriverHostBundleId } from "./backend/cuaDriver.hostIdentity";
 import {
   readLinuxGpuFallbackMarker,
@@ -38,10 +37,8 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
       ? "T3 Code (Alpha)"
       : null;
   const linuxGpuFallbackMarkerPath = resolveLinuxGpuFallbackMarkerPath(stateDir);
-  const sshOwnerProfile = resolveDesktopSshOwnerDevProfile(app.isPackaged, process.env);
 
   return {
-    isolatedUserDataPath: sshOwnerProfile ? Path.join(sshOwnerProfile, "electron") : undefined,
     appDisplayName,
     appUserModelId: releaseIdentity.appUserModelId,
     baseDir,

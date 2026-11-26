@@ -14,17 +14,17 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, payload) in [
         (
             "proof_terminal_open",
-            request(Operation::ProofOpenTerminal(ProofTerminalOpen::default())),
+            request(Operation::OpenTerminal(ProofTerminalOpen::default())),
         ),
         (
             "proof_terminal_status",
-            request(Operation::ProofTerminalStatus(ProofTerminalLease {
+            request(Operation::TerminalStatus(ProofTerminalLease {
                 lease: lease(),
             })),
         ),
         (
             "proof_terminal_close",
-            request(Operation::ProofCloseTerminal(ProofTerminalLease {
+            request(Operation::CloseTerminal(ProofTerminalLease {
                 lease: lease(),
             })),
         ),

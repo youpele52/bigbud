@@ -18,9 +18,6 @@ const legacy = vi.hoisted(() => ({
   build: vi.fn(),
   spawn: vi.fn(),
 }));
-vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReadyAsync: legacy.ready }));
-vi.mock("../ssh/sshHostTrust.ts", () => ({ inspectSshHostTrust: legacy.trust }));
-vi.mock("../ssh/sshCommand.ts", () => ({ buildSshCommandInvocation: legacy.build }));
 vi.mock("node:child_process", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:child_process")>()),
   spawn: legacy.spawn,

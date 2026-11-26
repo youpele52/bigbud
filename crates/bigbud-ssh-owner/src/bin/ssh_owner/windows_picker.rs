@@ -30,7 +30,7 @@ const MINOR: u32 = 0;
 /// Windows ships key-only (U3): a password-class request is refused with a
 /// typed denial before any credential collection, never as `authRequired`.
 pub(super) fn password_denial(operation: &Operation) -> Option<ErrorCode> {
-    matches!(operation, Operation::ProofUnlockSyntheticPosixPassword(_))
+    matches!(operation, Operation::UnlockPosixPassword(_))
         .then_some(ErrorCode::WindowsPasswordUnsupported)
 }
 

@@ -19,12 +19,6 @@ vi.mock("../../remote-agent/remoteAgentDefault.ts", async (importOriginal) => {
   );
   return { ...actual, getConfiguredRemoteAgentComposition: () => ({ pool }) };
 });
-vi.mock("../../ssh/sshProcess.ts", () => ({
-  runSshCommand: async () => {
-    touched.ssh += 1;
-    throw new Error("search must not spawn ssh");
-  },
-}));
 
 import { runLiveSearch, type SeedProject } from "./SystemSearch.layer.test.helpers.ts";
 

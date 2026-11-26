@@ -10,32 +10,32 @@ impl Owner {
         operation: Operation,
     ) -> Result<Outcome, ErrorCode> {
         match operation {
-            Operation::ProofPrepareTerminal(request) => self
+            Operation::PrepareTerminal(request) => self
                 .prepare_terminal(request)
                 .map(Outcome::ProofTerminalReservation),
-            Operation::ProofCancelTerminalReservation(request) => self
+            Operation::CancelTerminalReservation(request) => self
                 .cancel_terminal_reservation(&request.lease)
                 .map(Outcome::ProofTerminalReservation),
-            Operation::ProofOpenTerminal(request) => self
+            Operation::OpenTerminal(request) => self
                 .open_terminal(&request.lease)
                 .map(Outcome::ProofTerminal),
-            Operation::ProofTerminalCwd(request) => super::super::present(&self.transport)?
+            Operation::TerminalCwd(request) => super::super::present(&self.transport)?
                 .probe_terminal_cwd(request)
                 .map(Outcome::ProofTerminalCwd),
-            Operation::ProofTerminalReplay(request) => self
+            Operation::TerminalReplay(request) => self
                 .replay_terminal(&request.lease, request.after_sequence)
                 .map(Outcome::ProofTerminalReplay),
-            Operation::ProofTerminalStatus(handle) => self
+            Operation::TerminalStatus(handle) => self
                 .terminal_status(&handle.lease)
                 .map(Outcome::ProofTerminal),
-            Operation::ProofCloseTerminal(handle) => self
+            Operation::CloseTerminal(handle) => self
                 .close_terminal(&handle.lease)
                 .map(Outcome::ProofTerminal),
-            Operation::ProofTerminalInput(input) => self
+            Operation::TerminalInput(input) => self
                 .write_terminal_input(&input.lease, input.sequence, &input.data)
                 .and_then(|()| self.terminal_status(&input.lease))
                 .map(Outcome::ProofTerminal),
-            Operation::ProofTerminalResize(input) => self
+            Operation::TerminalResize(input) => self
                 .leased_terminal(&input.lease)
                 .and_then(|terminal| {
                     let cols = u16::try_from(input.cols).map_err(|_| ErrorCode::InvalidOperands)?;

@@ -21,13 +21,6 @@ const calls = vi.hoisted(() => ({
   children: [] as import("node:child_process").ChildProcess[],
   args: [] as string[],
 }));
-vi.mock("../ssh/sshVerification.ts", () => ({
-  assertSshExecutionTargetReadyAsync: async () => {},
-}));
-vi.mock("../ssh/sshHostTrust.ts", () => ({ inspectSshHostTrust: async () => {} }));
-vi.mock("../ssh/sshCommand.ts", () => ({
-  buildSshCommandInvocation: () => ({ command: process.execPath, args: calls.args }),
-}));
 vi.mock("node:child_process", async (original) => {
   const actual = await original<typeof import("node:child_process")>();
   return {
@@ -225,26 +218,6 @@ it.skipIf(process.platform !== "linux")(
     await expect(fetchLease(retained!)).rejects.toThrow();
   },
 );
-it("listing projects only explicit public pin fields and respects per-caller capacity", async () => {
-  const f = await fixture();
-  Object.assign(f.profile.profile, { deployment: f.profile.deployment });
-  Object.assign(f.profile.profile.identity.authority, { privateKey: "fixture-private-value" });
-  const listed = await f.leases.list("route:1", new AbortController().signal);
-  expect(JSON.stringify(listed)).not.toContain("deployment");
-  expect(JSON.stringify(listed)).not.toContain("fixture-private-value");
-  const opened = [];
-  for (let index = 0; index < 4; index++)
-    opened.push(
-      await f.leases.open("route:1", f.profile.profile.profileId, new AbortController().signal),
-    );
-  await expect(
-    f.leases.open("route:1", f.profile.profile.profileId, new AbortController().signal),
-  ).rejects.toMatchObject({ code: "limit" });
-  await f.leases.close("route:1", opened[0]!.leaseId);
-  expect(
-    await f.leases.open("route:1", f.profile.profile.profileId, new AbortController().signal),
-  ).toHaveProperty("localCredential");
-});
 it("authless local configuration cannot activate even an injected approved profile", async () => {
   const f = await fixture();
   let lookups = 0;

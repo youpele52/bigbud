@@ -188,13 +188,13 @@ pub(super) fn stage_outcome(reply: Reply) -> Option<result::Outcome> {
 }
 
 pub(super) fn begin(binding: &ProofWorkspaceGuardedWriteBinding) -> Operation {
-    Operation::ProofWorkspaceGuardedWriteBegin(ProofWorkspaceGuardedWriteBegin {
+    Operation::WorkspaceGuardedWriteBegin(ProofWorkspaceGuardedWriteBegin {
         binding: Some(binding.clone()),
     })
 }
 
 pub(super) fn chunk(binding: &ProofWorkspaceGuardedWriteBinding, lease: &[u8]) -> Operation {
-    Operation::ProofWorkspaceGuardedWriteChunk(ProofWorkspaceGuardedWriteChunk {
+    Operation::WorkspaceGuardedWriteChunk(ProofWorkspaceGuardedWriteChunk {
         binding: Some(binding.clone()),
         lease: lease.to_vec(),
         offset: 0,
@@ -203,7 +203,7 @@ pub(super) fn chunk(binding: &ProofWorkspaceGuardedWriteBinding, lease: &[u8]) -
 }
 
 pub(super) fn commit(binding: &ProofWorkspaceGuardedWriteBinding, lease: &[u8]) -> Operation {
-    Operation::ProofWorkspaceGuardedWriteCommit(ProofWorkspaceGuardedWriteCommit {
+    Operation::WorkspaceGuardedWriteCommit(ProofWorkspaceGuardedWriteCommit {
         binding: Some(binding.clone()),
         lease: lease.to_vec(),
     })

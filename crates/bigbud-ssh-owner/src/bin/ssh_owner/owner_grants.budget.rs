@@ -35,16 +35,16 @@ impl Class {
             | Operation::Disconnect(_)
             | Operation::ListFolders(_)
             | Operation::ListAliases(_)
-            | Operation::ProofOpenTerminal(_)
-            | Operation::ProofTerminalStatus(_)
-            | Operation::ProofCloseTerminal(_)
-            | Operation::ProofTerminalInput(_)
-            | Operation::ProofTerminalResize(_)
-            | Operation::ProofPrepareTerminal(_)
-            | Operation::ProofCancelTerminalReservation(_)
-            | Operation::ProofTerminalReplay(_)
-            | Operation::ProofTerminalCwd(_)
-            | Operation::ProofUnlockSyntheticPosixPassword(_)
+            | Operation::OpenTerminal(_)
+            | Operation::TerminalStatus(_)
+            | Operation::CloseTerminal(_)
+            | Operation::TerminalInput(_)
+            | Operation::TerminalResize(_)
+            | Operation::PrepareTerminal(_)
+            | Operation::CancelTerminalReservation(_)
+            | Operation::TerminalReplay(_)
+            | Operation::TerminalCwd(_)
+            | Operation::UnlockPosixPassword(_)
             | Operation::ProofRunAcpCommand(_)
             | Operation::RunAcpCommand(_)
             | Operation::RunAcpShell(_) => Self::Interactive,
@@ -169,7 +169,7 @@ mod tests {
     }
 
     fn index() -> Operation {
-        Operation::ProofWorkspaceIndex(ProofWorkspaceIndex {
+        Operation::WorkspaceIndex(ProofWorkspaceIndex {
             workspace_root: "/fixture/root".into(),
         })
     }
@@ -204,12 +204,12 @@ mod tests {
         assert_eq!(Class::of(&list()), Class::Interactive);
         assert_eq!(Class::of(&Operation::Connect(Empty {})), Class::Interactive);
         assert_eq!(
-            Class::of(&Operation::ProofUnlockSyntheticPosixPassword(Empty {})),
+            Class::of(&Operation::UnlockPosixPassword(Empty {})),
             Class::Interactive
         );
         assert_eq!(Class::of(&index()), Class::Background);
         assert_eq!(
-            Class::of(&Operation::ProofSampleHealth(Empty {})),
+            Class::of(&Operation::SampleHealth(Empty {})),
             Class::Background
         );
     }

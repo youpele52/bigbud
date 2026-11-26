@@ -1,6 +1,6 @@
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentRegistryStore } from "./remoteAgentInstall.registry.store.ts";
-import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import type { RemoteAgentControlOp } from "./remoteAgentControl.ops.ts";
 import { REMOTE_AGENT_CONTROL_ROOT_SCRIPT } from "./remoteAgentControl.scripts.ts";
 import { assertRemoteAgentControlRoot } from "./remoteAgentControl.root.ts";
@@ -28,12 +28,12 @@ export interface RemoteAgentControl {
 /** Resolve the verified account's canonical control root without opening any agent state. */
 export async function openRemoteAgentControl(
   executionTargetId: string,
-  runner?: (input: RunSshCommandInput) => Promise<unknown>,
+  runner?: RemoteAgentCommandRunner,
 ): Promise<RemoteAgentControl> {
-  // U25: production activation runs every control operation through the live SSH owner.
-  const owner = runner ? undefined : remoteAgentOwnerSelection();
-  if (owner) return openOwnerRemoteAgentControl(owner, executionTargetId);
-  const execute = runner ?? runSshCommand;
+  // U25: every control operation runs through the live SSH owner. `runner` is the
+  // injected command seam (tests and the local supervisor), never a TypeScript SSH launch.
+  if (!runner) return openOwnerRemoteAgentControl(remoteAgentOwnerSelection(), executionTargetId);
+  const execute = runner;
   const run = async (command: string, options?: { readonly timeoutMs?: number }) => {
     const result = await runRemoteAgentDiagnosedCommand(execute, "control", {
       executionTargetId,

@@ -13,7 +13,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_unlock_synthetic_posix_password",
-        request(Operation::ProofUnlockSyntheticPosixPassword(v1::Empty {})),
+        request(Operation::UnlockPosixPassword(v1::Empty {})),
     );
     assert_frame(
         values,
@@ -28,7 +28,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_workspace_mode_publish",
-        request(Operation::ProofWorkspaceModePublish(
+        request(Operation::WorkspaceModePublish(
             v1::ProofWorkspaceModePublish {
                 root: "/fixture/root".into(),
                 publication_token: vec![81; 32],
@@ -48,7 +48,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_workspace_mode_inspect",
-        request(Operation::ProofWorkspaceModeInspect(
+        request(Operation::WorkspaceModeInspect(
             v1::ProofWorkspaceModeInspect {
                 root: "/fixture/root".into(),
             },
@@ -92,7 +92,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_deployment_manifest_put",
-        request(Operation::ProofDeploymentManifestPut(
+        request(Operation::DeploymentManifestPut(
             v1::ProofDeploymentManifestPut {
                 request_id: "2e789a0b-6e7b-411b-8d34-4107f1c18902".into(),
                 manifest_sha256: "8f36ab2b3fd94e8d14eae1e5904e6b9be0d43de0dad112009a6ca8b91080f85b"
@@ -117,7 +117,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_git_advertisement_open",
-        request(Operation::ProofGitAdvertisementOpen(
+        request(Operation::GitAdvertisementOpen(
             v1::ProofGitAdvertisementOpen {
                 repository_path: "/tmp/bigbud-picker-linux-Fixture/receive.git".into(),
                 source_ref: "refs/heads/source".into(),
@@ -129,7 +129,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_deployment_stage_begin",
-        request(Operation::ProofDeploymentStageBegin(
+        request(Operation::DeploymentStageBegin(
             v1::ProofDeploymentStageBegin {
                 request_id: "2e789a0b-6e7b-411b-8d34-4107f1c18902".into(),
                 install_name: "0.1.0-aarch64-unknown-linux-gnu-aaaaaaaaaaaaaaaa".into(),
@@ -151,17 +151,17 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_pi_probe",
-        request(Operation::ProofPiProbe(pi.clone())),
+        request(Operation::PiProbe(pi.clone())),
     );
     assert_frame(
         values,
         "proof_pi_open",
-        request(Operation::ProofPiOpen(pi.clone())),
+        request(Operation::PiOpen(pi.clone())),
     );
     assert_frame(
         values,
         "proof_pi_open_resume",
-        request(Operation::ProofPiOpen(v1::ProofProviderScope {
+        request(Operation::PiOpen(v1::ProofProviderScope {
             thread_id: "thread-pi".into(),
             session_epoch: 9,
             cwd: "/fixture/work".into(),
@@ -188,12 +188,12 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_codex_probe",
-        request(Operation::ProofCodexProbe(scope.clone())),
+        request(Operation::CodexProbe(scope.clone())),
     );
     assert_frame(
         values,
         "proof_codex_open",
-        request(Operation::ProofCodexOpen(scope.clone())),
+        request(Operation::CodexOpen(scope.clone())),
     );
     assert_frame(
         values,
@@ -207,7 +207,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_client_relay_open",
-        request(Operation::ProofClientRelayOpen(v1::ProofClientRelayOpen {
+        request(Operation::ClientRelayOpen(v1::ProofClientRelayOpen {
             node_binary: "/fixture/bin/node".into(),
             node_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
             helper_entry: "/fixture/relay.mjs".into(),
@@ -223,7 +223,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_terminal_cwd_request",
-        request(Operation::ProofTerminalCwd(cwd.clone())),
+        request(Operation::TerminalCwd(cwd.clone())),
     );
     assert_frame(
         values,
@@ -233,7 +233,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_terminal_replay_request",
-        request(Operation::ProofTerminalReplay(ProofTerminalReplayRequest {
+        request(Operation::TerminalReplay(ProofTerminalReplayRequest {
             lease: lease(),
             after_sequence: 2,
         })),
@@ -266,7 +266,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, op) in [
         (
             "proof_terminal_prepare",
-            Operation::ProofPrepareTerminal(ProofPrepareTerminal {
+            Operation::PrepareTerminal(ProofPrepareTerminal {
                 cwd: "/fixture/work".into(),
                 thread_id: "thread".into(),
                 terminal_id: "pane".into(),
@@ -277,15 +277,15 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_terminal_open_reserved",
-            Operation::ProofOpenTerminal(ProofTerminalOpen { lease: lease() }),
+            Operation::OpenTerminal(ProofTerminalOpen { lease: lease() }),
         ),
         (
             "proof_terminal_cancel_reservation",
-            Operation::ProofCancelTerminalReservation(ProofTerminalLease { lease: lease() }),
+            Operation::CancelTerminalReservation(ProofTerminalLease { lease: lease() }),
         ),
         (
             "proof_terminal_input",
-            Operation::ProofTerminalInput(ProofTerminalInput {
+            Operation::TerminalInput(ProofTerminalInput {
                 lease: lease(),
                 sequence: 1,
                 data: b"abc\n".to_vec(),
@@ -293,7 +293,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_terminal_resize",
-            Operation::ProofTerminalResize(ProofTerminalResize {
+            Operation::TerminalResize(ProofTerminalResize {
                 lease: lease(),
                 cols: 96,
                 rows: 34,
@@ -301,18 +301,18 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_agent_proxy_open",
-            Operation::ProofAgentProxyOpen(ProofAgentProxyOpen {
+            Operation::AgentProxyOpen(ProofAgentProxyOpen {
                 binary_path: "/fixture/agent".into(),
                 sha256: "a".repeat(64),
             }),
         ),
         (
             "proof_agent_proxy_status",
-            Operation::ProofAgentProxyStatus(ProofTerminalLease { lease: lease() }),
+            Operation::AgentProxyStatus(ProofTerminalLease { lease: lease() }),
         ),
         (
             "proof_agent_proxy_close",
-            Operation::ProofAgentProxyClose(ProofAgentProxyClose {
+            Operation::AgentProxyClose(ProofAgentProxyClose {
                 lease: lease(),
                 terminate: true,
                 timeout_ms: 2000,

@@ -7,7 +7,6 @@ src/codex/codexAppServerManager.handlers.test.ts
 src/codex/codexAppServerManager.lifecycle.test.ts
 src/codex/codexAppServerManager.modelSelection.test.ts
 src/codex/codexAppServerManager.pendingStarts.test.ts
-src/codex/codexAppServerManager.process.remote.test.ts
 src/codex/codexAppServerManager.selection.integration.test.ts
 src/codex/codexAppServerManager.sendTurn.test.ts
 src/codex/codexAppServerManager.startSession.mcp.test.ts

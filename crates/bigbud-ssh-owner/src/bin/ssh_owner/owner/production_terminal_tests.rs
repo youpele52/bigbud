@@ -34,14 +34,12 @@ fn production_admits_terminal_verbs_and_keeps_fixture_only_verbs_refused() {
 
     assert!(
         owner
-            .validate(&envelope(Operation::ProofPrepareTerminal(request(
-                IDENTITY
-            ))))
+            .validate(&envelope(Operation::PrepareTerminal(request(IDENTITY))))
             .is_ok()
     );
     assert!(
         owner
-            .validate(&envelope(Operation::ProofOpenTerminal(
+            .validate(&envelope(Operation::OpenTerminal(
                 crate::v1::ProofTerminalOpen::default()
             )))
             .is_ok()
@@ -50,21 +48,21 @@ fn production_admits_terminal_verbs_and_keeps_fixture_only_verbs_refused() {
     // and a missing master/owner-selected agent refuses in dispatch.
     assert!(
         owner
-            .validate(&envelope(Operation::ProofAgentProxyOpen(
+            .validate(&envelope(Operation::AgentProxyOpen(
                 crate::v1::ProofAgentProxyOpen::default()
             )))
             .is_ok()
     );
     assert!(
         owner
-            .validate(&envelope(Operation::ProofAgentProxyStatus(
+            .validate(&envelope(Operation::AgentProxyStatus(
                 ProofTerminalLease::default()
             )))
             .is_ok()
     );
     assert!(
         owner
-            .validate(&envelope(Operation::ProofAgentProxyClose(
+            .validate(&envelope(Operation::AgentProxyClose(
                 crate::v1::ProofAgentProxyClose::default()
             )))
             .is_ok()
@@ -72,8 +70,8 @@ fn production_admits_terminal_verbs_and_keeps_fixture_only_verbs_refused() {
     // OpenCode is Linux-only in v1; every other POSIX host keeps the refusal.
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     for refused in [
-        Operation::ProofOpencodeOpen(crate::v1::ProofOpencodeOpen::default()),
-        Operation::ProofOpencodeClose(crate::v1::ProofOpencodeLease::default()),
+        Operation::OpencodeOpen(crate::v1::ProofOpencodeOpen::default()),
+        Operation::OpencodeClose(crate::v1::ProofOpencodeLease::default()),
     ] {
         assert_eq!(
             owner.validate(&envelope(refused)).err(),
@@ -83,9 +81,9 @@ fn production_admits_terminal_verbs_and_keeps_fixture_only_verbs_refused() {
     // Verbs without a production provider stay refused at admission.
     for refused in [
         Operation::ProofPeerRelayOpen(crate::v1::ProofPeerRelayOpen::default()),
-        Operation::ProofGitAdvertisementOpen(crate::v1::ProofGitAdvertisementOpen::default()),
+        Operation::GitAdvertisementOpen(crate::v1::ProofGitAdvertisementOpen::default()),
         Operation::ProofGitUploadOpen(crate::v1::ProofGitUploadOpen::default()),
-        Operation::ProofCodexOpen(crate::v1::ProofProviderScope::default()),
+        Operation::CodexOpen(crate::v1::ProofProviderScope::default()),
     ] {
         assert_eq!(
             owner.validate(&envelope(refused)).err(),

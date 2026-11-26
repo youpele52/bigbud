@@ -105,10 +105,9 @@ export function routeProductionRemoteAgentProxy<
         readonly runtime?: RemoteAgentRuntime;
         readonly maxFrameBytes?: number;
       },
->(input: I, activation?: boolean): I | RemoteAgentOwnedSshInput {
+>(input: I): I | RemoteAgentOwnedSshInput {
   if ("owner" in input) return input;
-  const production = remoteAgentOwnerSelection(activation);
-  if (!production) return input;
+  const production = remoteAgentOwnerSelection();
   if (!input.runtime) throw new Error("The SSH owner proxies only a pinned agent runtime.");
   return {
     executionTargetId: input.executionTargetId,

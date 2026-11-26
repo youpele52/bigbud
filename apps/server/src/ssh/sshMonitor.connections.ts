@@ -1,8 +1,5 @@
-import { runProcess } from "../utils/processRunner.ts";
-import { remoteReadOnlyInvocation } from "../terminal/Layers/Manager.remote-inspection.ts";
 import type { SshMonitorHealthOwner } from "./sshMonitor.healthOwner.ts";
 import { validSshMonitorTarget } from "./sshMonitor.target.ts";
-import { isSshOwnerSelected } from "./sshOwnerSelection.ts";
 
 interface HealthProbe {
   readonly abort: AbortController;
@@ -131,22 +128,6 @@ export function recordSshMonitorSample(
   connection.lastSuccess = Math.max(connection.lastSuccess, sampledAtMs);
 }
 
-async function sampleLegacyHealth(target: string): Promise<"reachable" | "unreachable"> {
-  try {
-    const invocation = remoteReadOnlyInvocation(target, "sh -c 'true'");
-    await runProcess(invocation.command, invocation.args, {
-      shell: false,
-      timeoutMs: 3_000,
-      settleOnTimeout: true,
-      maxBufferBytes: 4_096,
-      outputMode: "error",
-    });
-    return "reachable";
-  } catch {
-    return "unreachable";
-  }
-}
-
 /** Coalesced health checks across tabs; only confirmed failure can revoke caller leases. */
 export async function isConnectedSshMonitorTarget(
   target: string,
@@ -157,16 +138,14 @@ export async function isConnectedSshMonitorTarget(
   if (signal?.aborted) return false;
   const connection = connections.get(target);
   const lease = connection?.owners.get(callerId);
-  if (!connection || !lease || (!owner && isSshOwnerSelected())) return false;
+  // Health comes only from the owner; without one the target is not confirmed.
+  if (!connection || !lease || !owner) return false;
 
-  let check: HealthCheck = connection;
-  if (owner) {
-    // A selected owner must establish its own freshness, independent of the legacy path.
-    const ownerChecks = (connection.ownerChecks ??= new WeakMap());
-    const existing = ownerChecks.get(owner);
-    check = existing ?? { lastSuccess: -Infinity, probe: undefined };
-    if (!existing) ownerChecks.set(owner, check);
-  }
+  // Each owner establishes its own freshness.
+  const ownerChecks = (connection.ownerChecks ??= new WeakMap());
+  const existing = ownerChecks.get(owner);
+  const check: HealthCheck = existing ?? { lastSuccess: -Infinity, probe: undefined };
+  if (!existing) ownerChecks.set(owner, check);
   if (Date.now() - check.lastSuccess < CHECK_INTERVAL_MS) return true;
   let probe = check.probe;
   if (!probe) {
@@ -175,9 +154,7 @@ export async function isConnectedSshMonitorTarget(
     const startedAt = Date.now();
     const run = async () => {
       try {
-        const health = owner
-          ? await owner.sampleHealth(target, active.abort.signal)
-          : await sampleLegacyHealth(target);
+        const health = await owner.sampleHealth(target, active.abort.signal);
         if (active.abort.signal.aborted || connections.get(target) !== connection) return false;
         if (health === "reachable") {
           check.lastSuccess = Date.now();

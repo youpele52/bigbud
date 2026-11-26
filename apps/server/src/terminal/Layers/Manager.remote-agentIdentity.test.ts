@@ -20,15 +20,6 @@ import {
 import { makeTerminalTitleListener } from "../../orchestration/Layers/TerminalThreadTitleReactor.ts";
 
 vi.mock("./Manager.remote-inspection.ts", () => ({ inspectRemoteTerminalProcesses: vi.fn() }));
-vi.mock("../../ssh/sshProcess.ts", () => ({
-  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
-    stdout: `\x1e${input.args[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  })),
-}));
 const target = "ssh:host=devbox&user=deploy&auth=ssh-key";
 
 class RemoteFakeAdapter extends FakePtyAdapter {

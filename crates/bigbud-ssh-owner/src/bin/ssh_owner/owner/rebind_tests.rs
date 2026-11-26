@@ -122,7 +122,7 @@ fn snapshot_fixture_scopes_cancellation_to_one_admitted_request() {
         owner.validate(&request).err(),
         Some(ErrorCode::OperationDenied)
     );
-    request.operation = Some(Operation::ProofWorkspaceSnapshot(
+    request.operation = Some(Operation::WorkspaceSnapshot(
         crate::v1::ProofWorkspaceList {
             workspace_root: workspace.to_str().unwrap().into(),
             relative_dir: String::new(),

@@ -73,7 +73,7 @@ impl Owner {
         if self.tracked_push.is_some()
             && !matches!(
                 operation,
-                Operation::ProofGitTrackedPush(_)
+                Operation::GitTrackedPush(_)
                     | Operation::InspectTrust(_)
                     | Operation::ApproveTrust(_)
                     | Operation::Connect(_)
@@ -87,9 +87,9 @@ impl Owner {
             && self.opencode_v2.is_some()
             && !matches!(
                 operation,
-                Operation::ProofOpencodeOpen(_)
-                    | Operation::ProofOpencodeStatus(_)
-                    | Operation::ProofOpencodeClose(_)
+                Operation::OpencodeOpen(_)
+                    | Operation::OpencodeStatus(_)
+                    | Operation::OpencodeClose(_)
                     | Operation::InspectTrust(_)
                     | Operation::ApproveTrust(_)
                     | Operation::Connect(_)
@@ -107,7 +107,7 @@ impl Owner {
             && !matches!(
                 operation,
                 Operation::ListFolders(_)
-                    | Operation::ProofUnlockSyntheticPosixPassword(_)
+                    | Operation::UnlockPosixPassword(_)
                     | Operation::InspectTrust(_)
                     | Operation::ApproveTrust(_)
                     | Operation::Connect(_)
@@ -121,7 +121,7 @@ impl Owner {
             && !matches!(
                 operation,
                 Operation::ListFolders(_)
-                    | Operation::ProofSampleHealth(_)
+                    | Operation::SampleHealth(_)
                     | Operation::InspectTrust(_)
                     | Operation::ApproveTrust(_)
                     | Operation::Connect(_)
@@ -135,7 +135,7 @@ impl Owner {
             if inbox.cleanup_uncertain() {
                 return Err(ErrorCode::OwnerUnavailable);
             }
-            if matches!(operation, Operation::ProofWorkspaceSnapshot(_)) {
+            if matches!(operation, Operation::WorkspaceSnapshot(_)) {
                 if request.request_id.len() != super::picker_cancel::ID_BYTES {
                     return Err(ErrorCode::InvalidOperands);
                 }
@@ -146,7 +146,7 @@ impl Owner {
             }
         }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if matches!(operation, Operation::ProofWorkspaceReadiness(_))
+        if matches!(operation, Operation::WorkspaceReadiness(_))
             && !self.workspace_readiness_fixture
             && !self.production
         {
@@ -185,17 +185,15 @@ fn production_verb(operation: &Operation) -> bool {
     // set; they are admitted on every POSIX production host.
     let agent = matches!(
         operation,
-        Operation::ProofAgentProxyOpen(_)
-            | Operation::ProofAgentProxyStatus(_)
-            | Operation::ProofAgentProxyClose(_)
+        Operation::AgentProxyOpen(_)
+            | Operation::AgentProxyStatus(_)
+            | Operation::AgentProxyClose(_)
     );
     // OpenCode remains platform-gated: only Linux has the product recipe.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let opencode = matches!(
         operation,
-        Operation::ProofOpencodeOpen(_)
-            | Operation::ProofOpencodeStatus(_)
-            | Operation::ProofOpencodeClose(_)
+        Operation::OpencodeOpen(_) | Operation::OpencodeStatus(_) | Operation::OpencodeClose(_)
     );
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let opencode = false;
@@ -257,16 +255,16 @@ fn production_verb(operation: &Operation) -> bool {
                 | Operation::Disconnect(_)
                 | Operation::ListFolders(_)
                 | Operation::ListAliases(_)
-                | Operation::ProofSampleHealth(_)
-                | Operation::ProofPrepareTerminal(_)
-                | Operation::ProofCancelTerminalReservation(_)
-                | Operation::ProofOpenTerminal(_)
-                | Operation::ProofTerminalStatus(_)
-                | Operation::ProofTerminalReplay(_)
-                | Operation::ProofTerminalInput(_)
-                | Operation::ProofTerminalResize(_)
-                | Operation::ProofTerminalCwd(_)
-                | Operation::ProofCloseTerminal(_)
+                | Operation::SampleHealth(_)
+                | Operation::PrepareTerminal(_)
+                | Operation::CancelTerminalReservation(_)
+                | Operation::OpenTerminal(_)
+                | Operation::TerminalStatus(_)
+                | Operation::TerminalReplay(_)
+                | Operation::TerminalInput(_)
+                | Operation::TerminalResize(_)
+                | Operation::TerminalCwd(_)
+                | Operation::CloseTerminal(_)
         )
 }
 

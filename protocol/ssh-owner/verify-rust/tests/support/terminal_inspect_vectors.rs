@@ -30,7 +30,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_terminal_prepare_shell",
-            request(Operation::ProofPrepareTerminal(v1::ProofPrepareTerminal {
+            request(Operation::PrepareTerminal(v1::ProofPrepareTerminal {
                 cwd: "/srv/work".into(),
                 thread_id: "thread".into(),
                 terminal_id: "pane".into(),

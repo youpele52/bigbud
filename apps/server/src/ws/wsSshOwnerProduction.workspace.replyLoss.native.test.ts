@@ -70,7 +70,7 @@ it.skipIf(!enabled)(
         const files = Effect.runSync(
           withWsSshOwnerProductionWorkspace(
             { workspaceRuntime: base, workspaceMutations: unsupportedWorkspaceMutations },
-            { activation: true, read: () => registration },
+            { read: () => registration },
           )!.workspaceRuntime.pipe(Effect.provide(pathsLayer)),
         );
         const input = { executionTargetId: descriptor.targetId, cwd, relativePath: "lost.txt" };

@@ -1,9 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, expect } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { afterEach, beforeEach, vi } from "vitest";
 
-import { runSshCommand } from "../../ssh/sshProcess.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import {
   WorkspaceIndexReadOwner,
@@ -12,10 +11,7 @@ import {
 import { WorkspaceEntriesLive } from "./WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "./WorkspacePaths.ts";
 
-vi.mock("../../ssh/sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
-
 const directSshTarget = "ssh:host=dev&transport=direct-ssh";
-const agentTarget = "ssh:host=dev&transport=agent";
 const cwd = "/srv/project ";
 const owner = { indexWorkspace: vi.fn<WorkspaceIndexReadOwnerShape["indexWorkspace"]>() };
 const baseLayer = WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive));
@@ -24,16 +20,6 @@ const withNodeServices = (layer: typeof baseLayer) =>
 
 beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.unstubAllEnvs());
-
-function mockSshResponse(stdout: string) {
-  vi.mocked(runSshCommand).mockResolvedValueOnce({
-    stdout,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  });
-}
 
 it.layer(
   withNodeServices(baseLayer.pipe(Layer.provide(Layer.succeed(WorkspaceIndexReadOwner, owner)))),
@@ -69,7 +55,6 @@ it.layer(
           ],
           truncated: true,
         });
-        expect(runSshCommand).not.toHaveBeenCalled();
       }),
   );
 
@@ -120,7 +105,6 @@ it.layer(
           ],
           truncated: true,
         });
-        expect(runSshCommand).not.toHaveBeenCalled();
       }),
   );
 
@@ -139,77 +123,6 @@ it.layer(
         cause,
       });
       expect(owner.indexWorkspace).toHaveBeenCalledTimes(1);
-      expect(runSshCommand).not.toHaveBeenCalled();
-    }),
-  );
-
-  it.effect("retains local and remote-agent search even when the owner is present", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("BIGBUD_REMOTE_AGENT_TRANSPORT", "direct-ssh");
-      mockSshResponse("true\n");
-      mockSshResponse("agent-path\0");
-      const workspaceEntries = yield* WorkspaceEntries;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const localCwd = yield* fileSystem.makeTempDirectoryScoped();
-      yield* fileSystem.writeFileString(`${localCwd}/local-path`, "");
-
-      expect(yield* workspaceEntries.search({ cwd: localCwd, query: "", limit: 10 })).toMatchObject(
-        {
-          entries: [{ path: "local-path", kind: "file" }],
-          truncated: false,
-        },
-      );
-      expect(
-        yield* workspaceEntries.search({
-          cwd,
-          executionTargetId: agentTarget,
-          query: "",
-          limit: 10,
-        }),
-      ).toMatchObject({
-        entries: [{ path: "agent-path", kind: "file" }],
-        truncated: false,
-      });
-      expect(runSshCommand).toHaveBeenCalledTimes(2);
-      expect(runSshCommand).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          cwd,
-          executionTargetId: agentTarget,
-          command: "git",
-          args: ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        }),
-      );
-      expect(owner.indexWorkspace).not.toHaveBeenCalled();
-    }),
-  );
-});
-
-it.layer(withNodeServices(baseLayer))("WorkspaceEntries without an index read owner", (it) => {
-  it.effect("retains the legacy direct SSH filesystem scan", () =>
-    Effect.gen(function* () {
-      mockSshResponse("false\n");
-      mockSshResponse("d\tsrc\0f\tsrc/index.ts\0");
-      const workspaceEntries = yield* WorkspaceEntries;
-      const result = yield* workspaceEntries.search({
-        cwd,
-        executionTargetId: directSshTarget,
-        query: "index",
-        limit: 10,
-      });
-      expect(result).toMatchObject({
-        entries: [{ path: "src/index.ts", kind: "file", parentPath: "src" }],
-        truncated: false,
-      });
-      expect(runSshCommand).toHaveBeenCalledTimes(2);
-      expect(runSshCommand).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          cwd,
-          executionTargetId: directSshTarget,
-          command: "find",
-        }),
-      );
     }),
   );
 });

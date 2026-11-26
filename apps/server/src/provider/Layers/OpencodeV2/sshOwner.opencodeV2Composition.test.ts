@@ -3,13 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SshOwnerTargetDescriptor } from "../../../ssh/sshOwnerProductionClient.launch.ts";
 import {
   makeProductionV2OwnerSource,
-  makeSelectedV2OwnerSource,
   resolveV2OwnerServiceBinding,
   startSelectedV2OwnerProcess,
 } from "./ServerManager.ownerV2.selected.ts";
 import type { V2ProcessConfig } from "./ServerManager.types.ts";
 import {
-  binding,
   cleanupFixtures,
   config,
   ownerClient,
@@ -114,33 +112,6 @@ describe("selected OpenCode v2 SSH owner composition", () => {
     // The first teardown cannot retire the second target's listener.
     expect((await two.client.server.info()).version).toBe("2.1.4");
     expect(two.isRunning()).toBe(true);
-    expect(spawnSpy).not.toHaveBeenCalled();
-  });
-
-  it("binds the selected dev owner's exact target and trusted binding", async () => {
-    const fixture = await targetFixture("/opt/remote/opencode");
-    const source = makeSelectedV2OwnerSource({
-      targetId: "ssh:fixture",
-      picker: {
-        async withOwner(targetId, operation) {
-          expect(targetId).toBe("ssh:fixture");
-          return operation({
-            opencodeV2Lane: {
-              targetId,
-              client: ownerClient(fixture.port, fixture.password, fixture.calls, fixture.scopes),
-              binding,
-              binaryPath: fixture.remoteBinary,
-            },
-            opencodeV2Service: { binaryPath: fixture.remoteBinary },
-          });
-        },
-      },
-    });
-    const process = track(
-      await startSelectedV2OwnerProcess(config(), source, { platform: "linux" }),
-    );
-    expect((await process.client.server.info()).version).toBe("2.1.4");
-    expect(fixture.scopes[0]?.cwd).toBe("/srv/ssh_fixture");
     expect(spawnSpy).not.toHaveBeenCalled();
   });
 

@@ -6,7 +6,6 @@
  * @module server.providerLayers
  */
 import { Effect, Layer } from "effect";
-import { resolveAcpSessionFsOwner } from "./provider/Layers/AcpRemoteWorkspace.session.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { ServerConfig } from "./startup/config";
@@ -57,20 +56,16 @@ const makeProviderLayerLive = (
       const claudeAdapterLayer = makeClaudeAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
-      const sessionFsOwner = yield* resolveAcpSessionFsOwner();
-      const copilotAdapterLayer = makeCopilotAdapterLive({
-        ...(nativeEventLogger ? { nativeEventLogger } : {}),
-        ...(sessionFsOwner ? { sessionFsOwner } : {}),
-      });
+      const copilotAdapterLayer = makeCopilotAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
       const cursorAdapterLayer = makeCursorAdapterLive({
-        ...(sessionFsOwner ? { sessionFsOwner } : {}),
         ...(nativeEventLogger ? { nativeEventLogger } : {}),
         ...(configuredRemoteAgentLayers.ptyResolver
           ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }
           : {}),
       });
       const devinAdapterLayer = makeDevinAdapterLive({
-        ...(sessionFsOwner ? { sessionFsOwner } : {}),
         ...(nativeEventLogger ? { nativeEventLogger } : {}),
         ...(configuredRemoteAgentLayers.ptyResolver
           ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }

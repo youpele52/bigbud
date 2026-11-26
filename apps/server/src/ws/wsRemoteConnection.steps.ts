@@ -7,7 +7,7 @@ import {
   disconnectConfiguredRemoteAgentTarget,
   isRemoteAgentExecutionTarget,
 } from "../remote-agent/remoteAgentDefault.ts";
-import { closeSshPasswordSession } from "../ssh/sshSession.ts";
+import { transitionProductionTarget } from "../ssh/sshOwnerProductionPicker.ts";
 import { forgetSshMonitorTarget } from "../ssh/sshMonitor.connections.ts";
 import { type RemoteDisconnectStep, RemoteDisconnectStepError } from "./wsRemoteConnection.ts";
 
@@ -17,8 +17,13 @@ export interface RemoteDisconnectStepDependencies {
   /** Agent-transport targets use remote-agent PTYs, which keep running on the host. */
   readonly usesRemoteAgentPty?: (executionTargetId: string) => boolean;
   readonly disconnectRemoteAgent?: (executionTargetId: string, error: Error) => void;
-  readonly closePasswordSession?: (executionTargetId: string) => Promise<void>;
+  /** Owner Disconnect for a direct SSH target: closes its owner-held master. */
+  readonly disconnectOwnerTarget?: (executionTargetId: string) => Promise<void>;
   readonly forgetMonitorTarget?: (executionTargetId: string) => void;
+}
+
+async function disconnectProductionOwnerTarget(executionTargetId: string): Promise<void> {
+  await transitionProductionTarget(executionTargetId, "disconnect");
 }
 
 /** The one rule for whether a provider session runs on, or works in, an execution target. */
@@ -40,7 +45,7 @@ const logItemFailure = (step: string, executionTargetId: string, threadId: strin
     }),
   );
 
-/** Disconnect teardown in order: provider sessions, direct-SSH terminals, pool, ControlMaster, monitor. */
+/** Disconnect teardown in order: provider sessions, direct-SSH terminals, pool, owner master, monitor. */
 export function makeRemoteDisconnectSteps(
   dependencies: RemoteDisconnectStepDependencies,
 ): ReadonlyArray<RemoteDisconnectStep> {
@@ -98,12 +103,15 @@ export function makeRemoteDisconnectSteps(
         ),
     },
     {
-      name: "password-session",
+      name: "owner-disconnect",
       run: (target) =>
-        Effect.tryPromise({
-          try: () => (dependencies.closePasswordSession ?? closeSshPasswordSession)(target),
-          catch: (cause) => new RemoteDisconnectStepError({ step: "password-session", cause }),
-        }),
+        usesRemoteAgentPty(target)
+          ? Effect.void
+          : Effect.tryPromise({
+              try: () =>
+                (dependencies.disconnectOwnerTarget ?? disconnectProductionOwnerTarget)(target),
+              catch: (cause) => new RemoteDisconnectStepError({ step: "owner-disconnect", cause }),
+            }),
     },
     {
       name: "ssh-monitor",

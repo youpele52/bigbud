@@ -9,7 +9,6 @@ import {
   prepareRemoteAgentWorkspacePty,
   type RemoteAgentPtyResolver,
 } from "../remote-agent/remoteAgentPtyAdapter.ts";
-import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import { createRemoteWorkspaceBridge } from "./remoteWorkspaceBridge.ts";
 import {
   bindSessionFsOwner,
@@ -103,7 +102,7 @@ export async function createRemoteWorkspaceAcpBridge(input: {
     readonly sessionEpoch: number;
   };
 }): Promise<RemoteWorkspaceAcpBridge> {
-  if (isSshOwnerDevFixtureSelected() || input.ownerSelected === true) {
+  if (input.ownerSelected === true) {
     const reader = await bindSessionFsOwner(input.sessionFsOwner, input.workspaceTarget);
     const bridge = await createRemoteWorkspaceBridge(input);
     const denied = () => Effect.fail(acpInternalError(sessionFsUnavailable()));

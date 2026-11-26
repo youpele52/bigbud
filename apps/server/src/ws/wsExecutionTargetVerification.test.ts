@@ -4,13 +4,15 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { ExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 
-vi.mock("../ssh/sshVerification.ts", () => ({
-  verifySshExecutionTarget: vi.fn(async () => ({ message: "SSH access is available." })),
-  unlockSshExecutionTargetCredential: vi.fn(),
-  unlockSshExecutionTargetKey: vi.fn(),
-}));
 vi.mock("../remote-agent/remoteAgentDefault.ts", () => ({
   isRemoteAgentExecutionTarget: (target: string) => target.includes("transport=agent"),
+}));
+vi.mock("../ssh/sshOwnerProductionPicker.ts", () => ({
+  verifyProductionTarget: async (input: { executionTargetId: string }) => ({
+    executionTargetId: input.executionTargetId,
+    cwd: "/home/dev",
+    message: "Connected through the SSH owner.",
+  }),
 }));
 
 import { makeRemoteAgentInstallOperations } from "../remote-agent/remoteAgentInstall.operation.ts";

@@ -1,4 +1,4 @@
-import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
+import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
 import type { ProcessRunResult } from "../utils/processRunner.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
 import { runToolCommand, resolveToolTransportTarget } from "../tool-transport/toolTransport.ts";
@@ -52,8 +52,8 @@ export class SelectedSshOwnerWorkspaceBridgeError extends Error {
   ) {
     super(
       detail
-        ? `Remote workspace ${operation} is unavailable with the source-dev SSH owner: ${detail}.`
-        : `Remote workspace ${operation} is unavailable with the source-dev SSH owner.`,
+        ? `Remote workspace ${operation} is unavailable through the SSH owner: ${detail}.`
+        : `Remote workspace ${operation} is unavailable through the SSH owner.`,
     );
     this.name = "SelectedSshOwnerWorkspaceBridgeError";
   }
@@ -64,11 +64,11 @@ export function assertRemoteWorkspaceBridgeOperationSupported(
   operation: UnsupportedBridgeOperation,
   hasBoundCapability = false,
 ): void {
-  // This entry point has no selected owner capability; it must not dispatch
-  // generic shell or managed-agent operations as a substitute.
+  // A direct SSH target without a bound owner capability must not dispatch a
+  // generic shell as a substitute; SSH runs only through the Rust owner.
   if (
-    isSshOwnerDevFixtureSelected() &&
     workspaceTarget.location === "remote" &&
+    !isRemoteAgentExecutionTarget(workspaceTarget.executionTargetId) &&
     !hasBoundCapability
   ) {
     throw new SelectedSshOwnerWorkspaceBridgeError(operation);

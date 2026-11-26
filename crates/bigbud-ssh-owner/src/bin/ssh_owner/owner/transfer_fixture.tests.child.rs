@@ -303,7 +303,7 @@ fn hex32(hex: &str) -> [u8; 32] {
 fn transfer_fixture_grant_digest_separates_transfer_from_pty_shell_and_peer() {
     use v1::request::Operation;
 
-    let stream = Operation::ProofTransferStream(v1::ProofTransferStream {
+    let stream = Operation::TransferStream(v1::ProofTransferStream {
         scope: Some(scope(2)),
         operands: Some(v1::ProofTransferOperands {
             source: "fixture/source".into(),
@@ -313,7 +313,7 @@ fn transfer_fixture_grant_digest_separates_transfer_from_pty_shell_and_peer() {
         }),
         launch_attempt: None,
     });
-    let packaged = Operation::ProofPackagedRsync(v1::ProofPackagedRsync {
+    let packaged = Operation::PackagedRsync(v1::ProofPackagedRsync {
         scope: Some(scope(1)),
         operands: Some(v1::ProofTransferOperands {
             source: "fixture/tree-a".into(),
@@ -323,7 +323,7 @@ fn transfer_fixture_grant_digest_separates_transfer_from_pty_shell_and_peer() {
         }),
         launch_attempt: None,
     });
-    let pty = Operation::ProofOpenTerminal(v1::ProofTerminalOpen { lease: vec![1] });
+    let pty = Operation::OpenTerminal(v1::ProofTerminalOpen { lease: vec![1] });
     let shell = Operation::ProofRunThreadShell(v1::ProofRunThreadShell {
         workspace_root: "/fixture/root".into(),
         cwd: "/fixture/root".into(),

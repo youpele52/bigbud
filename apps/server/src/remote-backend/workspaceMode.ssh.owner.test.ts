@@ -1,8 +1,7 @@
 import type { OrchestrationCommand, OrchestrationReadModel } from "@bigbud/contracts";
 import { Effect } from "effect";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { runSshCommand } from "../ssh/sshProcess.ts";
 import { makeWorkspaceModeGate } from "./workspaceMode.gate.ts";
 import {
   encodeWorkspaceModeRecord,
@@ -16,8 +15,6 @@ import {
   type WorkspaceModeSshOwner,
 } from "./workspaceMode.ssh.owner.ts";
 import { makeSshWorkspaceModeStore } from "./workspaceMode.ssh.ts";
-
-vi.mock("../ssh/sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 
 const executionTargetId = "ssh:host=fixture&user=workspace&port=2222";
 const workspaceRoot = "/alias/project";
@@ -53,8 +50,6 @@ function setup(timeoutMs?: number) {
 }
 
 describe("workspace mode gate with a selected SSH owner", () => {
-  beforeEach(() => vi.mocked(runSshCommand).mockReset());
-
   const create = (target = executionTargetId, root = workspaceRoot) =>
     ({
       type: "project.create",
@@ -84,7 +79,6 @@ describe("workspace mode gate with a selected SSH owner", () => {
     });
     expect(inspectWorkspaceMode).toHaveBeenCalledTimes(2);
     expect(publishWorkspaceMode).toHaveBeenCalledTimes(1);
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it.each([true, false])(
@@ -106,7 +100,6 @@ describe("workspace mode gate with a selected SSH owner", () => {
         [scope, expect.any(AbortSignal)],
       ]);
       expect(publishWorkspaceMode).toHaveBeenCalledTimes(1);
-      expect(runSshCommand).not.toHaveBeenCalled();
     },
   );
 
@@ -117,7 +110,6 @@ describe("workspace mode gate with a selected SSH owner", () => {
       detail: expect.stringContaining("is a remote-runtime workspace"),
     });
     expect(publishWorkspaceMode).not.toHaveBeenCalled();
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid root and does not expose the reservation capability for conversion", async () => {
@@ -132,13 +124,10 @@ describe("workspace mode gate with a selected SSH owner", () => {
     await Effect.runPromise(gate.check(create("local"), readModel));
     expect(inspectWorkspaceMode).not.toHaveBeenCalled();
     expect(publishWorkspaceMode).not.toHaveBeenCalled();
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 });
 
 describe("selected SSH workspace-mode reservation owner", () => {
-  beforeEach(() => vi.mocked(runSshCommand).mockReset());
-
   it("publishes only the canonical claim bound to the exact inspected target, root and generation", async () => {
     const { store, inspectWorkspaceMode, publishWorkspaceMode } = setup();
     expect(await reserveWorkspaceMode(store, workspaceRoot, first.mode, first.owner!)).toEqual({
@@ -149,7 +138,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
     expect(publishWorkspaceMode.mock.calls).toStrictEqual([
       [{ observation, nextRecord: encodeWorkspaceModeRecord(first) }, expect.any(AbortSignal)],
     ]);
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it("requires the selected root and refuses an unobserved, mismatched or conversion publish", async () => {
@@ -169,7 +157,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
       await expect(store.publish({ ...first, ...change })).rejects.toThrow("reservation claim");
     }
     expect(publishWorkspaceMode).not.toHaveBeenCalled();
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it.each<Partial<WorkspaceModeSshObservation>>([
@@ -192,7 +179,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
     );
     await expect(store.publish(first)).rejects.toThrow("requires an inspected");
     expect(publishWorkspaceMode).not.toHaveBeenCalled();
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -210,7 +196,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
         currentRecord,
       });
       await expect(store.inspect(workspaceRoot)).rejects.toThrow(/workspace mode record/i);
-      expect(runSshCommand).not.toHaveBeenCalled();
     },
   );
 
@@ -234,7 +219,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
       },
       expect.any(AbortSignal),
     );
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it("uses exactly one read to reconcile a lost publish reply for a matching record", async () => {
@@ -247,7 +231,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
     });
     expect(inspectWorkspaceMode).toHaveBeenCalledTimes(2);
     expect(publishWorkspaceMode).toHaveBeenCalledTimes(1);
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -265,7 +248,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
       ).rejects.toThrow("publication could not be confirmed");
       expect(inspectWorkspaceMode).toHaveBeenCalledTimes(2);
       expect(publishWorkspaceMode).toHaveBeenCalledTimes(1);
-      expect(runSshCommand).not.toHaveBeenCalled();
     },
   );
 
@@ -281,7 +263,6 @@ describe("selected SSH workspace-mode reservation owner", () => {
     await expect(store.publish(first)).rejects.toThrow("publication could not be confirmed");
     await expect(store.publish(first)).rejects.toThrow("requires an inspected");
     expect(publishWorkspaceMode).toHaveBeenCalledTimes(1);
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it("preserves unsupported vs owner refusal, without legacy SSH", async () => {
@@ -296,29 +277,5 @@ describe("selected SSH workspace-mode reservation owner", () => {
       reserveWorkspaceMode(store, workspaceRoot, first.mode, first.owner!),
     ).rejects.toThrow("SSH owner refused");
     expect(publishWorkspaceMode).not.toHaveBeenCalled();
-    expect(runSshCommand).not.toHaveBeenCalled();
-  });
-
-  it("continues to use the existing shell runner when no owner is selected", async () => {
-    vi.mocked(runSshCommand).mockResolvedValueOnce({
-      stdout: "unsupported not-linux",
-      stderr: "",
-      code: 0,
-      signal: null,
-      timedOut: false,
-    });
-    const store = makeSshWorkspaceModeStore(executionTargetId);
-    expect(await store.inspect(workspaceRoot)).toEqual({
-      kind: "unsupported",
-      reason: "not-linux",
-    });
-    expect(runSshCommand).toHaveBeenCalledExactlyOnceWith({
-      executionTargetId,
-      shellMode: "clean-posix",
-      command: "/bin/sh",
-      args: ["-c", expect.any(String)],
-      timeoutMs: 15_000,
-      maxBufferBytes: 64 * 1024,
-    });
   });
 });

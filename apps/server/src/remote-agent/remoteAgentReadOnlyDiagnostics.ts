@@ -1,4 +1,4 @@
-import type { RunSshCommandInput } from "../ssh/sshProcess";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types";
 import { classifyRemoteAgentFailure } from "./remoteAgentFailure.classify";
 import {
   readRemoteAgentRegistryReadOnly,
@@ -9,7 +9,7 @@ import { readRemoteAgentInventoryWithoutStart } from "./remoteAgentReadOnlyInven
 /** Status/doctor observations never install, start, attach, prune or signal a supervisor. */
 export async function remoteAgentReadOnlyDiagnostics(
   target: string,
-  run?: (input: RunSshCommandInput) => Promise<unknown>,
+  run?: RemoteAgentCommandRunner,
   timeoutMs = 15_000,
   inventory = readRemoteAgentInventoryWithoutStart,
 ) {

@@ -1,7 +1,5 @@
 import { defineConfig, type UserConfig } from "tsdown";
 
-import { sshOwnerActivationDefine } from "@bigbud/shared/SshOwnerActivation.build";
-
 /** One self-contained file per helper: the laptop's sha256 pin of an entry covers all its code. */
 const helper = (name: string, entry: string, outDir: string): UserConfig => ({
   entry: { [name]: entry },
@@ -14,8 +12,6 @@ const helper = (name: string, entry: string, outDir: string): UserConfig => ({
   inputOptions: { optimization: { inlineConst: false } },
   minify: false,
   sourcemap: true,
-  // Temporary local-only SSH owner override; CI/release bundles get a literal `false`.
-  define: sshOwnerActivationDefine(),
   banner: { js: "#!/usr/bin/env node\n" },
 });
 

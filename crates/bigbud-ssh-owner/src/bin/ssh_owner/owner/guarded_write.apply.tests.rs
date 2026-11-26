@@ -8,7 +8,7 @@ use std::{fs, os::unix::fs::PermissionsExt};
 const OP: &str = "0123456789abcdef0123456789abcdef";
 
 fn apply(binding: &ProofWorkspaceGuardedWriteBinding, lease: &[u8]) -> Operation {
-    Operation::ProofWorkspaceGuardedWriteApply(ProofWorkspaceGuardedWriteApply {
+    Operation::WorkspaceGuardedWriteApply(ProofWorkspaceGuardedWriteApply {
         binding: Some(binding.clone()),
         lease: lease.to_vec(),
     })

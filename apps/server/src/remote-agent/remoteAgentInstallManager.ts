@@ -17,7 +17,8 @@ import { prepareRemoteAgentInstallCapacity } from "./remoteAgentInstall.capacity
 import { remoteAgentRuntimeSummary } from "./remoteAgentStatus.ts";
 import { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.ts";
 import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remoteAgentPlatform.ts";
-import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
+import { SshOwnerRequiredError } from "../ssh/sshOwnerRequired.ts";
+import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { assertInstalledRemoteAgentCheck } from "./remoteAgentInstallManager.verify.ts";
 import { makeOwnerRemoteAgentInstallDependencies } from "./remoteAgentControl.owner.install.ts";
 import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
@@ -92,7 +93,7 @@ interface RemoteAgentInstallManagerDependencies {
     readonly skipSignatureVerification?: boolean;
     readonly reservationId?: string;
   }) => Promise<RemoteAgentInstallPaths>;
-  readonly runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>;
+  readonly runRemoteCommand: RemoteAgentCommandRunner;
   readonly probePlacedArtifact: (
     executionTargetId: string,
     artifact: RemoteAgentArtifact,
@@ -119,8 +120,12 @@ interface RemoteAgentInstallManagerDependencies {
   readonly resumeRemoval?: (control: RemoteAgentControl) => Promise<boolean>;
 }
 
+const refuseRemoteCommand: RemoteAgentCommandRunner = async () => {
+  throw new SshOwnerRequiredError();
+};
+
 function defaultDependencies(
-  runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>,
+  runRemoteCommand: RemoteAgentCommandRunner,
 ): RemoteAgentInstallManagerDependencies {
   return {
     openControl: (executionTargetId) => openRemoteAgentControl(executionTargetId, runRemoteCommand),
@@ -154,10 +159,11 @@ function defaultDependencies(
 export function makeRemoteAgentInstallManager(
   overrides: Partial<RemoteAgentInstallManagerDependencies> = {},
 ) {
-  // U25: production activation routes every remote step through the live SSH owner.
+  // U25: every remote step routes through the live SSH owner. A step the owner does not
+  // serve is refused; `runRemoteCommand` is only the injected command seam.
   const owner = overrides.runRemoteCommand ? undefined : remoteAgentOwnerSelection();
   const dependencies = {
-    ...defaultDependencies(overrides.runRemoteCommand ?? runSshCommand),
+    ...defaultDependencies(overrides.runRemoteCommand ?? refuseRemoteCommand),
     ...(owner ? makeOwnerRemoteAgentInstallDependencies(owner) : {}),
     ...overrides,
   };

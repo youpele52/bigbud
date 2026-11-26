@@ -4,7 +4,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { expect, vi } from "vitest";
 
 import { RemoteAgentGitExecutorService } from "../../remote-agent/remoteAgentGit.ts";
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { makeGitCoreLayerLive } from "./GitComposition.ts";
 import { InitiatingFetchOwner } from "./GitCore.initiatingTransport.ts";
@@ -47,7 +46,6 @@ function provideGit<A, E, R>(effect: Effect.Effect<A, E, R>) {
 }
 
 it.effect("rejects unowned initiating transports before the Git spawner", () => {
-  activateDevSshOwner();
   const cwd = "/code";
   const fixture = provideGit(
     Effect.gen(function* () {
@@ -111,7 +109,6 @@ it.effect("rejects unowned initiating transports before the Git spawner", () => 
 });
 
 it.effect("keeps a stale custom upstream ref unchanged in selected status", () => {
-  activateDevSshOwner();
   const fixture = provideGit(
     Effect.gen(function* () {
       const cwd = yield* makeTmpDir();
@@ -167,7 +164,6 @@ it.effect("keeps a stale custom upstream ref unchanged in selected status", () =
 it.effect(
   "routes selected initiated fetch through the owner transport with no legacy launch",
   () => {
-    activateDevSshOwner();
     const fetch = vi.fn(async () => "fetched" as const);
     const fixture = provideGit(
       Effect.gen(function* () {

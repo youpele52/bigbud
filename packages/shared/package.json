@@ -331,14 +331,6 @@
       "types": "./src/DevLauncher.ts",
       "import": "./src/DevLauncher.ts"
     },
-    "./SshOwnerActivation": {
-      "types": "./src/SshOwnerActivation.ts",
-      "import": "./src/SshOwnerActivation.ts"
-    },
-    "./SshOwnerActivation.build": {
-      "types": "./src/SshOwnerActivation.build.ts",
-      "import": "./src/SshOwnerActivation.build.ts"
-    },
     "./SshOwnerTargets": {
       "types": "./src/SshOwnerTargets.ts",
       "import": "./src/SshOwnerTargets.ts"

@@ -2,7 +2,6 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { composeBridgeCleanups } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
-import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
 import {
   isLocalWorkspaceTarget,
   isRemoteWorkspaceTarget,
@@ -42,8 +41,8 @@ async function preparePiRpcProcessBridge(
 }
 
 /**
- * Legacy or local Pi launch. A selected dev owner never reaches this module: the dispatcher
- * refuses before any bridge or child exists.
+ * Local Pi launch. A remote runtime never reaches this module: it runs through the SSH owner,
+ * and without an owner binding the dispatcher refuses before any bridge or child exists.
  */
 export async function startLocalPiRpcProcess(input: {
   readonly options: PiRpcProcessOptions;
@@ -51,20 +50,18 @@ export async function startLocalPiRpcProcess(input: {
   readonly capabilities: ReturnType<typeof piVersionCapabilities>;
 }): Promise<PiRpcProcess> {
   const { options, executionTargetId, capabilities } = input;
+  if (!isLocalProviderRuntimeTarget(options.providerRuntimeTarget)) {
+    throw new Error(
+      `A remote Pi runtime (${executionTargetId}) runs only through the SSH owner. No SSH process was started.`,
+    );
+  }
   const bridge = await preparePiRpcProcessBridge(options);
   const rpcArgs = [
     ...(options.sessionFile ? ["--session", options.sessionFile] : []),
     ...(bridge ? bridge.extraArgs : []),
     ...(options.orchestrationBridge ? options.orchestrationBridge.extraArgs : []),
   ];
-  const invocation = isLocalProviderRuntimeTarget(options.providerRuntimeTarget)
-    ? buildPiRpcInvocation(options.binaryPath, rpcArgs)
-    : buildSshCommandInvocation({
-        executionTargetId,
-        command: options.binaryPath,
-        args: ["--mode", "rpc", ...(options.sessionFile ? ["--session", options.sessionFile] : [])],
-        ...(options.workspaceTarget.cwd ? { cwd: options.workspaceTarget.cwd } : {}),
-      });
+  const invocation = buildPiRpcInvocation(options.binaryPath, rpcArgs);
   const localSpawnCwd =
     bridge?.cwd ??
     (isLocalProviderRuntimeTarget(options.providerRuntimeTarget) &&

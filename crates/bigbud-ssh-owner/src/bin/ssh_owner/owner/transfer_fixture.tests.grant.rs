@@ -158,8 +158,8 @@ fn transfer_fixture_verbs_stay_refused_by_the_production_owner() {
     let fixture = Fixture::new();
     let mut owner = fixture.owner(None);
     let operations = [
-        Operation::ProofTransferStream(ProofTransferStream::default()),
-        Operation::ProofPackagedRsync(ProofPackagedRsync::default()),
+        Operation::TransferStream(ProofTransferStream::default()),
+        Operation::PackagedRsync(ProofPackagedRsync::default()),
     ];
     for operation in operations {
         let request = Request {

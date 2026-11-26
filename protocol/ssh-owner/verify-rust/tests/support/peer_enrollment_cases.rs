@@ -13,8 +13,8 @@ fn peer_enrollment_grants_are_separate_from_trust_monitor_and_pty() {
         host: "w1.example.test".into(),
         port: 2222,
     });
-    let health = Operation::ProofSampleHealth(Empty {});
-    let pty = Operation::ProofOpenTerminal(ProofTerminalOpen { lease: Vec::new() });
+    let health = Operation::SampleHealth(Empty {});
+    let pty = Operation::OpenTerminal(ProofTerminalOpen { lease: Vec::new() });
 
     // An issued peer-enrollment grant cannot be spent on ordinary trust, a
     // monitor sample or a PTY lease.

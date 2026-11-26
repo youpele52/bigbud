@@ -44,19 +44,15 @@ import {
 } from "./wsRetentionMutationAuthorization.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import { makeWsRpcHttpEffectWithSshMonitorCleanup } from "./wsSshMonitor.protocol.ts";
-import { makeSshMonitorHandlers } from "./wsSshMonitor.handlers.ts";
 import { forgetSshMonitorInstance } from "../ssh/sshMonitor.connections.ts";
 import { authorizeWebsocketRpcConnection } from "./wsConnectionAuthorization.ts";
-import { makeWsSshOwnerDevHandlers } from "./wsSshOwnerDev.ts";
-import { withWsSshOwnerDevEntryActions } from "./wsSshOwnerDev.workspace.create.ts";
-import { withWsSshOwnerDevWorkspace } from "./wsSshOwnerDev.workspace.ts";
 import { withWsSshOwnerProductionWorkspace } from "./wsSshOwnerProduction.workspace.ts";
 import { initializeProductionSshGuardedWriteJournal } from "../persistence/Layers/SshOwnerGuardedWriteJournal.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
-/** W2 T-files: production Files over the live owner; unchanged when activation is off. */
+/** W2 T-files: Files for SSH targets run over the live owner. */
 const withProductionWorkspace = Effect.fn("withProductionWorkspace")(function* <
   C extends Parameters<typeof withWsSshOwnerProductionWorkspace>[0],
 >(base: C) {
@@ -68,7 +64,6 @@ const withProductionWorkspace = Effect.fn("withProductionWorkspace")(function* <
       )
     : undefined;
   const production = withWsSshOwnerProductionWorkspace(base, journal ? { journal } : {});
-  if (!production) return base;
   return {
     ...base,
     workspaceMutations: production.workspaceMutations,
@@ -83,24 +78,11 @@ const makeWsRpcLayer = (
   relayHandlers: Awaited<
     Effect.Success<ReturnType<typeof makeRemoteBackendRelayRoute>>
   >["handlers"],
-  sshOwner: Effect.Success<ReturnType<typeof makeWsSshOwnerDevHandlers>>,
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const base = yield* makeWsRpcContext(withBootstrapCommandLock, monitorInstanceId);
-      const context = sshOwner
-        ? {
-            ...base,
-            workspaceMutations: withWsSshOwnerDevEntryActions(
-              base.workspaceMutations,
-              sshOwner.workspace,
-            ),
-            workspaceRuntime: yield* withWsSshOwnerDevWorkspace(
-              base.workspaceRuntime,
-              sshOwner.workspace,
-            ).pipe(Effect.provide(WorkspacePathsLive)),
-          }
-        : yield* withProductionWorkspace(base);
+      const context = yield* withProductionWorkspace(base);
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
@@ -135,8 +117,6 @@ const makeWsRpcLayer = (
         ...makeWsRpcSshOwnerAdmissionHandlers(),
         ...metadataWarningHandlers,
         ...searchHandlers,
-        ...sshOwner?.handlers,
-        ...(sshOwner?.monitorHealth && makeSshMonitorHandlers(context, sshOwner.monitorHealth)),
       });
     }),
   );
@@ -157,18 +137,9 @@ export const makeWebsocketRpcRouteLayer = (
         worktreeScope,
         Effect.sync(() => forgetSshMonitorInstance(monitorInstanceId)),
       );
-      const sshOwner = options.remoteClientRouter
-        ? undefined
-        : yield* makeWsSshOwnerDevHandlers(monitorInstanceId);
       const relay = yield* makeRemoteBackendRelayRoute(monitorInstanceId, worktreeScope);
       const wsRpcRuntimeLayer = Layer.mergeAll(
-        makeWsRpcLayer(
-          withBootstrapCommandLock,
-          worktreeScope,
-          monitorInstanceId,
-          relay.handlers,
-          sshOwner,
-        ),
+        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId, relay.handlers),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
         setupAuthority.layer,

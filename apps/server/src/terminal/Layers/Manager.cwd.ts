@@ -7,9 +7,7 @@ import {
 } from "@bigbud/contracts/workspace/terminal.ts";
 import { isLocalExecutionTarget } from "../../executionTargets";
 import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
-import { runSshCommand } from "../../ssh/sshProcess";
 import { assertSshTargetConnected } from "../../ssh/sshTargetDisconnects.ts";
-import { assertSshExecutionTargetReadyAsync } from "../../ssh/sshVerification";
 import type { DirectSshTerminalCwdOwner } from "./Manager.cwd.owner.ts";
 import type { RuntimePathIdentity } from "./Manager.types";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
@@ -42,59 +40,21 @@ export function expandTerminalHome(cwd: string, home: string, platform = process
   return (platform === "win32" ? path.win32 : path.posix).join(home, cwd.slice(2));
 }
 
-const REMOTE_FOLDER_PROBE = [
-  'printf "\\035"',
-  'p="$1"; if [ "$2" = home ]; then p="$HOME"; fi',
-  'case "$p" in "~") p="$HOME";; "~/"*) p="$HOME/${p#\\~/}";; esac',
-  '[ -n "$p" ] && [ -d "$p" ] && [ -x "$p" ] && cd "$p" 2>/dev/null || exit 77',
-  'p=$(pwd -P) || exit 78; printf "\\036%s\\037" "$p"',
-].join("; ");
-
-/** Probe the SSH user's folder without interpreting connection failures as directory failures. */
-const probeRemoteFolder = Effect.fn("terminal.probeRemoteFolder")(function* (
+/**
+ * Without the owner's cwd port a remote folder cannot be resolved: the probe is
+ * refused typed and no SSH process is started (SSH runs only through the owner).
+ */
+const probeRemoteFolder = (
   input: TerminalFolderInput,
-  home: boolean,
-  onFolderProbeReady: () => void = () => undefined,
-) {
-  let folderProbeReady = false;
-  const result = yield* Effect.tryPromise({
-    try: () =>
-      runSshCommand({
-        executionTargetId: input.executionTargetId,
-        command: "sh",
-        args: ["-lc", REMOTE_FOLDER_PROBE, "sh", input.cwd, home ? "home" : "folder"],
-        allowNonZeroExit: true,
-        timeoutMs: TERMINAL_FOLDER_TIMEOUT_MS,
-        maxBufferBytes: 8192,
-        onStdoutChunk: (chunk) => {
-          if (chunk.includes("\x1d")) {
-            folderProbeReady = true;
-            onFolderProbeReady();
-          }
-        },
-      }),
-    catch: () =>
-      new TerminalExecutionTargetError({
-        ...input,
-        detail:
-          "Could not resolve the terminal folder on this SSH target. Check its connection and authentication.",
-      }),
-  });
-  if (result.timedOut && folderProbeReady)
-    return yield* new TerminalCwdError({ cwd: home ? "~" : input.cwd, reason: "timedOut" });
-  if (result.code === 77)
-    return yield* new TerminalCwdError({ cwd: home ? "~" : input.cwd, reason: "statFailed" });
-  const start = result.stdout.lastIndexOf("\x1e");
-  const end = result.stdout.lastIndexOf("\x1f");
-  const cwd = start >= 0 && end > start ? result.stdout.slice(start + 1, end) : "";
-  if (result.timedOut || result.code !== 0 || !cwd.startsWith("/")) {
-    return yield* new TerminalExecutionTargetError({
+  _home: boolean,
+  _onFolderProbeReady: () => void = () => undefined,
+): Effect.Effect<string, TerminalCwdError | TerminalExecutionTargetError> =>
+  Effect.fail(
+    new TerminalExecutionTargetError({
       ...input,
-      detail: "The SSH folder probe did not complete. Check the target connection and retry.",
-    });
-  }
-  return cwd;
-});
+      detail: "Resolving a terminal folder on this SSH target needs the SSH owner.",
+    }),
+  );
 
 const probeOwnedRemoteFolder = Effect.fn("terminal.probeOwnedRemoteFolder")(function* (
   owner: DirectSshTerminalCwdOwner,
@@ -150,35 +110,10 @@ export function makeResolveTerminalFolder(
     if (isWslTerminalTargetId(input.executionTargetId))
       return yield* resolveWslTerminalFolder(input);
     const local = isLocalExecutionTarget(input.executionTargetId);
-    const sshTarget =
-      directSshCwdOwner && !local && parseSshExecutionTarget(input.executionTargetId);
-    const transport = sshTarget
-      ? (sshTarget.transport ??
-        (yield* Effect.tryPromise({
-          // The optional owner must not load the agent composition on the legacy path.
-          try: async () => {
-            const { resolveRemoteAgentConfiguration } =
-              await import("../../remote-agent/remoteAgentDefault.ts");
-            return resolveRemoteAgentConfiguration().transport;
-          },
-          catch: () =>
-            new TerminalExecutionTargetError({
-              ...input,
-              detail: "Could not resolve the SSH transport for terminal folder validation.",
-            }),
-        })))
-      : undefined;
-    const owned = transport === "direct-ssh" ? directSshCwdOwner : undefined;
-    if (!local && !owned) {
-      yield* Effect.tryPromise({
-        try: () => assertSshExecutionTargetReadyAsync(input.executionTargetId),
-        catch: () =>
-          new TerminalExecutionTargetError({
-            ...input,
-            detail: "The SSH target is not ready. Verify its connection and authentication.",
-          }),
-      });
-    }
+    // Every SSH target (direct or agent transport) resolves its folder through the
+    // Rust owner's cwd probe; there is no TypeScript SSH folder probe.
+    const owned =
+      !local && parseSshExecutionTarget(input.executionTargetId) ? directSshCwdOwner : undefined;
     const probe = (home: boolean) => {
       let remoteFolderProbeReady = false;
       return (

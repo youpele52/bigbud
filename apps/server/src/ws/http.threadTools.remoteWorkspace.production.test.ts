@@ -47,12 +47,11 @@ const shellRun = vi.fn(async (_input: { command: string }) => ({
   timedOut: false,
 }));
 
-const dispatch = (request: Record<string, unknown>, productionActivation = true) =>
+const dispatch = (request: Record<string, unknown>) =>
   Effect.runPromise(
     Effect.result(
       runRemoteWorkspaceProcess({
         callerThreadId: threadId,
-        productionActivation,
         request: { remoteInvocationId: "call-1", ...request },
       }).pipe(Effect.provide(engine)),
     ),
@@ -90,7 +89,7 @@ it("still refuses stdin, extra argv and a plain fixed-tool command in production
   expect(runToolCommand).not.toHaveBeenCalled();
 });
 
-it("routes typed bridge tools to the owner in production and to the fixed scripts on legacy", async () => {
+it("routes typed bridge tools for a direct SSH target to the owner", async () => {
   const tool = { tool: "write_text", path: "a", content: "x" };
   const owned = await dispatch({ remoteTool: tool });
   expect(owned._tag).toBe("Success");
@@ -100,9 +99,7 @@ it("routes typed bridge tools to the owner in production and to the fixed script
     expect.any(AbortSignal),
     expect.any(Function),
   );
-  const legacy = await dispatch({ remoteTool: tool }, false);
-  expect(legacy._tag).toBe("Success");
-  expect(runLegacyRemoteWorkspaceTool).toHaveBeenCalledTimes(1);
+  expect(runLegacyRemoteWorkspaceTool).not.toHaveBeenCalled();
   const invalid = await dispatch({ remoteTool: { tool: "exec", command: "id" } });
   expect(invalid._tag).toBe("Failure");
 });

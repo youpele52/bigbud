@@ -9,13 +9,10 @@ import { expect, it, vi } from "vitest";
 
 import { makeWorkspaceModeGate } from "../remote-backend/workspaceMode.gate.ts";
 import { decodeWorkspaceModeRecord } from "../remote-backend/workspaceMode.record.ts";
-import { runSshCommand } from "./sshProcess.ts";
 import { workspaceModeForPickerProof } from "./sshOwnerPickerProof.workspaceMode.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";
 import { storageScope } from "./sshOwnerPickerProof.integration.ts";
 import { approve, live, withFixture } from "./sshOwnerPickerProof.scopedNative.fixture.ts";
-
-vi.mock("./sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 
 it.skipIf(!live)(
   "runs the Linux workspace-mode gate through pinned Rust inspect and publish without fallback",
@@ -104,7 +101,6 @@ it.skipIf(!live)(
             await expect(Effect.runPromise(gate.check(create, readModel))).rejects.toMatchObject({
               detail: expect.stringContaining("could not complete"),
             });
-            expect(runSshCommand).not.toHaveBeenCalled();
           } finally {
             await owner.close();
           }

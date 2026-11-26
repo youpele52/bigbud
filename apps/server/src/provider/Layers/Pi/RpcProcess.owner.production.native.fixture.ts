@@ -33,8 +33,6 @@ export async function startPi(
 ) {
   const targetId = target.descriptor.targetId;
   const selected = await resolveProductionPiRpcOwner(targetId, {
-    activation: true,
-    devSelected: false,
     production: () => registration(handle, target),
   });
   if (!selected) throw new Error("no production Pi owner");

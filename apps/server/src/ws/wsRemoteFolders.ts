@@ -5,17 +5,17 @@ import {
 } from "@bigbud/contracts/server/server.remoteFolders";
 import { Effect, Schema } from "effect";
 
-import { listRemoteFolders } from "../ssh/sshRemoteFolders.ts";
+import { listProductionRemoteFolders } from "../ssh/sshOwnerProductionPicker.ts";
 
 const isFolderError = Schema.is(ServerListRemoteFoldersError);
 
-/** Plain-SSH folder listing for the remote-project picker; read-only. */
+/** Folder listing for the remote-project picker through the Rust SSH owner; read-only. */
 export const listRemoteFoldersEffect = Effect.fn("listRemoteFoldersEffect")(function* (
   input: ServerListRemoteFoldersInput,
   run: (
     input: ServerListRemoteFoldersInput,
     signal: AbortSignal,
-  ) => Promise<ServerListRemoteFoldersResult> = (request) => listRemoteFolders(request),
+  ) => Promise<ServerListRemoteFoldersResult> = listProductionRemoteFolders,
 ) {
   return yield* Effect.tryPromise({
     try: (signal) => run(input, signal),

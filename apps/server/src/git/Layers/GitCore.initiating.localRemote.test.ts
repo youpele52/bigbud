@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { Effect, Path } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
 import {
@@ -35,7 +34,6 @@ function commit(cwd: string, name: string): void {
 describe("selected-mode fetch routing by remote transport", () => {
   let root: string;
   beforeEach(() => {
-    activateDevSshOwner();
     root = mkdtempSync(join(tmpdir(), "bigbud-local-remote-"));
   });
   afterEach(() => {

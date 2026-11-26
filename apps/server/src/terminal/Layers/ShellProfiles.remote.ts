@@ -7,7 +7,6 @@ import {
   sshShellTarget,
   type RemoteShellDiscoveryInput,
 } from "./ShellProfiles.remote.identity";
-import { runSshCommand } from "../../ssh/sshProcess";
 import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault";
 import { runRemoteAgentShellInventory } from "../../remote-agent/remoteAgentShellInventory";
 import type { ProcessRunResult } from "../../utils/processRunner";
@@ -22,7 +21,6 @@ import {
 } from "./ShellProfiles.remote.protocol";
 
 export interface RemoteShellDiscoveryDependencies {
-  readonly runSshCommand?: typeof runSshCommand;
   readonly isRemoteAgentExecutionTarget?: typeof isRemoteAgentExecutionTarget;
   readonly runRemoteAgentShellInventory?: typeof runRemoteAgentShellInventory;
   readonly runWslProcess?: typeof runWslProcess;
@@ -103,14 +101,9 @@ export const discoverRemoteShellProfiles = Effect.fn("discoverRemoteShellProfile
             dependencies.runRemoteAgentShellInventory ?? runRemoteAgentShellInventory
           )(options);
         } else {
-          result = await (dependencies.runSshCommand ?? runSshCommand)({
-            ...options,
-            command: "/usr/bin/env",
-            allocateTty: false,
-            shellMode: "clean-posix",
-            allowNonZeroExit: true,
-            outputMode: "error",
-          });
+          // A direct SSH target lists shells through the owner (`list_terminal_shells`,
+          // `ShellProfiles.sshOwner.ts`); this generic probe never launches SSH.
+          throw new RemoteShellDiscoveryError({ reason: "probe-failed" });
         }
       }
       signal.throwIfAborted();

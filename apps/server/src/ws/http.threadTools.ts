@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
 import { BrowserAction, ThreadId } from "@bigbud/contracts";
@@ -31,9 +31,6 @@ import {
 } from "./http.threadTools.reads.ts";
 import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
-import { resolveSelectedOwnerAccess } from "../remote-agent/remoteAgentShell.selected.ts";
-import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
-import type { SelectedProviderWorkspaceShell } from "./remoteWorkspaceProviderShell.ts";
 import { handleSetElevatorSummaryAction } from "./http.threadTools.summary.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
 import { handleOrganizationThreadAction } from "./http.threadTools.organization.ts";
@@ -125,25 +122,11 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       if (body.action === "peer") return yield* handlePeerAction({ dispatcher, threadId, body });
 
       if (body.action === "remote_workspace_process") {
-        const shellAccess = resolveSelectedOwnerAccess(
-          Option.getOrUndefined(yield* Effect.serviceOption(DevSshOwnerRuntime))?.session,
-        );
-        const selectedProviderShell: SelectedProviderWorkspaceShell | undefined = shellAccess && {
-          targetId: shellAccess.targetId,
-          workspaceRoot: shellAccess.workspaceRoot,
-          run: (runInput, signal) =>
-            shellAccess.withOwner(
-              shellAccess.targetId,
-              (owner) => owner.runProofProviderWorkspaceShell(runInput, signal),
-              signal,
-            ),
-        };
         const result = yield* runRemoteWorkspaceProcess({
           callerThreadId: threadId,
           workspaceBinding: authRecord.workspaceBinding,
           executionOwner,
           executionGeneration,
-          selectedProviderShell,
           request: body,
         });
         return yield* HttpServerResponse.json({ ok: true, result });

@@ -3,7 +3,6 @@
 # probe runs without touching processes, PTYs, workers, SQLite, sockets, fetch, or
 # filesystem paths outside their own mkdtemp directories. Unlisted files run serially.
 src/git/Layers/GitBranches.list.test.ts
-src/git/Layers/GitCore.ssh.test.ts
 src/git/Layers/GitHubCli.test.ts
 src/git/Layers/GitManager.commitStep.test.ts
 src/git/Layers/GitStatus.details.test.ts

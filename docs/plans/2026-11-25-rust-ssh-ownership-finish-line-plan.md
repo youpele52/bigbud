@@ -334,6 +334,8 @@ Feed the `matrix/`, `rollback/`, `forward/` and `cutover/` checkers.
 4. Run the crash and version-mismatch fixtures.
 5. Write the S4 accepted record. Only after that, hand off transfer M0.
 
+**W7 status (26 November 2026, branch `feat/ssh-rust-only`, uncommitted).** Items 1–3 are applied as one change set: activation is unconditional and the `SshOwnerActivation` override is deleted, the dev selector and fixture runtime are gone, rows 1–51 are deleted or converted, and 54 `proof_*` verbs are promoted in place (7 superseded fixture variants remain). The structural checker passes on the changed files. Item 4 (crash/version fixtures on B) and item 5 are not done, and W6 has not run, so S4 is **not** accepted. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w7-build-b-activation-change-set-rust-only-ssh-branch-featssh-rust-only-26-november-2026-uncommitted).
+
 **Critical path:**
 
 1. W1.3 (retirement) and W3.2–W3.5 (drain, host verb, systemd, lock) feed the Build A schema and behavior.

@@ -20,13 +20,6 @@ import {
 import { readSshOwnerProductionOwner } from "./sshOwnerProductionRegistry.ts";
 import type { SshOwnerTargetDescriptor } from "./sshOwnerProductionClient.launch.ts";
 
-// The activation switch is a build-time constant; the module mock is the only
-// way to observe the activated boot without changing production code.
-vi.mock("@bigbud/shared/SshOwnerActivation", () => ({
-  SSH_OWNER_PRODUCTION_ACTIVATION: true,
-  resolveSshOwnerDrainIdentifiedRequest: () => false,
-}));
-
 const fake = vi.hoisted(() => ({
   deaths: new Set<() => void>(),
   shutdowns: 0,
@@ -126,7 +119,6 @@ async function boot() {
   const config = { mode: "remote", devUrl: undefined, stateDir: root } as const;
   await Effect.runPromise(
     configureSshOwner(config, "file:///unused", {
-      activation: true,
       artifactOverride: {
         profile: "remote-backend",
         path: "/fake/owner",

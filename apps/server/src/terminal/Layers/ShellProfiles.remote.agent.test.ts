@@ -21,18 +21,15 @@ describe("authenticated agent-host inventory routing", () => {
   ])("routes %s through the authenticated process lane", async (executionTargetId, transport) => {
     vi.stubEnv("BIGBUD_REMOTE_AGENT_TRANSPORT", transport);
     const runRemoteAgentShellInventory = vi.fn(async () => result());
-    const runSshCommand = vi.fn(async () => result());
     const profiles = await Effect.runPromise(
       discoverRemoteShellProfiles(
         { executionTargetId },
         {
           runRemoteAgentShellInventory,
-          runSshCommand,
         },
       ),
     );
     expect(profiles[0]?.host).toEqual(remoteShellHost({ executionTargetId: direct }));
-    expect(runSshCommand).not.toHaveBeenCalled();
     expect(runRemoteAgentShellInventory).toHaveBeenCalledExactlyOnceWith({
       executionTargetId,
       args: [
@@ -52,23 +49,6 @@ describe("authenticated agent-host inventory routing", () => {
     });
   });
 
-  it("honors explicit direct SSH even with the legacy agent default", async () => {
-    vi.stubEnv("BIGBUD_REMOTE_AGENT_TRANSPORT", "agent");
-    const runRemoteAgentShellInventory = vi.fn(async () => result());
-    const runSshCommand = vi.fn(async () => result());
-    await Effect.runPromise(
-      discoverRemoteShellProfiles(
-        { executionTargetId: direct },
-        {
-          runRemoteAgentShellInventory,
-          runSshCommand,
-        },
-      ),
-    );
-    expect(runSshCommand).toHaveBeenCalledOnce();
-    expect(runRemoteAgentShellInventory).not.toHaveBeenCalled();
-  });
-
   it.each([
     { stdout: "﻿" + inventory() },
     { stdout: inventory().slice(0, -1) },
@@ -76,36 +56,15 @@ describe("authenticated agent-host inventory routing", () => {
     { stdoutTruncated: true },
     { code: 79 },
   ])("fails closed on incomplete or invalid agent inventory %#", async (overrides) => {
-    const runSshCommand = vi.fn(async () => result());
     const error = await Effect.runPromise(
       discoverRemoteShellProfiles(
         { executionTargetId: agent },
         {
           runRemoteAgentShellInventory: async () => result(overrides),
-          runSshCommand,
         },
       ).pipe(Effect.flip),
     );
     expect(error.reason).toBe("probe-failed");
-    expect(runSshCommand).not.toHaveBeenCalled();
-  });
-
-  it("never falls back after agent admission/authentication failure", async () => {
-    const runSshCommand = vi.fn(async () => result());
-    const error = await Effect.runPromise(
-      discoverRemoteShellProfiles(
-        { executionTargetId: agent },
-        {
-          runRemoteAgentShellInventory: async () => {
-            throw new Error("private auth failure");
-          },
-          runSshCommand,
-        },
-      ).pipe(Effect.flip),
-    );
-    expect(error.reason).toBe("probe-failed");
-    expect(JSON.stringify(error)).not.toContain("private");
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 
   it.each(["timeout", "interrupt"])("aborts agent inventory on %s", async (mode) => {

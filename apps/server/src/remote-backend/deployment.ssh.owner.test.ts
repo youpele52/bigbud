@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import {
   graphInstallName,
   GRAPH_STAGE_SCRIPT,
@@ -13,19 +12,11 @@ import {
   SSH_HOST_KEY_DIR,
 } from "./deployment.remoteSetup.ts";
 import type { DeploymentSshOwner } from "./deployment.ssh.owner.ts";
-import { makeDeploymentSshRunner, runDeploymentSsh } from "./deployment.ssh.ts";
+import { makeDeploymentSshRunner } from "./deployment.ssh.ts";
 import { makeDeploymentFixture } from "./deployment.test.helpers.ts";
 import type { DeploymentRemoteCommand } from "./deployment.types.ts";
 
-vi.mock("../ssh/sshVerification.ts", () => ({
-  assertSshExecutionTargetReadyAsync: vi.fn(async () => {
-    throw new Error("Legacy SSH was used by an owner-selected runner");
-  }),
-}));
-
-afterEach(() => {
-  expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
-});
+afterEach(() => {});
 
 const target = "ssh:host=vps&user=deploy&port=2202&auth=ssh-key";
 const requestId = "3baaeec7-e811-40a3-bf2b-09608f12f1ec";
@@ -225,11 +216,6 @@ describe("deployment SSH graph stage begin", () => {
 });
 
 describe("deployment SSH owner selection", () => {
-  it("keeps the current SSH process runner as the default", () => {
-    expect(makeDeploymentSshRunner()).toBe(runDeploymentSsh);
-    expect(makeDeploymentSshRunner({ kind: "legacy" })).toBe(runDeploymentSsh);
-  });
-
   it("sends only exact target and probe operand, keeping host and completion identities separate", async () => {
     const { runner, deploymentAction, signal } = fixture();
     await expect(probeRemoteBackendHost(runner, target, requestId, signal)).resolves.toEqual({

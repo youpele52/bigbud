@@ -21,19 +21,11 @@ import {
   type RemoteAgentRegistry,
 } from "./remoteAgentInstall.registry.ts";
 import { restartFixtureBinding } from "./remoteAgentOwners.restart.binding.ts";
-import * as SshProcess from "../ssh/sshProcess.ts";
 
 export async function makeRemoteRestartFixture(options: { withholdControlAcks?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "bigbud-explicit-restart-"));
   const binding = restartFixtureBinding("g1");
   vi.spyOn(remoteAgentAdmission, "resolveBinding").mockResolvedValue(binding);
-  vi.spyOn(SshProcess, "runSshCommand").mockImplementation(async (input) => ({
-    stdout: `\x1e${input.args?.[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  }));
   let registry: RemoteAgentRegistry = {
     ...emptyRemoteAgentRegistry(),
     builds: [
@@ -161,6 +153,8 @@ export async function makeRemoteRestartFixture(options: { withholdControlAcks?: 
   const scope = await runtime.runPromise(Scope.make());
   const manager = await runtime.runPromise(
     makeTerminalManagerWithOptions({
+      // SSH folder resolution is the owner's cwd probe; this fake resolves the exact path.
+      directSshCwdOwner: { probeCwd: async ({ cwd }) => ({ kind: "resolved", cwd }) },
       logsDir: join(directory, "logs"),
       subprocessChecker: () => Effect.succeed(false),
       ptyAdapter: makeRemoteAgentPtyAdapter(

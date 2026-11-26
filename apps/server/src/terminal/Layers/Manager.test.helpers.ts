@@ -283,6 +283,8 @@ export const createManager = (
         getLocalShellDefault: options.getLocalShellDefault,
         historyLineLimit,
         ptyAdapter,
+        // SSH folder resolution is the owner's cwd probe; this fake resolves the exact path.
+        directSshCwdOwner: { probeCwd: async ({ cwd }) => ({ kind: "resolved", cwd }) },
         ...(options.resolveShellProfile
           ? { resolveShellProfile: options.resolveShellProfile }
           : {}),

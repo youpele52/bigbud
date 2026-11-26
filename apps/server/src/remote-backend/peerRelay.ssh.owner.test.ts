@@ -18,9 +18,6 @@ const legacy = vi.hoisted(() => ({
   build: vi.fn(),
 }));
 vi.mock("node:child_process", () => ({ spawn: legacy.spawn, execFile: legacy.execFile }));
-vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReadyAsync: legacy.ready }));
-vi.mock("../ssh/sshHostTrust.ts", () => ({ inspectSshHostTrust: legacy.trust }));
-vi.mock("../ssh/sshCommand.ts", () => ({ buildSshCommandInvocation: legacy.build }));
 
 const now = "2026-11-23T00:00:00.000Z";
 const pairing = {

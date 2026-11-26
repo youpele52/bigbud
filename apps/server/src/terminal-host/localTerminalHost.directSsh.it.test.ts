@@ -32,16 +32,6 @@ import {
 } from "./localTerminalHost.registry.ts";
 import { makeShortTerminalHostRoot } from "./localTerminalHost.testUtils.ts";
 
-vi.mock("../ssh/sshProcess", () => ({
-  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
-    stdout: `\x1e${input.args[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  })),
-}));
-
 const enabled = process.env.BIGBUD_TERMINAL_HOST_IT === "1" && process.platform !== "win32";
 const target = "ssh:host=devbox.test&user=me&auth=ssh-key&transport=direct-ssh";
 const processes = makeLocalTerminalHostProcesses();

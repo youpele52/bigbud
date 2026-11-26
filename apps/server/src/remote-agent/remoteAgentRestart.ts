@@ -4,7 +4,7 @@ import type {
   ServerRestartRemoteAgentResult,
 } from "@bigbud/contracts/server/server.remoteRestart.ts";
 
-import { verifySshExecutionTarget } from "../ssh/sshVerification.ts";
+import { verifyProductionTarget } from "../ssh/sshOwnerProductionPicker.ts";
 import { openRemoteAgentControl } from "./remoteAgentControl.ts";
 import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
@@ -61,7 +61,7 @@ export function makeRemoteAgentRestart(input: {
   const verifySsh =
     input.verifySsh ??
     (async (target: string) => {
-      await verifySshExecutionTarget({ executionTargetId: target });
+      await verifyProductionTarget({ executionTargetId: target });
     });
   const status = async (request: ServerRestartRemoteAgentInput) => {
     const store = storeFor();

@@ -4,8 +4,7 @@ import {
   verifyRemoteAgentArtifactSignature,
   type RemoteAgentArtifactTrustStore,
 } from "./remoteAgentArtifact.ts";
-import { runSshCommand } from "../ssh/sshProcess.ts";
-import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
+import { SshOwnerRequiredError } from "../ssh/sshOwnerRequired.ts";
 import { REMOTE_AGENT_UNSAFE_DIRECTORY_MARKER } from "./remoteAgentFailure.classify.ts";
 
 const SAFE_REMOTE_PATH_VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
@@ -234,6 +233,11 @@ export function buildRemoteAgentCandidateCheckScript(): string {
   ].join("\n");
 }
 
+/**
+ * Legacy single-command install. Installs run through the SSH owner's typed
+ * install operations (`makeOwnerRemoteAgentInstallDependencies`, U25); this
+ * entry point verifies the artifact and then refuses without launching SSH.
+ */
 export async function installRemoteAgentArtifact(input: {
   readonly executionTargetId: string;
   readonly artifact: RemoteAgentArtifact;
@@ -247,19 +251,5 @@ export async function installRemoteAgentArtifact(input: {
     verifyRemoteAgentArtifactSignature(input.artifact, input.trustStore);
   }
   verifyRemoteAgentArtifactBytes(input.artifact, input.bytes);
-  const script = buildRemoteAgentInstallScript({
-    artifact: input.artifact,
-    targetTriple: input.targetTriple,
-    stagedBase64: Buffer.from(input.bytes).toString("base64"),
-    ...(input.reservationId ? { reservationId: input.reservationId } : {}),
-  });
-  await runRemoteAgentDiagnosedCommand(runSshCommand, "install", {
-    executionTargetId: input.executionTargetId,
-    command: "sh",
-    args: ["-lc", script.command],
-    stdin: script.stdin,
-    timeoutMs: 60_000,
-    maxBufferBytes: 64 * 1024,
-  });
-  return script.paths;
+  throw new SshOwnerRequiredError();
 }

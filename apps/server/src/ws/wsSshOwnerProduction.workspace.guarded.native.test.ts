@@ -36,7 +36,7 @@ it.skipIf(!enabled)(
     try {
       await storageScope(path.join(state, "state.sqlite"), (sql) =>
         Effect.gen(function* () {
-          const journal = yield* initializeProductionSshGuardedWriteJournal(sql, true);
+          const journal = yield* initializeProductionSshGuardedWriteJournal(sql);
           yield* Effect.promise(() =>
             withProductionV2Owner(
               external!,
@@ -64,7 +64,7 @@ it.skipIf(!enabled)(
                 const files = Effect.runSync(
                   withWsSshOwnerProductionWorkspace(
                     { workspaceRuntime: base, workspaceMutations: unsupportedWorkspaceMutations },
-                    { activation: true, read: () => registration, journal },
+                    { read: () => registration, journal },
                   )!.workspaceRuntime.pipe(Effect.provide(pathsLayer)),
                 ).files;
                 const input = {

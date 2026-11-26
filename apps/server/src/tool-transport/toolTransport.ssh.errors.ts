@@ -1,17 +1,16 @@
-import { isSshOwnerSelected } from "../ssh/sshOwnerSelection.ts";
-
-/** Selected owner domains have no generic SSH command runner; typed verbs are separate. */
+/** A direct SSH target has no generic command runner; typed owner verbs are separate. */
 export class SelectedSshToolTransportError extends Error {
   readonly code = "unsupported-by-selected-ssh-owner";
 
   constructor() {
     super(
-      "This SSH tool command is unavailable with the source-dev Rust SSH owner. Use a typed workspace verb.",
+      "This SSH tool command is unavailable through the Rust SSH owner. Use a typed workspace verb.",
     );
     this.name = "SelectedSshToolTransportError";
   }
 }
 
-export function assertSelectedSshToolTransportAvailable(): void {
-  if (isSshOwnerSelected()) throw new SelectedSshToolTransportError();
+/** SSH runs only through the owner, so a generic SSH tool command is always refused. */
+export function assertSelectedSshToolTransportAvailable(): never {
+  throw new SelectedSshToolTransportError();
 }

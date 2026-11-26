@@ -2,7 +2,7 @@ import { Effect, Queue, Stream } from "effect";
 
 import type { ProjectDirectoryWatchEvent } from "@bigbud/contracts/workspace/project.ts";
 
-import { runSshCommand } from "../../ssh/sshProcess.ts";
+import { SshOwnerRequiredError } from "../../ssh/sshOwnerRequired.ts";
 import { WorkspaceFileSystemError } from "../Services/WorkspaceFileSystem.ts";
 import type {
   WorkspaceMutationWatchOwnerInput,
@@ -11,8 +11,6 @@ import type {
 
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const MAX_RETRY_DELAY_MS = 30_000;
-const REMOTE_DIRECTORY_SNAPSHOT_MAX_BYTES = 4 * 1024 * 1024;
-const REMOTE_DIRECTORY_SNAPSHOT_TIMEOUT_MS = 10_000;
 
 interface RemoteDirectoryPollingInput {
   readonly cwd: string;
@@ -147,39 +145,13 @@ export function watchRemoteDirectoryViaSsh(
       readSnapshot: (signal) => owner.snapshotDirectory(input, signal),
     });
   }
-  return createRemoteDirectoryPollingStream({
-    cwd: input.cwd,
-    relativePath: input.relativePath,
-    readSnapshot: async () => {
-      const findRoot = input.relativePath ? `./${input.relativePath}` : ".";
-      const result = await runSshCommand({
-        executionTargetId: input.executionTargetId,
-        cwd: input.cwd,
-        command: "find",
-        args: [
-          findRoot,
-          "-mindepth",
-          "1",
-          "-maxdepth",
-          "1",
-          "(",
-          "-type",
-          "d",
-          "-o",
-          "-type",
-          "f",
-          ")",
-          "-printf",
-          "%y\\t%P\\t%s\\t%T@\\0",
-        ],
-        timeoutMs: REMOTE_DIRECTORY_SNAPSHOT_TIMEOUT_MS,
-        maxBufferBytes: REMOTE_DIRECTORY_SNAPSHOT_MAX_BYTES,
-        outputMode: "truncate",
-      });
-      if (result.stdoutTruncated) {
-        throw new Error("Remote directory snapshot exceeded the 4 MiB safety limit.");
-      }
-      return result.stdout.split("\0").filter(Boolean).toSorted().join("\0");
-    },
-  });
+  // Without the owner's snapshot verb the watch fails typed; SSH runs only through the owner.
+  return Stream.fail(
+    new WorkspaceFileSystemError({
+      cwd: input.cwd,
+      relativePath: input.relativePath,
+      operation: "workspaceFileSystem.watchRemoteDirectory",
+      detail: new SshOwnerRequiredError().message,
+    }),
+  );
 }

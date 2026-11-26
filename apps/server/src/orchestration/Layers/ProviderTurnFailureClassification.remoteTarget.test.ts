@@ -2,9 +2,11 @@ import { Cause } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { ProviderAdapterProcessError } from "../../provider/Errors.ts";
-import { formatSshPasswordRequiredMessage } from "../../ssh/sshSession.ts";
 import { RemoteTargetDisconnectedError } from "../../ssh/sshTargetDisconnects.ts";
-import { SshTargetAuthRequiredError } from "../../ssh/sshTargetUnavailable.ts";
+import {
+  buildSshPasswordRequiredMessage,
+  SshTargetAuthRequiredError,
+} from "../../ssh/sshTargetUnavailable.ts";
 import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
 import { describeRemoteTargetTurnStartFailure } from "./ProviderTurnFailureClassification.remoteTarget.ts";
 
@@ -21,7 +23,11 @@ describe("remote-target turn-start classification", () => {
   it("a process error wrapping an SSH auth-required error is auth-or-quota, not session-dead", () => {
     const error = processError(
       "Failed to prepare Codex remote workspace bridge.",
-      new SshTargetAuthRequiredError(TARGET, "password", formatSshPasswordRequiredMessage(TARGET)),
+      new SshTargetAuthRequiredError(
+        TARGET,
+        "password",
+        buildSshPasswordRequiredMessage("ice-2-kg"),
+      ),
     );
     expect(classifyTurnStartFailure(error)).toBe("auth-or-quota");
     expect(classifyTurnStartFailure(Cause.fail(error))).toBe("auth-or-quota");
@@ -38,7 +44,7 @@ describe("remote-target turn-start classification", () => {
   });
 
   it.each([
-    [formatSshPasswordRequiredMessage(TARGET), "auth-or-quota"],
+    [buildSshPasswordRequiredMessage("ice-2-kg"), "auth-or-quota"],
     ["SSH key '~/.ssh/id' requires a passphrase. Load it into ssh-agent.", "auth-or-quota"],
     ['SSH host trust is required: {"challengeId":"c"}', "auth-or-quota"],
     ["Remote workspace is disconnected. Connect it to continue.", "unknown"],

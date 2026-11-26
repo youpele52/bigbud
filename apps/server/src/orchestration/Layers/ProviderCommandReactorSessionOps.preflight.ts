@@ -1,10 +1,11 @@
 /**
  * SSH readiness pre-flight before a provider session starts.
  *
- * Runs the bounded local readiness probe (`assertSshExecutionTargetReadyAsync`: user Disconnect,
- * password ControlMaster, key passphrase, host trust on missing credentials) for every distinct
- * SSH target the session uses. The typed SSH error is kept as `cause`, so the turn-start failure
- * classifies as a remote-target failure whatever each adapter would have wrapped it as.
+ * Refuses a session whose SSH target the user disconnected (`assertSshTargetConnected`) for
+ * every distinct SSH target the session uses. Authentication, host trust and credential prompts
+ * belong to the Rust SSH owner; nothing here launches SSH. The typed SSH error is kept as
+ * `cause`, so the turn-start failure classifies as a remote-target failure whatever each adapter
+ * would have wrapped it as.
  *
  * @module ProviderCommandReactorSessionOps.preflight
  */
@@ -14,7 +15,7 @@ import { Effect } from "effect";
 import { ProviderAdapterProcessError } from "../../provider/Errors.ts";
 import type { ProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
-import { assertSshExecutionTargetReadyAsync } from "../../ssh/sshVerification.ts";
+import { assertSshTargetConnected } from "../../ssh/sshTargetDisconnects.ts";
 
 export function sshTargetsForSession(
   targets: Pick<
@@ -40,8 +41,8 @@ export const assertSessionSshTargetsReady = Effect.fn("assertSessionSshTargetsRe
     >;
   }) {
     for (const executionTargetId of sshTargetsForSession(input.targets)) {
-      yield* Effect.tryPromise({
-        try: () => assertSshExecutionTargetReadyAsync(executionTargetId),
+      yield* Effect.try({
+        try: () => assertSshTargetConnected(executionTargetId),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: input.provider,

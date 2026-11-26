@@ -111,7 +111,6 @@ describe("remote workspace thread tool", () => {
   });
 
   it.each([
-    ["direct SSH", "ssh", "ssh:host=devbox&user=root&port=22&transport=direct-ssh"],
     ["remote agent", "agent", "ssh:host=devbox&user=root&port=22&transport=agent"],
   ] as const)(
     "returns a single actionable error for a failed %s call without replaying or rerouting it",

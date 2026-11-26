@@ -52,10 +52,9 @@ it.layer(serverTestLayer)("server router seam > websocket Files create and delet
 
       assert.isTrue(result.actions.createFolder.allowed);
       assert.isTrue(result.actions.delete.allowed);
-      assert.deepEqual(result.directSsh.createFolder, {
-        allowed: false,
-        reason: "directSshPendingOwner",
-      });
+      // SSH Files always run through the Rust owner, which advertises folder create; a missing
+      // owner refuses at dispatch rather than hiding the action.
+      assert.deepEqual(result.directSsh.createFolder, { allowed: true });
       assert.equal(result.created.relativePath, "docs");
       assert.equal((yield* fs.stat(path.join(workspaceDir, "docs"))).type, "Directory");
       assert.isTrue(Exit.isFailure(result.duplicate));

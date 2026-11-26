@@ -1,5 +1,3 @@
-import { runSshCommand } from "../ssh/sshProcess.ts";
-import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentOwnerExec } from "./remoteAgentControl.owner.ts";
 import { remoteAgentOwnerSelection } from "./remoteAgentControl.selection.ts";
 import {
@@ -62,23 +60,10 @@ export function buildRemoteAgentPlatformProbeScript(): string {
 export async function probeRemoteAgentPlatform(
   executionTargetId: string,
 ): Promise<RemoteAgentPlatformInfo> {
-  // U25: production activation runs the same probe as one typed owner operation.
-  const owner = remoteAgentOwnerSelection();
-  if (owner) {
-    const { stdout } = await makeRemoteAgentOwnerExec(
-      owner,
-      executionTargetId,
-    )({
-      kind: "platformProbe",
-    });
-    return parseRemoteAgentPlatformProbe(stdout);
-  }
-  const result = await runRemoteAgentDiagnosedCommand(runSshCommand, "platform", {
+  // U25: the probe runs as one typed owner operation; there is no TypeScript SSH launch.
+  const { stdout } = await makeRemoteAgentOwnerExec(
+    remoteAgentOwnerSelection(),
     executionTargetId,
-    command: "sh",
-    args: ["-lc", buildRemoteAgentPlatformProbeScript()],
-    timeoutMs: 8_000,
-    maxBufferBytes: 4096,
-  });
-  return parseRemoteAgentPlatformProbe(result.stdout);
+  )({ kind: "platformProbe" });
+  return parseRemoteAgentPlatformProbe(stdout);
 }

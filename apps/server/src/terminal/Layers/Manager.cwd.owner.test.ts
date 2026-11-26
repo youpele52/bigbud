@@ -7,14 +7,8 @@ import {
   markSshTargetDisconnected,
   clearSshTargetDisconnected,
 } from "../../ssh/sshTargetDisconnects.ts";
-import { assertSshExecutionTargetReadyAsync } from "../../ssh/sshVerification.ts";
 import { makeResolveTerminalFolder } from "./Manager.cwd.ts";
 import type { DirectSshTerminalCwdOwner } from "./Manager.cwd.owner.ts";
-
-vi.mock(import("../../ssh/sshVerification.ts"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  assertSshExecutionTargetReadyAsync: vi.fn(async () => undefined),
-}));
 
 const target = "ssh:host=terminal-cwd.test&user=deploy&transport=direct-ssh";
 const input = {
@@ -52,7 +46,6 @@ it.effect("passes only the exact direct SSH target and cwd operands to the owner
       { executionTargetId: target, cwd: input.cwd, home: false },
       expect.any(AbortSignal),
     );
-    expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
     expect(legacy).not.toHaveBeenCalled();
     expect(local).not.toHaveBeenCalled();
   }),
@@ -78,24 +71,31 @@ it.effect("uses the same captured owner for verified no-folder and Home", () =>
       { executionTargetId, cwd: input.cwd, home: false },
       { executionTargetId, cwd: input.cwd, home: true },
     ]);
-    expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
     expect(legacy).not.toHaveBeenCalled();
     expect(local).not.toHaveBeenCalled();
   }),
 );
 
-it.effect("does not route local or configured-agent cwd validation through the direct owner", () =>
-  Effect.gen(function* () {
-    vi.stubEnv("BIGBUD_REMOTE_AGENT_TRANSPORT", "direct-ssh");
-    const { resolve, probeCwd, legacy, local } = fixture(async () => ({ kind: "noFolder" }));
-    const agent = target.replace("direct-ssh", "agent");
-    expect(yield* resolve({ ...input, executionTargetId: "local" })).toEqual({ cwd: input.cwd });
-    expect(yield* resolve({ ...input, executionTargetId: agent })).toEqual({ cwd: "/legacy" });
-    expect(assertSshExecutionTargetReadyAsync).toHaveBeenCalledExactlyOnceWith(agent);
-    expect(local).toHaveBeenCalledExactlyOnceWith(input.cwd);
-    expect(legacy).toHaveBeenCalledOnce();
-    expect(probeCwd).not.toHaveBeenCalled();
-  }),
+it.effect(
+  "keeps local cwd validation local and routes agent-transport SSH targets through the owner",
+  () =>
+    Effect.gen(function* () {
+      const { resolve, probeCwd, legacy, local } = fixture(async ({ cwd }) => ({
+        kind: "resolved",
+        cwd,
+      }));
+      const agent = target.replace("direct-ssh", "agent");
+      expect(yield* resolve({ ...input, executionTargetId: "local" })).toEqual({ cwd: input.cwd });
+      expect(yield* resolve({ ...input, executionTargetId: agent })).toMatchObject({
+        cwd: input.cwd,
+      });
+      expect(local).toHaveBeenCalledExactlyOnceWith(input.cwd);
+      expect(legacy).not.toHaveBeenCalled();
+      expect(probeCwd).toHaveBeenCalledExactlyOnceWith(
+        { executionTargetId: agent, cwd: input.cwd, home: false },
+        expect.anything(),
+      );
+    }),
 );
 
 it.effect("fails closed on owner denial or an invalid resolved path", () =>
@@ -113,7 +113,6 @@ it.effect("fails closed on owner denial or an invalid resolved path", () =>
       expect(legacy).not.toHaveBeenCalled();
       expect(local).not.toHaveBeenCalled();
     }
-    expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
   }),
 );
 
@@ -128,7 +127,6 @@ it.effect("fails closed when the owner denies Home after a verified no-folder re
       executionTargetId: target,
     });
     expect(probeCwd.mock.calls.map(([request]) => request.home)).toEqual([false, true]);
-    expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
     expect(legacy).not.toHaveBeenCalled();
     expect(local).not.toHaveBeenCalled();
   }),
@@ -145,7 +143,6 @@ it.effect("bounds the selected owner probe and aborts it without retrying on tim
     expect((yield* Fiber.join(fiber))._tag).toBe("TerminalExecutionTargetError");
     expect(signal?.aborted).toBe(true);
     expect(probeCwd).toHaveBeenCalledOnce();
-    expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
     expect(legacy).not.toHaveBeenCalled();
   }),
 );
@@ -162,7 +159,6 @@ it.effect("refuses invalid paths and explicitly disconnected targets before owne
     );
     expect(error._tag).toBe("TerminalExecutionTargetError");
     expect(probeCwd).not.toHaveBeenCalled();
-    expect(assertSshExecutionTargetReadyAsync).not.toHaveBeenCalled();
     expect(legacy).not.toHaveBeenCalled();
   }),
 );

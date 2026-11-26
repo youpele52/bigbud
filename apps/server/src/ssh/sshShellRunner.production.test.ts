@@ -6,12 +6,10 @@ import {
   type FakeShellOutcome,
 } from "./sshOwnerPickerProof.productionShell.fixture.ts";
 import type { SshOwnerProductionRegistration } from "./sshOwnerProductionRegistry.ts";
-import { runSshCommand } from "./sshProcess.ts";
 import { makeSshShellRunner } from "./sshShellRunner.ts";
 import { makeProductionShellRunner } from "./sshShellRunner.production.ts";
 import { makeProductionProviderWorkspaceShell } from "../ws/remoteWorkspaceProviderShell.ts";
 
-vi.mock("./sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 afterEach(() => vi.clearAllMocks());
 
 const TARGET = "ssh:host=devbox&transport=direct-ssh";
@@ -54,7 +52,6 @@ it("runs the thread command as a thread lease on the exact target with cwd as it
   // Settled leases are released, and no legacy SSH launch happens.
   expect(owner.operations.at(-1)).toMatchObject({ kind: "shellClose", role: "thread" });
   expect(owner.leases.size).toBe(0);
-  expect(runSshCommand).not.toHaveBeenCalled();
 });
 
 it("reads output larger than one owner chunk back in order", async () => {
@@ -148,14 +145,12 @@ it("surfaces typed owner failures and refuses without an owner or a resolvable t
     ),
   );
   expect(root.message).toContain("not an exact absolute workspace path");
-  expect(runSshCommand).not.toHaveBeenCalled();
 });
 
 it("production activation selects the owner runner and never the legacy SSH launch", async () => {
-  const runner = makeSshShellRunner(TARGET, undefined, true);
+  const runner = makeSshShellRunner(TARGET);
   const failure = await Effect.runPromise(
     Effect.flip(runner.run({ threadId: "t", cwd: "/srv/work", command: "true" })),
   );
   expect(failure.message).toContain("No legacy shell was started");
-  expect(runSshCommand).not.toHaveBeenCalled();
 });

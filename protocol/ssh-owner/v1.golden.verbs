@@ -1,6 +1,7 @@
-# Frozen v1 production verb names (W1.1). Field numbers stay as declared in v1.proto.
-# Each proof_* wire variant maps to exactly one production verb. Promotion into
-# product dispatch happens only in W7; this file is the checked naming record.
+# v1 production verb names (W1.1 frozen; promoted in place at W7). Field numbers
+# are unchanged. Each former proof_* wire variant maps to exactly one production
+# verb; seven were superseded by separately allocated production verbs and stay
+# fixture-only (see v1.golden.verbs.test.ts). This file is the naming record.
 proof_open_terminal=open_terminal
 proof_terminal_status=terminal_status
 proof_close_terminal=close_terminal

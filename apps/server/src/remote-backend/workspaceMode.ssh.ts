@@ -6,7 +6,7 @@
  *
  * @module workspaceMode.ssh
  */
-import { runSshCommand } from "../ssh/sshProcess.ts";
+import { SshOwnerRequiredError } from "../ssh/sshOwnerRequired.ts";
 import {
   decodeWorkspaceModeRecord,
   encodeWorkspaceModeRecord,
@@ -161,7 +161,7 @@ export function makeShellWorkspaceModeStore(run: WorkspaceModeShellRunner): Work
   };
 }
 
-/** Existing callers use verified clean-posix SSH; an explicitly selected owner is exclusive. */
+/** Workspace mode on an SSH target is served only by the owner; without one it refuses. */
 export function makeSshWorkspaceModeStore(
   executionTargetId: string,
   timeoutMs = 15_000,
@@ -170,15 +170,7 @@ export function makeSshWorkspaceModeStore(
   if (selectedOwner !== undefined) {
     return makeOwnedSshWorkspaceModeStore(executionTargetId, timeoutMs, selectedOwner);
   }
-  return makeShellWorkspaceModeStore(async (script) => {
-    const result = await runSshCommand({
-      executionTargetId,
-      shellMode: "clean-posix",
-      command: "/bin/sh",
-      args: ["-c", script],
-      timeoutMs,
-      maxBufferBytes: 64 * 1024,
-    });
-    return result.stdout;
+  return makeShellWorkspaceModeStore(async () => {
+    throw new SshOwnerRequiredError();
   });
 }

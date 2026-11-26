@@ -57,7 +57,7 @@ it.skipIf(!enabled)(
         };
         const composed = withWsSshOwnerProductionWorkspace(
           { workspaceRuntime: base, workspaceMutations: unsupportedWorkspaceMutations },
-          { activation: true, read: () => registration },
+          { read: () => registration },
         )!;
         const files = Effect.runSync(composed.workspaceRuntime.pipe(Effect.provide(pathsLayer)));
         const mutations = composed.workspaceMutations;

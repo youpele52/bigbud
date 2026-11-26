@@ -17,8 +17,7 @@ import { randomUUID } from "node:crypto";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { type KillProcessTreeOptions, killProcessTree } from "../utils/killProcessTree.ts";
 
-import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
-import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
+import { SshOwnerRequiredError } from "../ssh/sshOwnerRequired.ts";
 import { decodeDelimitedFrame, encodeDelimitedFrame } from "./remoteAgentProtocol.codec.ts";
 import {
   REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES,
@@ -28,8 +27,6 @@ import {
   type RemoteAgentFrame,
   type RemoteAgentHello,
 } from "./remoteAgentProtocol.ts";
-import { buildRemoteAgentProxyCommand } from "./remoteAgentSupervisor.ts";
-import { buildPinnedRemoteAgentProxy } from "./remoteAgentRuntime.launch.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 
 export { buildRemoteAgentProxyCommand } from "./remoteAgentSupervisor.ts";
@@ -175,19 +172,8 @@ export class RemoteAgentConnection {
         (ownerLease) => new RemoteAgentConnection({ ownerLease }, maxFrameBytes),
       );
     }
-    await assertSshExecutionTargetReadyAsync(input.executionTargetId);
-    const proxyCommand = input.runtime
-      ? buildPinnedRemoteAgentProxy(input.runtime)
-      : buildRemoteAgentProxyCommand(input.binaryPath);
-    const invocation = buildSshCommandInvocation({
-      executionTargetId: input.executionTargetId,
-      command: "sh",
-      args: ["-lc", proxyCommand],
-    });
-    return new RemoteAgentConnection(
-      spawn(invocation.command, invocation.args, { stdio: ["pipe", "pipe", "pipe"] }),
-      maxFrameBytes,
-    );
+    // The agent proxy runs only as an owner `agent_proxy` lease; no local `ssh` child.
+    throw new RemoteAgentConnectionError(new SshOwnerRequiredError().message);
   }
 
   async handshake(

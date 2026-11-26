@@ -1,6 +1,5 @@
 import { execFile, type ExecFileOptionsWithStringEncoding } from "node:child_process";
 import { promisify } from "node:util";
-import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { resolvePiInvocation, shouldUseWindowsPiShell, quoteWindowsPiShellCommand } from "./Cli.ts";
 import type { PiRpcProcessOptions } from "./RpcProcess.types.ts";
@@ -27,8 +26,8 @@ export interface PiSettlementProbe {
 /**
  * Probe the selected host/executable, never the local installation for a remote runtime.
  * A selected owner runtime is probed only through its typed `probeProvider` port, bounded to
- * the same five seconds and 4 KiB per stream; the widened `execFile` SSH probe remains for
- * the unselected legacy path and for local Pi.
+ * the same five seconds and 4 KiB per stream. Only local Pi runs a local `--version` probe;
+ * a remote runtime without an owner binding is refused before any process starts.
  */
 export async function probePiSettlementSupport(
   options: PiRpcProcessOptions,
@@ -56,27 +55,25 @@ export async function probePiSettlementSupport(
     return { version, capabilities: piVersionCapabilities(version) };
   }
 
-  const selected = local ? resolvePiInvocation(options.binaryPath) : undefined;
-  if (selected?.bundledCliPath) {
+  if (!local) {
+    throw new Error(
+      `Pi version probing for ${options.providerRuntimeTarget.executionTargetId} runs only through the SSH owner. No SSH process was started.`,
+    );
+  }
+  const selected = resolvePiInvocation(options.binaryPath);
+  if (selected.bundledCliPath) {
     const version = "1.4.0";
     return { version, capabilities: piVersionCapabilities(version) };
   }
-  const invocation = selected
-    ? { command: selected.command, args: [...selected.args, "--version"] }
-    : buildSshCommandInvocation({
-        executionTargetId: options.providerRuntimeTarget.executionTargetId,
-        command: options.binaryPath,
-        args: ["--version"],
-        ...(options.workspaceTarget.cwd ? { cwd: options.workspaceTarget.cwd } : {}),
-      });
-  const shell = local && shouldUseWindowsPiShell(invocation.command);
+  const invocation = { command: selected.command, args: [...selected.args, "--version"] };
+  const shell = shouldUseWindowsPiShell(invocation.command);
   try {
     const { stdout } = await run(
       shell ? quoteWindowsPiShellCommand(invocation.command) : invocation.command,
       [...invocation.args],
       {
         env: options.env,
-        ...(local && options.workspaceTarget.location === "local" && options.workspaceTarget.cwd
+        ...(options.workspaceTarget.location === "local" && options.workspaceTarget.cwd
           ? { cwd: options.workspaceTarget.cwd }
           : {}),
         encoding: "utf8",

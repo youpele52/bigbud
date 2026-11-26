@@ -1,9 +1,7 @@
 import { Layer, ServiceMap } from "effect";
 
-import type { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
 import { makeShellRunnerLayer } from "./remoteAgentServerLayer.shell.ts";
-import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
-import { makeSelectedDevGitLayer } from "../git/Layers/GitCore.ssh.selected.ts";
+import { makeSshOwnerGitLayer } from "../git/Layers/GitCore.ssh.selected.ts";
 import { RemoteAgentGitOwnership } from "./remoteAgentGit.ts";
 import type { RemoteAgentPtyResolver } from "./remoteAgentPtyAdapter.ts";
 import {
@@ -329,19 +327,14 @@ export function makeRemoteAgentServerServices(
  * Default live composition for remote projects. The per-project target transport
  * selects the managed agent or the direct SSH implementation at operation time.
  */
-export function makeConfiguredRemoteAgentLayers<E = never, R = never>(
-  devOwner?: Layer.Layer<DevSshOwnerRuntime, E, R>,
-) {
+export function makeConfiguredRemoteAgentLayers() {
   const configuration = resolveRemoteAgentConfiguration();
   const composition = getConfiguredRemoteAgentComposition();
   if (!composition) {
     return {
       services: Layer.mergeAll(
-        makeSelectedDevGitLayer(devOwner),
+        makeSshOwnerGitLayer(),
         Layer.succeed(RemoteAgentGitOwnership, "external"),
-        // Preserve the previous no-composition behavior outside the selected
-        // development domain; selected direct shell authority needs the owner.
-        ...(isSshOwnerDevFixtureSelected() ? [makeShellRunnerLayer(devOwner)] : []),
       ),
       workspace: WorkspaceRuntimeLayerLive,
       ptyResolver: undefined as RemoteAgentPtyResolver | undefined,
@@ -361,8 +354,8 @@ export function makeConfiguredRemoteAgentLayers<E = never, R = never>(
     composition.managed ? RemoteAgentRuntimeBindingsLive : Layer.empty,
     Layer.succeed(RemoteAgentGitOwnership, composition.managed ? "managed" : "external"),
     Layer.succeed(RemoteWorkspaceRuntime, composition.workspaceRuntime),
-    makeSelectedDevGitLayer(devOwner, composition.gitExecutor),
-    makeShellRunnerLayer(devOwner, composition.shellRunner),
+    makeSshOwnerGitLayer(composition.gitExecutor),
+    makeShellRunnerLayer(composition.shellRunner),
     Layer.succeed(RemoteAgentHealthService, health),
     Layer.succeed(RemoteAgentInstallerService, installer),
     remoteAgentInstallOperationsLayer({ installer, updateCoordinator, pool: composition.pool }),

@@ -64,6 +64,8 @@ export const remoteFixture = Effect.fn("test.remoteProfileManager")(function* (
     ptyAdapter: adapter,
     agentDetector: () => Effect.succeed(new Map()),
     preflightRemoteShellProfile: () => Effect.void,
+    // SSH folder resolution is the owner's cwd probe; this fake resolves the exact path.
+    directSshCwdOwner: { probeCwd: async ({ cwd }) => ({ kind: "resolved", cwd }) },
     resolveShellProfile: (selected, context) =>
       Effect.try({
         try: () => {

@@ -5,7 +5,6 @@
  */
 import { Effect, Path } from "effect";
 
-import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import { type GitCoreShape } from "../Services/GitCore.ts";
 import { type GitHelpers } from "./GitCoreExecutor.ts";
 import { GitCommandError } from "@bigbud/contracts";
@@ -50,7 +49,6 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
 ) {
   const { executeGit, runGit, runGitStdout } = helpers;
   const initiatingTransportDisabled = () => isInitiatingGitTransportDisabled(lane);
-  const selectedTarget = () => lane === "target" && isSshOwnerDevFixtureSelected();
 
   const remoteOps = makeRemoteOps(helpers, path);
   const upstreamOps = yield* makeUpstreamOps(helpers, path, remoteOps, initiatingTransportDisabled);
@@ -74,17 +72,12 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     executeGit,
     runGitStdout,
     originRemoteExists,
-    computeAheadCountAgainstBase: (cwd, branch) =>
-      selectedTarget() ? Effect.succeed(0) : computeAheadCountAgainstBase(cwd, branch),
-    allowPathNumstat: () => !selectedTarget(),
-    allowUntrackedCount: selectedTarget,
+    computeAheadCountAgainstBase,
+    allowPathNumstat: () => true,
+    allowUntrackedCount: () => false,
   });
 
   const statusDetails: GitCoreShape["statusDetails"] = Effect.fn("statusDetails")(function* (cwd) {
-    // The selected owner already supplies upstream tracking data in porcelain status.
-    // Do not probe or fetch independently of that read-only recipe.
-    if (selectedTarget()) return yield* readStatusDetails(cwd, "GitCore.statusDetails");
-
     yield* refreshStatusUpstreamIfStale(cwd).pipe(
       Effect.catchIf(isMissingGitCwdError, () => Effect.void),
       Effect.ignoreCause({ log: true }),

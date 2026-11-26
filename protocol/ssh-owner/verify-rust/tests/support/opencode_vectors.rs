@@ -13,7 +13,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_opencode_open",
-        request(Operation::ProofOpencodeOpen(v1::ProofOpencodeOpen {
+        request(Operation::OpencodeOpen(v1::ProofOpencodeOpen {
             scope: Some(v1::ProofProviderScope {
                 thread_id: "thread-opencode".into(),
                 session_epoch: 7,
@@ -28,7 +28,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_opencode_service_open",
-        request(Operation::ProofOpencodeOpen(v1::ProofOpencodeOpen {
+        request(Operation::OpencodeOpen(v1::ProofOpencodeOpen {
             scope: None,
             lease: lease.clone(),
             service_scope: Some(v1::ProviderServiceScope {
@@ -42,7 +42,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_opencode_service_open_v2",
-        request(Operation::ProofOpencodeOpen(v1::ProofOpencodeOpen {
+        request(Operation::OpencodeOpen(v1::ProofOpencodeOpen {
             scope: None,
             lease: lease.clone(),
             service_scope: Some(v1::ProviderServiceScope {
@@ -56,14 +56,14 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     assert_frame(
         values,
         "proof_opencode_status",
-        request(Operation::ProofOpencodeStatus(v1::ProofOpencodeLease {
+        request(Operation::OpencodeStatus(v1::ProofOpencodeLease {
             lease: lease.clone(),
         })),
     );
     assert_frame(
         values,
         "proof_opencode_close",
-        request(Operation::ProofOpencodeClose(v1::ProofOpencodeLease {
+        request(Operation::OpencodeClose(v1::ProofOpencodeLease {
             lease: lease.clone(),
         })),
     );

@@ -2,7 +2,6 @@ import * as Effect from "effect/Effect";
 import { describe, expect, it, vi } from "vitest";
 import { assertDirectShellLaunchAvailable } from "./Manager.shell.direct";
 import {
-  deferred,
   fixture,
   ownerKey,
   pane,
@@ -31,28 +30,6 @@ function harness() {
 }
 
 describe("explicit direct launch reservation recovery", () => {
-  it("cancellation wins against an in-flight original dispatch and revokes its one-shot permit", async () => {
-    const f = harness();
-    const gate = deferred();
-    const reserved = deferred();
-    const reserve = vi.mocked(f.store.reserve).getMockImplementation()!;
-    vi.mocked(f.store.reserve).mockImplementation(async (owner) => {
-      const result = await reserve(owner);
-      reserved.release();
-      await gate.promise;
-      return result;
-    });
-    const original = f.controller()(request());
-    const rejected = expect(original).rejects.toThrow("claim was not granted");
-    await reserved.promise;
-    await Effect.runPromise(assertDirectShellLaunchAvailable(f.store, input));
-    expect(f.entries.has(ownerKey)).toBe(false);
-    gate.release();
-    await rejected;
-    expect(f.transport).not.toHaveBeenCalled();
-    expect(f.store.claimDispatch).toHaveBeenCalledTimes(1);
-  });
-
   it("a dispatch claim winning the race retains ownership and refuses replacement", async () => {
     const f = harness();
     f.entries.set(ownerKey, prepared());

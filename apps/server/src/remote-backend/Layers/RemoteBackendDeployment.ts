@@ -5,17 +5,14 @@ import { RemoteBackendProfiles } from "../../persistence/Services/RemoteBackendP
 import { RemoteBackendProfilesLive } from "../../persistence/Layers/RemoteBackendProfiles.ts";
 import { readRemoteAgentApprovalEvidence } from "../../remote-agent/remoteAgentLocalControl.approval.ts";
 import { makeRemoteAgentInstallSourceLoader } from "../../remote-agent/remoteAgentInstallSource.ts";
-import { inspectSshHostTrust } from "../../ssh/sshHostTrust.ts";
 import { RemoteBackendRelayProfiles } from "../clientRelay.profiles.ts";
 import { makeDeploymentApproval } from "../deployment.approval.ts";
 import { makePersistedRemoteBackendRelayProfiles } from "../deployment.profiles.store.ts";
 import { makeDeploymentGraphSourceResolver } from "../deployment.source.ts";
-import { runDeploymentSsh } from "../deployment.ssh.ts";
 import {
   makeProductionDeploymentHostTrust,
   makeProductionDeploymentRunner,
 } from "../deployment.ssh.owner.production.ts";
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
 import { readSshOwnerProductionOwner } from "../../ssh/sshOwnerProductionRegistry.ts";
 import { makeRemoteBackendDeployment } from "../deployment.ts";
 import type { DeploymentProfileStore } from "../deployment.types.ts";
@@ -34,11 +31,9 @@ const makeServices = Effect.fn("makeRemoteBackendDeploymentServices")(function* 
     insert: (record) => run(repository.insert(record)),
   };
   const sourceLoader = makeRemoteAgentInstallSourceLoader();
-  // W2 T-backend: production activation runs every step through the live owner's typed
-  // step leases and checks trust in the owner; no legacy SSH launch remains on that path.
-  const production = SSH_OWNER_PRODUCTION_ACTIVATION
-    ? { owner: readSshOwnerProductionOwner }
-    : undefined;
+  // W2 T-backend: every step runs through the live owner's typed step leases and trust
+  // is checked in the owner; there is no TypeScript SSH launch.
+  const production = { owner: readSshOwnerProductionOwner };
   const deployment = makeRemoteBackendDeployment({
     approval: makeDeploymentApproval({
       listSavedTargets: () =>
@@ -50,10 +45,8 @@ const makeServices = Effect.fn("makeRemoteBackendDeploymentServices")(function* 
         ),
       evidence: (target) => readRemoteAgentApprovalEvidence(target),
     }),
-    assertHostTrusted: production
-      ? makeProductionDeploymentHostTrust(production)
-      : (target) => inspectSshHostTrust(target),
-    run: production ? makeProductionDeploymentRunner(production) : runDeploymentSsh,
+    assertHostTrusted: makeProductionDeploymentHostTrust(production),
+    run: makeProductionDeploymentRunner(production),
     resolveSource: makeDeploymentGraphSourceResolver({
       environment: process.env,
       loadRustSource: (signal) => sourceLoader(signal),

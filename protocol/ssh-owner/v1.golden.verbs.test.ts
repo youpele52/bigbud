@@ -33,10 +33,35 @@ const mapping = (() => {
 // `terminal_inspect` was allocated as field 120 (W2 T-term).
 const reservedFutures = ["subscribe_status", "git_remote_transport"] as const;
 
-test("frozen production verbs cover every proof_* operation exactly once", () => {
+// W7: these proof_* fixture variants were superseded by separately allocated
+// production verbs before W7, so their production name already exists at a
+// different field. They stay fixture-only until retired; all other proof_*
+// variants were promoted in place (same field number, production name).
+const superseded = new Set([
+  "proof_peer_relay_open",
+  "proof_git_upload_open",
+  "proof_run_thread_shell",
+  "proof_run_provider_workspace_shell",
+  "proof_run_acp_command",
+  "proof_ensure_peer_coordinator_key",
+  "proof_inspect_peer_host_key",
+]);
+
+test("W7 promoted every frozen proof_* operation to its production name", () => {
+  const declared = new Set(declaredOperations.map(({ name }) => name));
+  const promoted = new Set<string>();
+  for (const [proof, production] of mapping) {
+    assert.ok(declared.has(production), production);
+    if (superseded.has(proof)) {
+      assert.ok(declared.has(proof), proof);
+      continue;
+    }
+    assert.ok(!declared.has(proof), `${proof} must be promoted`);
+    promoted.add(production);
+  }
   // The product verbs keep their existing names and field numbers.
   assert.deepEqual(
-    declaredOperations.filter(({ name }) => !name.startsWith("proof_")),
+    declaredOperations.filter(({ name }) => !name.startsWith("proof_") && !promoted.has(name)),
     [
       { name: "inspect_trust", field: 10 },
       { name: "approve_trust", field: 11 },
@@ -101,14 +126,13 @@ test("frozen production verbs cover every proof_* operation exactly once", () =>
     .filter(({ name }) => name.startsWith("proof_"))
     .map(({ name }) => name)
     .toSorted();
-  assert.deepEqual([...mapping.keys()].toSorted(), proofNames);
+  assert.deepEqual(proofNames, [...superseded].toSorted());
 
   const productionNames = [...mapping.values()];
   assert.equal(new Set(productionNames).size, productionNames.length);
   for (const [proof, production] of mapping) {
     assert.match(production, /^[a-z][a-z0-9_]*$/, proof);
     assert.ok(!production.startsWith("proof_"), proof);
-    assert.ok(!proofNames.includes(production), proof);
   }
 });
 

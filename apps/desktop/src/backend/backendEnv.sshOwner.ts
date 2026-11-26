@@ -1,39 +1,21 @@
-import { isAbsolute } from "node:path";
-import { tmpdir } from "node:os";
-import { isDevSshOwnerProfile } from "@bigbud/shared/DevLauncher";
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
-
-export function resolveDesktopSshOwnerDevProfile(
-  isPackaged: boolean,
-  env: NodeJS.ProcessEnv,
-): string | undefined {
-  const profile = env.BIGBUD_SSH_OWNER_NORMAL_DEV_PROFILE;
-  if (
-    isPackaged ||
-    !env.VITE_DEV_SERVER_URL ||
-    env.BIGBUD_SSH_OWNER_NORMAL_DEV_READY !== "1" ||
-    env.BIGBUD_SSH_OWNER !== "1" ||
-    !isAbsolute(env.BIGBUD_SSH_OWNER_BIN ?? "") ||
-    !profile ||
-    !isDevSshOwnerProfile(profile, process.platform, tmpdir()) ||
-    env.BIGBUD_HOME !== profile
-  ) {
-    return undefined;
-  }
-  return profile;
-}
+import { isAbsolute, normalize } from "node:path";
 
 /**
- * Production owner path for a packaged desktop build. The server re-verifies
- * the artifact's native target and fails closed with `sshOwnerUnavailable`, so
- * this is a locator, not a trust decision. Off while the build-time activation
- * constant is off, which keeps today's packaged environment unchanged.
+ * Locates the Rust SSH owner the backend must use. SSH always runs through the
+ * owner (S4); there is no legacy launcher to fall back to.
+ *
+ * - Packaged: the staged owner beside the bundled server. The server re-verifies
+ *   the artifact's native target and fails closed with `sshOwnerUnavailable`, so
+ *   this is a locator, not a trust decision.
+ * - Development (`bun run dev:desktop`): the absolute Cargo artifact the dev
+ *   runner built and exported as `BIGBUD_SSH_OWNER_BIN`.
  */
-export function resolveDesktopSshOwnerProductionBinary(input: {
+export function resolveDesktopSshOwnerBinary(input: {
   readonly isPackaged: boolean;
   readonly packagedBinary: string | null;
-  readonly activation?: boolean;
+  readonly environment: NodeJS.ProcessEnv;
 }): string | undefined {
-  const activated = input.activation ?? SSH_OWNER_PRODUCTION_ACTIVATION;
-  return activated && input.isPackaged ? (input.packagedBinary ?? undefined) : undefined;
+  if (input.isPackaged) return input.packagedBinary ?? undefined;
+  const value = input.environment.BIGBUD_SSH_OWNER_BIN;
+  return value !== undefined && isAbsolute(value) && normalize(value) === value ? value : undefined;
 }

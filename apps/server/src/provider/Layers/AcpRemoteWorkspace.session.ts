@@ -15,9 +15,7 @@ import {
   createRemoteWorkspaceAcpBridge,
   type RemoteWorkspaceAcpBridge,
 } from "../../remote-workspace-bridge/remoteWorkspaceAcpBridge.ts";
-import { isSshOwnerDevFixtureSelected } from "../../ssh/sshOwnerSelection.ts";
 import type { SessionFsOwnerWorkspace } from "../../remote-workspace-bridge/remoteWorkspaceSessionFsBridge.owner.ts";
-import { DevSshOwnerRuntime } from "../../ssh/sshOwnerDevRuntime.ts";
 import {
   makeProductionAcpWorkspace,
   usesProductionAcpBridge,
@@ -26,24 +24,6 @@ import { isRemoteWorkspaceTarget } from "../../workspace-target/workspaceTarget.
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import { resolveProviderExecutionContext } from "../providerExecutionContext.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
-
-export const resolveAcpSessionFsOwner = Effect.fn("resolveAcpSessionFsOwner")(function* () {
-  if (!isSshOwnerDevFixtureSelected()) return undefined;
-  const runtime = yield* Effect.serviceOption(DevSshOwnerRuntime);
-  const session = runtime._tag === "Some" ? runtime.value.session : undefined;
-  if (session?.kind !== "unix" && session?.kind !== "retained-unix") return undefined;
-  const boundWorkspace =
-    "guardedWorkspace" in session && session.guardedWorkspace
-      ? session.guardedWorkspace
-      : {
-          targetId: session.targetId,
-          workspaceRoot: session.fixture.folder,
-          withOwner: session.picker.withOwner,
-        };
-  const { targetId, workspaceRoot, withOwner } = boundWorkspace;
-  const workspace: SessionFsOwnerWorkspace = { targetId, workspaceRoot, withOwner };
-  return workspace;
-});
 
 export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorkspaceSession")(
   function* (input: {
@@ -81,7 +61,7 @@ export const prepareAcpRemoteWorkspaceSession = Effect.fn("prepareAcpRemoteWorks
             workspaceRoot: workspaceTarget.cwd ?? "",
           })
         : undefined;
-      const selected = isSshOwnerDevFixtureSelected() || production !== undefined;
+      const selected = production !== undefined;
       const useRemoteAgentPty =
         !selected &&
         input.ptyResolver !== undefined &&

@@ -25,10 +25,6 @@ import {
 } from "./sshOwnerProductionComposition.ts";
 
 const flags = vi.hoisted(() => ({ starts: 0 }));
-vi.mock("@bigbud/shared/SshOwnerActivation", () => ({
-  SSH_OWNER_PRODUCTION_ACTIVATION: true,
-  resolveSshOwnerDrainIdentifiedRequest: () => false,
-}));
 vi.mock("./sshOwnerProductionClient.ts", async (importOriginal) => {
   const { Effect: E } = await import("effect");
   return {

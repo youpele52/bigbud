@@ -1,15 +1,10 @@
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
-
 import { readSshOwnerProductionOwner } from "../ssh/sshOwnerProductionRegistry.ts";
 import type { RemoteAgentOwnerControlDependencies } from "./remoteAgentControl.owner.ts";
 
 /**
- * U25: under production activation every remote-agent control, install and read-only probe
- * runs through the live SSH owner; otherwise the legacy SSH path is unchanged. There is no
- * fallback from one to the other.
+ * U25: every remote-agent control, install and read-only probe runs through the live SSH
+ * owner. There is no TypeScript SSH path.
  */
-export function remoteAgentOwnerSelection(
-  activation: boolean = SSH_OWNER_PRODUCTION_ACTIVATION,
-): RemoteAgentOwnerControlDependencies | undefined {
-  return activation ? { owner: readSshOwnerProductionOwner } : undefined;
+export function remoteAgentOwnerSelection(): RemoteAgentOwnerControlDependencies {
+  return { owner: readSshOwnerProductionOwner };
 }

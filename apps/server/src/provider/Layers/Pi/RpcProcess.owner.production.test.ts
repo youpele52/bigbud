@@ -93,16 +93,13 @@ describe("production Pi owner port", () => {
       handle: { target },
       descriptorFor: async (targetId: string) => ({ targetId, kind: "structured" }),
     } as unknown as SshOwnerProductionRegistration;
-    const selected = { activation: true, devSelected: false, production: () => registration };
+    const selected = { production: () => registration };
     const resolved = await resolveProductionPiRpcOwner(TARGET, selected);
     expect(resolved?.targetId).toBe(TARGET);
     expect(target).toHaveBeenCalledTimes(1);
     expect(
       await resolveProductionPiRpcOwner(TARGET, { ...selected, production: () => undefined }),
     ).toBeUndefined();
-    expect(await resolveProductionPiRpcOwner(TARGET, { ...selected, activation: false })).toBe(
-      undefined,
-    );
     const mismatched = {
       ...registration,
       descriptorFor: async () => ({ targetId: "ssh:elsewhere", kind: "structured" }),
@@ -117,11 +114,10 @@ describe("production Pi owner port", () => {
       providerRuntimeTarget: { location: "remote", executionTargetId: TARGET },
       workspaceTarget: { location: "remote", executionTargetId: TARGET, cwd: "/srv/work" },
     } as unknown as Parameters<typeof getPiRpcCapabilityDenial>[0];
-    expect(getPiRpcCapabilityDenial(targets, "rpc-start", false, true)?.message).toBe(
+    expect(getPiRpcCapabilityDenial(targets, "rpc-start", false)?.message).toBe(
       "Pi remote RPC start is unavailable with the production SSH owner.",
     );
-    expect(getPiRpcCapabilityDenial(targets, "rpc-start", true, true)).toBeUndefined();
-    expect(getPiRpcCapabilityDenial(targets, "rpc-start", false, false)).toBeUndefined();
+    expect(getPiRpcCapabilityDenial(targets, "rpc-start", true)).toBeUndefined();
   });
 });
 

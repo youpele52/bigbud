@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { Effect, Path } from "effect";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { routeSelectedFetch } from "./GitCore.fetchRoute.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { registerSshTargetIdSource } from "./GitCore.fetchRoute.hosts.ts";
@@ -47,7 +46,6 @@ describe.skipIf(!existsSync(SSHD))("third-party SSH remote under selection (U14)
   let sshCommand: string;
 
   beforeAll(async () => {
-    activateDevSshOwner();
     root = mkdtempSync(join(tmpdir(), "bbsshd-"));
     port = await freePort();
     const keygen = (name: string) =>

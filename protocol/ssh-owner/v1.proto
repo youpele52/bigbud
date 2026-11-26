@@ -126,10 +126,12 @@ message Request {
   // `target_generation` must equal the descriptor's own fields when present.
   TargetDescriptor target_descriptor = 6;
 
-  // Frozen production verb names (engineering decision; W1.1). Field numbers and
-  // the existing `proof_*` names stay unchanged; promotion of any variant into
-  // product dispatch lands only with W7. This table is the single naming record
-  // and is checked against `v1.golden.verbs`:
+  // Production verb names (W1.1 frozen, promoted in place at W7). Each former
+  // `proof_*` field kept its field number and now carries its production name;
+  // the wire bytes are unchanged. Seven `proof_*` fixture variants (peer relay,
+  // Git upload, the three shells and the two peer-key verbs) were superseded
+  // earlier by separately allocated production verbs and remain fixture-only.
+  // This table is the single naming record, checked against `v1.golden.verbs`:
   //
   //   proof_open_terminal                  -> open_terminal
   //   proof_terminal_status                -> terminal_status
@@ -209,58 +211,58 @@ message Request {
     ListFolders list_folders = 14;
     // These three fixture-only operations exercise one native PTY lease. The
     // child command and dimensions are fixed; the client cannot supply input.
-    ProofTerminalOpen proof_open_terminal = 15;
-    ProofTerminalLease proof_terminal_status = 16;
-    ProofTerminalLease proof_close_terminal = 17;
-    ProofWorkspaceRead proof_workspace_read = 18;
-    ProofWorkspaceList proof_workspace_list = 19;
-    ProofWorkspaceList proof_workspace_snapshot = 20;
-    ProofWorkspaceIndex proof_workspace_index = 21;
-    ProofWorkspaceWrite proof_workspace_write = 22;
-    ProofWorkspaceContentSearch proof_workspace_content_search = 23;
-    Empty proof_sample_health = 24;
-    ProofWorkspaceGit proof_workspace_git = 25;
-    ProofTerminalInput proof_terminal_input = 26;
-    ProofTerminalResize proof_terminal_resize = 27;
-    ProofPrepareTerminal proof_prepare_terminal = 28;
-    ProofAgentProxyOpen proof_agent_proxy_open = 29;
-    ProofTerminalLease proof_agent_proxy_status = 30;
-    ProofAgentProxyClose proof_agent_proxy_close = 31;
-    ProofTerminalLease proof_cancel_terminal_reservation = 32;
-    ProofTerminalReplayRequest proof_terminal_replay = 33;
-    ProofTerminalCwd proof_terminal_cwd = 34;
-    ProofDeploymentHostProbe proof_deployment_host_probe = 35;
-    ProofDeploymentCompletion proof_deployment_completion = 36;
-    ProofClientRelayOpen proof_client_relay_open = 37;
-    ProofProviderScope proof_codex_probe = 38;
-    ProofProviderScope proof_codex_open = 39;
-    ProofProviderScope proof_pi_probe = 40;
-    ProofProviderScope proof_pi_open = 41;
+    ProofTerminalOpen open_terminal = 15;
+    ProofTerminalLease terminal_status = 16;
+    ProofTerminalLease close_terminal = 17;
+    ProofWorkspaceRead workspace_read = 18;
+    ProofWorkspaceList workspace_list = 19;
+    ProofWorkspaceList workspace_snapshot = 20;
+    ProofWorkspaceIndex workspace_index = 21;
+    ProofWorkspaceWrite workspace_write = 22;
+    ProofWorkspaceContentSearch workspace_content_search = 23;
+    Empty sample_health = 24;
+    ProofWorkspaceGit workspace_git = 25;
+    ProofTerminalInput terminal_input = 26;
+    ProofTerminalResize terminal_resize = 27;
+    ProofPrepareTerminal prepare_terminal = 28;
+    ProofAgentProxyOpen agent_proxy_open = 29;
+    ProofTerminalLease agent_proxy_status = 30;
+    ProofAgentProxyClose agent_proxy_close = 31;
+    ProofTerminalLease cancel_terminal_reservation = 32;
+    ProofTerminalReplayRequest terminal_replay = 33;
+    ProofTerminalCwd terminal_cwd = 34;
+    ProofDeploymentHostProbe deployment_host_probe = 35;
+    ProofDeploymentCompletion deployment_completion = 36;
+    ProofClientRelayOpen client_relay_open = 37;
+    ProofProviderScope codex_probe = 38;
+    ProofProviderScope codex_open = 39;
+    ProofProviderScope pi_probe = 40;
+    ProofProviderScope pi_open = 41;
     ProofPeerRelayOpen proof_peer_relay_open = 42;
-    ProofGitAdvertisementOpen proof_git_advertisement_open = 43;
-    ProofDeploymentStageBegin proof_deployment_stage_begin = 44;
+    ProofGitAdvertisementOpen git_advertisement_open = 43;
+    ProofDeploymentStageBegin deployment_stage_begin = 44;
     ProofGitUploadOpen proof_git_upload_open = 45;
-    ProofDeploymentManifestPut proof_deployment_manifest_put = 46;
-    ProofWorkspaceModeInspect proof_workspace_mode_inspect = 47;
-    ProofWorkspaceModePublish proof_workspace_mode_publish = 48;
-    ProofGitTrackedPush proof_git_tracked_push = 49;
-    ProofOpencodeOpen proof_opencode_open = 50;
-    ProofOpencodeLease proof_opencode_status = 51;
-    ProofOpencodeLease proof_opencode_close = 52;
-    Empty proof_unlock_synthetic_posix_password = 53;
-    ProofWorkspaceReadiness proof_workspace_readiness = 54;
-    ProofWorkspaceGuardedWriteBegin proof_workspace_guarded_write_begin = 55;
-    ProofWorkspaceGuardedWriteChunk proof_workspace_guarded_write_chunk = 56;
-    ProofWorkspaceGuardedWriteCommit proof_workspace_guarded_write_commit = 57;
-    ProofWorkspaceGuardedWriteAbort proof_workspace_guarded_write_abort = 58;
-    ProofWorkspaceGuardedWriteApply proof_workspace_guarded_write_apply = 59;
-    ProofWorkspaceCreate proof_workspace_create = 60;
-    ProofWorkspaceCreateDirectory proof_workspace_create_directory = 61;
-    ProofWorkspaceDeleteEntry proof_workspace_delete_entry = 62;
-    ProofWorkspaceWriteBegin proof_workspace_write_begin = 63;
-    ProofWorkspaceWriteChunk proof_workspace_write_chunk = 64;
-    ProofWorkspaceWriteCommit proof_workspace_write_commit = 65;
-    ProofWorkspaceWriteAbort proof_workspace_write_abort = 66;
+    ProofDeploymentManifestPut deployment_manifest_put = 46;
+    ProofWorkspaceModeInspect workspace_mode_inspect = 47;
+    ProofWorkspaceModePublish workspace_mode_publish = 48;
+    ProofGitTrackedPush git_tracked_push = 49;
+    ProofOpencodeOpen opencode_open = 50;
+    ProofOpencodeLease opencode_status = 51;
+    ProofOpencodeLease opencode_close = 52;
+    Empty unlock_posix_password = 53;
+    ProofWorkspaceReadiness workspace_readiness = 54;
+    ProofWorkspaceGuardedWriteBegin workspace_guarded_write_begin = 55;
+    ProofWorkspaceGuardedWriteChunk workspace_guarded_write_chunk = 56;
+    ProofWorkspaceGuardedWriteCommit workspace_guarded_write_commit = 57;
+    ProofWorkspaceGuardedWriteAbort workspace_guarded_write_abort = 58;
+    ProofWorkspaceGuardedWriteApply workspace_guarded_write_apply = 59;
+    ProofWorkspaceCreate workspace_create = 60;
+    ProofWorkspaceCreateDirectory workspace_create_directory = 61;
+    ProofWorkspaceDeleteEntry workspace_delete_entry = 62;
+    ProofWorkspaceWriteBegin workspace_write_begin = 63;
+    ProofWorkspaceWriteChunk workspace_write_chunk = 64;
+    ProofWorkspaceWriteCommit workspace_write_commit = 65;
+    ProofWorkspaceWriteAbort workspace_write_abort = 66;
     // Exec-class owner verbs. Distinct grants; none shares the ACP authority.
     ProofRunThreadShell proof_run_thread_shell = 67;
     ProofRunProviderWorkspaceShell proof_run_provider_workspace_shell = 68;
@@ -276,7 +278,7 @@ message Request {
     RunAcpShell run_acp_shell = 95;
     // Owner-compiled agent management. Enum-only verbs; the owner selects every
     // program, argument, cwd and environment.
-    AgentAction proof_agent_action = 70;
+    AgentAction agent_action = 70;
     // Peer enrollment (T-peer, dev-selected only). The owner provisions the
     // profile-bound coordinator identity and inspects one exact worker host.
     // Neither verb accepts a path, algorithm, identity, credential or pin write.
@@ -284,13 +286,13 @@ message Request {
     ProofInspectPeerHostKey proof_inspect_peer_host_key = 72;
     // Typed deployment steps: bounded archive upload, reset, fetch, publish,
     // backend start, operation-only cancellation and reattach by request id.
-    ProofDeploymentAction proof_deployment_action = 73;
+    ProofDeploymentAction deployment_action = 73;
     // Reservation only: C15 / W2 T-xfer. Not enabled for real transfers in
     // S1-S4. The dispatcher denies both verbs typed; the disposable native
     // fixture is the only consumer. No recursive transfer, rsync packaging or
     // publication is implemented behind these fields.
-    ProofTransferStream proof_transfer_stream = 74;
-    ProofPackagedRsync proof_packaged_rsync = 75;
+    ProofTransferStream transfer_stream = 74;
+    ProofPackagedRsync packaged_rsync = 75;
     // Read-only discovery of the aliases declared in the owner's own config
     // scope. Metadata only: no dial, DNS, credential path, raw config value or
     // `Match exec` evaluation. Connection UI only; the monitor never lists.

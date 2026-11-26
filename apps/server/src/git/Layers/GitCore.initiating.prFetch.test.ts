@@ -2,7 +2,6 @@ import { it } from "@effect/vitest";
 import { Effect, Path } from "effect";
 import { expect, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
 import { InitiatingFetchOwner } from "./GitCore.initiatingTransport.ts";
@@ -40,7 +39,6 @@ function harness() {
 
 it.effect("fetches a pull request head through the owner with the exact refspec", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const { calls, fetch, ops } = harness();
     yield* ops.pipe(
       Effect.flatMap((worktree) =>
@@ -64,7 +62,6 @@ it.effect("fetches a pull request head through the owner with the exact refspec"
 
 it.effect("fetches a remote branch and materializes the local branch", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const { calls, fetch, ops } = harness();
     yield* ops.pipe(
       Effect.flatMap((worktree) =>
@@ -94,7 +91,6 @@ it.effect("fetches a remote branch and materializes the local branch", () =>
 
 it.effect("refuses invalid PR operands before the owner or a legacy fetch", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const { calls, fetch, ops } = harness();
     for (const prNumber of [0, -1, 1.5, Number.NaN]) {
       const error = yield* ops.pipe(
@@ -121,7 +117,6 @@ it.effect("refuses invalid PR operands before the owner or a legacy fetch", () =
 
 it.effect("refuses an unsafe remote branch refspec before the owner", () =>
   Effect.gen(function* () {
-    activateDevSshOwner();
     const { fetch, ops } = harness();
     const error = yield* ops.pipe(
       Effect.flatMap((worktree) =>

@@ -2,18 +2,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
 import { remoteFixture, target } from "./Manager.shell.remote.test.helpers";
 
-vi.mock("../../ssh/sshProcess", () => ({
-  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
-    stdout: `\x1e${input.args[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  })),
-}));
 import {
   createManager,
   openInput,

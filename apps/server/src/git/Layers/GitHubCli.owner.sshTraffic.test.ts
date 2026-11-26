@@ -2,7 +2,6 @@ import { PassThrough } from "node:stream";
 import { Effect, Layer } from "effect";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { runProcess } from "../../utils/processRunner";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { GitHubCliLive } from "./GitHubCli.ts";
@@ -51,7 +50,6 @@ afterEach(() => {
 });
 
 it("routes gh pr checkout SSH through the owner shim, never ambient SSH", async () => {
-  activateDevSshOwner();
   const pipes = lease();
   const openGitUpload = vi.fn(async () => pipes);
   vi.mocked(runProcess).mockResolvedValue(processResult());
@@ -76,7 +74,6 @@ it("routes gh pr checkout SSH through the owner shim, never ambient SSH", async 
 });
 
 it("refuses an ambient GIT_SSH_COMMAND for gh SSH traffic", async () => {
-  activateDevSshOwner();
   vi.stubEnv("GIT_SSH_COMMAND", "ssh -oProxyCommand=evil");
   const openGitUpload = vi.fn<OpenUpload>();
   const transport = makeSelectedGitHubCliOwnerTransport({
@@ -97,7 +94,6 @@ it("refuses an ambient GIT_SSH_COMMAND for gh SSH traffic", async () => {
 });
 
 it("runs API-intent gh verbs with an environment that omits ambient transport", async () => {
-  activateDevSshOwner();
   vi.stubEnv("GIT_SSH_COMMAND", "ssh -oProxyCommand=evil");
   vi.mocked(runProcess).mockResolvedValue({ ...processResult(), stdout: "[]\n" });
   const transport = makeSelectedGitHubCliOwnerTransport({
@@ -114,7 +110,6 @@ it("runs API-intent gh verbs with an environment that omits ambient transport", 
 });
 
 it("admits pr checkout but refuses unported gh verbs through the product service", () => {
-  activateDevSshOwner();
   vi.mocked(runProcess).mockResolvedValue(processResult());
   const openGitUpload = vi.fn<OpenUpload>(async () => lease());
   const transport = makeSelectedGitHubCliOwnerTransport({

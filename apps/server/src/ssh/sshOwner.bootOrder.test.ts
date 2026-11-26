@@ -350,7 +350,6 @@ it.effect(
         { mode: "desktop", devUrl: undefined, stateDir: fixture.stateDirectory },
         "file:///unused-entry.mjs",
         {
-          activation: true,
           artifactOverride: fixture.artifact(path, "desktop-packaged"),
           ownerProfile: { ...fixture.profile, kind: "desktop-packaged" },
         },

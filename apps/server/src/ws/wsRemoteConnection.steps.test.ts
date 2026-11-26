@@ -42,7 +42,7 @@ function harness(options: { readonly agentPty: boolean }) {
     },
     usesRemoteAgentPty: () => options.agentPty,
     disconnectRemoteAgent: (id, error) => void calls.push(`agent:${id}:${error.message}`),
-    closePasswordSession: async (id) => void calls.push(`password:${id}`),
+    disconnectOwnerTarget: async (id) => void calls.push(`password:${id}`),
     forgetMonitorTarget: (id) => void calls.push(`monitor:${id}`),
   });
   const runAll = () =>
@@ -60,7 +60,7 @@ describe("remote disconnect steps", () => {
       "provider-sessions",
       "direct-ssh-terminals",
       "remote-agent-connections",
-      "password-session",
+      "owner-disconnect",
       "ssh-monitor",
     ]);
   });

@@ -2,7 +2,6 @@ import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { expect, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import { runProcess } from "../../utils/processRunner";
 import { GitHubCli } from "../Services/GitHubCli.ts";
 import { GitHubCliLive } from "./GitHubCli.ts";
@@ -24,7 +23,6 @@ function provideOwner() {
 }
 
 it.effect("routes admitted gh API traffic through the owner without a legacy launch", () => {
-  activateDevSshOwner();
   const owner = provideOwner();
   return Effect.gen(function* () {
     const gh = yield* GitHubCli;
@@ -59,7 +57,6 @@ it.effect("routes admitted gh API traffic through the owner without a legacy lau
 });
 
 it.effect("refuses unported gh verbs with a typed error", () => {
-  activateDevSshOwner();
   const owner = provideOwner();
   return Effect.gen(function* () {
     const gh = yield* GitHubCli;
@@ -75,16 +72,4 @@ it.effect("refuses unported gh verbs with a typed error", () => {
     expect(owner.execute).not.toHaveBeenCalled();
     expect(runProcess).not.toHaveBeenCalled();
   }).pipe(Effect.provide(Layer.merge(GitHubCliLive, owner.layer)));
-});
-
-it.effect("keeps the typed refusal when no owner transport is composed", () => {
-  activateDevSshOwner();
-  return Effect.gen(function* () {
-    const gh = yield* GitHubCli;
-    expect(yield* Effect.flip(gh.execute({ cwd: "/repo", args: ["pr", "list"] }))).toMatchObject({
-      _tag: "GitHubCliError",
-      detail: expect.stringContaining("No legacy transport was started"),
-    });
-    expect(runProcess).not.toHaveBeenCalled();
-  }).pipe(Effect.provide(GitHubCliLive));
 });

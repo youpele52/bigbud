@@ -1,18 +1,12 @@
-import { buildSshCommandInvocation } from "../../ssh/sshCommand";
-import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget";
+import { SshOwnerRequiredError } from "../../ssh/sshOwnerRequired";
 import { wslProbeArgs } from "./Manager.wsl.invocation";
 import { wslExecutable } from "./Manager.wsl.process";
-import { remoteShellPidPrefix } from "./Manager.remote-identity";
 import type { ResolvedShellProfileLaunch } from "./ShellProfiles.launch";
 import { remoteShellLaunchIntent } from "./ShellProfiles.launch.intent";
 import { parseExecutionHostShellLaunch } from "./ShellProfiles.launch.metadata";
 import { executionHostTerminalEnvironment } from "./ShellProfiles.remote.environment";
-import { sshShellTarget, type RemoteShellDiscoveryInput } from "./ShellProfiles.remote.identity";
+import type { RemoteShellDiscoveryInput } from "./ShellProfiles.remote.identity";
 
-const SSH_EXEC = [
-  'test "$(/usr/bin/id -un)" = "$1" || exit 79',
-  'shift; cd "$1" 2>/dev/null || exit 77',
-]; // The generation-scoped PID marker is process-inspection evidence, never exec identity.
 const WSL_EXEC = [
   'test "$(/usr/bin/id -un)" = "$1" && test "$(/usr/bin/id -u)" = "$2" || exit 79',
   'shift 2; cd "$1" 2>/dev/null || exit 77',
@@ -72,38 +66,7 @@ export function directShellProfileInvocation(
       },
     };
   }
-  const target = parseSshExecutionTarget(input.executionTargetId);
-  if (!target || target.transport === "agent")
-    throw new Error("An agent execution target cannot use a direct SSH profile launch.");
-  const username = sshShellTarget(input).user;
-  const generation = input.runtimeGeneration;
-  if (generation !== undefined && !/^[a-f0-9-]{36}$/.test(generation))
-    throw new Error("Invalid direct shell runtime generation.");
-  const script = [
-    ...SSH_EXEC,
-    "shift",
-    ...(generation ? ['printf \'%s%s\\007\' "$1" "$$"', "shift"] : []),
-    'exec "$@"',
-  ].join("; ");
-  return {
-    transport: "ssh" as const,
-    launch,
-    invocation: buildSshCommandInvocation({
-      executionTargetId: input.executionTargetId,
-      command: "/bin/sh",
-      args: [
-        "-c",
-        script,
-        "sh",
-        username,
-        launch.cwd,
-        ...(generation ? [remoteShellPidPrefix(generation)] : []),
-        launch.executable,
-        ...launch.args,
-      ],
-      env,
-      allocateTty: true,
-      shellMode: "non-login-posix",
-    }),
-  };
+  // A direct SSH profile launch runs only through the Rust owner's PTY
+  // (`ShellProfiles.sshOwner.ts`); there is no TypeScript `ssh` argv.
+  throw new SshOwnerRequiredError();
 }

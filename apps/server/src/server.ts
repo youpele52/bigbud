@@ -27,13 +27,10 @@ import { StateDirLockLive } from "./startup/backendInstance";
 import { withOwnershipShutdown } from "./startup/ownershipShutdown";
 import { prepareProviderServicePath } from "./provider-provisioning/servicePath.runtime.ts";
 import { makeRoutesLayer } from "./server.routes.ts";
-import { configureDevSshOwner } from "./server.sshOwnerDev.ts";
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
 import {
   configureSshOwner,
   SshOwnerProductionBootLive,
 } from "./ssh/sshOwnerProductionComposition.ts";
-import { DevSshOwnerRuntimeLive } from "./ssh/sshOwnerDevRuntime.ts";
 import { readProductionOwnerProfileFacts } from "./ssh/sshOwnerProductionProfileFacts.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
@@ -100,8 +97,7 @@ import { RemoteTerminalAvailabilityLive } from "./remote-backend/terminalAvailab
 import { PtyAdapterLive } from "./server.pty.ts";
 import { TerminalActivityLive } from "./terminal/Layers/TerminalActivity.ts";
 
-const DevSshOwnerLayer = DevSshOwnerRuntimeLive.pipe(Layer.provide(PersistenceLayerLive));
-const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers(DevSshOwnerLayer);
+const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
 const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
 const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
 const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
@@ -117,7 +113,6 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
   : PtyAdapterLive;
 const TerminalLayerLive = TerminalManagerLive.pipe(
   Layer.provideMerge(TerminalActivityLive),
-  Layer.provide(DevSshOwnerLayer),
   Layer.provide(TerminalPtyLayerLive),
   Layer.provide(
     ShellLaunchPlannerLive.pipe(
@@ -136,7 +131,7 @@ const OrchestrationEngineLayerLive = withEngineTerminal(
   Layer.provide(ProfileVisibleBrowserControlLive),
   // One shared in-memory grant store; grants and challenges are lost on restart by design.
   Layer.provide(ThreadCoordinationGrantsLive),
-  Layer.provide(WorkspaceModeGateLive.pipe(Layer.provide(DevSshOwnerLayer))),
+  Layer.provide(WorkspaceModeGateLive),
 );
 
 const OrchestrationCommandLayerLive = CommandGatewayLive.pipe(
@@ -164,7 +159,7 @@ const CheckpointingLayerLive = Layer.empty.pipe(
 
 const ProviderInfrastructureLayerLive = makeProviderInfrastructureLayerLive(
   configuredRemoteAgentLayers,
-).pipe(Layer.provide(DevSshOwnerLayer));
+);
 
 const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
 const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
@@ -276,7 +271,6 @@ function localServerLayer(config: ServerConfigShape) {
 
   // The shutdown signal finalizes first, before routes close their WebSocket streams.
   return withServerShutdownSignal(serverApplicationLayer).pipe(
-    Layer.provideMerge(DevSshOwnerLayer),
     Layer.provideMerge(RuntimeServicesLive),
     Layer.provideMerge(HttpServerLive),
     // One backend per state directory: acquired before the port binds and persistence opens,
@@ -297,19 +291,15 @@ type ServerApplicationLayer = Layer.Layer<
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
-    if (SSH_OWNER_PRODUCTION_ACTIVATION) {
-      // Trusted endpoint facts derive from the server's own state directory only.
-      // Owner profile facts from the server's own settings and the user's SSH
-      // config paths; a request never names a program or a config file.
-      const profileFacts = yield* Effect.promise(() =>
-        readProductionOwnerProfileFacts(config.settingsPath),
-      );
-      yield* configureSshOwner(config, import.meta.url, {
-        ownerProfile: { stateDirectory: config.stateDir, ...profileFacts },
-      });
-    } else {
-      yield* Effect.sync(() => configureDevSshOwner(config, import.meta.url));
-    }
+    // SSH always runs through the Rust owner (S4). Trusted endpoint facts derive from the
+    // server's own state directory and settings and the user's SSH config paths; a request
+    // never names a program or a config file.
+    const profileFacts = yield* Effect.promise(() =>
+      readProductionOwnerProfileFacts(config.settingsPath),
+    );
+    yield* configureSshOwner(config, import.meta.url, {
+      ownerProfile: { stateDirectory: config.stateDir, ...profileFacts },
+    });
     if (config.mode === "remote") {
       yield* Effect.try({
         try: () => {

@@ -31,17 +31,8 @@ import { RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import * as RemoteDefault from "./remoteAgentDefault.ts";
 import { runRestartFixtureTool } from "./remoteAgentOwners.httpFixture.ts";
-import * as SshProcess from "../ssh/sshProcess.ts";
 import { configureRemoteAgentReattachEnvironment } from "./remoteAgentProcessClient.reattach.ts";
 
-vi.mock("../ssh/sshVerification.ts", () => ({
-  assertSshExecutionTargetReady: () => undefined,
-  assertSshExecutionTargetReadyAsync: async () => undefined,
-}));
-vi.mock("../ssh/sshCommand.ts", () => ({
-  buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
-  buildSshTerminalCandidateInvocation: () => ({ command: "fixture", args: [] }),
-}));
 // A lost controller link is permanent here: give up reattaching at once instead of
 // retrying until the 24 h result retention would have expired.
 let restoreReattachEnvironment: (() => void) | undefined;
@@ -218,13 +209,6 @@ describe("application terminal owner recovery after server services restart", ()
   });
 
   it("reopens through the durable old PTY identity after newer activation; never spawns a replacement", async () => {
-    const folderProbe = vi.spyOn(SshProcess, "runSshCommand").mockImplementation(async (input) => ({
-      stdout: `\x1e${input.args?.[3]}\x1f`,
-      stderr: "",
-      code: 0,
-      signal: null,
-      timedOut: false,
-    }));
     const directory = mkdtempSync(join(tmpdir(), "bigbud-owner-restart-"));
     const old = binding("g1");
     const newer = binding("g2");
@@ -332,6 +316,8 @@ describe("application terminal owner recovery after server services restart", ()
         );
         const manager = await runtime.runPromise(
           makeTerminalManagerWithOptions({
+            // SSH folder resolution is the owner's cwd probe; this fake resolves the exact path.
+            directSshCwdOwner: { probeCwd: async ({ cwd }) => ({ kind: "resolved", cwd }) },
             logsDir: join(directory, "logs"),
             ptyAdapter: adapter,
             subprocessChecker: () => Effect.succeed(false),
@@ -377,10 +363,6 @@ describe("application terminal owner recovery after server services restart", ()
       expect(requests.every((entry) => entry.generation === "g1")).toBe(true);
       expect(selection).toHaveBeenCalledOnce();
       expect(requests.some((entry) => entry.frame.type === "ptySignalRequest")).toBe(false);
-      expect(folderProbe).toHaveBeenCalledTimes(2);
-      expect(folderProbe).toHaveBeenCalledWith(
-        expect.objectContaining({ executionTargetId: "ssh:fixture", command: "sh" }),
-      );
     } finally {
       for (const controller of controllers) await controller.dispose();
       rmSync(directory, { recursive: true, force: true });

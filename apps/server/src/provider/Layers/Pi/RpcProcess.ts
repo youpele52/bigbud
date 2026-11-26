@@ -1,4 +1,3 @@
-import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isLocalWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { buildPiRpcInvocation } from "./Cli.ts";
@@ -27,7 +26,7 @@ export type {
   PiRpcWriteOnlyCommand,
 } from "./RpcProcess.types.ts";
 
-/** Local Pi and the unselected legacy path are unchanged; a selected owner never spawns SSH. */
+/** Local Pi starts a local child; a remote runtime runs only through the SSH owner. */
 export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcProcess> {
   const remote = !isLocalProviderRuntimeTarget(options.providerRuntimeTarget);
   const ownerBinding = remote ? options.ownerBinding : undefined;
@@ -38,10 +37,6 @@ export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<
   if (ownerBinding) {
     const probe = await probePiSettlementSupport(options, undefined, ownerBinding);
     return startOwnedPiProcess({ options, binding: ownerBinding, version: probe.version });
-  }
-  if (remote) {
-    // Checked before any bridge or process starts, without blocking the event loop.
-    await assertSshExecutionTargetReadyAsync(executionTargetId);
   }
   if (
     isLocalProviderRuntimeTarget(options.providerRuntimeTarget) &&

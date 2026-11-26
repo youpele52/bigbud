@@ -42,7 +42,7 @@ fn grants_bind_packets_and_lost_commit_ack_does_not_allow_another_commit() -> Te
 
     let valid = grant(&mut owner, 3, chunk(&binding, &lease));
     let mut altered = valid.clone();
-    if let Some(Operation::ProofWorkspaceGuardedWriteChunk(packet)) = &mut altered.operation {
+    if let Some(Operation::WorkspaceGuardedWriteChunk(packet)) = &mut altered.operation {
         packet.data.push(b'!');
     }
     assert_error(
@@ -167,7 +167,7 @@ fn disconnect_and_rebind_clear_drafts_without_evicting_finalized_ids() -> TestRe
         ErrorCode::OperationDenied,
     );
     let lease = begin_lease(&mut owner, 14, &pending)?;
-    let abort = Operation::ProofWorkspaceGuardedWriteAbort(ProofWorkspaceGuardedWriteAbort {
+    let abort = Operation::WorkspaceGuardedWriteAbort(ProofWorkspaceGuardedWriteAbort {
         binding: Some(pending.clone()),
         lease: lease.clone(),
     });
@@ -210,7 +210,7 @@ fn maximum_chunk_and_binding_fit_the_client_frame() -> TestResult {
         attempted_sha256: vec![2; 32],
         body_bytes: Some(512 * 1024),
     };
-    let operation = Operation::ProofWorkspaceGuardedWriteChunk(ProofWorkspaceGuardedWriteChunk {
+    let operation = Operation::WorkspaceGuardedWriteChunk(ProofWorkspaceGuardedWriteChunk {
         binding: Some(binding),
         lease: vec![3; 40],
         offset: 512 * 1024 - 48 * 1024,
@@ -234,19 +234,19 @@ fn maximum_chunk_and_binding_fit_the_client_frame() -> TestResult {
 fn wire_tags_and_optional_empty_body_match_contract() {
     for (operation, tag) in [
         (
-            Operation::ProofWorkspaceGuardedWriteBegin(ProofWorkspaceGuardedWriteBegin::default()),
+            Operation::WorkspaceGuardedWriteBegin(ProofWorkspaceGuardedWriteBegin::default()),
             0xba,
         ),
         (
-            Operation::ProofWorkspaceGuardedWriteChunk(ProofWorkspaceGuardedWriteChunk::default()),
+            Operation::WorkspaceGuardedWriteChunk(ProofWorkspaceGuardedWriteChunk::default()),
             0xc2,
         ),
         (
-            Operation::ProofWorkspaceGuardedWriteCommit(ProofWorkspaceGuardedWriteCommit::default()),
+            Operation::WorkspaceGuardedWriteCommit(ProofWorkspaceGuardedWriteCommit::default()),
             0xca,
         ),
         (
-            Operation::ProofWorkspaceGuardedWriteAbort(ProofWorkspaceGuardedWriteAbort::default()),
+            Operation::WorkspaceGuardedWriteAbort(ProofWorkspaceGuardedWriteAbort::default()),
             0xd2,
         ),
     ] {

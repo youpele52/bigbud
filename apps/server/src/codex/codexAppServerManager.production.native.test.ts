@@ -1,5 +1,4 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
 import { expect, it } from "vitest";
 
 import {
@@ -17,14 +16,13 @@ import { CodexAppServerManager } from "./codexAppServerManager.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
 // W2 T-prov live proof (U20): a real Codex app-server session through the Codex manager and the
-// production owner (activation on), against a disposable Linux sshd with the real Codex CLI on
+// production owner, against a disposable Linux sshd with the real Codex CLI on
 // the login PATH:
-// BIGBUD_SSH_OWNER_ACTIVATION=1 BIGBUD_TEST_PROVIDER_LEASE_EXTERNAL_TARGET='{…}' \
+// BIGBUD_TEST_PROVIDER_LEASE_EXTERNAL_TARGET='{…}' \
 // BIGBUD_TEST_PROVIDER_LEASE_EXPECT=ready bun run --cwd apps/server vitest run <this file>
 const external = readExternalV2Target(process.env.BIGBUD_TEST_PROVIDER_LEASE_EXTERNAL_TARGET);
 const enabled =
   external !== undefined &&
-  SSH_OWNER_PRODUCTION_ACTIVATION &&
   process.env.BIGBUD_TEST_PROVIDER_LEASE_EXPECT === "ready" &&
   (process.platform === "darwin" || process.platform === "linux");
 

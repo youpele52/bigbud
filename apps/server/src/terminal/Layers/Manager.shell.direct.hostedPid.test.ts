@@ -4,37 +4,19 @@
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect } from "effect";
 import { expect, vi } from "vitest";
 
 import { fixture } from "../../persistence/Layers/DirectShellLaunchOwners.test.helpers";
-import { parsePosixAgentProcesses } from "./Manager.agentDetection.ts";
 import { directShellOwnerKey } from "./DirectShellLaunch.owner";
 import { hostedDirectShellOwner } from "./DirectShellLaunch.hosted";
-import { historyPath } from "./Manager.history-io.ts";
-import { flush, makeHostManager } from "./Manager.host.test.helpers.ts";
+import { flush } from "./Manager.host.test.helpers.ts";
 import { remoteShellPidPrefix } from "./Manager.remote-identity.ts";
 import { trackHostedDirectShellRecord } from "./Manager.shell.direct.hostedPid.ts";
-import {
-  DirectSshHostAdapter,
-  SSH_TARGET,
-  sshPane,
-} from "./Manager.shell.direct.hosted.test.helpers.ts";
+import { SSH_TARGET } from "./Manager.shell.direct.hosted.test.helpers.ts";
 import { FakePtyProcess } from "./Manager.test.helpers.ts";
 
-vi.mock("../../ssh/sshProcess", () => ({
-  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
-    stdout: `\x1e${input.args[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  })),
-}));
-
 const key = directShellOwnerKey("thread-1", "ssh");
-const generationOf = (args: ReadonlyArray<string> | undefined) =>
-  /bigbud-shell-([0-9a-f-]{36})/.exec((args ?? []).join(" "))?.[1];
 const waitFor = async (check: () => boolean | Promise<boolean>) => {
   for (let attempt = 0; attempt < 100 && !(await check()); attempt++) await flush();
 };
@@ -42,47 +24,6 @@ const waitFor = async (check: () => boolean | Promise<boolean>) => {
 it.layer(NodeServices.layer, { excludeTestServices: true })(
   "hosted Direct SSH remote shell PID",
   (it) => {
-    it.effect("stores the launch PID and restores real busy hints after a restart", () =>
-      Effect.gen(function* () {
-        const db = yield* Effect.promise(fixture);
-        const adapter = new DirectSshHostAdapter();
-        const inspector = vi.fn((_target: string) =>
-          Effect.succeed(parsePosixAgentProcesses("4242 1 4242 4242 -zsh")),
-        );
-        const options = {
-          directShellOwners: db.store,
-          remoteProcessInspector: inspector,
-          subprocessPollIntervalMs: 20,
-        };
-        const first = yield* makeHostManager(adapter, options);
-        yield* first.manager.open(sshPane());
-        const process = yield* adapter.processAt(0);
-        const generation = generationOf(adapter.hostSpawns()[0]?.args);
-        expect(generation).toBeDefined();
-        process.emitHost(`${remoteShellPidPrefix(generation!)}4242\x07me@devbox$ `);
-        yield* Effect.promise(() =>
-          waitFor(async () => (await db.store.getHosted!(key))?.remoteShellPid === 4242),
-        );
-        expect((yield* Effect.promise(() => db.store.getHosted!(key)))?.remoteShellPid).toBe(4242);
-
-        // A second backend over the same host and journal reattaches the same PTY, which never
-        // prints its marker again: only the stored PID can give it a real hint.
-        inspector.mockClear();
-        Object.assign(process, { recovered: true });
-        const fs = yield* FileSystem.FileSystem;
-        yield* fs.writeFileString(historyPath(first.logsDir, "thread-1", "ssh"), "me@devbox$ ");
-        const restarted = yield* makeHostManager(adapter, { ...options, logsDir: first.logsDir });
-        yield* restarted.manager.open(sshPane({ attachOnly: true }));
-        expect(adapter.spawnInputs.at(-1)).toMatchObject({ recoverOnly: true });
-        expect(adapter.processes).toHaveLength(1);
-        yield* Effect.promise(() =>
-          waitFor(() => process.viewStates.at(-1)?.ownerBusyHint === "idle"),
-        );
-        expect(inspector).toHaveBeenCalledWith(SSH_TARGET);
-        expect(process.viewStates.at(-1)?.ownerBusyHint).toBe("idle");
-      }),
-    );
-
     it.effect("clears a stale PID when a fresh PTY starts under a kept record", () =>
       Effect.gen(function* () {
         const db = yield* Effect.promise(fixture);

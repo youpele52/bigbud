@@ -19,7 +19,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         assert_frame(
             values,
             name,
-            request(Operation::ProofWorkspaceList(ProofWorkspaceList {
+            request(Operation::WorkspaceList(ProofWorkspaceList {
                 workspace_root: "/fixture/root".into(),
                 relative_dir: relative_dir.into(),
             })),
@@ -55,7 +55,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         assert_frame(
             values,
             name,
-            request(Operation::ProofWorkspaceRead(ProofWorkspaceRead {
+            request(Operation::WorkspaceRead(ProofWorkspaceRead {
                 workspace_root: "/fixture/root".into(),
                 relative_path: "data.bin".into(),
                 read: Some(read),
@@ -75,31 +75,31 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, operation) in [
         (
             "proof_workspace_guarded_write_begin",
-            Operation::ProofWorkspaceGuardedWriteBegin(Default::default()),
+            Operation::WorkspaceGuardedWriteBegin(Default::default()),
         ),
         (
             "proof_workspace_guarded_write_chunk",
-            Operation::ProofWorkspaceGuardedWriteChunk(Default::default()),
+            Operation::WorkspaceGuardedWriteChunk(Default::default()),
         ),
         (
             "proof_workspace_guarded_write_commit",
-            Operation::ProofWorkspaceGuardedWriteCommit(Default::default()),
+            Operation::WorkspaceGuardedWriteCommit(Default::default()),
         ),
         (
             "proof_workspace_guarded_write_abort",
-            Operation::ProofWorkspaceGuardedWriteAbort(Default::default()),
+            Operation::WorkspaceGuardedWriteAbort(Default::default()),
         ),
         (
             "proof_workspace_guarded_write_apply",
-            Operation::ProofWorkspaceGuardedWriteApply(Default::default()),
+            Operation::WorkspaceGuardedWriteApply(Default::default()),
         ),
         (
             "proof_workspace_create",
-            Operation::ProofWorkspaceCreate(Default::default()),
+            Operation::WorkspaceCreate(Default::default()),
         ),
         (
             "proof_workspace_readiness",
-            Operation::ProofWorkspaceReadiness(Default::default()),
+            Operation::WorkspaceReadiness(Default::default()),
         ),
     ] {
         // Empty operands: these vectors are syntactic, not admission proofs.
@@ -115,14 +115,14 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, operation) in [
         (
             "proof_workspace_create_directory",
-            Operation::ProofWorkspaceCreateDirectory(ProofWorkspaceCreateDirectory {
+            Operation::WorkspaceCreateDirectory(ProofWorkspaceCreateDirectory {
                 workspace_root: "/fixture/root".into(),
                 relative_path: "new folder".into(),
             }),
         ),
         (
             "proof_workspace_delete_entry",
-            Operation::ProofWorkspaceDeleteEntry(ProofWorkspaceDeleteEntry {
+            Operation::WorkspaceDeleteEntry(ProofWorkspaceDeleteEntry {
                 workspace_root: "/fixture/root".into(),
                 relative_path: "old.txt".into(),
                 expected_directory: true,
@@ -130,13 +130,13 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_workspace_write_begin",
-            Operation::ProofWorkspaceWriteBegin(ProofWorkspaceWriteBegin {
+            Operation::WorkspaceWriteBegin(ProofWorkspaceWriteBegin {
                 binding: Some(binding.clone()),
             }),
         ),
         (
             "proof_workspace_write_chunk",
-            Operation::ProofWorkspaceWriteChunk(ProofWorkspaceWriteChunk {
+            Operation::WorkspaceWriteChunk(ProofWorkspaceWriteChunk {
                 binding: Some(binding.clone()),
                 lease: lease.clone(),
                 offset: 0,
@@ -145,14 +145,14 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_workspace_write_commit",
-            Operation::ProofWorkspaceWriteCommit(ProofWorkspaceWriteCommit {
+            Operation::WorkspaceWriteCommit(ProofWorkspaceWriteCommit {
                 binding: Some(binding.clone()),
                 lease: lease.clone(),
             }),
         ),
         (
             "proof_workspace_write_abort",
-            Operation::ProofWorkspaceWriteAbort(ProofWorkspaceWriteAbort {
+            Operation::WorkspaceWriteAbort(ProofWorkspaceWriteAbort {
                 binding: Some(binding),
                 lease: lease.clone(),
             }),

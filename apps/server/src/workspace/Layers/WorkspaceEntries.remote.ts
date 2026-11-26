@@ -1,11 +1,10 @@
-import { parseRemoteFindRecord } from "./WorkspaceEntries.remote.records.ts";
 import { Effect } from "effect";
 
 import { type ProjectEntry } from "@bigbud/contracts";
 
 import { resolveRemoteAgentTransport } from "../../remote-agent/remoteAgentDefault.ts";
 import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
-import { runSshCommand } from "../../ssh/sshProcess.ts";
+import { SshOwnerRequiredError } from "../../ssh/sshOwnerRequired.ts";
 import type { WorkspaceDirectoryReadOwnerShape } from "../Services/WorkspaceDirectoryReadOwner.ts";
 import { WorkspaceEntriesError } from "../Services/WorkspaceEntries.ts";
 import type { WorkspaceIndexReadOwnerShape } from "../Services/WorkspaceIndexReadOwner.ts";
@@ -20,12 +19,8 @@ import {
   parentPathOf,
   toSearchableWorkspaceEntry,
   isPathInIgnoredDirectory,
-  directoryAncestorsOf,
 } from "./WorkspaceEntriesSearch.ts";
 
-const REMOTE_WORKSPACE_SCAN_TIMEOUT_MS = 30_000;
-const REMOTE_DIRECTORY_LIST_TIMEOUT_MS = 10_000;
-const REMOTE_DIRECTORY_LIST_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 const isDirectSshWorkspaceTarget = (executionTargetId: string): boolean =>
   parseSshExecutionTarget(executionTargetId) !== null &&
   resolveRemoteAgentTransport(executionTargetId) === "direct-ssh";
@@ -101,35 +96,8 @@ export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspac
           );
         }
 
-        const findRoot = relativeDir.length > 0 ? `./${relativeDir}` : ".";
-        const result = await runSshCommand({
-          executionTargetId: input.executionTargetId,
-          cwd: input.cwd,
-          command: "find",
-          args: [
-            findRoot,
-            "-mindepth",
-            "1",
-            "-maxdepth",
-            "1",
-            "(",
-            "-type",
-            "d",
-            "-o",
-            "-type",
-            "f",
-            ")",
-            "-printf",
-            "%y\\t%P\\0",
-          ],
-          allowNonZeroExit: false,
-          timeoutMs: REMOTE_DIRECTORY_LIST_TIMEOUT_MS,
-          maxBufferBytes: REMOTE_DIRECTORY_LIST_MAX_BUFFER_BYTES,
-          outputMode: "truncate",
-        });
-        return splitNullSeparatedOutput(result.stdout, result.stdoutTruncated ?? false).map(
-          parseRemoteFindRecord,
-        );
+        // A direct SSH listing runs only through the owner's directory read.
+        throw new SshOwnerRequiredError();
       },
       catch: (cause) =>
         new WorkspaceEntriesError({
@@ -153,17 +121,6 @@ export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspac
     return listRemoteWorkspaceDirectory(toRemoteProjectEntries(entries), relativeDir);
   },
 );
-
-function splitNullSeparatedOutput(stdout: string, truncated: boolean): string[] {
-  const parts = stdout.split("\0");
-  if (parts.length === 0) {
-    return [];
-  }
-  if (truncated && parts[parts.length - 1]?.length) {
-    parts.pop();
-  }
-  return parts.filter((value) => value.length > 0);
-}
 
 function toRemoteProjectEntries(
   input: ReadonlyArray<{ path: string; kind: "file" | "directory" }>,
@@ -236,156 +193,9 @@ export const buildRemoteWorkspaceIndex = Effect.fn("buildRemoteWorkspaceIndex")(
   if (indexReadOwner && isDirectSshWorkspaceTarget(input.executionTargetId))
     return yield* buildOwnedRemoteWorkspaceIndex(input, indexReadOwner);
 
-  const gitProbe = yield* Effect.tryPromise({
-    try: () =>
-      runSshCommand({
-        executionTargetId: input.executionTargetId,
-        cwd: input.cwd,
-        command: "git",
-        args: ["rev-parse", "--is-inside-work-tree"],
-        allowNonZeroExit: true,
-        timeoutMs: 5_000,
-        maxBufferBytes: 4_096,
-        outputMode: "truncate",
-      }),
-    catch: (cause) =>
-      new WorkspaceEntriesError({
-        cwd: input.cwd,
-        operation: "workspaceEntries.remoteGitProbe",
-        detail: processErrorDetail(cause),
-        cause,
-      }),
+  return yield* new WorkspaceEntriesError({
+    cwd: input.cwd,
+    operation: "workspaceEntries.remoteIndex",
+    detail: new SshOwnerRequiredError().message,
   });
-
-  if (gitProbe.code === 0 && gitProbe.stdout.trim() === "true") {
-    const listedFiles = yield* Effect.tryPromise({
-      try: () =>
-        runSshCommand({
-          executionTargetId: input.executionTargetId,
-          cwd: input.cwd,
-          command: "git",
-          args: ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-          allowNonZeroExit: true,
-          timeoutMs: REMOTE_WORKSPACE_SCAN_TIMEOUT_MS,
-          maxBufferBytes: 16 * 1024 * 1024,
-          outputMode: "truncate",
-        }),
-      catch: (cause) =>
-        new WorkspaceEntriesError({
-          cwd: input.cwd,
-          operation: "workspaceEntries.remoteGitLsFiles",
-          detail: processErrorDetail(cause),
-          cause,
-        }),
-    });
-
-    if (listedFiles.code === 0) {
-      const filePaths = splitNullSeparatedOutput(
-        listedFiles.stdout,
-        listedFiles.stdoutTruncated ?? false,
-      )
-        .map((entry) => toPosixPath(entry))
-        .filter(
-          (entry) => entry.length > 0 && !isPathInIgnoredDirectory(entry, IGNORED_DIRECTORY_NAMES),
-        );
-      const directorySet = new Set<string>();
-      for (const filePath of filePaths) {
-        for (const directoryPath of directoryAncestorsOf(filePath)) {
-          if (!isPathInIgnoredDirectory(directoryPath, IGNORED_DIRECTORY_NAMES)) {
-            directorySet.add(directoryPath);
-          }
-        }
-      }
-
-      const entries = toRemoteProjectEntries([
-        ...[...directorySet].map((path) => ({ path, kind: "directory" as const })),
-        ...[...new Set(filePaths)].map((path) => ({ path, kind: "file" as const })),
-      ]);
-      return {
-        scannedAt: Date.now(),
-        entries: entries.slice(0, WORKSPACE_INDEX_MAX_ENTRIES),
-        truncated:
-          (listedFiles.stdoutTruncated ?? false) || entries.length > WORKSPACE_INDEX_MAX_ENTRIES,
-      };
-    }
-  }
-
-  const findResult = yield* Effect.tryPromise({
-    try: () =>
-      runSshCommand({
-        executionTargetId: input.executionTargetId,
-        cwd: input.cwd,
-        command: "find",
-        args: [
-          ".",
-          "(",
-          "-name",
-          ".git",
-          "-o",
-          "-name",
-          ".convex",
-          "-o",
-          "-name",
-          "node_modules",
-          "-o",
-          "-name",
-          ".next",
-          "-o",
-          "-name",
-          ".turbo",
-          "-o",
-          "-name",
-          "dist",
-          "-o",
-          "-name",
-          "build",
-          "-o",
-          "-name",
-          "out",
-          "-o",
-          "-name",
-          ".cache",
-          ")",
-          "-prune",
-          "-o",
-          "-printf",
-          "%y\\t%P\\0",
-        ],
-        allowNonZeroExit: false,
-        timeoutMs: REMOTE_WORKSPACE_SCAN_TIMEOUT_MS,
-        maxBufferBytes: 16 * 1024 * 1024,
-        outputMode: "truncate",
-      }),
-    catch: (cause) =>
-      new WorkspaceEntriesError({
-        cwd: input.cwd,
-        operation: "workspaceEntries.remoteFind",
-        detail: processErrorDetail(cause),
-        cause,
-      }),
-  });
-
-  const entries = toRemoteProjectEntries(
-    splitNullSeparatedOutput(findResult.stdout, findResult.stdoutTruncated ?? false)
-      .map((entry) => {
-        const record = parseRemoteFindRecord(entry);
-        if (!record) return null;
-        const { path: normalizedPath, kind } = record;
-        if (!normalizedPath || normalizedPath === ".") {
-          return null;
-        }
-        return {
-          path: normalizedPath,
-          kind,
-        };
-      })
-      .filter((entry): entry is { path: string; kind: "file" | "directory" } => entry !== null),
-  );
-
-  return {
-    scannedAt: Date.now(),
-    entries: entries.slice(0, WORKSPACE_INDEX_MAX_ENTRIES),
-    truncated:
-      (findResult.stdoutTruncated ?? false) || entries.length > WORKSPACE_INDEX_MAX_ENTRIES,
-  };
 });

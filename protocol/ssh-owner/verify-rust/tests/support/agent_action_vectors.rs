@@ -12,7 +12,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, payload) in [
         (
             "proof_agent_action",
-            request(Operation::ProofAgentAction(AgentAction {
+            request(Operation::AgentAction(AgentAction {
                 action: AgentActionKind::Status as i32,
                 operation_id: sequence(0),
                 artifact_version: None,
@@ -25,7 +25,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_agent_action_reattach",
-            request(Operation::ProofAgentAction(AgentAction {
+            request(Operation::AgentAction(AgentAction {
                 action: AgentActionKind::Status as i32,
                 operation_id: sequence(0),
                 artifact_version: None,
@@ -38,7 +38,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_agent_action_install",
-            request(Operation::ProofAgentAction(AgentAction {
+            request(Operation::AgentAction(AgentAction {
                 action: AgentActionKind::Install as i32,
                 operation_id: sequence(16),
                 artifact_version: Some("0.3.3".into()),

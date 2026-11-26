@@ -3,7 +3,6 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Stream } from "effect";
 import { beforeEach, vi } from "vitest";
 
-import { runSshCommand } from "../../ssh/sshProcess.ts";
 import { runToolCommand } from "../../tool-transport/toolTransport.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "../Services/WorkspaceFileSystem.ts";
@@ -14,10 +13,6 @@ import {
 import { WorkspaceFileSystemLive } from "./WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./WorkspacePaths.ts";
 
-vi.mock("../../ssh/sshProcess.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../ssh/sshProcess.ts")>()),
-  runSshCommand: vi.fn(),
-}));
 vi.mock("../../tool-transport/toolTransport.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../tool-transport/toolTransport.ts")>()),
   runToolCommand: vi.fn(),
@@ -43,16 +38,7 @@ const OwnerTestLayer = FallbackTestLayer.pipe(
 );
 
 const target = { cwd: "/srv/project ", executionTargetId: "ssh:host=dev&transport=direct-ssh" };
-const agent = { ...target, executionTargetId: "ssh:host=dev&transport=agent" };
 const writeInput = { ...target, relativePath: "./src/../-file\t ", contents: "text\n" };
-const commandResult = {
-  stdout: "",
-  stderr: "",
-  code: 0,
-  signal: null,
-  timedOut: false,
-  stdoutTruncated: false,
-};
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -159,7 +145,6 @@ it.layer(OwnerTestLayer)("WorkspaceFileSystem direct SSH mutation and watch owne
         { ...target, relativePath: "docs" },
         expect.any(AbortSignal),
       );
-      expect(runSshCommand).not.toHaveBeenCalled();
     }),
   );
 
@@ -182,53 +167,6 @@ it.layer(OwnerTestLayer)("WorkspaceFileSystem direct SSH mutation and watch owne
         { ...target, relativePath: "" },
         expect.any(AbortSignal),
       );
-      expect(runSshCommand).not.toHaveBeenCalled();
-    }),
-  );
-
-  it.effect("keeps non-direct targets off the owner paths", () =>
-    Effect.gen(function* () {
-      vi.mocked(runToolCommand).mockResolvedValueOnce(commandResult);
-      vi.mocked(runSshCommand).mockResolvedValueOnce(commandResult);
-      const workspace = yield* WorkspaceFileSystem;
-      yield* workspace.writeFile({ ...writeInput, ...agent });
-      const agentWatch = yield* workspace.watchDirectory(agent);
-      expect(Option.getOrUndefined(yield* Stream.runHead(agentWatch))).toMatchObject({
-        type: "directoryChanged",
-      });
-      const localWatch = yield* workspace.watchDirectory({ cwd: target.cwd }).pipe(Effect.flip);
-      expect(localWatch).toMatchObject({ operation: "workspaceFileSystem.watchDirectory" });
-
-      expect(runToolCommand).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ target: { ...agent, transport: "agent" }, command: "sh" }),
-      );
-      expect(runSshCommand).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ ...agent, command: "find" }),
-      );
-      expect(owner.writeFile).not.toHaveBeenCalled();
-      expect(owner.snapshotDirectory).not.toHaveBeenCalled();
-    }),
-  );
-});
-
-it.layer(FallbackTestLayer)("WorkspaceFileSystem without a mutation and watch owner", (it) => {
-  it.effect("uses legacy SSH write and snapshot commands for direct SSH", () =>
-    Effect.gen(function* () {
-      vi.mocked(runToolCommand).mockResolvedValueOnce(commandResult);
-      vi.mocked(runSshCommand).mockResolvedValueOnce(commandResult);
-      const workspace = yield* WorkspaceFileSystem;
-      yield* workspace.writeFile(writeInput);
-      const stream = yield* workspace.watchDirectory(target);
-      expect(Option.getOrUndefined(yield* Stream.runHead(stream))).toMatchObject({
-        type: "directoryChanged",
-      });
-      expect(runToolCommand).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ target: { ...target, transport: "ssh" }, command: "sh" }),
-      );
-      expect(runSshCommand).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ ...target, command: "find" }),
-      );
-      expect(invalidate).toHaveBeenCalledExactlyOnceWith(target.cwd);
     }),
   );
 });

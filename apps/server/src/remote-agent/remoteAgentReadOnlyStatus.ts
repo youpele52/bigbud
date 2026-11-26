@@ -1,4 +1,3 @@
-import { runSshCommand } from "../ssh/sshProcess.ts";
 import type { RemoteAgentCommandRunner } from "./remoteAgentCommand.types.ts";
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentOwnerExec } from "./remoteAgentControl.owner.ts";
@@ -33,11 +32,14 @@ export async function readRemoteAgentRegistryReadOnly(
   run?: RemoteAgentCommandRunner,
   timeoutMs = 15_000,
 ): Promise<RemoteAgentRegistry | null> {
-  // U25: production activation reads through the owner's fixed read-only template (15 s).
-  const owner = run ? undefined : remoteAgentOwnerSelection();
-  const { stdout } = owner
-    ? await makeRemoteAgentOwnerExec(owner, executionTargetId)({ kind: "readOnlyStatus" })
-    : await runRemoteAgentDiagnosedCommand(run ?? runSshCommand, "preflight", {
+  // U25: reads go through the owner's fixed read-only template (15 s); `run` is the
+  // injected command seam only.
+  const { stdout } = !run
+    ? await makeRemoteAgentOwnerExec(
+        remoteAgentOwnerSelection(),
+        executionTargetId,
+      )({ kind: "readOnlyStatus" })
+    : await runRemoteAgentDiagnosedCommand(run, "preflight", {
         executionTargetId,
         command: "sh",
         args: ["-c", buildRemoteAgentRegistryReadOnlyProbe()],

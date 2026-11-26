@@ -20,7 +20,6 @@ import {
   waitForDeath,
   type ProductionFixture,
 } from "./sshOwnerProductionClient.fixture.ts";
-import { assertLegacySshLaunchAllowed, isSshOwnerSelected } from "./sshOwnerSelection.ts";
 import { runLegacyDrain, type LegacyDrainInput, type LegacyDrainPane } from "./sshLegacyDrain.ts";
 
 type Sql = SqlClient.SqlClient;
@@ -81,9 +80,6 @@ describe("production owner client lifecycle", () => {
           step: "owner-attach",
           error: { code: "sshOwnerUnavailable", reason: "owner-died" },
         });
-        // The legacy fence stays engaged, so no legacy executor can be launched.
-        expect(isSshOwnerSelected(true)).toBe(true);
-        expect(() => assertLegacySshLaunchAllowed(true)).toThrow();
       }),
     );
   });

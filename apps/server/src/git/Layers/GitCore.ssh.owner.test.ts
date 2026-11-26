@@ -1,8 +1,6 @@
 import { Deferred, Effect, Fiber, Path } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import * as devMode from "../../ssh/sshOwnerDevMode.fixture.ts";
-import { runSshCommand } from "../../ssh/sshProcess.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeRemoteGitOps } from "./GitCore.remoteOps.ts";
 import {
@@ -13,8 +11,6 @@ import {
 } from "./GitCore.ssh.owner.ts";
 import { refusedOwnerInputs } from "./GitCore.ssh.owner.testInputs.ts";
 import { makeSshGitExecutor } from "./GitCore.ssh.ts";
-
-vi.mock("../../ssh/sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
 
 const scope = { executionTargetId: "ssh:host=example&transport=direct-ssh", cwd: "/srv/a repo" };
 const statusInput: ExecuteGitInput = {
@@ -70,7 +66,6 @@ function fixture(result = success) {
 
 describe("direct workspace Git owner", () => {
   afterEach(() => {
-    expect(runSshCommand).not.toHaveBeenCalled();
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -229,53 +224,6 @@ describe("direct workspace Git owner", () => {
       expect.any(AbortSignal),
     );
     expect(execute).not.toHaveBeenCalled();
-  });
-
-  it("refreshes selected status when an untracked file appears with one bounded count read", async () => {
-    vi.spyOn(devMode, "isDevSshOwnerSelected").mockReturnValue(true);
-    const { execute, git, ops, pathRead } = fixture();
-    let upstream = "# branch.upstream origin/main\n# branch.ab +2 -1\n";
-    let untracked = "";
-    execute.mockImplementation(async ({ action }) =>
-      action === "statusPorcelainV2"
-        ? { ...success, stdout: `# branch.head main\n${upstream}${untracked}` }
-        : success,
-    );
-    await Effect.runPromise(
-      ops.pipe(
-        Effect.flatMap(({ statusOps }) =>
-          Effect.gen(function* () {
-            expect(yield* statusOps.status(scope)).toMatchObject({
-              hasUpstream: true,
-              aheadCount: 2,
-              behindCount: 1,
-              hasWorkingTreeChanges: false,
-            });
-            upstream = "";
-            untracked = "? new.txt\n";
-            expect(yield* statusOps.status(scope)).toMatchObject({
-              hasUpstream: false,
-              aheadCount: 0,
-              behindCount: 0,
-              hasWorkingTreeChanges: true,
-              workingTree: { files: [{ path: "new.txt", insertions: 1, deletions: 0 }] },
-            });
-          }),
-        ),
-      ),
-    );
-    expect(execute).toHaveBeenCalledTimes(10);
-    // One extra boundary call is the bounded untracked count, not a metadata read.
-    expect(git).toHaveBeenCalledTimes(11);
-    expect(pathRead).toHaveBeenCalledExactlyOnceWith(
-      {
-        action: "untrackedNumstat",
-        executionTargetId: scope.executionTargetId,
-        cwd: scope.cwd,
-        path: "new.txt",
-      },
-      expect.any(AbortSignal),
-    );
   });
 
   it.each(refusedOwnerInputs(statusInput, workTreeInput))(

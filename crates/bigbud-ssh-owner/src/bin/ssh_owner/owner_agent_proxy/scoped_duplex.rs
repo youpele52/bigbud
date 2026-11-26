@@ -36,16 +36,16 @@ impl AgentProxyFixture {
             Some(ScopedDuplex::Peer(_)) => matches!(
                 operation,
                 Operation::ProofPeerRelayOpen(_)
-                    | Operation::ProofAgentProxyStatus(_)
-                    | Operation::ProofAgentProxyClose(_)
+                    | Operation::AgentProxyStatus(_)
+                    | Operation::AgentProxyClose(_)
                     | Operation::Connect(_)
                     | Operation::Disconnect(_)
             ),
             Some(ScopedDuplex::GitUpload(_)) => matches!(
                 operation,
                 Operation::ProofGitUploadOpen(_)
-                    | Operation::ProofAgentProxyStatus(_)
-                    | Operation::ProofAgentProxyClose(_)
+                    | Operation::AgentProxyStatus(_)
+                    | Operation::AgentProxyClose(_)
                     | Operation::Connect(_)
                     | Operation::Disconnect(_)
                     | Operation::InspectTrust(_)
@@ -53,9 +53,9 @@ impl AgentProxyFixture {
             ),
             Some(ScopedDuplex::Git(_)) => matches!(
                 operation,
-                Operation::ProofGitAdvertisementOpen(_)
-                    | Operation::ProofAgentProxyStatus(_)
-                    | Operation::ProofAgentProxyClose(_)
+                Operation::GitAdvertisementOpen(_)
+                    | Operation::AgentProxyStatus(_)
+                    | Operation::AgentProxyClose(_)
                     | Operation::Connect(_)
                     | Operation::Disconnect(_)
                     | Operation::InspectTrust(_)

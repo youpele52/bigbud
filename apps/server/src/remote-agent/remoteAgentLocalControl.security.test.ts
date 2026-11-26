@@ -5,7 +5,6 @@ import * as Ownership from "@bigbud/shared/backendOwnership.record";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
 import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentInstallOperations } from "./remoteAgentInstall.operation.ts";
 import { buildRemoteAgentRegistryReadOnlyProbe } from "./remoteAgentLocalControl.approval.ts";
@@ -69,11 +68,6 @@ describe("remote agent control target safety", () => {
     "ssh:host=vps%0Aevil&transport=agent",
   ])("rejects option-like or control-character destinations: %s", (target) => {
     expect(resolveRemoteAgentTarget(target, [])).toMatchObject({ ok: false });
-  });
-
-  it("ends ssh option parsing before the destination", () => {
-    const { args } = buildSshCommandInvocation({ executionTargetId: saved, command: "true" });
-    expect(args[args.indexOf("dev@vps") - 1]).toBe("--");
   });
 
   it("limits agent tools to saved targets", async () => {

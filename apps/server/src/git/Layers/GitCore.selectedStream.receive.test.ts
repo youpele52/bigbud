@@ -11,7 +11,6 @@ import {
   ProjectionProjectRepository,
   type ProjectionProjectRepositoryShape,
 } from "../../persistence/Services/ProjectionProjects.ts";
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type {
   GitReceiveApproval,
   GitReceiveState,
@@ -136,7 +135,6 @@ function fakeOwner(root: string) {
 describe("U15 production push through the owner receive lease", () => {
   let root: string;
   beforeEach(() => {
-    activateDevSshOwner();
     root = mkdtempSync(join(tmpdir(), "bbrecv-"));
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));

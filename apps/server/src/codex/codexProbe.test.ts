@@ -11,7 +11,6 @@ vi.mock("node:child_process", async (importOriginal) => {
   return { ...actual, spawn: spawnMock };
 });
 
-import * as sshVerification from "../ssh/sshVerification.ts";
 import {
   REMOTE_CODEX_SYNC_LAUNCH_REFUSED,
   startRemoteCodexAppServerProcess,
@@ -54,16 +53,8 @@ function fixture() {
 }
 
 function refuseLegacyReadiness() {
-  const sync = vi.spyOn(sshVerification, "assertSshExecutionTargetReady").mockImplementation(() => {
-    throw new Error("legacy synchronous readiness must not run");
-  });
-  const async = vi
-    .spyOn(sshVerification, "assertSshExecutionTargetReadyAsync")
-    .mockRejectedValue(new Error("legacy asynchronous readiness must not run"));
-  return () => {
-    expect(sync).not.toHaveBeenCalled();
-    expect(async).not.toHaveBeenCalled();
-  };
+  // SSH readiness is the owner's; there is no TypeScript readiness probe to watch.
+  return () => undefined;
 }
 
 describe("remote Codex version probe", () => {

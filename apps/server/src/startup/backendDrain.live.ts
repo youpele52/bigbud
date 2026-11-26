@@ -1,5 +1,4 @@
 import { version } from "../../package.json" with { type: "json" };
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -16,7 +15,6 @@ import {
   type LegacyDrainChoice,
   type LegacyDrainPane,
 } from "../ssh/sshLegacyDrain.ts";
-import { drainOwnedSshMasters } from "../ssh/sshSession.ts";
 import { getPeerCoordinator } from "../peer-orchestration/peerCoordinator.layer.ts";
 import { stopAllSshMonitorTargets } from "../ssh/sshMonitor.connections.ts";
 import {
@@ -68,11 +66,6 @@ export interface LiveBackendDrainDeps {
   readonly drainFollowers?: (() => Effect.Effect<number, Error>) | undefined;
   readonly consentTimeoutMs?: number;
 }
-
-class BackendDrainLiveError extends Data.TaggedError("BackendDrainLiveError")<{
-  readonly detail: string;
-  readonly cause?: unknown;
-}> {}
 
 const asError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)));
 
@@ -194,10 +187,9 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
       stopMonitors: runBackendDrainStopStep("monitors"),
       stopRelays: runBackendDrainStopStep("relays"),
       stopProviders: runBackendDrainStopStep("providers"),
-      closeOwnedMasters: Effect.tryPromise({
-        try: () => drainOwnedSshMasters(),
-        catch: (cause) => new BackendDrainLiveError({ detail: "SSH master drain failed.", cause }),
-      }),
+      // This backend owns no TypeScript SSH masters: the Rust owner holds every master and
+      // closes them on its own shutdown.
+      closeOwnedMasters: Effect.succeed({ closed: 0, failed: 0 }),
       commit: (input) =>
         commitLegacyRetirement(sql, input).pipe(
           Effect.map((result) => result),

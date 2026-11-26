@@ -37,7 +37,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
     for (name, payload) in [
         (
             "proof_transfer_stream",
-            request(Operation::ProofTransferStream(ProofTransferStream {
+            request(Operation::TransferStream(ProofTransferStream {
                 scope: Some(scope(2)),
                 operands: Some(stream_operands),
                 launch_attempt: None,
@@ -45,7 +45,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
         ),
         (
             "proof_packaged_rsync",
-            request(Operation::ProofPackagedRsync(ProofPackagedRsync {
+            request(Operation::PackagedRsync(ProofPackagedRsync {
                 scope: Some(scope(1)),
                 operands: Some(rsync_operands),
                 launch_attempt: None,

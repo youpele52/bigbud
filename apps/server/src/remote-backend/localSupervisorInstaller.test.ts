@@ -12,14 +12,7 @@ import { pinRemoteAgentBuild } from "../remote-agent/remoteAgentInstall.registry
 import type { RemoteAgentControl } from "../remote-agent/remoteAgentControl.ts";
 import type { LocalSupervisorControl } from "./localSupervisorControl.ts";
 import { makeLocalSupervisorInstaller } from "./localSupervisorInstaller.ts";
-import { runSshCommand } from "../ssh/sshProcess.ts";
 import { remoteAgentBuildId, type RemoteAgentRuntime } from "../remote-agent/remoteAgentRuntime.ts";
-
-vi.mock("../ssh/sshProcess.ts", () => ({
-  runSshCommand: vi.fn(() => {
-    throw new Error("Unexpected SSH execution");
-  }),
-}));
 
 function fixture() {
   const targetId = `remote-backend:${"a".repeat(32)}`;
@@ -272,7 +265,6 @@ describe("signed local supervisor installer", () => {
     expect((await f.registry.read()).pins).toEqual([
       { owner: "terminal:fixture", buildId: build.id },
     ]);
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 });
 
@@ -283,7 +275,6 @@ describe("local supervisor cleanup reference authority", () => {
     await expect(f.installer.cleanup(f.targetId)).rejects.toThrow(
       "complete durable service and owner references",
     );
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
   it("uses the same explicit reference source for local cleanup", async () => {
     const f = fixture();
@@ -294,6 +285,5 @@ describe("local supervisor cleanup reference authority", () => {
     });
     expect(await installer.cleanup(f.targetId)).toMatchObject({ deleted: 0 });
     expect(references).toHaveBeenCalledWith(f.targetId);
-    expect(runSshCommand).not.toHaveBeenCalled();
   });
 });

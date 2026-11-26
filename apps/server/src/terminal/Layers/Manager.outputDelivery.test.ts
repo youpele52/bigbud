@@ -2,19 +2,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import type { TerminalEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
 
 import { createManager, openInput, restartInput, waitFor } from "./Manager.test.helpers";
-
-vi.mock("../../ssh/sshProcess", () => ({
-  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
-    stdout: `\x1e${input.args[3]}\x1f`,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  })),
-}));
 
 const REMOTE_TARGET = "ssh:host=devbox&user=root&port=22&auth=ssh-key";
 

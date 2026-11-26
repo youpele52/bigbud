@@ -7,12 +7,6 @@ vi.mock("../../remote-agent/remoteAgentDefault.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../remote-agent/remoteAgentDefault.ts")>();
   return { ...actual, getConfiguredRemoteAgentComposition: () => ({ pool: state.pool }) };
 });
-vi.mock("../../ssh/sshProcess.ts", () => ({
-  runSshCommand: async () => {
-    state.ssh += 1;
-    throw new Error("search must not spawn ssh");
-  },
-}));
 
 import type { RemoteAgentConnection } from "../../remote-agent/remoteAgentConnection.ts";
 import { RemoteAgentConnectionPool } from "../../remote-agent/remoteAgentConnectionPool.ts";

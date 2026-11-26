@@ -67,7 +67,7 @@ fn production_admits_the_four_provider_verbs_only() {
     assert!(production_verb(&Operation::ProviderLeaseClose(
         ProviderLeaseHandle::default()
     )));
-    assert!(!production_verb(&Operation::ProofPiProbe(
+    assert!(!production_verb(&Operation::PiProbe(
         crate::v1::ProofProviderScope::default()
     )));
     let fixture = support::Fixture::new();

@@ -1,7 +1,6 @@
 import { Effect, Path } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { activateDevSshOwner } from "../../ssh/sshOwnerDevMode.fixture.ts";
 import type { ExecuteGitInput, ExecuteGitResult } from "../Services/GitCore.ts";
 import { makeGitHelpers } from "./GitCoreExecutor.ts";
 import {
@@ -71,9 +70,7 @@ const cleanStatus = [
 ].join("\n");
 
 describe("owner-controlled initiating fetch", () => {
-  beforeEach(() => {
-    activateDevSshOwner();
-  });
+  beforeEach(() => {});
 
   it("sends explicit fetch through the owner with the 30 s bound", async () => {
     const fixture = gitFixture(cleanStatus);

@@ -1,10 +1,6 @@
 import { desktopMobileGatewayEnvironment } from "./mobileGatewayOwner";
-import {
-  resolveDesktopSshOwnerDevProfile,
-  resolveDesktopSshOwnerProductionBinary,
-} from "./backendEnv.sshOwner";
+import { resolveDesktopSshOwnerBinary } from "./backendEnv.sshOwner";
 import { backendChildEnv } from "../logging/logging";
-import { DEV_SSH_OWNER_WINDOWS_FIXTURE_ENV } from "@bigbud/shared/DevLauncher";
 
 export function withBackendNodeOptions(
   env: NodeJS.ProcessEnv,
@@ -64,21 +60,13 @@ export function buildBackendChildEnvironment(input: {
     },
     input.backendMaxOldSpaceMb,
   );
-  if (!resolveDesktopSshOwnerDevProfile(input.isPackaged, environment)) {
-    if (!input.isPackaged && process.platform === "win32" && environment.BIGBUD_SSH_OWNER === "1") {
-      throw new Error("Invalid Windows Rust SSH owner dev profile. No legacy backend was started.");
-    }
-    const productionBinary = resolveDesktopSshOwnerProductionBinary({
-      isPackaged: input.isPackaged,
-      packagedBinary: input.packagedSshOwnerBinary ?? null,
-    });
-    delete environment.BIGBUD_SSH_OWNER;
-    delete environment.BIGBUD_SSH_OWNER_NORMAL_DEV_READY;
-    delete environment.BIGBUD_SSH_OWNER_NORMAL_DEV_PROFILE;
-    if (productionBinary) environment.BIGBUD_SSH_OWNER_BIN = productionBinary;
-    else delete environment.BIGBUD_SSH_OWNER_BIN;
-  }
-  delete environment[DEV_SSH_OWNER_WINDOWS_FIXTURE_ENV];
+  const sshOwnerBinary = resolveDesktopSshOwnerBinary({
+    isPackaged: input.isPackaged,
+    packagedBinary: input.packagedSshOwnerBinary ?? null,
+    environment,
+  });
+  if (sshOwnerBinary) environment.BIGBUD_SSH_OWNER_BIN = sshOwnerBinary;
+  else delete environment.BIGBUD_SSH_OWNER_BIN;
   delete environment.BIGBUD_SYSTEM_MONITOR_AGENT_ENDPOINT;
   delete environment.BIGBUD_SYSTEM_MONITOR_AGENT_TOKEN;
   return environment;

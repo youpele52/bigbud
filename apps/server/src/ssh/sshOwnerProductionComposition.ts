@@ -2,11 +2,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import {
-  resolveSshOwnerDrainIdentifiedRequest,
-  SSH_OWNER_PRODUCTION_ACTIVATION,
-} from "@bigbud/shared/SshOwnerActivation";
-
 import { BackendInstance } from "../startup/backendInstance.ts";
 import { ServerConfig, type ServerConfigShape } from "../startup/config.ts";
 import {
@@ -39,31 +34,18 @@ import {
   SshOwnerProfileError,
   type SshOwnerProfileBinding,
 } from "./sshOwnerProductionProfile.ts";
-import { isSshOwnerDevFixtureSelected } from "./sshOwnerSelection.ts";
 import { SshOwnerUnavailableError, type LegacyEntryFencedError } from "./sshOwnerStartupRefusal.ts";
 import type { TrustedStandaloneSshOwnerManifestEntry } from "./sshOwnerExecutable.ts";
 
 /**
- * Production SSH-owner composition (W3.7). Inert unless the single activation
- * resolver in `@bigbud/shared/SshOwnerActivation` is on: release builds always
- * resolve off; a local build may opt in with `BIGBUD_SSH_OWNER_ACTIVATION=1`.
+ * Production SSH-owner composition (W3.7, activated unconditionally at W7). SSH
+ * runs only through the Rust owner in every build and profile; there is no
+ * selector, no environment override and no TypeScript SSH fallback.
  *
- * ## What W7 changes
- *
- * 1. Make `resolveSshOwnerActivation` in
- *    `packages/shared/src/SshOwnerActivation.ts` return `true` and remove the
- *    temporary local override.
- * 2. Supply the trusted endpoint facts (`ownerProfile`) for the active profile
- *    when calling `configureSshOwner`; the profile **binding** itself is always
- *    derived from `config.stateDir` and the resolved artifact profile and can
- *    never be overridden by the caller or the environment.
- * 3. Delete cutover inventory rows 1–51, the D1–D5 type dependents, the dev
- *    fixture selector (`sshOwnerDevMode.fixture.ts`) and every remaining
- *    `sshOwnerSelection.ts` fence call site that guards deleted legacy code.
- * 4. Run the structural checker on the changed files and the `cutover/` B
- *    traces, expecting zero outside-owner launches.
- * 5. Record the S4 acceptance (protocol version, capabilities, typed errors,
- *    grants/limits and artifact IDs).
+ * The caller supplies the trusted endpoint facts (`ownerProfile`) for the
+ * active profile; the profile **binding** itself is always derived from
+ * `config.stateDir` and the resolved artifact profile and can never be
+ * overridden by the caller or the environment.
  *
  * The boot order is already the designed one: lock → retirement marker →
  * owner attach → hydration → admission. Any failure keeps SSH admission
@@ -71,6 +53,12 @@ import type { TrustedStandaloneSshOwnerManifestEntry } from "./sshOwnerExecutabl
  *
  * @module sshOwnerProductionComposition
  */
+
+/**
+ * Explicit restart request to drain the identified legacy panes of a fenced
+ * startup (W3.6); the "Drain identified panes" UI action is the primary path.
+ */
+export const SSH_OWNER_DRAIN_IDENTIFIED_ENV = "BIGBUD_SSH_OWNER_DRAIN_IDENTIFIED";
 
 export type SshOwnerProductionConfiguration =
   | { readonly kind: "inactive" }
@@ -91,7 +79,6 @@ export type SshOwnerAdmission =
     };
 
 export interface ConfigureSshOwnerOptions {
-  readonly activation?: boolean;
   readonly environment?: NodeJS.ProcessEnv;
   readonly platform?: NodeJS.Platform;
   readonly arch?: string;
@@ -138,13 +125,6 @@ export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
   entryUrl: string = import.meta.url,
   options: ConfigureSshOwnerOptions = {},
 ) {
-  const activated = options.activation ?? SSH_OWNER_PRODUCTION_ACTIVATION;
-  if (!activated) {
-    configuration = { kind: "inactive" };
-    admission = { kind: "inactive" };
-    launchProfile = undefined;
-    return configuration;
-  }
   const resolution = yield* resolveArtifact(config, entryUrl, options);
   if (resolution.kind === "unavailable") {
     configuration = { kind: "unavailable", error: resolution.error };
@@ -159,7 +139,6 @@ export const configureSshOwner = Effect.fn("configureSshOwner")(function* (
         kind: resolution.artifact.profile,
         stateDirectory: config.stateDir,
         environment,
-        devFixtureGate: isSshOwnerDevFixtureSelected(),
       }),
     catch: (cause) =>
       cause instanceof SshOwnerProfileError
@@ -279,11 +258,10 @@ function recordOutcome(outcome: SshOwnerBootOutcome): void {
 
 /**
  * Runs the designed boot order after the state lock and persistence exist, through
- * the W3.6 startup gate. Inert unless `resolveSshOwnerActivation` is on.
+ * the W3.6 startup gate.
  */
 export const SshOwnerProductionBootLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    if (!SSH_OWNER_PRODUCTION_ACTIVATION) return;
     const config = yield* ServerConfig;
     const sql = yield* SqlClient.SqlClient;
     const instance = yield* BackendInstance;
@@ -302,7 +280,7 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
       sql,
       profileScope: config.stateDir,
       artifactPath: configured.artifact.path,
-      drainRequested: resolveSshOwnerDrainIdentifiedRequest(),
+      drainRequested: process.env[SSH_OWNER_DRAIN_IDENTIFIED_ENV] === "1",
       assertLockHeld: Effect.tryPromise({
         try: () => instance.assertHeld(),
         catch: () =>

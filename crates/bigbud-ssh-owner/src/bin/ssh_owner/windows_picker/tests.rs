@@ -16,7 +16,7 @@ const PROFILE: &[u8] = b"windows-fixture-profile";
 #[test]
 fn windows_password_denial_precedes_dispatch_and_is_never_auth() {
     assert_eq!(
-        password_denial(&Operation::ProofUnlockSyntheticPosixPassword(Empty {})),
+        password_denial(&Operation::UnlockPosixPassword(Empty {})),
         Some(ErrorCode::WindowsPasswordUnsupported)
     );
     for operation in [
@@ -218,22 +218,10 @@ fn grants_and_execution_refuse_unsupported_operations_and_wrong_bindings() {
     for denied in [
         wrong_target,
         wrong_epoch,
-        request(
-            &accepted,
-            2,
-            Operation::ProofOpenTerminal(Default::default()),
-        ),
-        request(
-            &accepted,
-            3,
-            Operation::ProofAgentProxyOpen(Default::default()),
-        ),
-        request(
-            &accepted,
-            4,
-            Operation::ProofWorkspaceRead(Default::default()),
-        ),
-        request(&accepted, 5, Operation::ProofSampleHealth(Empty {})),
+        request(&accepted, 2, Operation::OpenTerminal(Default::default())),
+        request(&accepted, 3, Operation::AgentProxyOpen(Default::default())),
+        request(&accepted, 4, Operation::WorkspaceRead(Default::default())),
+        request(&accepted, 5, Operation::SampleHealth(Empty {})),
     ] {
         let refusal = issue(&mut session, &mut wire, &denied);
         assert_eq!(refusal.error, ErrorCode::OperationDenied as i32);

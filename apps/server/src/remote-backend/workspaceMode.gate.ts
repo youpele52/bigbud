@@ -23,17 +23,15 @@ import {
 } from "@bigbud/contracts";
 
 import { OrchestrationCommandInvariantError } from "../orchestration/Errors.ts";
-import { probeSelectedSshOwnerWorkspaceReadiness } from "../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import { parseSshExecutionTarget } from "../ssh/sshExecutionTarget.ts";
-import { DevSshOwnerRuntime } from "../ssh/sshOwnerDevRuntime.ts";
 import { ServerConfig, type RuntimeMode } from "../startup/config.ts";
-import { makeLocalWorkspaceModeStore } from "./workspaceMode.local.ts";
 import {
   workspaceModeConflictMessage,
   workspaceModeOwnerId,
   type WorkspaceModeStore,
   type WorkspaceRuntimeMode,
 } from "./workspaceMode.record.ts";
+import { makeLocalWorkspaceModeStore } from "./workspaceMode.local.ts";
 import { reserveWorkspaceMode } from "./workspaceMode.reserve.ts";
 import { makeSshWorkspaceModeStore } from "./workspaceMode.ssh.ts";
 import type { WorkspaceModeSshOwner } from "./workspaceMode.ssh.owner.ts";
@@ -216,62 +214,13 @@ export function makeWorkspaceModeGate(options: WorkspaceModeGateOptions): Worksp
   };
 }
 
-function makeDevSelectedSshStore(
-  dev: NonNullable<(typeof DevSshOwnerRuntime.Service)["session"]>,
-): SelectedSshStore {
-  if (dev.kind !== "unix") {
-    const profile = dev.kind === "windows" ? "Windows" : "Linux jump";
-    return () => {
-      throw new Error(`The ${profile} Rust SSH owner fixture cannot reserve a workspace.`);
-    };
-  }
-
-  // The disposable sshd serves the same workspace directory. Keep reservation records outside
-  // the remote shell's view; the native owner admits the cwd but never publishes the record.
-  const store = makeLocalWorkspaceModeStore({ home: dev.fixture.root });
-  return (target, workspaceRoot) => {
-    if (target !== dev.targetId || workspaceRoot !== dev.fixture.folder) {
-      throw new Error("Only the disposable Rust SSH owner workspace can be reserved.");
-    }
-    const withAdmission = <A>(use: () => Promise<A>) =>
-      dev.picker.withOwner(target, async (owner) => {
-        await probeSelectedSshOwnerWorkspaceReadiness(owner, {
-          executionTargetId: target,
-          workspaceRoot,
-        });
-        // Keep the picker queue through the local store operation so a connection transition
-        // cannot overtake an admitted read or write.
-        return use();
-      });
-    return {
-      inspect: () => withAdmission(() => store.inspect(workspaceRoot)),
-      publish: (record) =>
-        withAdmission(async () => {
-          const current = await store.inspect(workspaceRoot);
-          if (
-            current.kind !== "ready" ||
-            current.identity.realpathSha256 !== record.realpathSha256 ||
-            current.identity.accountUid !== record.accountUid ||
-            current.identity.hostIdentity !== record.hostIdentity
-          ) {
-            throw new Error("The reservation does not match the disposable workspace identity.");
-          }
-          return store.publish(record);
-        }),
-    };
-  };
-}
-
 export const WorkspaceModeGateLive = Layer.effect(
   WorkspaceModeGate,
   Effect.gen(function* () {
     const config = yield* ServerConfig;
-    const devOwner = yield* Effect.serviceOption(DevSshOwnerRuntime);
-    const dev = devOwner._tag === "Some" ? devOwner.value.session : undefined;
     return makeWorkspaceModeGate({
       serverMode: config.mode,
       owner: workspaceModeOwnerId(machineIdentity() ?? os.hostname(), config.stateDir),
-      ...(dev ? { selectedSshStore: makeDevSelectedSshStore(dev) } : {}),
     });
   }),
 );

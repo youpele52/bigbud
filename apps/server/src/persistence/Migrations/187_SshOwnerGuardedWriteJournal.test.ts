@@ -45,7 +45,7 @@ it.effect("creates the B-side guarded-save journal and stays idempotent with its
     );
     // The journal's own bootstrap over the migrated table is a no-op, and it
     // keeps the one-claim/one-receipt semantics.
-    const journal = yield* initializeProductionSshGuardedWriteJournal(sql, true);
+    const journal = yield* initializeProductionSshGuardedWriteJournal(sql);
     assert.deepEqual(yield* journal.claim(binding), { kind: "claimed" });
     assert.deepEqual(yield* journal.claim(binding), { kind: "existing", receipt: null });
     assert.deepEqual(

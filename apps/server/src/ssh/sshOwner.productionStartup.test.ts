@@ -21,13 +21,9 @@ import {
   SSH_OWNER_EXPLICIT_DRAIN_ARTIFACT_ID,
 } from "./sshOwnerProductionStartup.ts";
 
-// The activation resolves once at module load; the mock stands in for a local
-// build started with BIGBUD_SSH_OWNER_ACTIVATION=1.
-const flags = vi.hoisted(() => ({ drainRequested: false, starts: 0 }));
-vi.mock("@bigbud/shared/SshOwnerActivation", () => ({
-  SSH_OWNER_PRODUCTION_ACTIVATION: true,
-  resolveSshOwnerDrainIdentifiedRequest: () => flags.drainRequested,
-}));
+// SSH always runs through the owner; the explicit drain request is an env flag.
+
+const flags = vi.hoisted(() => ({ starts: 0 }));
 
 vi.mock("./sshOwnerProductionClient.ts", async (importOriginal) => {
   const { Effect: E } = await import("effect");
@@ -59,7 +55,7 @@ let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(await realpath(tmpdir()), "ssh-owner-startup-"));
   resetSshOwnerProductionStateForTest();
-  flags.drainRequested = false;
+  vi.stubEnv("BIGBUD_SSH_OWNER_DRAIN_IDENTIFIED", "0");
   flags.starts = 0;
 });
 afterEach(async () => {
@@ -101,7 +97,7 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
   it.effect("drains at startup only when explicitly requested", () =>
     Effect.scoped(
       Effect.gen(function* () {
-        flags.drainRequested = true;
+        vi.stubEnv("BIGBUD_SSH_OWNER_DRAIN_IDENTIFIED", "1");
         yield* boot({ ownerPresent: true });
         assert.equal(readSshOwnerAdmission().kind, "open");
         assert.equal(flags.starts, 1);

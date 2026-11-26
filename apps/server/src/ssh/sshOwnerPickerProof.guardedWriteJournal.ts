@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
-import type { initializeDevSshGuardedWriteJournal } from "../persistence/Layers/DevSshGuardedWriteJournal.ts";
+import type { initializeSshGuardedWriteJournal } from "../persistence/Layers/SshGuardedWriteJournal.ts";
 import type { PickerProofWorkspaceClient } from "./sshOwnerPickerProof.client.workspace.ts";
 import type { GuardedWriteResult } from "./sshOwnerPickerProof.codec.guardedWrite.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 import { MAX_GUARDED_WRITE_BYTES } from "./sshOwnerPickerProof.guardedWriteStage.ts";
 
-type Journal = Effect.Success<ReturnType<typeof initializeDevSshGuardedWriteJournal>>;
+type Journal = Effect.Success<ReturnType<typeof initializeSshGuardedWriteJournal>>;
 const unknown = { kind: "unknown" } as const;
 
 /** Private proof only. The app must supply an exact selected scope and a qualified owner. */

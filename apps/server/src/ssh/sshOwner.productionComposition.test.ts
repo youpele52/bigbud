@@ -8,8 +8,6 @@ import { it } from "@effect/vitest";
 import { afterEach, beforeEach, describe, expect } from "vitest";
 import * as Effect from "effect/Effect";
 
-import { SSH_OWNER_PRODUCTION_ACTIVATION } from "@bigbud/shared/SshOwnerActivation";
-
 import {
   configureSshOwner,
   readSshOwnerAdmission,
@@ -17,7 +15,6 @@ import {
   resetSshOwnerProductionStateForTest,
 } from "./sshOwnerProductionComposition.ts";
 import { resolveSshOwnerArtifact, resolveSshOwnerProfile } from "./sshOwnerProductionArtifact.ts";
-import { assertLegacySshLaunchAllowed, isSshOwnerSelected } from "./sshOwnerSelection.ts";
 
 function nativeHeader(platform: "darwin" | "linux" | "win32", arch: "arm64" | "x64"): Buffer {
   const bytes = Buffer.alloc(512);
@@ -184,25 +181,12 @@ describe("production SSH owner composition", () => {
     }),
   );
 
-  it.effect("keeps today's behaviour while the activation constant is off", () =>
-    Effect.gen(function* () {
-      const configuration = yield* configureSshOwner(
-        { mode: "desktop", devUrl: undefined, stateDir: root },
-        pathToFileURL(join(root, "server/dist/bin.mjs")).href,
-      );
-      expect(SSH_OWNER_PRODUCTION_ACTIVATION).toBe(false);
-      expect(configuration).toEqual({ kind: "inactive" });
-      expect(readSshOwnerAdmission()).toEqual({ kind: "inactive" });
-    }),
-  );
-
   it.effect("keeps local features working when the activated owner is missing", () =>
     Effect.gen(function* () {
       const configuration = yield* configureSshOwner(
         { mode: "desktop", devUrl: undefined, stateDir: root },
         pathToFileURL(join(root, "server/dist/bin.mjs")).href,
         {
-          activation: true,
           environment: { BIGBUD_DESKTOP_PACKAGED: "1" },
           platform: "darwin",
           arch: "arm64",
@@ -231,7 +215,6 @@ describe("production SSH owner composition", () => {
         { mode: "desktop", devUrl: undefined, stateDir: root },
         pathToFileURL(join(root, "server/dist/bin.mjs")).href,
         {
-          activation: true,
           environment: { BIGBUD_DESKTOP_PACKAGED: "1" },
           platform: "darwin",
           arch: "arm64",
@@ -242,9 +225,6 @@ describe("production SSH owner composition", () => {
         artifact: { profile: "desktop-packaged" },
       });
       expect(readSshOwnerProductionConfiguration()).toEqual(configuration);
-      expect(isSshOwnerSelected(true)).toBe(true);
-      expect(isSshOwnerSelected(false)).toBe(false);
-      expect(() => assertLegacySshLaunchAllowed(true)).toThrow(/selected SSH owner/);
     }),
   );
 });

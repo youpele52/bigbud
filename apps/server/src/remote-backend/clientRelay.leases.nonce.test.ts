@@ -10,13 +10,6 @@ const calls = vi.hoisted(() => ({
   children: [] as import("node:child_process").ChildProcess[],
   args: [] as string[],
 }));
-vi.mock("../ssh/sshVerification.ts", () => ({
-  assertSshExecutionTargetReadyAsync: async () => {},
-}));
-vi.mock("../ssh/sshHostTrust.ts", () => ({ inspectSshHostTrust: async () => {} }));
-vi.mock("../ssh/sshCommand.ts", () => ({
-  buildSshCommandInvocation: () => ({ command: process.execPath, args: calls.args }),
-}));
 vi.mock("node:child_process", async (original) => {
   const actual = await original<typeof import("node:child_process")>();
   return {

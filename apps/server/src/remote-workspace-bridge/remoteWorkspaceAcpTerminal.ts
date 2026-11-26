@@ -1,9 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
-
 import type { RemoteAgentPtyResolver } from "../remote-agent/remoteAgentPtyAdapter.ts";
 import { createRemoteAgentWorkspacePty } from "../remote-agent/remoteAgentPtyAdapter.ts";
-import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
-import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import {
   AcpTerminalOwnerError,
   createOwnedAcpTerminal,
@@ -23,47 +19,6 @@ export interface AcpTerminalProcess {
   close(terminate?: boolean): Promise<void>;
 }
 
-function makeSshTerminalProcess(child: ChildProcess): AcpTerminalProcess {
-  const dataListeners = new Set<(data: string) => void>();
-  const exitListeners = new Set<
-    (event: { exitCode: number; signal: string | number | null }) => void
-  >();
-  const errorListeners = new Set<(error: Error) => void>();
-  child.stdout?.on("data", (chunk) => {
-    const data = String(chunk);
-    for (const listener of dataListeners) listener(data);
-  });
-  child.stderr?.on("data", (chunk) => {
-    const data = String(chunk);
-    for (const listener of dataListeners) listener(data);
-  });
-  child.on("error", (error) => {
-    for (const listener of errorListeners) listener(error);
-  });
-  child.on("exit", (exitCode, signal) => {
-    for (const listener of exitListeners) listener({ exitCode: exitCode ?? 0, signal });
-  });
-  return {
-    kill: (signal = "SIGTERM") => child.kill(signal),
-    onData: (callback) => {
-      dataListeners.add(callback);
-      return () => dataListeners.delete(callback);
-    },
-    onExit: (callback) => {
-      exitListeners.add(callback);
-      return () => exitListeners.delete(callback);
-    },
-    onError: (callback) => {
-      errorListeners.add(callback);
-      return () => errorListeners.delete(callback);
-    },
-    close: async (terminate = true) => {
-      if (!terminate || child.exitCode !== null || child.signalCode !== null) return;
-      child.kill("SIGTERM");
-    },
-  };
-}
-
 export async function createRemoteWorkspaceAcpTerminal(input: {
   readonly executionTargetId: string;
   readonly workspaceRoot: string;
@@ -78,9 +33,8 @@ export async function createRemoteWorkspaceAcpTerminal(input: {
     if (input.ptyResolver) throw new AcpTerminalOwnerError("unsupported-target");
     return createOwnedAcpTerminal(input, input.sshOwner);
   }
-  // Selection does not depend on the caller supplying a capability. Neither
-  // legacy SSH nor a managed-agent PTY can substitute for the missing owner.
-  if (isSshOwnerDevFixtureSelected()) throw new AcpTerminalOwnerError("ssh-owner-unavailable");
+  // A managed-agent PTY serves agent targets only. A direct SSH target needs
+  // the owner capability; there is no TypeScript SSH launch to fall back to.
   if (input.ptyResolver) {
     return createRemoteAgentWorkspacePty(
       {
@@ -97,17 +51,5 @@ export async function createRemoteWorkspaceAcpTerminal(input: {
     );
   }
 
-  const invocation = buildSshCommandInvocation({
-    executionTargetId: input.executionTargetId,
-    cwd: input.cwd ?? input.workspaceRoot,
-    command: input.command,
-    args: input.args ?? [],
-    env: Object.fromEntries(input.environment?.map(({ name, value }) => [name, value]) ?? []),
-  });
-  return makeSshTerminalProcess(
-    spawn(invocation.command, invocation.args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
-    }),
-  );
+  throw new AcpTerminalOwnerError("ssh-owner-unavailable");
 }

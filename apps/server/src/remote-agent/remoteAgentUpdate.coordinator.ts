@@ -1,6 +1,6 @@
 import { Effect, Scope, ServiceMap } from "effect";
 
-import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
+import { assertSshTargetConnected } from "../ssh/sshTargetDisconnects.ts";
 import { isSshTargetDisconnected } from "../ssh/sshTargetDisconnects.ts";
 import { isRemoteAgentExecutionTarget } from "./remoteAgentDefault.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
@@ -118,8 +118,9 @@ export function makeRemoteAgentUpdateCoordinator(
   const openControl = dependencies.openControl ?? openRemoteAgentControl;
   const hasReusableCredentials =
     dependencies.hasReusableCredentials ??
+    // The owner authenticates; a connected (not user-disconnected) target is enough here.
     (async (target) => {
-      await assertSshExecutionTargetReadyAsync(target);
+      assertSshTargetConnected(target);
       return true;
     });
   const logger =

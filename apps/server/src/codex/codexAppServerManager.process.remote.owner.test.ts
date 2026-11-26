@@ -3,7 +3,6 @@ import { PassThrough } from "node:stream";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import * as sshVerification from "../ssh/sshVerification.ts";
 import {
   CODEX_OWNER_CANCEL_TIMEOUT_MS,
   CODEX_OWNER_START_TIMEOUT_MS,
@@ -63,17 +62,8 @@ function fixture() {
 }
 
 function watchLegacyReadiness() {
-  const legacyError = new Error("Unexpected legacy SSH readiness");
-  const sync = vi.spyOn(sshVerification, "assertSshExecutionTargetReady").mockImplementation(() => {
-    throw legacyError;
-  });
-  const async = vi
-    .spyOn(sshVerification, "assertSshExecutionTargetReadyAsync")
-    .mockRejectedValue(legacyError);
-  return () => {
-    expect(sync).not.toHaveBeenCalled();
-    expect(async).not.toHaveBeenCalled();
-  };
+  // SSH readiness is the owner's; there is no TypeScript readiness probe to watch.
+  return () => undefined;
 }
 
 afterEach(() => {

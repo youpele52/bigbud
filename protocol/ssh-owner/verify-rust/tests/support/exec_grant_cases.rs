@@ -35,11 +35,11 @@ fn acp_command() -> Operation {
 }
 
 fn terminal() -> Operation {
-    Operation::ProofOpenTerminal(ProofTerminalOpen { lease: Vec::new() })
+    Operation::OpenTerminal(ProofTerminalOpen { lease: Vec::new() })
 }
 
 fn workspace_read() -> Operation {
-    Operation::ProofWorkspaceRead(ProofWorkspaceRead {
+    Operation::WorkspaceRead(ProofWorkspaceRead {
         workspace_root: "/fixture/root".into(),
         relative_path: "a.txt".into(),
         read: Some(proof_workspace_read::Read::Preview(Empty {})),

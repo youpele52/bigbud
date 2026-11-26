@@ -1,9 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, expect } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { afterEach, beforeEach, vi } from "vitest";
 
-import { runSshCommand } from "../../ssh/sshProcess.ts";
 import {
   WorkspaceDirectoryReadOwner,
   type WorkspaceDirectoryReadOwnerShape,
@@ -12,10 +11,7 @@ import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspaceEntriesLive } from "./WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "./WorkspacePaths.ts";
 
-vi.mock("../../ssh/sshProcess.ts", () => ({ runSshCommand: vi.fn() }));
-
 const directSshTarget = "ssh:host=dev&transport=direct-ssh";
-const agentTarget = "ssh:host=dev&transport=agent";
 const cwd = "/srv/project ";
 const owner = {
   listDirectory: vi.fn<WorkspaceDirectoryReadOwnerShape["listDirectory"]>(),
@@ -26,17 +22,6 @@ const withNodeServices = (layer: typeof baseLayer) =>
 
 beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.unstubAllEnvs());
-
-function mockLegacyListing(stdout: string, stdoutTruncated = false) {
-  vi.mocked(runSshCommand).mockResolvedValueOnce({
-    stdout,
-    stdoutTruncated,
-    stderr: "",
-    code: 0,
-    signal: null,
-    timedOut: false,
-  });
-}
 
 it.layer(
   withNodeServices(
@@ -81,7 +66,6 @@ it.layer(
             { path: "src /a\tfile ", kind: "file", parentPath: "src " },
           ],
         });
-        expect(runSshCommand).not.toHaveBeenCalled();
       }),
   );
 
@@ -108,7 +92,6 @@ it.layer(
         { path: "src", kind: "directory" },
         { path: ".gitconfig", kind: "file" },
       ]);
-      expect(runSshCommand).not.toHaveBeenCalled();
     }),
   );
 
@@ -122,7 +105,6 @@ it.layer(
         expect(error.operation).toBe("workspaceEntries.remoteDirectoryPath");
       }
       expect(owner.listDirectory).not.toHaveBeenCalled();
-      expect(runSshCommand).not.toHaveBeenCalled();
     }),
   );
 
@@ -141,73 +123,6 @@ it.layer(
         cause,
       });
       expect(owner.listDirectory).toHaveBeenCalledTimes(1);
-      expect(runSshCommand).not.toHaveBeenCalled();
-    }),
-  );
-
-  it.effect("does not change local or agent-target listing", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("BIGBUD_REMOTE_AGENT_TRANSPORT", "direct-ssh");
-      mockLegacyListing("f\tagent-path\0");
-      const workspaceEntries = yield* WorkspaceEntries;
-      const fileSystem = yield* FileSystem.FileSystem;
-      const localCwd = yield* fileSystem.makeTempDirectoryScoped();
-      yield* fileSystem.writeFileString(`${localCwd}/local-path`, "");
-
-      expect(yield* workspaceEntries.listDirectory({ cwd: localCwd })).toEqual({
-        entries: [{ path: "local-path", kind: "file" }],
-      });
-      expect(
-        yield* workspaceEntries.listDirectory({ cwd, executionTargetId: agentTarget }),
-      ).toEqual({
-        entries: [{ path: "agent-path", kind: "file" }],
-      });
-      expect(runSshCommand).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ cwd, executionTargetId: agentTarget, command: "find" }),
-      );
-      expect(owner.listDirectory).not.toHaveBeenCalled();
-    }),
-  );
-});
-
-it.layer(withNodeServices(baseLayer))("WorkspaceEntries without a directory read owner", (it) => {
-  it.effect("preserves the legacy direct SSH command and truncated record handling", () =>
-    Effect.gen(function* () {
-      mockLegacyListing("f\tz.txt\0d\ta-dir\0f\tpartial", true);
-      const workspaceEntries = yield* WorkspaceEntries;
-      const result = yield* workspaceEntries.listDirectory({
-        cwd,
-        executionTargetId: directSshTarget,
-        relativePath: "./src//",
-      });
-      expect(result.entries).toEqual([
-        { path: "src/a-dir", kind: "directory", parentPath: "src" },
-        { path: "src/z.txt", kind: "file", parentPath: "src" },
-      ]);
-      expect(runSshCommand).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({
-          cwd,
-          executionTargetId: directSshTarget,
-          command: "find",
-          args: [
-            "./src",
-            "-mindepth",
-            "1",
-            "-maxdepth",
-            "1",
-            "(",
-            "-type",
-            "d",
-            "-o",
-            "-type",
-            "f",
-            ")",
-            "-printf",
-            "%y\\t%P\\0",
-          ],
-          outputMode: "truncate",
-        }),
-      );
     }),
   );
 });

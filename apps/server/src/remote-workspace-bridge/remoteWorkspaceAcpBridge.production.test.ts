@@ -50,12 +50,9 @@ function setup() {
   return { shell, bound, owner: () => live };
 }
 
-it("selects the production bridge only for direct ssh targets under activation", () => {
-  expect(usesProductionAcpBridge(workspaceTarget, true)).toBe(true);
-  expect(usesProductionAcpBridge(workspaceTarget, false)).toBe(false);
-  expect(usesProductionAcpBridge({ ...workspaceTarget, executionTargetId: "local" }, true)).toBe(
-    false,
-  );
+it("selects the production bridge only for direct ssh targets", () => {
+  expect(usesProductionAcpBridge(workspaceTarget)).toBe(true);
+  expect(usesProductionAcpBridge({ ...workspaceTarget, executionTargetId: "local" })).toBe(false);
 });
 
 it("composes owner reads, writes and the approved pwd terminal on the exact target", async () => {

@@ -121,7 +121,7 @@ fn frames(payloads: impl IntoIterator<Item = Payload>) -> Vec<u8> {
 }
 
 fn readiness(root: &str) -> Operation {
-    Operation::ProofWorkspaceReadiness(ProofWorkspaceReadiness {
+    Operation::WorkspaceReadiness(ProofWorkspaceReadiness {
         workspace_root: root.into(),
     })
 }

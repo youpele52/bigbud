@@ -67,11 +67,6 @@ export interface DeriveSshOwnerProfileBindingInput {
   readonly kind: SshOwnerProfile;
   readonly stateDirectory: string;
   readonly environment?: NodeJS.ProcessEnv;
-  /**
-   * The existing dev-fixture gate (`isSshOwnerDevFixtureSelected`). Production
-   * callers pass its live answer; only a gated dev build may use the env value.
-   */
-  readonly devFixtureGate?: boolean;
 }
 
 const isKind = (value: string): value is SshOwnerProfile =>
@@ -199,29 +194,7 @@ function readStateIdentity(stateDirectory: string) {
 export function deriveSshOwnerProfileBinding(
   input: DeriveSshOwnerProfileBindingInput,
 ): SshOwnerProfileBinding {
-  const environment = input.environment ?? process.env;
   const identity = readStateIdentity(input.stateDirectory);
-  const fixture = input.devFixtureGate === true && input.kind === "desktop-dev";
-  if (fixture) {
-    const override = environment[SSH_OWNER_PROFILE_BINDING_ENV];
-    if (override !== undefined && override.length > 0) {
-      const parsed = parseSshOwnerProfileBinding(override);
-      if (!parsed || parsed.kind !== input.kind) {
-        throw new SshOwnerProfileError(
-          "owner-profile-unavailable",
-          "The development SSH owner fixture profile binding is malformed.",
-        );
-      }
-      return {
-        kind: parsed.kind,
-        stateDirectory: identity.canonical,
-        device: identity.device,
-        inode: identity.inode,
-        digest: parsed.digest,
-        text: encodeSshOwnerProfileBinding(parsed.kind, identity.canonical, parsed.digest),
-      };
-    }
-  }
   const digest = digestFor(input.kind, identity.canonical, identity.device, identity.inode);
   return {
     kind: input.kind,
