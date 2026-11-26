@@ -81,6 +81,19 @@ export function forgetSshMonitorCaller(callerId: string | null): void {
   }
 }
 
+/** Upgrade drain: revokes every admitted target and aborts in-flight health probes. */
+export function stopAllSshMonitorTargets(): number {
+  const stopped = connections.size;
+  for (const connection of connections.values()) {
+    const probe = connection.probe;
+    connection.probe = undefined;
+    probe?.abort.abort();
+    for (const finish of probe?.readers ?? []) finish(false);
+  }
+  connections.clear();
+  return stopped;
+}
+
 /** Server shutdown also removes any close events still queued when its protocol stops. */
 export function forgetSshMonitorInstance(instanceId: string): void {
   const prefix = `${instanceId}:`;

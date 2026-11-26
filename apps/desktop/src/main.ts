@@ -331,6 +331,8 @@ app
     });
     void bootstrapDesktop({
       baseDir: mainConfig.cuaDriverBaseDir,
+      backendStateDir: mainConfig.backendStateDir,
+      backendArtifactId: `bigbud-server@${app.getVersion()}`,
       channels,
       cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
       computerUseGuard: {

@@ -8,6 +8,7 @@ import { broadRendererWindows } from "../window/rendererWindows";
 import { configureUpdaterFeed } from "./autoUpdater.feed";
 import {
   createUpdateInstallCoordinator,
+  type UpdateInstallCoordinatorDeps,
   handleUpdateHandoffAccepted,
   type UpdateInstallCoordinator,
 } from "./autoUpdater.install";
@@ -25,6 +26,7 @@ import {
   reduceDesktopUpdateStateOnDownloadFailure,
   reduceDesktopUpdateStateOnDownloadProgress,
   reduceDesktopUpdateStateOnDownloadStart,
+  reduceDesktopUpdateStateOnInstallBlocked,
   reduceDesktopUpdateStateOnInstallRestartRequired,
   reduceDesktopUpdateStateOnInstallStart,
   reduceDesktopUpdateStateOnNoUpdate,
@@ -206,6 +208,8 @@ export interface AutoUpdaterDeps {
   readonly setIsQuitting: (v: boolean) => void;
   readonly beginUpdatePreparation: () => void;
   readonly prepareForUpdateInstall: () => Promise<void>;
+  /** U5/U8 drain-with-consent before preparation; Cancel aborts the upgrade. */
+  readonly drainBeforeInstall?: UpdateInstallCoordinatorDeps["drainBeforeInstall"];
   /**
    * Called when `before-quit-for-update` fires on the Electron built-in
    * autoUpdater. Used by main.ts to run the same backend-stop / timer-clear
@@ -244,6 +248,11 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
   };
   _installCoordinator = createUpdateInstallCoordinator({
     beginUpdatePreparation: deps.beginUpdatePreparation,
+    drainBeforeInstall: deps.drainBeforeInstall,
+    onInstallBlocked: (message) => {
+      if (_updateState)
+        setUpdateState(reduceDesktopUpdateStateOnInstallBlocked(_updateState, message));
+    },
     canInstall: () => updaterConfigured && _updateState?.status === "downloaded",
     clearUpdateTimers: clearUpdatePollTimer,
     formatError: formatErrorMessage,

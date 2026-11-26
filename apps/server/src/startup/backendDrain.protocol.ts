@@ -7,12 +7,19 @@
  *
  * @module backendDrain.protocol
  */
-export const BACKEND_DRAIN_VERSION = 1;
-export const BACKEND_DRAIN_MAX_REQUEST_BYTES = 8 * 1024;
-export const BACKEND_DRAIN_ADMISSION_MS = 2_000;
-export const BACKEND_DRAIN_MAX_WAIT_MS = 25_000;
+import {
+  BACKEND_DRAIN_MAX_WAIT_MS,
+  BACKEND_DRAIN_VERSION,
+  type BackendDrainConsent,
+} from "@bigbud/shared/backendDrain.client";
 
-export type BackendDrainConsent = "non-interactive" | "ui";
+export {
+  BACKEND_DRAIN_MAX_REQUEST_BYTES,
+  BACKEND_DRAIN_MAX_WAIT_MS,
+  BACKEND_DRAIN_VERSION,
+  type BackendDrainConsent,
+} from "@bigbud/shared/backendDrain.client";
+export const BACKEND_DRAIN_ADMISSION_MS = 2_000;
 
 export interface BackendDrainRequest {
   readonly v: 1;
@@ -32,7 +39,17 @@ export type BackendDrainStatus =
   | "timeout";
 
 export type BackendDrainResponse =
-  | { readonly v: 1; readonly ok: true; readonly status: BackendDrainStatus }
+  | {
+      readonly v: 1;
+      readonly ok: true;
+      readonly status: BackendDrainStatus;
+      /** Present after the stop phase ran: monitors, relays then providers, in order. */
+      readonly stops?: ReadonlyArray<{
+        readonly step: "monitors" | "relays" | "providers";
+        readonly stopped: number;
+        readonly owners: number;
+      }>;
+    }
   | {
       readonly v: 1;
       readonly ok: false;

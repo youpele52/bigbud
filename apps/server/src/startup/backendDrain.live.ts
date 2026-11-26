@@ -8,6 +8,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { commitLegacyRetirement } from "../persistence/Layers/LegacyRetirement.ts";
 import { TerminalManager } from "../terminal/Services/Manager.ts";
 import { OwnershipShutdown } from "./ownershipShutdown.ts";
+import { armBackendDrainExit } from "./backendDrain.exit.ts";
 import { registerBackendDrainHandler, type BackendDrainHandler } from "./backendDrain.handler.ts";
 import { requestBackendDrainConsent, type BackendDrainDecision } from "./backendDrain.consent.ts";
 import {
@@ -17,15 +18,40 @@ import {
 } from "../ssh/sshLegacyDrain.ts";
 import { drainOwnedSshMasters } from "../ssh/sshSession.ts";
 import { getPeerCoordinator } from "../peer-orchestration/peerCoordinator.layer.ts";
+import { stopAllSshMonitorTargets } from "../ssh/sshMonitor.connections.ts";
+import {
+  ProviderService,
+  type ProviderServiceShape,
+} from "../provider/Services/ProviderService.ts";
+import {
+  registerBackendDrainStop,
+  runBackendDrainStopStep,
+  type BackendDrainStopReport,
+} from "./backendDrain.stops.ts";
+
+/** Stops every live provider session; a failed stop fails the drain's stop phase. */
+export const stopProviderSessions = (service: ProviderServiceShape) =>
+  service.listSessions().pipe(
+    Effect.flatMap((sessions) =>
+      Effect.forEach(sessions, (session) => service.stopSession({ threadId: session.threadId }), {
+        concurrency: "unbounded",
+        discard: true,
+      }).pipe(Effect.as(sessions.length)),
+    ),
+  );
+
+const registerProviderDrainStop = (service: ProviderServiceShape) =>
+  registerBackendDrainStop("providers", () => Effect.runPromise(stopProviderSessions(service)));
 
 export interface LiveBackendDrainDeps {
   readonly profileScope: string;
   readonly artifactId: string;
   readonly listPanes: () => Effect.Effect<ReadonlyArray<LegacyDrainPane>>;
   readonly closePane: (pane: LegacyDrainPane) => Effect.Effect<void, Error>;
-  readonly stopMonitors: Effect.Effect<void, Error>;
-  readonly stopRelays: Effect.Effect<void, Error>;
-  readonly stopProviders: Effect.Effect<void, Error>;
+  /** Real stop effects; a `BackendDrainStopReport` result is reported in the response. */
+  readonly stopMonitors: Effect.Effect<unknown, Error>;
+  readonly stopRelays: Effect.Effect<unknown, Error>;
+  readonly stopProviders: Effect.Effect<unknown, Error>;
   readonly closeOwnedMasters: Effect.Effect<
     { readonly closed: number; readonly failed: number },
     Error
@@ -50,6 +76,9 @@ class BackendDrainLiveError extends Data.TaggedError("BackendDrainLiveError")<{
 
 const asError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)));
 
+const isStopReport = (value: unknown): value is BackendDrainStopReport =>
+  typeof value === "object" && value !== null && "step" in value && "stopped" in value;
+
 const choiceFromDecision = (decision: BackendDrainDecision): LegacyDrainChoice | undefined =>
   decision.kind === "proceed" ? decision.choice : undefined;
 
@@ -66,6 +95,12 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
       return { v: 1, ok: true, status: "unknown-artifact" };
     if (running) return { v: 1, ok: true, status: "busy" };
     running = true;
+    const stops: BackendDrainStopReport[] = [];
+    const reported = (stop: Effect.Effect<unknown, Error>) =>
+      stop.pipe(
+        Effect.tap((result) => Effect.sync(() => isStopReport(result) && stops.push(result))),
+        Effect.asVoid,
+      );
     try {
       if (deps.drainFollowers) await Effect.runPromise(deps.drainFollowers());
       const panes = await Effect.runPromise(deps.listPanes());
@@ -74,7 +109,9 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
         const decision = await Effect.runPromise(
           requestBackendDrainConsent({
             panes,
-            timeoutMs: deps.consentTimeoutMs ?? 120_000,
+            // Never outlive the caller's wait: a late decision after the client gave up
+            // must not drain an upgrade that was already reported as not started.
+            timeoutMs: Math.min(deps.consentTimeoutMs ?? 120_000, request.waitMs),
             drainId: `drain-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
           }),
         );
@@ -90,9 +127,9 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
           trigger: "cli-for-upgrade",
           profileScope: deps.profileScope,
           artifactId: deps.artifactId,
-          stopMonitors: deps.stopMonitors,
-          stopRelays: deps.stopRelays,
-          stopProviders: deps.stopProviders,
+          stopMonitors: reported(deps.stopMonitors),
+          stopRelays: reported(deps.stopRelays),
+          stopProviders: reported(deps.stopProviders),
           listPanes: Effect.succeed(panes),
           consent: () => Effect.succeed({ kind: "proceed", choice }),
           closePane: deps.closePane,
@@ -105,7 +142,7 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
         throw asError(cause);
       });
       return outcome.kind === "drained"
-        ? { v: 1, ok: true, status: "drained" }
+        ? { v: 1, ok: true, status: "drained", stops }
         : { v: 1, ok: true, status: "cancelled" };
     } catch (cause) {
       return {
@@ -125,6 +162,7 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
     const manager = yield* TerminalManager;
     const sql = yield* SqlClient.SqlClient;
     const shutdown = yield* Effect.serviceOption(OwnershipShutdown);
+    const provider = yield* Effect.serviceOption(ProviderService);
     const handler = makeLiveBackendDrainHandler({
       profileScope: "backend",
       artifactId: `bigbud-server@${version}`,
@@ -153,9 +191,9 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
         manager
           .close({ threadId: pane.threadId, terminalId: pane.paneId.split(":")[1]! })
           .pipe(Effect.mapError(asError), Effect.asVoid),
-      stopMonitors: Effect.logInfo("drain: stopping SSH monitors").pipe(Effect.asVoid),
-      stopRelays: Effect.logInfo("drain: stopping relays").pipe(Effect.asVoid),
-      stopProviders: Effect.logInfo("drain: stopping providers").pipe(Effect.asVoid),
+      stopMonitors: runBackendDrainStopStep("monitors"),
+      stopRelays: runBackendDrainStopStep("relays"),
+      stopProviders: runBackendDrainStopStep("providers"),
       closeOwnedMasters: Effect.tryPromise({
         try: () => drainOwnedSshMasters(),
         catch: (cause) => new BackendDrainLiveError({ detail: "SSH master drain failed.", cause }),
@@ -178,10 +216,27 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
               "The backend has no shutdown request; the drain cannot release the lock for the upgrade.",
             ),
           ),
-        onSome: (service) => Effect.sync(() => service.request()),
+        onSome: (service) =>
+          Effect.sync(() => {
+            service.request();
+            armBackendDrainExit();
+          }),
       }),
     });
     const unregister = registerBackendDrainHandler(handler);
-    yield* Effect.addFinalizer(() => Effect.sync(unregister));
+    const unregisterMonitors = registerBackendDrainStop("monitors", async () =>
+      stopAllSshMonitorTargets(),
+    );
+    const unregisterProviders = Option.match(provider, {
+      onNone: () => () => {},
+      onSome: registerProviderDrainStop,
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        unregister();
+        unregisterMonitors();
+        unregisterProviders();
+      }),
+    );
   }),
 );

@@ -67,7 +67,12 @@ describe("live backend drain handler", () => {
   it("classifies panes, closes only drainable ones, and runs the core in order", async () => {
     const { deps: live, events } = deps();
     const handler = makeLiveBackendDrainHandler(live);
-    await expect(handler(request())).resolves.toEqual({ v: 1, ok: true, status: "drained" });
+    await expect(handler(request())).resolves.toEqual({
+      v: 1,
+      ok: true,
+      status: "drained",
+      stops: [],
+    });
     expect(events).toEqual([
       "monitors",
       "relays",

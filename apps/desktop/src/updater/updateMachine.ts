@@ -191,3 +191,17 @@ export function reduceDesktopUpdateStateOnInstallRestartRequired(
     canRetry: false,
   };
 }
+
+/** The upgrade drain was cancelled or refused: the app keeps running and the install can retry. */
+export function reduceDesktopUpdateStateOnInstallBlocked(
+  state: DesktopUpdateState,
+  message: string,
+): DesktopUpdateState {
+  return {
+    ...state,
+    status: "downloaded",
+    message,
+    errorContext: "install",
+    canRetry: true,
+  };
+}

@@ -76,6 +76,8 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
     linuxWmClass: isDevelopment ? "bigbud-dev" : releaseIdentity.linuxWmClass,
     releaseIdentity,
     rootDir,
+    /** The backend's state directory; the updater reaches its drain control socket here. */
+    backendStateDir: stateDir,
     serverSettingsPath: Path.join(stateDir, "settings.json"),
     /** This channel's own Tailscale Serve HTTPS listener (development has its own). */
     tailscaleServeHttpsPort: resolveTailscaleServeHttpsPort({

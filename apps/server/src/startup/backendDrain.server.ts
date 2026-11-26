@@ -1,8 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, unlink, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
-import { join } from "node:path";
 
+import {
+  BackendDrainControlUnavailableError,
+  backendDrainControlPaths,
+} from "@bigbud/shared/backendDrain.client";
 import { unixSocketPathMaxBytes } from "@bigbud/shared/privateSocketPath";
 
 import {
@@ -12,18 +15,10 @@ import {
   type BackendDrainResponse,
 } from "./backendDrain.protocol.ts";
 
-export function backendDrainControlPaths(stateDir: string) {
-  const directory = join(stateDir, "control");
-  return {
-    directory,
-    socketPath: join(directory, "backend-drain.sock"),
-    tokenPath: join(directory, "backend-drain.token"),
-  };
-}
-
-export class BackendDrainControlUnavailableError extends Error {
-  readonly _tag = "BackendDrainControlUnavailableError";
-}
+export {
+  BackendDrainControlUnavailableError,
+  backendDrainControlPaths,
+} from "@bigbud/shared/backendDrain.client";
 
 const failure = (
   code: "invalid-request" | "unauthorized" | "unavailable" | "failed",
@@ -144,23 +139,4 @@ export async function startBackendDrainControlServer(input: {
       await unlink(tokenPath).catch(() => undefined);
     },
   };
-}
-
-/** Same-user client. The token file must be mode 0600 and owned by this account. */
-export async function readBackendDrainToken(stateDir: string): Promise<string> {
-  const { tokenPath } = backendDrainControlPaths(stateDir);
-  const info = await lstat(tokenPath);
-  if (
-    !info.isFile() ||
-    info.isSymbolicLink() ||
-    (info.mode & 0o077) !== 0 ||
-    (typeof process.getuid === "function" && info.uid !== process.getuid())
-  )
-    throw new BackendDrainControlUnavailableError(
-      "The backend drain token is not private to this account.",
-    );
-  const token = (await readFile(tokenPath, "utf8")).trim();
-  if (!/^[a-f0-9]{64}$/.test(token))
-    throw new BackendDrainControlUnavailableError("The backend drain token is malformed.");
-  return token;
 }

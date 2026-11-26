@@ -16,6 +16,7 @@ import {
   stopBackendAndWaitForExit,
 } from "./backend/backendManager";
 import { createPrepareForUpdateInstall } from "./main.bootstrap.updateInstall";
+import { createUpgradeDrain } from "./updater/upgradeDrain";
 import type { DesktopQuitTeardown } from "./main.quitTeardown";
 import { makeDesktopMobileRemoteAccess } from "./main.bootstrap.tailscale";
 import {
@@ -67,6 +68,10 @@ import {
 interface BootstrapDesktopOptions {
   /** Legacy Cua runtime base (`cuaDriverBaseDir` in main config); used only for Cua. */
   readonly baseDir: string;
+  /** The backend's state directory; the updater drains through its control socket. */
+  readonly backendStateDir: string;
+  /** The running backend's artifact id, `bigbud-server@<version>`. */
+  readonly backendArtifactId: string;
   readonly systemMonitor: SystemMonitorBridge;
   readonly channels: typeof desktopIpcChannels;
   readonly cuaDriverHostBundleId: string;
@@ -102,6 +107,8 @@ interface BootstrapDesktopOptions {
 export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promise<void> {
   const {
     baseDir,
+    backendStateDir,
+    backendArtifactId,
     systemMonitor,
     channels,
     cuaDriverHostBundleId,
@@ -300,6 +307,12 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     setIsQuitting,
     // Preserve first: a failed copy must not fence CUA/backend process starts in the running app.
     beginUpdatePreparation: () => undefined,
+    // U5/U8: drain-with-consent first; Cancel aborts the upgrade and leaves this app running.
+    drainBeforeInstall: createUpgradeDrain({
+      stateDir: backendStateDir,
+      artifactId: backendArtifactId,
+      platform: process.platform,
+    }),
     prepareForUpdateInstall: createPrepareForUpdateInstall({
       cuaDriverBaseDir: baseDir,
       isPackaged,

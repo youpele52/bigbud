@@ -168,10 +168,15 @@ export class NodeSqliteWorkerBridge {
       });
     }
     void this.worker.terminate();
+    // Clear the bound once the worker exits: a dangling timer would hold the event loop open.
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       this.exited,
-      new Promise((resolve) => setTimeout(resolve, this.timeouts.exitTimeoutMs)),
+      new Promise((resolve) => {
+        exitTimer = setTimeout(resolve, this.timeouts.exitTimeoutMs);
+      }),
     ]);
+    clearTimeout(exitTimer);
     activeBridges.delete(this);
   }
 

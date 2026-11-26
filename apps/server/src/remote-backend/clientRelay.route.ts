@@ -15,6 +15,7 @@ import type { ClientRelaySshOwner } from "./clientRelay.ssh.owner.ts";
 import { isSshOwnerDevFixtureSelected } from "../ssh/sshOwnerSelection.ts";
 import { sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
 import { makeWsRpcRemoteBackendRelayHandlers } from "../ws/wsRpcHandlers.remoteBackendRelay.ts";
+import { registerBackendDrainStop } from "../startup/backendDrain.stops.ts";
 
 const noProtocolClients = async (): Promise<ReadonlySet<number>> => new Set();
 
@@ -52,9 +53,11 @@ export const makeRemoteBackendRelayRoute = Effect.fn("makeRemoteBackendRelayRout
     openProfile: (profile, signal) =>
       openRemoteBackendRelayProfileOwner(profile, origins, signal, sshOwner),
   });
+  // The upgrade drain closes live relay leases before any pane closes (W3.2 step 1).
+  const unregisterDrainStop = registerBackendDrainStop("relays", () => leases.closeAll());
   yield* Scope.addFinalizer(
     scope,
-    Effect.promise(() => leases.dispose()),
+    Effect.sync(unregisterDrainStop).pipe(Effect.andThen(Effect.promise(() => leases.dispose()))),
   );
   return {
     handlers: makeWsRpcRemoteBackendRelayHandlers({

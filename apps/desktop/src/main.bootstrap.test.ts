@@ -151,6 +151,8 @@ const originalPlatform = process.platform;
 function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
   return {
     baseDir: "/base",
+    backendStateDir: "/base/userdata",
+    backendArtifactId: "bigbud-server@0.0.0-test",
     systemMonitor: {} as never,
     channels: {} as never,
     cuaDriverHostBundleId: "bundle-id",

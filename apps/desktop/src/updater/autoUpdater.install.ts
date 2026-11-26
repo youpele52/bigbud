@@ -7,8 +7,20 @@ export class RestartRequiredUpdatePreparationError extends Error {
   override readonly name = "RestartRequiredUpdatePreparationError";
 }
 
+/**
+ * Outcome of the U5/U8 upgrade drain that runs before any install preparation.
+ * `cancelled` and `failed` abort the upgrade and leave the running app intact.
+ */
+export type UpdateInstallDrainOutcome =
+  | { readonly kind: "drained" }
+  | { readonly kind: "skipped"; readonly reason: string }
+  | { readonly kind: "cancelled" | "failed"; readonly message: string };
+
 export interface UpdateInstallCoordinatorDeps {
   readonly beginUpdatePreparation: () => void;
+  /** Drain-with-consent; runs before `beginUpdatePreparation` so Cancel changes nothing. */
+  readonly drainBeforeInstall?: (() => Promise<UpdateInstallDrainOutcome>) | undefined;
+  readonly onInstallBlocked?: (message: string) => void;
   readonly canInstall: () => boolean;
   readonly clearUpdateTimers: () => void;
   readonly formatError: (error: unknown) => string;
@@ -127,6 +139,25 @@ export function createUpdateInstallCoordinator(
     }
   };
 
+  const drainThenInstall = async (): Promise<UpdateInstallResult> => {
+    if (deps.drainBeforeInstall) {
+      const drain = await deps.drainBeforeInstall().catch(
+        (error: unknown): UpdateInstallDrainOutcome => ({
+          kind: "failed",
+          message: deps.formatError(error),
+        }),
+      );
+      if (drain.kind === "cancelled" || drain.kind === "failed") {
+        console.warn(`[desktop-updater] Upgrade blocked by the drain (${drain.kind}).`);
+        deps.onInstallBlocked?.(drain.message);
+        return { accepted: true, completed: false };
+      }
+      if (drain.kind === "skipped")
+        console.info(`[desktop-updater] Upgrade drain skipped: ${drain.reason}`);
+    }
+    return runInstall();
+  };
+
   return {
     install: () => {
       if (
@@ -139,7 +170,7 @@ export function createUpdateInstallCoordinator(
       ) {
         return Promise.resolve({ accepted: false, completed: false });
       }
-      const request = runInstall();
+      const request = drainThenInstall();
       installPromise = request;
       const clearRequest = () => {
         if (installPromise === request) installPromise = null;
