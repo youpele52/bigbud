@@ -12,6 +12,8 @@
 
 #[path = "support/terminal_host.fixture.rs"]
 mod fixture;
+#[path = "support/terminal_flow_perf.fixture.rs"]
+mod perf;
 
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -82,6 +84,7 @@ struct Output {
     bytes: Vec<u8>,
     last_sequence: u64,
     exited: bool,
+    model_invalid: bool,
 }
 
 impl Output {
@@ -97,6 +100,11 @@ impl Output {
                 self.bytes.extend_from_slice(&output.bytes);
             }
             Payload::PtyExited(exit) if exit.pty_id == pty_id => self.exited = true,
+            Payload::PtyLifecycleNotice(notice)
+                if notice.pty_id == pty_id && notice.kind == "model_invalid" =>
+            {
+                self.model_invalid = true;
+            }
             Payload::ProtocolError(error) => panic!("{error:?}"),
             _ => {}
         }
@@ -126,6 +134,49 @@ fn next_sequence(host: &Host, pty_id: &str) -> u64 {
 
 fn rss_mib(host: &Host) -> u64 {
     host.rss_bytes() >> 20
+}
+
+/// The screen model either saw every byte or said it did not. §13 lets the reader drop the
+/// actor feed after 50 ms when the model cannot keep up (a starved host), which must surface
+/// as `model_invalid` and a non-live or `partial` snapshot, never as a silently stale `live`
+/// one. A strict perf run also requires that the model kept up.
+fn assert_model_honest(client: &mut Client, id: &str, output: &Output) {
+    let (header, ansi) = client.snapshot(id);
+    let invalidated = output.model_invalid
+        || client.backlog.iter().any(|frame| {
+            matches!(&frame.payload,
+            Some(Payload::PtyLifecycleNotice(n)) if n.pty_id == id && n.kind == "model_invalid")
+        });
+    eprintln!(
+        "{id}: model {} fidelity {} through {} (invalidated: {invalidated})",
+        header.model_state, header.fidelity, header.through_sequence
+    );
+    if header.model_state == "live" {
+        assert_eq!(
+            header.through_sequence, output.last_sequence,
+            "model is current"
+        );
+        let last = output.bytes.rsplit(|b| *b == b'\n').nth(1).unwrap();
+        assert!(
+            ansi.windows(last.len()).any(|window| window == last),
+            "a live screen shows the final line"
+        );
+    }
+    if invalidated {
+        assert!(
+            header.model_state != "live" || header.fidelity == "partial",
+            "an invalidated model is not reported as fully live"
+        );
+    } else {
+        assert_eq!(
+            header.model_state, "live",
+            "no notice, so the model saw every byte"
+        );
+        assert_eq!(header.fidelity, "full");
+    }
+    if perf::strict() {
+        assert!(!invalidated, "the screen model kept up with the flood");
+    }
 }
 
 #[test]
@@ -187,15 +238,9 @@ fn a_flood_arrives_complete_in_order_and_fast_for_unmanaged_and_managed_ptys() {
             original.len()
         );
         if managed {
-            let (header, _) = client.snapshot(id);
-            assert_eq!(
-                header.model_state, "live",
-                "the screen model saw every byte"
-            );
-            assert!(!client.backlog.iter().any(|frame| matches!(&frame.payload,
-                Some(Payload::PtyLifecycleNotice(n)) if n.kind == "model_invalid")));
+            assert_model_honest(&mut client, id, &output);
         }
-        if !cfg!(debug_assertions) {
+        if perf::strict() {
             assert!(rate >= 20.0, "{id} reached only {rate:.1} MB/s");
         }
     }
@@ -275,57 +320,61 @@ fn a_stalled_connection_does_not_hold_back_another_one_or_other_ptys() {
         &["-c", &script],
     )));
     while !matches!(stalled.next(), Payload::PtyCreateResponse(_)) {}
-    // A second connection attaches to the same PTY and keeps reading; it also owns an echo PTY.
+    // A second connection owns an echo PTY; its idle echo latency is the same-run baseline.
     let mut reader = Client::connect(&host, "reader");
-    reader.send(Payload::PtyAttachRequest(v1::PtyAttachRequest {
-        request_id: "attach".to_owned(),
-        pty_id: "shared".to_owned(),
-        after_sequence: 0,
-    }));
     assert!(
         reader
             .create(create_request("echo", "/bin/cat", &[]))
             .accepted
     );
+    let (mut sequence, mut shared_bytes) = (0u64, 0usize);
+    let mut baseline: Vec<Duration> = (0..100)
+        .map(|_| echo(&mut reader, &mut sequence, &mut shared_bytes))
+        .collect();
+    // It then attaches to the shared PTY and keeps reading it.
+    reader.send(Payload::PtyAttachRequest(v1::PtyAttachRequest {
+        request_id: "attach".to_owned(),
+        pty_id: "shared".to_owned(),
+        after_sequence: 0,
+    }));
     let started = Instant::now();
-    let (mut shared_bytes, mut samples, mut sequence) = (0usize, Vec::new(), 0u64);
+    let mut samples = Vec::new();
     while started.elapsed() < Duration::from_secs(12) {
-        sequence += 1;
-        let sent = Instant::now();
-        reader.send(Payload::PtyInput(v1::PtyInput {
-            request_id: format!("input-{sequence}"),
-            pty_id: "echo".to_owned(),
-            sequence,
-            bytes: b"x".to_vec(),
-        }));
-        loop {
-            let frame = reader
-                .recv(Duration::from_secs(10))
-                .expect("frames keep flowing");
-            match frame.payload {
-                Some(Payload::PtyOutput(output)) if output.pty_id == "shared" => {
-                    shared_bytes += output.bytes.len();
-                }
-                Some(Payload::PtyOutput(output)) if output.pty_id == "echo" => {
-                    samples.push(sent.elapsed());
-                    break;
-                }
-                _ => {}
-            }
-        }
-        std::thread::sleep(Duration::from_millis(20));
+        samples.push(echo(&mut reader, &mut sequence, &mut shared_bytes));
     }
-    samples.sort();
-    let p99 = samples[(samples.len() * 99 / 100).min(samples.len() - 1)];
     eprintln!(
-        "reader got {shared_bytes} bytes of the shared PTY while the other connection stalled; \
-         echo p99 {p99:?} over {} samples",
-        samples.len()
+        "reader got {shared_bytes} bytes of the shared PTY while the other connection stalled"
     );
     assert!(
         shared_bytes > 8 * 1024 * 1024,
         "the stalled connection held the PTY back"
     );
-    assert!(p99 < Duration::from_millis(5), "echo p99 {p99:?}");
+    perf::assert_echo_latency(&mut baseline, &mut samples);
     let _ = std::fs::remove_dir_all(root);
+}
+
+/// One echo round trip on the reader's `echo` PTY, counting shared-PTY bytes on the way.
+fn echo(reader: &mut Client, sequence: &mut u64, shared_bytes: &mut usize) -> Duration {
+    *sequence += 1;
+    let sent = Instant::now();
+    reader.send(Payload::PtyInput(v1::PtyInput {
+        request_id: format!("input-{sequence}"),
+        pty_id: "echo".to_owned(),
+        sequence: *sequence,
+        bytes: b"x".to_vec(),
+    }));
+    let elapsed = loop {
+        let frame = reader
+            .recv(Duration::from_secs(10))
+            .expect("frames keep flowing");
+        match frame.payload {
+            Some(Payload::PtyOutput(output)) if output.pty_id == "shared" => {
+                *shared_bytes += output.bytes.len();
+            }
+            Some(Payload::PtyOutput(output)) if output.pty_id == "echo" => break sent.elapsed(),
+            _ => {}
+        }
+    };
+    std::thread::sleep(Duration::from_millis(20));
+    elapsed
 }
