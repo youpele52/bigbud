@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { DEFAULT_BROWSER_TAB_LIMIT } from "@bigbud/contracts/constants/browser.constant.ts";
+import { ClientSettingsSchema, DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { removeLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import { CLIENT_SETTINGS_STORAGE_KEY } from "~/hooks/useSettings.storage";
 
 import {
   closeBrowserTab,
   closeBrowserPanel,
+  confirmBrowserClose,
   openBrowserPanel,
   openNewBrowserTab,
   toggleBrowserPanel,
@@ -13,12 +18,27 @@ import { useFilesPanelStore } from "../files/filesPanel.store";
 import { getRequestedRightPanel, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import {
   countRightPanelTabsByKind,
-  MAX_RIGHT_PANEL_BROWSER_TABS,
   useRightPanelTabsStore,
 } from "../rightPanel/rightPanelTabs.store";
 
+function setTabLimit(browserTabLimit: number) {
+  setLocalStorageItem(
+    CLIENT_SETTINGS_STORAGE_KEY,
+    { ...DEFAULT_CLIENT_SETTINGS, browserTabLimit },
+    ClientSettingsSchema,
+  );
+}
+
+function openTabs(count: number) {
+  for (let index = 0; index < count; index++) {
+    openNewBrowserTab({ url: `https://example.com/${index}` });
+  }
+  return useRightPanelTabsStore.getState().browserCreationOrder;
+}
+
 describe("browserPanel.actions", () => {
   afterEach(() => {
+    removeLocalStorageItem(CLIENT_SETTINGS_STORAGE_KEY);
     useBrowserPanelStore.setState({ open: false, tabsById: {} });
     useBrowserCloseConfirmationStore.getState().dismiss();
     useFilesPanelStore.setState({ open: false });
@@ -26,6 +46,8 @@ describe("browserPanel.actions", () => {
       activeKind: null,
       activeTabId: null,
       openTabs: [],
+      browserCreationOrder: [],
+      browserDraftTabId: null,
       rightPanelOpen: false,
     });
     requestRightPanel(null);
@@ -132,7 +154,10 @@ describe("browserPanel.actions", () => {
 
     expect(useRightPanelTabsStore.getState().openTabs).toContain(tabId);
     expect(useBrowserPanelStore.getState().tabsById[tabId]?.agentLease).toBeDefined();
-    expect(useBrowserCloseConfirmationStore.getState().tabIds).toEqual([tabId]);
+    expect(useBrowserCloseConfirmationStore.getState().current).toEqual({
+      kind: "close",
+      tabIds: [tabId],
+    });
   });
 
   it("opens a new browser tab without mutating the current browser tab", () => {
@@ -150,15 +175,193 @@ describe("browserPanel.actions", () => {
     expect(activeTabId ? tabsById[activeTabId]?.url : null).toBe("https://bigbud.dev");
   });
 
-  it("caps browser tabs at five", () => {
-    for (let index = 0; index < MAX_RIGHT_PANEL_BROWSER_TABS; index += 1) {
-      openNewBrowserTab({ url: `https://example.com/${index}` });
-    }
+  it("focuses the matching tab at capacity without changing opening order or closing a tab", () => {
+    const ids = openTabs(DEFAULT_BROWSER_TAB_LIMIT);
+    const matchingTabId = ids[1]!;
+    const url = "https://example.com/";
+    const browser = useBrowserPanelStore.getState();
+    browser.setTabUrl(matchingTabId, url);
+    useRightPanelTabsStore.getState().closeRightPanel();
+    browser.setOpen(false);
+
+    openNewBrowserTab({ url: " https://EXAMPLE.com:443 " });
+
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      openTabs: ids,
+      browserCreationOrder: ids,
+      activeTabId: matchingTabId,
+      rightPanelOpen: true,
+    });
+    expect(useBrowserPanelStore.getState()).toMatchObject({
+      open: true,
+      tabsById: { [matchingTabId]: { url } },
+    });
+    expect(useBrowserCloseConfirmationStore.getState().current).toBeNull();
+  });
+
+  it("keeps different query strings, fragments, and blank tabs separate", () => {
+    openNewBrowserTab({ url: "https://example.com/?q=1#top" });
+    openNewBrowserTab({ url: "https://example.com/?q=2#top" });
+    openNewBrowserTab({ url: "https://example.com/?q=1#bottom" });
+    openNewBrowserTab();
+    openNewBrowserTab();
+
+    expect(useRightPanelTabsStore.getState().openTabs).toHaveLength(5);
+  });
+
+  it("focuses an existing URL instead of navigating the active tab when opening a link", () => {
+    const [matchingTabId, activeTabId] = openTabs(2);
+    openBrowserPanel({ url: "https://example.com/0" });
+
+    expect(useRightPanelTabsStore.getState().activeTabId).toBe(matchingTabId);
+    expect(useBrowserPanelStore.getState().tabsById[activeTabId!]?.url).toBe(
+      "https://example.com/1",
+    );
+  });
+
+  it("opens unmatched links without navigating an agent-controlled page", () => {
+    const [leasedTabId] = openTabs(1);
+    const browser = useBrowserPanelStore.getState();
+    browser.setAgentLease(leasedTabId!, { leaseId: "lease", threadId: "thread", turnId: "turn" });
+
+    openBrowserPanel({ url: "https://example.com/new" });
+
+    const { openTabs: tabs, activeTabId } = useRightPanelTabsStore.getState();
+    expect(tabs).toEqual([leasedTabId, activeTabId]);
+    expect(useBrowserPanelStore.getState().tabsById[leasedTabId!]?.url).toBe(
+      "https://example.com/0",
+    );
+    expect(useBrowserPanelStore.getState().tabsById[activeTabId!]?.url).toBe(
+      "https://example.com/new",
+    );
+  });
+
+  it("reuses a matching tab that appears while overflow confirmation is open", async () => {
+    const ids = openTabs(DEFAULT_BROWSER_TAB_LIMIT);
+    const [oldest, matchingTabId] = ids;
+    const browser = useBrowserPanelStore.getState();
+    browser.setAgentLease(oldest!, { leaseId: "lease", threadId: "thread", turnId: "turn" });
+    const url = "https://example.com/new";
+    openNewBrowserTab({ url });
+    const request = useBrowserCloseConfirmationStore.getState().current!;
+    expect(request.tabIds).toEqual([oldest]);
+    browser.setTabUrl(matchingTabId!, url);
+
+    const revokeLease = vi.fn();
+    await confirmBrowserClose(request, new Set(["lease"]), revokeLease);
+
+    expect(revokeLease).not.toHaveBeenCalled();
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeTabId: matchingTabId,
+      openTabs: ids,
+    });
+    expect(useBrowserCloseConfirmationStore.getState().current).toBeNull();
+  });
+
+  it("replaces the oldest of five tabs regardless of dragging and activation", () => {
+    const [oldest, second, ...rest] = openTabs(DEFAULT_BROWSER_TAB_LIMIT);
+    useRightPanelTabsStore.getState().moveTab(oldest!, rest.at(-1)!, "after");
+    useRightPanelTabsStore.getState().setActiveTab(oldest!);
 
     openNewBrowserTab({ url: "https://example.com/overflow" });
 
-    expect(countRightPanelTabsByKind(useRightPanelTabsStore.getState().openTabs, "browser")).toBe(
-      MAX_RIGHT_PANEL_BROWSER_TABS,
+    const { openTabs: visibleTabs, activeTabId } = useRightPanelTabsStore.getState();
+    expect(visibleTabs).toEqual([second, ...rest, activeTabId]);
+    expect(useBrowserPanelStore.getState().tabsById[oldest!]).toBeUndefined();
+    expect(useBrowserPanelStore.getState().tabsById[activeTabId!]?.url).toBe(
+      "https://example.com/overflow",
     );
+  });
+
+  it("honors a higher cap and waits for the next new tab to enforce a lower cap", () => {
+    setTabLimit(6);
+    const ids = openTabs(6);
+    expect(ids).toHaveLength(6);
+    setTabLimit(3);
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+
+    openNewBrowserTab({ url: "https://example.com/new" });
+
+    const { openTabs: visibleTabs, activeTabId } = useRightPanelTabsStore.getState();
+    expect(visibleTabs).toEqual([...ids.slice(4), activeTabId]);
+    expect(useBrowserCloseConfirmationStore.getState().current).toBeNull();
+  });
+
+  it("does not close any tab when an unknown-order multi-tab replacement is canceled", async () => {
+    const ids = openTabs(5);
+    useRightPanelTabsStore.setState({ browserCreationOrder: ids.slice(1) });
+    setTabLimit(3);
+
+    openNewBrowserTab({ url: "https://example.com/overflow" });
+    const confirmation = useBrowserCloseConfirmationStore.getState();
+    expect(confirmation.current).toMatchObject({
+      kind: "overflow",
+      unknownOrder: true,
+      tabIds: ids.slice(0, 3),
+    });
+    confirmation.dismiss();
+    const revokeLease = vi.fn();
+    await confirmBrowserClose(confirmation.current!, new Set(), revokeLease);
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+    expect(revokeLease).not.toHaveBeenCalled();
+  });
+
+  it("rechecks capacity before closing tabs the user has not approved", async () => {
+    const ids = openTabs(5);
+    useRightPanelTabsStore.setState({ browserCreationOrder: ids.slice(2) });
+    openNewBrowserTab({ url: "https://example.com/new" });
+    const request = useBrowserCloseConfirmationStore.getState().current!;
+    expect(request.tabIds).toEqual(ids.slice(0, 1));
+    setTabLimit(3);
+
+    await confirmBrowserClose(request, new Set(), vi.fn());
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+    expect(useBrowserCloseConfirmationStore.getState().current?.tabIds).toEqual(ids.slice(0, 3));
+  });
+
+  it("waits for successful lease revocation before closing the oldest tab and continuing", async () => {
+    const [oldest, ...rest] = openTabs(5);
+    useBrowserPanelStore.getState().setAgentLease(oldest!, {
+      leaseId: "lease:1",
+      threadId: "thread:1",
+      turnId: "turn:1",
+    });
+    openNewBrowserTab({ url: "https://example.com/overflow" });
+    const request = useBrowserCloseConfirmationStore.getState().current!;
+    expect(request).toMatchObject({ kind: "overflow", tabIds: [oldest] });
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual([oldest, ...rest]);
+    const revokeLease = vi.fn().mockRejectedValueOnce(new Error("revocation rejected"));
+    await expect(confirmBrowserClose(request, new Set(["lease:1"]), revokeLease)).rejects.toThrow(
+      "revocation rejected",
+    );
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual([oldest, ...rest]);
+    expect(useBrowserPanelStore.getState().tabsById[oldest!]?.agentLease?.leaseId).toBe("lease:1");
+
+    await confirmBrowserClose(request, new Set(["lease:1"]), revokeLease);
+    expect(revokeLease).toHaveBeenLastCalledWith({ tabId: oldest, leaseId: "lease:1" });
+    const { openTabs: visibleTabs, activeTabId } = useRightPanelTabsStore.getState();
+    expect(visibleTabs).toEqual([...rest, activeTabId]);
+    expect(useBrowserPanelStore.getState().tabsById[activeTabId!]?.url).toBe(
+      "https://example.com/overflow",
+    );
+  });
+
+  it("does not clear a replacement lease acquired while the old lease is revoking", async () => {
+    const ids = openTabs(5);
+    const browser = useBrowserPanelStore.getState();
+    browser.setAgentLease(ids[0]!, { leaseId: "lease:old", threadId: "thread", turnId: "turn" });
+    openNewBrowserTab({ url: "https://example.com/new" });
+    const request = useBrowserCloseConfirmationStore.getState().current!;
+
+    const revokeLease = vi.fn().mockImplementation(async () => {
+      browser.setAgentLease(ids[0]!, { leaseId: "lease:new", threadId: "thread", turnId: "turn" });
+    });
+    await confirmBrowserClose(request, new Set(["lease:old"]), revokeLease);
+
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(ids);
+    expect(useBrowserPanelStore.getState().tabsById[ids[0]!]?.agentLease?.leaseId).toBe(
+      "lease:new",
+    );
+    expect(useBrowserCloseConfirmationStore.getState().current).toBe(request);
   });
 });

@@ -3,11 +3,11 @@ import type { BrowserAction, BrowserResult, VisibleBrowserCommand } from "@bigbu
 
 import { getWsRpcClient } from "~/rpc/wsRpcClient";
 import type { WsRpcClient } from "~/rpc/wsRpcClient.types";
+import { getBrowserTabLimit } from "~/hooks/useSettings.storage";
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
 import { closeBrowserTabsAfterRevocation } from "~/stores/browser/browserPanel.actions";
 import {
-  isRightPanelTabOfKind,
-  MAX_RIGHT_PANEL_BROWSER_TABS,
+  selectOpenBrowserTabs,
   type RightPanelTabId,
   useRightPanelTabsStore,
 } from "~/stores/rightPanel/rightPanelTabs.store";
@@ -46,43 +46,45 @@ export function clearVisibleBrowserRendererLease(leaseId: string): void {
 
 type ResolvedBrowserTab = { readonly tabId: string } | { readonly limitResult: BrowserResult };
 
-function browserTabLimitResult(action: BrowserAction["action"]): BrowserResult {
+function browserTabLimitResult(action: BrowserAction["action"], limit: number): BrowserResult {
   const tabsById = useBrowserPanelStore.getState().tabsById;
-  const tabs = useRightPanelTabsStore
-    .getState()
-    .openTabs.filter((tabId) => isRightPanelTabOfKind(tabId, "browser"))
-    .map((tabId) => {
-      const tab = tabsById[tabId];
-      return {
-        tabId,
-        title: tab?.title ?? "",
-        url: tab?.url ?? "",
-        openedByAgent: tab?.openedByAgent === true,
-      };
-    });
+  const tabs = selectOpenBrowserTabs(useRightPanelTabsStore.getState()).map((tabId) => {
+    const tab = tabsById[tabId];
+    return {
+      tabId,
+      title: tab?.title ?? "",
+      url: tab?.url ?? "",
+      openedByAgent: tab?.openedByAgent === true,
+    };
+  });
   return {
     action,
-    summary: `Browser tab limit reached (${MAX_RIGHT_PANEL_BROWSER_TABS}). Ask the user which tab to close before opening another.`,
+    summary: `Browser tab limit reached (${limit}). Ask the user which tab to close before opening another.`,
     target: "visible",
     selectionReason: "tab_limit_reached",
-    tabLimit: { limit: MAX_RIGHT_PANEL_BROWSER_TABS, tabs },
+    tabLimit: { limit, tabs },
   };
 }
 
 async function resolveTab(command: VisibleBrowserCommand): Promise<ResolvedBrowserTab> {
+  const state = useRightPanelTabsStore.getState();
+  const limit = getBrowserTabLimit();
   if (command.action.tabId) {
+    if (command.action.tabId === state.browserDraftTabId) {
+      return { limitResult: browserTabLimitResult(command.action.action, limit) };
+    }
     return { tabId: command.action.tabId };
   }
-  const opened = useRightPanelTabsStore.getState().openBrowserTab();
+  const opened = state.openBrowserTab(limit);
   if (!opened.tabId || opened.status === "limit_reached") {
-    return { limitResult: browserTabLimitResult(command.action.action) };
+    return { limitResult: browserTabLimitResult(command.action.action, limit) };
   }
   useBrowserPanelStore.getState().ensureTab(opened.tabId);
   useBrowserPanelStore.getState().markTabOpenedByAgent(opened.tabId);
   return { tabId: opened.tabId };
 }
 
-async function executeCommand(command: VisibleBrowserCommand) {
+export async function executeVisibleBrowserCommand(command: VisibleBrowserCommand) {
   const resolvedTab = await resolveTab(command);
   if ("limitResult" in resolvedTab) return resolvedTab.limitResult;
   const { tabId } = resolvedTab;
@@ -186,7 +188,7 @@ export function BrowserAgentControlBridge() {
         void executeAndCompleteVisibleBrowserCommand({
           command,
           rendererId,
-          execute: executeCommand,
+          execute: executeVisibleBrowserCommand,
           complete: client.browser.completeCommand,
           reconcile: reconcileBrowserLeases,
         });

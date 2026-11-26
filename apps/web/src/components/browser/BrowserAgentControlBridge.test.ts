@@ -1,11 +1,16 @@
 import { ThreadId, TurnId, type VisibleBrowserCommand } from "@bigbud/contracts";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ClientSettingsSchema, DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { removeLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import { CLIENT_SETTINGS_STORAGE_KEY } from "~/hooks/useSettings.storage";
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
+import { openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import {
   clearVisibleBrowserRendererLease,
   executeAndCompleteVisibleBrowserCommand,
+  executeVisibleBrowserCommand,
   reconcileBrowserLeases,
 } from "./BrowserAgentControlBridge";
 
@@ -16,9 +21,54 @@ describe("BrowserAgentControlBridge", () => {
       activeKind: null,
       activeTabId: null,
       openTabs: [],
+      browserCreationOrder: [],
       rightPanelOpen: false,
       lastActiveKind: null,
     });
+  });
+
+  afterEach(() => {
+    removeLocalStorageItem(CLIENT_SETTINGS_STORAGE_KEY);
+  });
+
+  it("returns the configured cap and asks the user without evicting any tabs", async () => {
+    setLocalStorageItem(
+      CLIENT_SETTINGS_STORAGE_KEY,
+      { ...DEFAULT_CLIENT_SETTINGS, browserTabLimit: 3 },
+      ClientSettingsSchema,
+    );
+    for (let index = 0; index < 3; index++) {
+      openNewBrowserTab({ url: `https://example.com/${index}` });
+    }
+    const { openTabs } = useRightPanelTabsStore.getState();
+    useBrowserPanelStore.getState().markTabOpenedByAgent(openTabs[0]!);
+
+    const result = await executeVisibleBrowserCommand({
+      commandId: "command:limit",
+      leaseId: "lease:limit",
+      rendererId: "renderer:1",
+      threadId: ThreadId.makeUnsafe("thread:1"),
+      turnId: TurnId.makeUnsafe("turn:1"),
+      action: { action: "capture", target: "visible" },
+    });
+
+    expect(result).toEqual({
+      action: "capture",
+      summary:
+        "Browser tab limit reached (3). Ask the user which tab to close before opening another.",
+      target: "visible",
+      selectionReason: "tab_limit_reached",
+      tabLimit: {
+        limit: 3,
+        tabs: openTabs.map((tabId, index) => ({
+          tabId,
+          title: "",
+          url: `https://example.com/${index}`,
+          openedByAgent: index === 0,
+        })),
+      },
+    });
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual(openTabs);
   });
 
   it("revokes reload-orphaned leases while preserving leases for existing tabs", async () => {

@@ -49,6 +49,16 @@ describe("Settings search dropdown", () => {
     await expect.element(input).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("finds the browser tab limit under General settings", async () => {
+    await render(<SettingsSearchFixture />);
+    await page.getByRole("searchbox", { name: "Search settings" }).fill("maximum browser tabs");
+    await page.getByRole("button", { name: "Maximum browser tabs Browser", exact: true }).click();
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+      to: "/settings/general",
+      replace: true,
+    });
+  });
+
   it("hides results on outside clicks without clearing the query, then reopens on focus", async () => {
     await render(<SettingsSearchFixture />);
     const input = page.getByRole("searchbox", { name: "Search settings" });

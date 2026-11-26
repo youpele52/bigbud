@@ -1,7 +1,10 @@
 import { Effect } from "effect";
 import {
   BROWSER_SEARCH_ENGINES,
+  BROWSER_TAB_LIMIT_MAX,
+  BROWSER_TAB_LIMIT_MIN,
   DEFAULT_BROWSER_SEARCH_ENGINE,
+  DEFAULT_BROWSER_TAB_LIMIT,
 } from "../constants/browser.constant";
 import { TerminalInteractionSettingsFields } from "./settings.terminal";
 import { DEFAULT_TERMINAL_SHELL_SETTINGS, TerminalShellSettings } from "./settings.terminalShell";
@@ -112,6 +115,10 @@ export const ClientSettingsSchema = Schema.Struct({
   browserSearchEngine: Schema.Literals(BROWSER_SEARCH_ENGINES).pipe(
     Schema.withDecodingDefault(() => DEFAULT_BROWSER_SEARCH_ENGINE),
   ),
+  browserTabLimit: Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(BROWSER_TAB_LIMIT_MIN),
+    Schema.isLessThanOrEqualTo(BROWSER_TAB_LIMIT_MAX),
+  ).pipe(Schema.withDecodingDefault(() => DEFAULT_BROWSER_TAB_LIMIT)),
   openWebLinksInApp: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),

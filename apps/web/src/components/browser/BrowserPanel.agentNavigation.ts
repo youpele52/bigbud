@@ -1,17 +1,9 @@
 import type { RefObject } from "react";
 import type { BrowserResult } from "@bigbud/contracts";
 
+import { matchesBrowserUrl } from "~/lib/browserUrl";
 import { executeBrowserTabActionWhenReady } from "./browserAgentControl";
 import type { BrowserViewportRef } from "./BrowserPanel.viewport";
-
-function matchesNavigationUrl(actual: string | undefined, expected: string): boolean {
-  if (!actual) return false;
-  try {
-    return new URL(actual).toString() === new URL(expected).toString();
-  } catch {
-    return actual === expected;
-  }
-}
 
 export async function waitForVisibleBrowserNavigation(input: {
   readonly url: string;
@@ -25,6 +17,6 @@ export async function waitForVisibleBrowserNavigation(input: {
       }
       return viewport.executeAgentAction({ action: "get_page_info" });
     },
-    (result) => matchesNavigationUrl(result.page?.url, input.url),
+    (result) => matchesBrowserUrl(result.page?.url, input.url),
   );
 }

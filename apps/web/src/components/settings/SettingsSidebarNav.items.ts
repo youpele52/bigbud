@@ -57,6 +57,7 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Automatically delete old threads", section: "Threads", to: "/settings/general" },
   { label: "Delete eligible threads now", section: "Threads", to: "/settings/general" },
   { label: "Default search engine", section: "Browser", to: "/settings/general" },
+  { label: "Maximum browser tabs", section: "Browser", to: "/settings/general" },
   { label: "Terminal", section: "Terminal", to: "/settings/terminal" },
   { label: "Terminal font", section: "Terminal", to: "/settings/terminal" },
   { label: "Terminal font size", section: "Terminal", to: "/settings/terminal" },

@@ -1,57 +1,62 @@
 import { toastManager } from "~/components/ui/toast";
+import { getBrowserTabLimit } from "~/hooks/useSettings.storage";
 import { requestRightPanel } from "../rightPanel/rightPanel.coordinator";
-import {
-  countRightPanelTabsByKind,
-  MAX_RIGHT_PANEL_BROWSER_TABS,
-  useRightPanelTabsStore,
-} from "../rightPanel/rightPanelTabs.store";
+import { selectOpenBrowserTabs, useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useBrowserPanelStore } from "./browser.store";
-import { closeBrowserTab } from "./browserPanel.actions";
+import {
+  type BrowserClosePlan,
+  useBrowserCloseConfirmationStore,
+} from "./browserCloseConfirmation.store";
+import { closeBrowserTabsAfterRevocation } from "./browserPanel.actions";
+import {
+  getBrowserTabName,
+  isBrowserTabLeased,
+  planBrowserTabReplacements,
+} from "./browserTabCapacity";
 
 let launching = false;
-let pending: { name: string; url: string; onOpened: () => void } | null = null;
-
-/** Opens only a fresh tab; never overwrites or revokes an agent-controlled tab. */
-export function openGameBrowserTab(input: {
+interface GameLaunch {
   name: string;
   url: string;
   onOpened: () => void;
-}): boolean {
+}
+let pending: GameLaunch | null = null;
+
+/** Opens only a fresh tab; never overwrites or revokes an agent-controlled tab. */
+export function openGameBrowserTab(input: GameLaunch): boolean {
+  return launchGameBrowserTab(input);
+}
+
+function launchGameBrowserTab(input: GameLaunch, approved?: BrowserClosePlan): boolean {
   if (launching) return false;
   launching = true;
   try {
-    const tabs = useRightPanelTabsStore.getState();
     const browser = useBrowserPanelStore.getState();
-    let evictedName: string | null = null;
-    if (countRightPanelTabsByKind(tabs.openTabs, "browser") >= MAX_RIGHT_PANEL_BROWSER_TABS) {
-      const oldest = tabs.browserCreationOrder.find((id) => tabs.openTabs.includes(id));
-      if (!oldest || browser.tabsById[oldest]?.agentLease) {
-        pending = input;
-        toastManager.add({
-          type: "warning",
-          title: `Maximum of ${MAX_RIGHT_PANEL_BROWSER_TABS} browser tabs`,
-          description: oldest
-            ? "The oldest tab is agent-controlled. Close a browser tab manually, then retry."
-            : "Close a browser tab manually, then retry.",
-          actionProps: { children: "Retry", onClick: () => retryPendingGame() },
-        });
-        return false;
-      }
-      evictedName =
-        browser.tabsById[oldest]?.title || browser.tabsById[oldest]?.url || "the oldest tab";
-      closeBrowserTab(oldest);
-      if (useRightPanelTabsStore.getState().openTabs.includes(oldest)) {
-        pending = input;
-        toastManager.add({
-          type: "warning",
-          title: "Could not close the oldest tab",
-          description: "Close a browser tab manually, then retry.",
-          actionProps: { children: "Retry", onClick: () => retryPendingGame() },
-        });
-        return false;
-      }
+    const limit = approved?.limit ?? getBrowserTabLimit();
+    const { tabIds, unknownOrder } = approved
+      ? { tabIds: approved.tabIds, unknownOrder: false }
+      : planBrowserTabReplacements(limit, "game");
+    if (tabIds.some(isBrowserTabLeased)) {
+      offerGameLeaseRetry(input, limit);
+      return false;
     }
-    const result = useRightPanelTabsStore.getState().openBrowserTab();
+    if (unknownOrder) {
+      useBrowserCloseConfirmationStore.getState().request({
+        kind: "overflow",
+        tabIds,
+        unknownOrder,
+        continuation: {
+          kind: "game",
+          resume: (plan) => launchGameBrowserTab(input, plan),
+          onLeaseConflict: (limit) => offerGameLeaseRetry(input, limit),
+        },
+      });
+      return false;
+    }
+
+    const evictedNames = tabIds.map((id) => getBrowserTabName(browser.tabsById[id]));
+    closeBrowserTabsAfterRevocation(tabIds);
+    const result = useRightPanelTabsStore.getState().openBrowserTab(limit);
     if (result.status !== "created" || !result.tabId) {
       pending = input;
       toastManager.add({
@@ -67,10 +72,10 @@ export function openGameBrowserTab(input: {
     requestRightPanel("browser");
     useBrowserPanelStore.getState().setOpen(true);
     pending = null;
-    if (evictedName)
+    if (evictedNames.length > 0)
       toastManager.add({
         type: "info",
-        title: `Closed ${evictedName} to make room for ${input.name}`,
+        title: `Closed ${evictedNames.join(", ")} to make room for ${input.name}`,
       });
     input.onOpened();
     return true;
@@ -88,6 +93,29 @@ export function openGameBrowserTab(input: {
   }
 }
 
+function offerGameLeaseRetry(input: GameLaunch, limit: number): void {
+  pending = input;
+  toastManager.add({
+    type: "warning",
+    title: `Maximum of ${limit} browser tabs`,
+    description:
+      "A tab that needs replacing is agent-controlled. Close browser tabs manually, then retry.",
+    actionProps: { children: "Retry", onClick: () => retryPendingGame() },
+  });
+}
+
 function retryPendingGame(): void {
-  if (pending) openGameBrowserTab(pending);
+  if (!pending) return;
+  const limit = getBrowserTabLimit();
+  const needed = selectOpenBrowserTabs(useRightPanelTabsStore.getState()).length - limit + 1;
+  if (needed <= 0) {
+    launchGameBrowserTab(pending, { limit, tabIds: [] });
+    return;
+  }
+  toastManager.add({
+    type: "warning",
+    title: `Maximum of ${limit} browser tabs`,
+    description: `Close ${needed} browser ${needed === 1 ? "tab" : "tabs"} manually, then retry.`,
+    actionProps: { children: "Retry", onClick: () => retryPendingGame() },
+  });
 }
