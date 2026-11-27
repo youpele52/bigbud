@@ -58,7 +58,8 @@ describe("ordinary custom-binary profile composition", () => {
     expect(f.observe).toHaveBeenCalledWith(
       "ssh:target",
       { root: "/remote/account" },
-      undefined,
+      // W7: the SSH owner is always on, so the binding is observed through an owner proxy.
+      expect.any(Function),
       undefined,
       "/opt/custom/agent",
     );

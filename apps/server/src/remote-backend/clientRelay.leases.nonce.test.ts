@@ -79,7 +79,7 @@ it("cancel by known request nonce fences both a delayed lookup and an open arriv
     isCallerActive: async () => true,
     openProfile: async (profile, ownedSignal) => {
       opens++;
-      return openRemoteBackendRelayProfileOwner(profile, [], ownedSignal);
+      return openRemoteBackendRelayProfileOwner(profile, [], ownedSignal, f.sshOwner);
     },
   });
   cleanup.push(leases.dispose);
@@ -116,7 +116,7 @@ it.skipIf(process.platform !== "linux")(
       },
       isCallerActive: async () => true,
       openProfile: async (profile, signal) => {
-        const owner = await openRemoteBackendRelayProfileOwner(profile, [], signal);
+        const owner = await openRemoteBackendRelayProfileOwner(profile, [], signal, f.sshOwner);
         produced(owner);
         await held;
         return owner;
@@ -158,7 +158,7 @@ it.skipIf(process.platform !== "linux")(
       },
       isCallerActive: async (caller) => f.active.has(caller),
       openProfile: (profile, ownedSignal) =>
-        openRemoteBackendRelayProfileOwner(profile, [], ownedSignal),
+        openRemoteBackendRelayProfileOwner(profile, [], ownedSignal, f.sshOwner),
     });
     cleanup.push(leases.dispose);
     const first = randomUUID(),
@@ -207,7 +207,8 @@ it("a stale active-client read cannot enter profile lookup after authoritative d
       }
       return false;
     },
-    openProfile: (profile, signal) => openRemoteBackendRelayProfileOwner(profile, [], signal),
+    openProfile: (profile, signal) =>
+      openRemoteBackendRelayProfileOwner(profile, [], signal, f.sshOwner),
   });
   cleanup.push(leases.dispose);
   const opening = leases.open(

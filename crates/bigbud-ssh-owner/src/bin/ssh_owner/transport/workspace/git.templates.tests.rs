@@ -71,6 +71,17 @@ fn repo(fixture: &Fixture) -> std::path::PathBuf {
     root
 }
 
+/// Commits need an identity. Linux runners have no GECOS name, so give the fixture HOME one.
+fn home_with_identity(fixture: &Fixture) -> std::path::PathBuf {
+    let home = fixture.0.clone();
+    fs::write(
+        home.join(".gitconfig"),
+        "[user]\n\tname = Fixture User\n\temail = fixture@example.invalid\n",
+    )
+    .unwrap();
+    home
+}
+
 fn stdout(result: Result<ProofWorkspaceGitResult, ErrorCode>) -> String {
     let result = result.unwrap();
     assert_eq!(result.code, Some(0), "{result:?}");
@@ -235,7 +246,7 @@ fn operands_are_typed_per_slot() {
 fn stash_new_branches_force_delete_init_and_remote_add() {
     let fixture = Fixture::new();
     let root = repo(&fixture);
-    let home = fixture.0.clone();
+    let home = home_with_identity(&fixture);
     fs::write(root.join("a.txt"), "changed\n").unwrap();
     stdout(run(&root, &home, A::StashPushMessage, &["wip"]));
     assert!(stdout(run(&root, &home, A::StashList, &[])).contains("wip"));
@@ -278,7 +289,7 @@ fn stash_new_branches_force_delete_init_and_remote_add() {
 fn commands_run_inside_a_linked_worktree() {
     let fixture = Fixture::new();
     let root = repo(&fixture);
-    let home = fixture.0.clone();
+    let home = home_with_identity(&fixture);
     let linked = fixture.0.join("project-linked");
     let linked_str = linked.to_str().unwrap();
     stdout(run(

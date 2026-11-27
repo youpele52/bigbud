@@ -6,8 +6,12 @@ import {
   ownerKey,
   pane,
   prepared,
-  request,
+  request as requestFor,
 } from "./DirectShellLaunch.dispatch.test.helpers";
+
+// Direct SSH profiles launch only through the Rust owner PTY and are refused in preflight;
+// WSL is the dispatcher's remaining direct transport, so its fences are exercised on WSL.
+const request = (wsl = true) => requestFor(wsl);
 
 it("reserves one winner across concurrent controllers before granting one transport call", async () => {
   const f = fixture();

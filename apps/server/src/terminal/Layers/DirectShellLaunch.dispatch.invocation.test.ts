@@ -4,50 +4,12 @@ import {
   fixture,
   ownerKey,
   pane,
-  request,
+  request as requestFor,
 } from "./DirectShellLaunch.dispatch.test.helpers";
 
-it("dispatches exact stored SSH account, port, cwd, executable and argv with honest metadata", async () => {
-  const f = fixture();
-  const input = request();
-  const result = await f.controller()(input);
-  const plan = f.transport.mock.calls[0]![0];
-  expect(plan.transport).toBe("ssh");
-  expect(plan.launch).toEqual(f.entries.get(ownerKey)!.intent.launch);
-  expect(plan.invocation.command).toBe("ssh");
-  expect(plan.invocation.args.slice(0, -1)).toEqual([
-    "-tt",
-    "-o",
-    "BatchMode=yes",
-    "-p",
-    "2222",
-    "--",
-    "tester@example.test",
-  ]);
-  const command = plan.invocation.args.at(-1)!;
-  expect(command).toMatch(/^'\/bin\/sh' '-c' /);
-  expect(command).toContain('test "$(/usr/bin/id -un)" = "$1" || exit 79');
-  expect(command).toContain('shift; cd "$1" 2>/dev/null || exit 77; shift; exec "$@"');
-  expect(
-    command.endsWith(
-      "'sh' 'tester' '/srv/project with '\\''quotes'\\''' '/usr/bin/zsh' '-o' 'nopromptsp' 'argument with '\\''quotes'\\''' ''",
-    ),
-  ).toBe(true);
-  expect(result).toMatchObject({
-    action: "dispatched",
-    owner: { state: "may-have-been-sent", intent: input.intent },
-    shellUnconfirmedLaunch: {
-      status: "unconfirmed",
-      requestedProfile: input.intent.launch.requestedProfile,
-    },
-  });
-  for (const value of [result, plan]) {
-    expect(value).not.toHaveProperty("shellLaunchIdentity");
-    expect(value).not.toHaveProperty("actualIdentity");
-    expect(value).not.toHaveProperty("launchStatus", "confirmed");
-  }
-  expect(plan.launch).not.toHaveProperty("identity");
-});
+// Direct SSH profiles launch only through the Rust owner PTY and are refused in preflight;
+// WSL is the dispatcher's remaining direct transport, so its fences are exercised on WSL.
+const request = (wsl = true) => requestFor(wsl);
 
 it("dispatches pinned WSL distribution/account/UID with exact stored argv and cwd", async () => {
   const f = fixture();

@@ -124,7 +124,7 @@ describe("CursorAdapter startSession orchestration wiring", () => {
     }),
   );
 
-  it.effect("keeps Direct SSH on SSH even when the agent PTY resolver is available", () =>
+  it.effect("keeps Direct SSH on the SSH owner even when the agent PTY resolver is available", () =>
     Effect.gen(function* () {
       capturedAcpInputs.length = 0;
       const threadId = ThreadId.makeUnsafe("thread-cursor-direct-ssh");
@@ -135,7 +135,7 @@ describe("CursorAdapter startSession orchestration wiring", () => {
         sessions,
       });
 
-      yield* makeStartSessionEffect(
+      const exit = yield* makeStartSessionEffect(
         {
           ...deps,
           notificationScope,
@@ -157,14 +157,14 @@ describe("CursorAdapter startSession orchestration wiring", () => {
           providerRuntimeExecutionTargetId: "local",
           workspaceExecutionTargetId: "ssh:host=devbox&transport=direct-ssh",
         },
-      ).pipe(Effect.scoped);
+      ).pipe(Effect.scoped, Effect.exit);
 
-      const acpInput = capturedAcpInputs.at(-1);
-      assert.notStrictEqual(acpInput?.cwd, "/srv/cursor-project");
-      assert.strictEqual(acpInput?.cwd, acpInput?.spawnCwd);
-      yield* Effect.promise(
-        () => sessions.get(threadId)?.orchestrationBridgeCleanup?.() ?? Promise.resolve(),
-      );
+      // W7: Direct SSH workspaces bind only through the Rust SSH owner. Without an owner the
+      // start is refused before any ACP runtime is created; it never falls back to the agent PTY.
+      assert.isTrue(Exit.isFailure(exit));
+      assert.include(String(Exit.isFailure(exit) ? exit.cause : ""), "ownerUnavailable");
+      assert.strictEqual(capturedAcpInputs.length, 0);
+      assert.strictEqual(sessions.has(threadId), false);
       yield* Effect.ignore(Scope.close(notificationScope, Exit.void));
     }),
   );

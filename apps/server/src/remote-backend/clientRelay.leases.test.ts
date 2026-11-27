@@ -110,7 +110,7 @@ it("disconnect during private profile lookup prevents late listener creation", a
     isCallerActive: async () => active,
     openProfile: async (profile, signal) => {
       opens++;
-      return openRemoteBackendRelayProfileOwner(profile, [], signal);
+      return openRemoteBackendRelayProfileOwner(profile, [], signal, f.sshOwner);
     },
   });
   cleanup.push(leases.dispose);

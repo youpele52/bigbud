@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import path from "node:path";
 
 import { GitCommandError } from "@bigbud/contracts";
@@ -20,22 +21,38 @@ export function makeTempDir(
   });
 }
 
+/**
+ * Runs fixture-setup git directly. Fixture arrangement (pushes to local bare remotes, fetches)
+ * is not product traffic, so it does not go through GitCore and its initiating transport fence.
+ */
 export function runGit(
   cwd: string,
   args: readonly string[],
   allowNonZeroExit = false,
 ): Effect.Effect<
   { readonly code: number; readonly stdout: string; readonly stderr: string },
-  GitCommandError,
-  GitCore
+  GitCommandError
 > {
-  return Effect.gen(function* () {
-    const gitCore = yield* GitCore;
-    return yield* gitCore.execute({
-      operation: "GitManager.test.runGit",
-      cwd,
-      args,
-      allowNonZeroExit,
+  return Effect.callback<
+    { readonly code: number; readonly stdout: string; readonly stderr: string },
+    GitCommandError
+  >((resume) => {
+    execFile("git", [...args], { cwd, encoding: "utf8" }, (error, stdout, stderr) => {
+      const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
+      if (code !== 0 && !allowNonZeroExit) {
+        resume(
+          Effect.fail(
+            new GitCommandError({
+              operation: "GitManager.test.runGit",
+              command: `git ${args.join(" ")}`,
+              cwd,
+              detail: stderr.trim() || error?.message || `git exited with code ${code}`,
+            }),
+          ),
+        );
+        return;
+      }
+      resume(Effect.succeed({ code, stdout, stderr }));
     });
   });
 }
