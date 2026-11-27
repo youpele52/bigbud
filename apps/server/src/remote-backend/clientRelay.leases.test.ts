@@ -196,7 +196,7 @@ it.skipIf(process.platform !== "linux")(
             config: { mode: "desktop", authToken: "local-control-fixture" },
           });
           const scope = yield* Effect.scope;
-          const route = yield* makeRemoteBackendRelayRoute("route", scope).pipe(
+          const route = yield* makeRemoteBackendRelayRoute("route", scope, f.sshOwner).pipe(
             Effect.provideService(ServerConfig, config),
             Effect.provideService(RemoteBackendRelayProfiles, {
               list: async () => ({ availability: "available", profiles: [f.profile.profile] }),
