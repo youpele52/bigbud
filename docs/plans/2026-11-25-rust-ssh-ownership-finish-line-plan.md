@@ -356,7 +356,17 @@ Five bugs were found and fixed in B, each with tests:
 
 **Defects (a)–(c) fixed (27 November 2026, uncommitted).** (a) A new production verb `owner_shutdown` (Request 194, Reply 108 `OwnerShutdownReport`; `v1.owner_shutdown.proto`) is the drain's owner step: the owner closes every master and lease with confirmed teardown, clears its retirement intent and the attach record, removes its socket and exits (10 s hard-exit watchdog), and the drain response reports `owner: {masters, leases}`. Attach now verifies the owner's artifact identity (path plus bytes); another install path or build is refused typed (ErrorCode 82 `ownerArtifactMismatch`) and retires, and the backend starts its own owner. (b) The owner adopts the current generation for a reattached backend's first use of a known target, so a reattach no longer fails every operation with `staleGeneration`, and production messages no longer say "development". (c) W7 made the U25 installed-agent startup wait unconditional; its 60 s owner poll was detached and uncancellable and kept a drained backend alive. It is now scoped to its layer, abortable and unref'd, and `backendDrain.processExit.test.ts` passes. Live: the release owner closed a real master to the Debian guest's disposable sshd on drain and exited. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-defects-a-c-owner-shutdown-verb-27-november-2026-uncommitted).
 
-**Still open:** B is not release-trusted (ad hoc, version `0.1.613`). No `cutover/` lineage traces or conforming checker inputs exist. The A-side live relay, terminal and monitor upgrade, the Electron GUI smoke and the Linux AppImage cells were not run, and the Windows cells are open. S4 is **not accepted**. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-pre-cutover-qualification-local-pass-27-november-2026-uncommitted).
+**W6 rerun with A′ (27 November 2026, no code change).** These ran on a local B build of `b3f0114c53`:
+
+- The pre-A→A′→B→A′→B same-DB lifecycle passed. Every B drain reported `owner: {masters, leases}`, the owner and backend exited by themselves, and A′'s marker stayed byte-identical. Both newer-schema refusals held.
+- A′ (x64 AppImage, in a disposable amd64 OrbStack machine) drained a live legacy SSH PTY through its now-reachable UI consent: Cancel blocks, Drain proceeds. Packaged Mac B then booted `open` on that DB and refused to resurrect the drained pane.
+- The packaged B drain with a live owner master reported `masters: 1`. kqueue-verified exits ran ssh → guard → owner → backend, and the next start spawned a fresh owner.
+- A second install path retired the surviving owner and replaced it.
+- A lossless tracefs lineage capture recorded A′'s positive legacy control.
+
+See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-rerun-with-build-a-and-the-owner-shutdown-verb-27-november-2026).
+
+**Still open:** B is not release-trusted (ad hoc, version `0.1.613`). There is no B Linux artifact (the desktop Linux build cannot be produced on macOS), so there is no B `cutover/` trace and no reviewer-frozen manifest. There is no conforming `rollback/`, `forward/` or `cutover/` input. The live relay and monitor upgrade, the Electron GUI smoke and the Linux AppImage B cells were not run, and the Windows cells are open. S4 is **not accepted**. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-pre-cutover-qualification-local-pass-27-november-2026-uncommitted).
 
 ### W7 — S4 activation (one change set; needs W2, W3 and W6)
 
