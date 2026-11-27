@@ -342,6 +342,12 @@ pub(super) fn run(mut args: impl Iterator<Item = OsString>) -> RunResult<()> {
     owner.supervised_terminal = false;
     let result = owner.serve_primary_session(&mut pipe);
     drop(pipe);
+    if owner.shutdown_requested {
+        // `owner_shutdown` on the launch pipe: dropping the attachment removes
+        // its socket; never wait for another backend.
+        drop(attachment);
+        return result;
+    }
     match attachment {
         Some(attachment) => {
             drop(result);

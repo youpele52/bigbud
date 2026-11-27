@@ -45,7 +45,13 @@ export type Frame =
       ownerEpoch: Uint8Array;
       generation: Uint8Array;
     }
-  | { kind: "attachChallenge"; serverNonce: Uint8Array; proof: Uint8Array }
+  | {
+      kind: "attachChallenge";
+      serverNonce: Uint8Array;
+      proof: Uint8Array;
+      /** The owner's artifact identity; empty from an owner that predates it. */
+      ownerIdentity: Uint8Array;
+    }
   | {
       kind: "storageTransition";
       requestId: Uint8Array;
@@ -166,14 +172,26 @@ const readFrame = (field: number, bytes: Uint8Array): Frame => {
     case 12: {
       let serverNonce: Uint8Array | undefined;
       let proof: Uint8Array | undefined;
+      let ownerIdentity: Uint8Array | undefined;
       decodeMessage(bytes, (number, wire, reader) => {
         if (number === 1 && serverNonce === undefined) serverNonce = bytesValue(wire, reader);
         else if (number === 2 && proof === undefined) proof = bytesValue(wire, reader);
+        else if (number === 3 && ownerIdentity === undefined)
+          ownerIdentity = bytesValue(wire, reader);
         else return invalid();
       });
-      if (serverNonce?.length !== PROOF_TOKEN_BYTES || proof?.length !== PROOF_TOKEN_BYTES)
+      if (
+        serverNonce?.length !== PROOF_TOKEN_BYTES ||
+        proof?.length !== PROOF_TOKEN_BYTES ||
+        (ownerIdentity !== undefined && ownerIdentity.length !== PROOF_TOKEN_BYTES)
+      )
         return invalid();
-      return { kind: "attachChallenge", serverNonce, proof };
+      return {
+        kind: "attachChallenge",
+        serverNonce,
+        proof,
+        ownerIdentity: ownerIdentity ?? new Uint8Array(),
+      };
     }
     default:
       return invalid();

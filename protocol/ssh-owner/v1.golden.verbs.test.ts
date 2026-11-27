@@ -126,6 +126,8 @@ test("W7 promoted every frozen proof_* operation to its production name", () => 
       { name: "credential_unlock_open", field: 191 },
       { name: "credential_unlock_commit", field: 192 },
       { name: "credential_lock", field: 193 },
+      // Drain-time owner shutdown (v1.owner_shutdown.proto).
+      { name: "owner_shutdown", field: 194 },
     ],
   );
 

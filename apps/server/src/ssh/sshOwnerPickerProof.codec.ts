@@ -37,6 +37,11 @@ import {
   type CredentialOperation,
 } from "./sshOwnerPickerProof.codec.credential.ts";
 import {
+  isOwnerShutdownOperation,
+  writeOwnerShutdown,
+  type OwnerShutdownOperation,
+} from "./sshOwnerPickerProof.codec.ownerShutdown.ts";
+import {
   writeProviderLease,
   type ProviderLeaseOperation,
 } from "./sshOwnerPickerProof.codec.providerLease.ts";
@@ -156,6 +161,7 @@ export type PickerProofOperation =
   | GitLeaseOperation
   | ProviderLeaseOperation
   | CredentialOperation
+  | OwnerShutdownOperation
   | ShellLeaseOperation
   | BackendLeaseOperation
   | { readonly kind: "unlockSyntheticPosixPassword" }
@@ -173,7 +179,8 @@ export interface PickerProofRequest {
   readonly operation: PickerProofOperation;
 }
 
-function writeHello(writer: WireWriter, profileBinding: Uint8Array, major: number) {
+/** Hello fields 1–3; shared with the attachment handshake encoder. */
+export function writeHelloFields(writer: WireWriter, profileBinding: Uint8Array, major: number) {
   writer.fieldUint(1, major);
   writer.fieldUint(2, OWNER_MINOR);
   writer.fieldBytes(3, profileBinding);
@@ -181,19 +188,8 @@ function writeHello(writer: WireWriter, profileBinding: Uint8Array, major: numbe
 
 export const encodeHello = (profileBinding: Uint8Array, major: number, capability?: Uint8Array) =>
   message(1, (writer) => {
-    writeHello(writer, profileBinding, major);
+    writeHelloFields(writer, profileBinding, major);
     if (capability !== undefined) writer.fieldBytes(4, capability);
-  });
-
-export const encodeAttachProbe = (clientNonce: Uint8Array) =>
-  message(11, (writer) => writer.fieldBytes(1, clientNonce));
-
-export const encodeAttachHello = (profileBinding: Uint8Array, major: number, proof: Uint8Array) =>
-  message(13, (writer) => {
-    const hello = new WireWriter();
-    writeHello(hello, profileBinding, major);
-    writer.fieldRepeatedMessage(1, hello.finish());
-    writer.fieldBytes(2, proof);
   });
 
 export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =>
@@ -393,8 +389,9 @@ export const encodeRequest = (request: PickerProofRequest, grant?: Uint8Array) =
       case "proofInspectPeerHostKey":
         writeProofPeerEnrollment(writer, operands, operation);
         break;
-      default: // W2 T-backend leases (100-105); in-app credentials (190-193).
+      default: // T-backend leases (100-105); credentials (190-193); owner shutdown (194).
         if (isCredentialOperation(operation)) writeCredential(writer, operation);
+        else if (isOwnerShutdownOperation(operation)) writeOwnerShutdown(writer);
         else writeBackendLease(writer, operation);
     }
   });

@@ -46,6 +46,9 @@ pub(crate) struct Owner {
     #[cfg(target_os = "linux")]
     pub(super) jump_picker: Option<crate::transport::jump_binding::JumpPicker>,
     pub(crate) supervised_terminal: bool,
+    /// Set once `owner_shutdown` tore everything down: the serving loops end and
+    /// the process exits instead of waiting for another attachment.
+    pub(crate) shutdown_requested: bool,
     pub(super) agent_fixture: Option<AgentProxyFixture>,
     /// Owner-selected installed agent for a production per-target proxy.
     #[cfg(any(target_os = "macos", target_os = "linux"))]

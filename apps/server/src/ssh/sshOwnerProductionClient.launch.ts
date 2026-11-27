@@ -232,6 +232,7 @@ export async function spawnSshOwnerProduction(
 export async function attachSshOwnerProduction(
   input: Omit<PickerProofSessionOptions, "major"> & {
     readonly descriptor: SshOwnerAttachmentDescriptor;
+    readonly expectedArtifactIdentity?: Uint8Array;
   },
 ): Promise<PickerProofOwner> {
   return attachPickerProofOwner({
@@ -241,6 +242,9 @@ export async function attachSshOwnerProduction(
     ...(input.profileScope === undefined ? {} : { profileScope: input.profileScope }),
     socketPath: input.descriptor.socketPath,
     capability: input.descriptor.capability,
+    ...(input.expectedArtifactIdentity === undefined
+      ? {}
+      : { expectedArtifactIdentity: input.expectedArtifactIdentity }),
   });
 }
 

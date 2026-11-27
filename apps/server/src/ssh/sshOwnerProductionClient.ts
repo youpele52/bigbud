@@ -4,7 +4,6 @@ import type { DevOpencodeV2ServiceRefusal } from "./sshOwnerDevRuntime.providerS
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { PickerProofOwner } from "./sshOwnerPickerProof.client.session.types.ts";
-import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.ts";
 import type { SshOwnerArtifact } from "./sshOwnerProductionArtifact.ts";
 import { sshOwnerProfileSurvivesLauncher } from "./sshOwnerProfileLifetime.ts";
 import type { SshOwnerProductionOwner } from "./sshOwnerProductionBoot.ts";
@@ -18,16 +17,21 @@ import {
   newSshOwnerAttachCapability,
   readSshOwnerAttachmentDescriptor,
   writeSshOwnerAttachmentDescriptor,
-  type SshOwnerAttachmentDescriptor,
 } from "./sshOwnerProductionClient.attachment.ts";
 import {
-  attachSshOwnerProduction,
   classifyStartupError,
   resolveSshOwnerLaunchFacts,
   spawnSshOwnerProduction,
   type SshOwnerLaunchFacts,
 } from "./sshOwnerProductionClient.launch.ts";
 import { negotiateSshOwnerV1, SSH_OWNER_PROTOCOL } from "./sshOwnerProductionClient.negotiate.ts";
+import { tryAttachSshOwnerProduction as tryAttach } from "./sshOwnerProductionClient.reattach.ts";
+import {
+  measureSshOwnerArtifactIdentity,
+  waitForSshOwnerSocketGone,
+} from "./sshOwnerProductionClient.identity.ts";
+import { shutdownSshOwnerForDrain } from "./sshOwnerProductionClient.shutdown.ts";
+import type { OwnerShutdownReport } from "./sshOwnerPickerProof.codec.ownerShutdown.ts";
 import type { SshOwnerHydrationSnapshot } from "./sshOwnerProductionHydration.ts";
 
 /**
@@ -61,6 +65,8 @@ export interface SshOwnerProductionHandle extends SshOwnerProductionOwner {
   readonly peer: PickerProofOwner["peerProduction"];
   /** Detach, or reap a non-surviving profile. Idempotent. */
   shutdown(): Effect.Effect<void>;
+  /** Upgrade drain: the owner closes every master and lease, then exits (never re-attached). */
+  shutdownForDrain(): Promise<OwnerShutdownReport>;
   onDeath(listener: () => void): () => void;
 }
 
@@ -71,6 +77,8 @@ export interface StartSshOwnerProductionInput {
   readonly deadlineMs?: number;
   readonly advertisedCapabilities?: ReadonlyArray<string>;
   readonly requiredCapabilities?: ReadonlyArray<string>;
+  /** Bound on waiting for a refused owner from another artifact to exit. */
+  readonly ownerExitWaitMs?: number;
 }
 
 const clientError = (failure: SshOwnerClientError["failure"], message: string, cause?: unknown) =>
@@ -154,6 +162,19 @@ function makeHandle(input: {
       return () => listeners.delete(listener);
     },
     shutdown: () => shutdown,
+    async shutdownForDrain() {
+      state = "detached";
+      unsubscribe();
+      try {
+        return await shutdownSshOwnerForDrain({
+          owner: input.owner,
+          socketPath: input.facts.socketPath,
+          attachFile: input.facts.attachFile,
+        });
+      } finally {
+        await input.releaseGate();
+      }
+    },
     abortHydration: () => abortHydration,
     hydrate: (snapshot: SshOwnerHydrationSnapshot) =>
       Effect.try({
@@ -195,47 +216,6 @@ function negotiate(
   });
 }
 
-async function tryAttach(
-  input: StartSshOwnerProductionInput,
-  descriptor: SshOwnerAttachmentDescriptor,
-): Promise<PickerProofOwner | undefined> {
-  try {
-    return await attachSshOwnerProduction({
-      profileBinding: input.facts.profileBinding,
-      profileScope: input.facts.stateDirectory,
-      ...(input.facts.target === undefined ? {} : { targetId: input.facts.target.targetId }),
-      sql: input.sql,
-      descriptor,
-    });
-  } catch (cause) {
-    const code = cause instanceof PickerProofOwnerError ? cause.code : "";
-    // No listener: the descriptor is stale. Only then may this backend spawn.
-    if (code === "ownerUnavailable") return undefined;
-    if (code === "profileMismatch") {
-      throw clientError(
-        "profile-mismatch",
-        "The live SSH owner reported a different profile binding; refusing the attachment.",
-        cause,
-      );
-    }
-    if (code === "operationDenied") {
-      throw clientError(
-        "attachment-refused",
-        "A live SSH owner refused this profile's attachment capability; refusing to spawn a second owner.",
-        cause,
-      );
-    }
-    if (code === "invalidOperands") {
-      throw clientError(
-        "attachment-invalid",
-        "The SSH owner attachment endpoint failed its private-path checks.",
-        cause,
-      );
-    }
-    throw classifyStartupError(cause);
-  }
-}
-
 /**
  * Attaches to the live, verified owner for this profile, or spawns exactly one.
  */
@@ -254,10 +234,24 @@ export const startOrAttachSshOwnerProduction = Effect.fn("startOrAttachSshOwnerP
         );
       }
       const attached = yield* Effect.tryPromise({
-        try: () => tryAttach(input, descriptor),
+        try: async () =>
+          tryAttach(input, descriptor, await measureSshOwnerArtifactIdentity(input.artifact.path)),
         catch: (cause) => fromPickerProofError(cause),
       });
-      if (attached) {
+      // A refused owner from another artifact must be gone before this backend spawns
+      // its own; one that does not exit is a typed refusal, never a second owner.
+      if (
+        attached === "artifact-mismatch" &&
+        !(yield* Effect.promise(() =>
+          waitForSshOwnerSocketGone(facts.socketPath, input.ownerExitWaitMs),
+        ))
+      ) {
+        return yield* clientError(
+          "artifact-mismatch",
+          "A live SSH owner from another bigbud installation refused this backend and did not exit. Quit the other bigbud and retry.",
+        );
+      }
+      if (attached && attached !== "artifact-mismatch") {
         negotiate(attached, input);
         requireMultiTarget(attached);
         return makeHandle({

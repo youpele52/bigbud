@@ -81,7 +81,6 @@ impl PosixMasterSlot {
         }
     }
 
-    #[cfg(test)]
     pub(in super::super) fn has_live_master(&self) -> bool {
         self.master.is_some()
     }

@@ -245,6 +245,7 @@ fn production_verb(operation: &Operation) -> bool {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let peer = false;
     peer || agent
+        || matches!(operation, Operation::OwnerShutdown(_))
         || credential
         || opencode
         || git_upload

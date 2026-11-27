@@ -16,6 +16,7 @@ import "v1.remote_backend.proto";
 import "v1.agent_control.proto";
 import "v1.system_status.proto";
 import "v1.credential.proto";
+import "v1.owner_shutdown.proto";
 
 // Private local owner proof; no caller-supplied SSH argv, env, auth flags or forwarding.
 //
@@ -359,6 +360,8 @@ message Request {
     CredentialUnlockOpen credential_unlock_open = 191;
     CredentialUnlockCommit credential_unlock_commit = 192;
     CredentialLock credential_lock = 193;
+    // Drain-time owner shutdown (see v1.owner_shutdown.proto). Owner-wide.
+    OwnerShutdown owner_shutdown = 194;
   }
 }
 
@@ -568,6 +571,8 @@ message Reply {
     // In-app credential entry (v1.credential.proto).
     CredentialState credential_state = 106;
     CredentialUnlockLease credential_unlock_lease = 107;
+    // Drain-time owner shutdown report (v1.owner_shutdown.proto).
+    OwnerShutdownReport owner_shutdown = 108;
   }
 }
 
@@ -669,6 +674,9 @@ enum ErrorCode {
   // Three rejected attempts for this target generation. Connect or Disconnect
   // rotates the generation before another attempt.
   ERROR_CODE_CREDENTIAL_ATTEMPTS_EXHAUSTED = 81;
+  // An authenticated attach named another owner artifact identity (install path
+  // or executable bytes). The owner refused the session and shuts down.
+  ERROR_CODE_OWNER_ARTIFACT_MISMATCH = 82;
 }
 
 message Trust {
@@ -870,11 +878,16 @@ message ProofReconcileSnapshot {
 // of the inherited capability; neither nonce nor a profile ID grants access.
 message ProofAttachProbe {
   bytes client_nonce = 1;
+  // 32-byte artifact identity the backend would launch (v1.owner_shutdown.proto);
+  // empty in fixtures, which skip the check.
+  bytes expected_artifact_identity = 2;
 }
 
 message ProofAttachChallenge {
   bytes server_nonce = 1;
   bytes proof = 2;
+  // The owner's own 32-byte artifact identity, measured at startup.
+  bytes owner_artifact_identity = 3;
 }
 
 message ProofAttachHello {

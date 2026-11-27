@@ -217,5 +217,8 @@ mod dns_tests;
 #[path = "targets.lanes.tests.rs"]
 mod lane_tests;
 #[cfg(test)]
+#[path = "targets.reattach.tests.rs"]
+mod reattach_tests;
+#[cfg(test)]
 #[path = "targets.tests.rs"]
 mod tests;

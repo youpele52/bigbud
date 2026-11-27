@@ -20,7 +20,9 @@ export interface SshOwnerProductionRegistration {
     // The owner binary, for durable native terminal rows (W2 T-term); fakes may omit it.
     Partial<Pick<SshOwnerProductionHandle, "artifactPath">> &
     // U24 owner-wide peer enrollment and relay; fakes may omit it.
-    Partial<Pick<SshOwnerProductionHandle, "peer">>;
+    Partial<Pick<SshOwnerProductionHandle, "peer">> &
+    // The drain's owner shutdown (cutover §d1); fakes may omit it.
+    Partial<Pick<SshOwnerProductionHandle, "shutdownForDrain">>;
   /**
    * Exact descriptor for a runtime target (`resolveProductionTargetDescriptor`
    * in production). Rejects with a typed `SshOwnerTargetRefusal` when the

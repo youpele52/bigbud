@@ -91,6 +91,10 @@ export interface PickerProofOwner
   readonly acknowledgedSnapshot?: import("./sshOwnerProductionHydration.ts").SshOwnerHydrationSnapshot;
   /** U24 owner-wide peer enrollment and relay (production owner only). */
   readonly peerProduction: PickerProofPeerProductionClient;
+  /** Drain-time owner shutdown: every master and lease closed, then the owner exits. */
+  readonly shutdownOwner?: () => Promise<
+    import("./sshOwnerPickerProof.codec.ownerShutdown.ts").OwnerShutdownReport
+  >;
   /** Fires once when the inherited channel is lost unexpectedly (not on detach). */
   onLost(listener: () => void): () => void;
   /** Binds one target for per-target requests (W3.7). */

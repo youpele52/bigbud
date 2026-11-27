@@ -124,6 +124,10 @@ pub(crate) struct Leases {
 }
 
 impl Leases {
+    pub(crate) fn len(&self) -> usize {
+        self.entries.len()
+    }
+
     /// Confirmed teardown of every lease: all are cancelled first, then
     /// awaited under one shared deadline. Any unconfirmed lease stays and the
     /// target reports `OutcomeUnknown`.

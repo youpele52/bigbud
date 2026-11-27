@@ -109,4 +109,22 @@ describe("U25 production normal startup (local owner store binding)", () => {
     expect(results.size).toBe(0);
     expect(installedRemoteAgentStartupRefusal(target)).toBeNull();
   });
+
+  it("stops waiting for an unregistered owner as soon as the boot scope aborts", async () => {
+    // Regression (W6 defect c): the 60 s owner wait kept a drained backend process alive.
+    const controller = new AbortController();
+    const observe = vi.fn();
+    const startedAt = Date.now();
+    const pending = run({
+      selection: { owner: () => undefined },
+      observe,
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(), 20);
+    const results = await pending;
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    expect(results.size).toBe(0);
+    expect(observe).not.toHaveBeenCalled();
+    expect(installedRemoteAgentStartupRefusal(target)).toBeNull();
+  });
 });

@@ -219,6 +219,8 @@ impl Owner {
             | Operation::AgentProxyLeaseOpen(_)
             | Operation::AgentProxyLeaseStatus(_)
             | Operation::AgentProxyLeaseClose(_) => Ok(Err(ErrorCode::OperationDenied)),
+            // Drain-time owner shutdown (owner/shutdown.rs), production only.
+            Operation::OwnerShutdown(_) => Ok(self.shutdown_for_drain()),
             // In-app password and key passphrase (owner/credential.rs).
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             operation @ (Operation::InspectCredential(_)

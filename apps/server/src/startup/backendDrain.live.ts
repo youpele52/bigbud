@@ -11,6 +11,7 @@ import {
 import { TerminalManager } from "../terminal/Services/Manager.ts";
 import { OwnershipShutdown } from "./ownershipShutdown.ts";
 import { armBackendDrainExit } from "./backendDrain.exit.ts";
+import { closeSshOwnerForDrain } from "./backendDrain.owner.ts";
 import { registerBackendDrainHandler, type BackendDrainHandler } from "./backendDrain.handler.ts";
 import { requestBackendDrainConsent, type BackendDrainDecision } from "./backendDrain.consent.ts";
 import {
@@ -53,8 +54,9 @@ export interface LiveBackendDrainDeps {
   readonly stopMonitors: Effect.Effect<unknown, Error>;
   readonly stopRelays: Effect.Effect<unknown, Error>;
   readonly stopProviders: Effect.Effect<unknown, Error>;
+  /** The SSH owner's masters (and leases, when reported) closed before the lock release. */
   readonly closeOwnedMasters: Effect.Effect<
-    { readonly closed: number; readonly failed: number },
+    { readonly closed: number; readonly failed: number; readonly leases?: number },
     Error
   >;
   readonly commit: (input: {
@@ -99,6 +101,7 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
     if (running) return { v: 1, ok: true, status: "busy" };
     running = true;
     const stops: BackendDrainStopReport[] = [];
+    let owner: { masters: number; leases: number } | undefined;
     const reported = (stop: Effect.Effect<unknown, Error>) =>
       stop.pipe(
         Effect.tap((result) => Effect.sync(() => isStopReport(result) && stops.push(result))),
@@ -136,7 +139,13 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
           listPanes: Effect.succeed(panes),
           consent: () => Effect.succeed({ kind: "proceed", choice }),
           closePane: deps.closePane,
-          closeOwnedMasters: deps.closeOwnedMasters,
+          closeOwnedMasters: deps.closeOwnedMasters.pipe(
+            Effect.tap((closed) =>
+              Effect.sync(() => {
+                owner = { masters: closed.closed, leases: closed.leases ?? 0 };
+              }),
+            ),
+          ),
           commit: deps.commit,
           releaseLock: deps.releaseLock,
           timeoutMs: 60_000,
@@ -145,7 +154,7 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
         throw asError(cause);
       });
       return outcome.kind === "drained"
-        ? { v: 1, ok: true, status: "drained", stops }
+        ? { v: 1, ok: true, status: "drained", stops, ...(owner ? { owner } : {}) }
         : { v: 1, ok: true, status: "cancelled" };
     } catch (cause) {
       return {
@@ -207,9 +216,8 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
       stopMonitors: runBackendDrainStopStep("monitors"),
       stopRelays: runBackendDrainStopStep("relays"),
       stopProviders: runBackendDrainStopStep("providers"),
-      // This backend owns no TypeScript SSH masters: the Rust owner holds every master and
-      // closes them on its own shutdown.
-      closeOwnedMasters: Effect.succeed({ closed: 0, failed: 0 }),
+      // The Rust owner holds every master and lease: it closes them all and exits.
+      closeOwnedMasters: closeSshOwnerForDrain(),
       commit: () => commitOwnerBuildDrain(sql),
       drainFollowers: () => {
         const coordinator = getPeerCoordinator();

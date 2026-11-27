@@ -92,6 +92,10 @@ impl Drop for Lease {
 pub(crate) struct Leases(Vec<Lease>);
 
 impl Leases {
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Confirmed teardown of every shell lease; the first failure is returned
     /// after all attempts and the unconfirmed leases are kept.
     pub(crate) fn revoke(&mut self) -> Result<(), ErrorCode> {

@@ -12,18 +12,18 @@ import {
 } from "./sshOwnerPickerProof.codec.wire.ts";
 
 const ownerMessages: Partial<Record<PickerProofOwnerErrorCode, string>> = {
-  ownerUnavailable: "The development SSH owner is no longer available.",
-  operationDenied: "The development SSH owner denied this operation.",
-  invalidOperands: "The development SSH owner rejected the supplied path or operation.",
+  ownerUnavailable: "The SSH owner is no longer available.",
+  operationDenied: "The SSH owner denied this operation.",
+  invalidOperands: "The SSH owner rejected the supplied path or operation.",
   configUnsupported:
     "The SSH settings for this alias are unsupported or changed. Review the alias configuration before retrying.",
   routeUnavailable:
     "The SSH route helper for this alias is missing, substituted or not qualified. Only a qualified nc connector is supported.",
   trustRequired: "SSH host trust is not yet established. Retry to check the host key.",
-  hostKeyChanged: "The SSH host key changed. The development SSH owner refused the connection.",
-  trustStoreReadOnly: "The development SSH owner's host trust store is read-only.",
+  hostKeyChanged: "The SSH host key changed. The SSH owner refused the connection.",
+  trustStoreReadOnly: "The SSH owner's host trust store is read-only.",
   authRequired:
-    "The SSH server did not accept the configured identity. Check the login and key for this alias. This development picker cannot prompt for credentials.",
+    "The SSH server did not accept the configured identity. Check the login and key for this alias.",
   keyboardInteractiveUnsupported:
     "This host only offers keyboard-interactive login, which is not supported. Use SSH key authentication.",
   ownerRetirementUnverified:
@@ -41,13 +41,14 @@ const ownerMessages: Partial<Record<PickerProofOwnerErrorCode, string>> = {
   listFailed: "Failed to list remote folders.",
   listTimedOut: "The remote folder listing timed out.",
   listPathUnavailable: "The remote folder is unavailable.",
-  listInvalidOutput: "The development SSH owner received an invalid remote folder listing.",
-  staleGeneration: "The development SSH owner's target changed. Retry the operation.",
-  storageUnavailable: "The development SSH owner's disconnect store is unavailable.",
-  outcomeUnknown:
-    "The development SSH owner could not confirm the operation's outcome. It was not retried.",
-  versionIncompatible: "The development SSH owner uses an incompatible protocol version.",
-  protocolError: "The development SSH owner returned an invalid response.",
+  listInvalidOutput: "The SSH owner received an invalid remote folder listing.",
+  staleGeneration: "The SSH owner's target changed. Retry the operation.",
+  ownerArtifactMismatch:
+    "The running SSH owner belongs to another bigbud installation or build and was not used. bigbud starts its own owner; if SSH stays unavailable, quit the other bigbud and retry.",
+  storageUnavailable: "The SSH owner's disconnect store is unavailable.",
+  outcomeUnknown: "The SSH owner could not confirm the operation's outcome. It was not retried.",
+  versionIncompatible: "The SSH owner uses an incompatible protocol version.",
+  protocolError: "The SSH owner returned an invalid response.",
 };
 
 /** Keep startup and subsequent owner failures distinct, without surfacing private startup operands. */
@@ -101,15 +102,14 @@ export function ownerFailure(error: unknown) {
   // The typed in-app credential prompt keeps its text and auth mode for the web.
   if (error instanceof SshTargetAuthRequiredError) return error;
   if (error instanceof PickerProofOwnerError) {
-    const message =
-      ownerMessages[error.code] ?? "The development SSH owner rejected this operation.";
+    const message = ownerMessages[error.code] ?? "The SSH owner rejected this operation.";
     return new SshOwnerDevPickerError(
       error.code,
       error.jumpFailure ? jumpFailureMessage(error.jumpFailure, error.code, message) : message,
       error,
     );
   }
-  return new SshOwnerDevPickerError("ownerFailure", "The development SSH owner operation failed.");
+  return new SshOwnerDevPickerError("ownerFailure", "The SSH owner operation failed.");
 }
 
 export function startupFailure(error: unknown) {
@@ -125,8 +125,8 @@ export function startupFailure(error: unknown) {
   return new SshOwnerDevPickerError(
     "startupFailed",
     cause === undefined
-      ? "The development SSH owner failed to start."
-      : `The development SSH owner failed to start (${cause.code}).`,
+      ? "The SSH owner failed to start."
+      : `The SSH owner failed to start (${cause.code}).`,
     cause,
   );
 }
@@ -161,7 +161,7 @@ export function folderLookupFailure(cause: unknown) {
     message:
       cause instanceof Error && cause.message.trim()
         ? cause.message
-        : "The development SSH picker operation failed.",
+        : "The SSH owner operation failed.",
     ...(code ? { code } : {}),
     cause,
   });

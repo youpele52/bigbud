@@ -115,6 +115,7 @@ describe("backend drain real stop phase", () => {
         { step: "relays", stopped: 2, owners: 1 },
         { step: "providers", stopped: 2, owners: 1 },
       ],
+      owner: { masters: 1, leases: 0 },
     });
     expect(events).toEqual([
       "monitors:1",

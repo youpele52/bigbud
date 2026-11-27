@@ -347,6 +347,11 @@ impl MasterPicker {
         Ok(())
     }
 
+    /// True while this picker holds a live control master.
+    pub(super) fn has_live_master(&self) -> bool {
+        self.slot.has_live_master()
+    }
+
     pub(super) fn rebind_generation(&mut self) -> Result<(), ErrorCode> {
         // A storage handoff rotates the request fence. Never adopt the old
         // transport into the new generation, or lift a pause without Connect.

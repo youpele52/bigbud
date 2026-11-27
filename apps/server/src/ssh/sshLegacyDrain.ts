@@ -78,9 +78,9 @@ export interface LegacyDrainInput {
   readonly savePane?: ((pane: LegacyDrainPane) => Effect.Effect<void, Error>) | undefined;
   /** Marks the pane closed and guarantees no respawn. */
   readonly closePane: (pane: LegacyDrainPane) => Effect.Effect<void, Error>;
-  /** `ssh -O exit` for A's own masters only; never discovered from ambient sockets. */
+  /** `ssh -O exit` for A's own masters only; B: the Rust owner's shutdown (with leases). */
   readonly closeOwnedMasters: Effect.Effect<
-    { readonly closed: number; readonly failed: number },
+    { readonly closed: number; readonly failed: number; readonly leases?: number },
     Error
   >;
   readonly commit: (input: {

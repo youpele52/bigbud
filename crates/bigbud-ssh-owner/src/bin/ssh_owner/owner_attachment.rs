@@ -2,6 +2,7 @@
 
 mod auth;
 mod deadline;
+mod identity;
 mod lifetime;
 mod socket;
 
@@ -28,17 +29,21 @@ pub(super) struct Attachment {
     listener: UnixListener,
     capability: Token,
     uid: libc::uid_t,
+    /// This owner's artifact identity, measured once at bind (startup).
+    identity: Token,
 }
 
 impl Attachment {
     pub(super) fn bind(path: &Path, capability: Token) -> io::Result<Self> {
         let uid = socket::effective_uid();
+        let identity = identity::measure_self()?;
         let (path, listener) = OwnedSocket::bind(path, uid)?;
         Ok(Self {
             _path: path,
             listener,
             capability,
             uid,
+            identity,
         })
     }
 
@@ -78,6 +83,10 @@ impl Attachment {
             // Neither peer failures nor ambiguous storage replies release the
             // owner fence. A new peer must authenticate and hydrate afresh.
             drop(self.session(&stream, owner, profile, lifetime));
+            if owner.shutdown_requested {
+                // Dropping `self` removes the attach socket; the caller exits.
+                return Ok(());
+            }
             owner.park();
         }
     }
@@ -96,7 +105,11 @@ impl Attachment {
             lifetime,
         };
         let mut pipe = Pipe::new(io(), io());
-        auth::authenticate(&mut pipe, &self.capability, profile)?;
+        if auth::authenticate(&mut pipe, &self.capability, profile, &self.identity)? {
+            // Another install path or build: refuse typed, then retire so the
+            // backend can start a fresh owner from its own artifact.
+            return owner.refuse_foreign_artifact(&mut pipe);
+        }
         deadline.set(Instant::now() + HYDRATE_LIMIT);
         owner.rebind(&mut pipe)?;
         owner.serve_session(&mut pipe, |waiting_for_request| {

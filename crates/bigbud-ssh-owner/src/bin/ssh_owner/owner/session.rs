@@ -26,6 +26,10 @@ impl Owner {
             };
             before_io(false)?;
             pipe.send(reply)?;
+            // A completed `owner_shutdown` ends this session and the owner.
+            if self.shutdown_requested {
+                return Ok(());
+            }
         }
     }
 
@@ -177,7 +181,10 @@ impl Owner {
 /// the alias list comes from the owner's own config scope.
 fn requires_target(operation: &Operation, production: bool) -> bool {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    if production && super::peer_store::owner_wide_verb(operation) {
+    if production
+        && (super::peer_store::owner_wide_verb(operation)
+            || matches!(operation, Operation::OwnerShutdown(_)))
+    {
         return false;
     }
     !production || !matches!(operation, Operation::ListAliases(_))

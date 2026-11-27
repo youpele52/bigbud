@@ -72,6 +72,7 @@ describe("live backend drain handler", () => {
       ok: true,
       status: "drained",
       stops: [],
+      owner: { masters: 1, leases: 0 },
     });
     expect(events).toEqual([
       "monitors",

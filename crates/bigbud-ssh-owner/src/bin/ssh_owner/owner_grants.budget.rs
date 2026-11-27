@@ -49,6 +49,7 @@ impl Class {
             | Operation::CredentialUnlockOpen(_)
             | Operation::CredentialUnlockCommit(_)
             | Operation::CredentialLock(_)
+            | Operation::OwnerShutdown(_)
             | Operation::ProofRunAcpCommand(_)
             | Operation::RunAcpCommand(_)
             | Operation::RunAcpShell(_) => Self::Interactive,

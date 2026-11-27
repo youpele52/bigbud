@@ -93,6 +93,7 @@ fn challenge_client_fixture() {
             &mut pipe,
             Payload::ProofAttachProbe(ProofAttachProbe {
                 client_nonce: client_nonce.to_vec(),
+                ..ProofAttachProbe::default()
             }),
         );
         let Payload::ProofAttachChallenge(challenge) = receive(&mut pipe) else {
@@ -143,6 +144,7 @@ fn challenge(pipe: &mut VerifiedPipe) -> Exchange {
         Payload::ProofAttachChallenge(ProofAttachChallenge {
             server_nonce: server_nonce.to_vec(),
             proof: proof(Role::Server, &client_nonce, &server_nonce).to_vec(),
+            ..ProofAttachChallenge::default()
         }),
     );
     let Payload::ProofAttachHello(response) = receive(pipe) else {

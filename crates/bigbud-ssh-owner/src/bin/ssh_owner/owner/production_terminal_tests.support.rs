@@ -24,7 +24,7 @@ const PIN: &str =
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n";
 
 pub(in crate::owner) struct Fixture {
-    pub(super) root: PathBuf,
+    pub(in crate::owner) root: PathBuf,
     identity: PathBuf,
     known_hosts: PathBuf,
     state: PathBuf,
@@ -110,7 +110,7 @@ impl Fixture {
         .0
     }
 
-    pub(super) fn descriptor(&self, target: &str, port: u16) -> TargetDescriptor {
+    pub(in crate::owner) fn descriptor(&self, target: &str, port: u16) -> TargetDescriptor {
         TargetDescriptor {
             target_id: target.into(),
             kind: TargetKind::Structured as i32,

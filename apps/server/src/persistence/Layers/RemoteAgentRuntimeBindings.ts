@@ -335,15 +335,18 @@ export const RemoteAgentRuntimeBindingsLive = Layer.effectDiscard(
       }
     }
     configureRemoteAgentOwners(store);
-    // U25 decision (a): under production activation, observe and compose each target's
-    // installed agent from its locally bound runtime and epoch. Boot never waits for a host.
+    // U25 decision (a): observe and compose each target's installed agent from its locally
+    // bound runtime and epoch. Boot never waits for a host. The background wait is scoped to
+    // this layer: shutdown (or a committed drain) interrupts it and aborts its owner poll, so
+    // it never outlives the backend.
     const selection = remoteAgentOwnerSelection();
-    if (selection)
-      yield* Effect.forkDetach(
-        Effect.promise(() =>
-          composeProductionInstalledStartups({ selection, owners: store }).catch(() => undefined),
+    yield* Effect.forkScoped(
+      Effect.promise((signal) =>
+        composeProductionInstalledStartups({ selection, owners: store, signal }).catch(
+          () => undefined,
         ),
-      );
+      ),
+    );
     yield* Effect.promise(() => store.pruneTerminal?.().then(() => undefined) ?? Promise.resolve());
     const maintenance = yield* makeRemoteAgentMaintenance;
     const targets = yield* sql<{

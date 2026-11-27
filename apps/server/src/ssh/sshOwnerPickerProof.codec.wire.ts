@@ -56,11 +56,12 @@ const wireErrorCodes = [
   "providerExecutableUnavailable",
 ] as const;
 /** Lane-allocated codes past the dense table (W2 T-term owns 55–58, U24 peer 59–62,
- * in-app credentials 79–82). */
+ * in-app credentials 79–81, owner artifact identity 82). */
 const sparseErrorCodes = {
   79: "credentialRequired",
   80: "credentialRejected",
   81: "credentialAttemptsExhausted",
+  82: "ownerArtifactMismatch",
   55: "terminalShellUnavailable",
   59: "peerKeyCorrupt",
   60: "peerPinUnknown",

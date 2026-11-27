@@ -26,6 +26,8 @@ mod opencode_vectors;
 mod operand_goldens;
 #[path = "support/operands.rs"]
 mod operands;
+#[path = "support/owner_shutdown_vectors.rs"]
+mod owner_shutdown_vectors;
 #[path = "support/peer_enrollment_vectors.rs"]
 mod peer_enrollment_vectors;
 #[path = "support/remote_backend_vectors.rs"]
@@ -177,6 +179,7 @@ fn s1_wire_goldens() {
     consumer_vectors::verify(&mut values);
     control_vectors::verify(&mut values);
     credential_vectors::verify(&mut values);
+    owner_shutdown_vectors::verify(&mut values);
     native_lease_vectors::verify(&mut values);
     peer_enrollment_vectors::verify(&mut values);
     shell_vectors::verify(&mut values);

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package bigbud.ssh_owner.v1;
+
+// Owner shutdown for an upgrade drain (Request 194, Reply 108, ErrorCode 82).
+//
+// `owner_shutdown` (194, owner-wide, no operands) is sent by the backend's drain
+// before it releases the backend lock. The owner, in order:
+//
+//   1. stops admission and tears down every lease and every control master of
+//      every target with confirmed teardown (a failed reap answers
+//      `ERROR_CODE_OUTCOME_UNKNOWN` and the owner keeps running);
+//   2. clears its retirement intent and the profile's durable attach record,
+//      so no later backend can re-attach it;
+//   3. answers `OwnerShutdownReport` with the real counts;
+//   4. removes its attach socket and exits. A watchdog hard-exits the process
+//      when graceful exit exceeds the owner's bounded deadline.
+//
+// Attach identity (ProofAttachProbe.expected_artifact_identity and
+// ProofAttachChallenge.owner_artifact_identity) is SHA-256 over
+// "bigbud.ssh-owner.artifact.v1\0" || canonical executable path || "\0" ||
+// SHA-256(executable bytes), measured by the owner once at startup. An
+// authenticated attach that names another identity is refused with
+// `HelloAccepted.reconciliation_error = ERROR_CODE_OWNER_ARTIFACT_MISMATCH`;
+// the refused owner then shuts down exactly as for `owner_shutdown`, so the
+// backend can start a fresh owner from its own artifact.
+message OwnerShutdown {}
+
+message OwnerShutdownReport {
+  // Live control masters closed (each confirmed reaped).
+  uint32 masters_closed = 1;
+  // Lease records torn down across every target and the owner-wide peer relays.
+  uint32 leases_closed = 2;
+  // The durable attach record was removed (or was already absent).
+  bool attach_cleared = 3;
+}

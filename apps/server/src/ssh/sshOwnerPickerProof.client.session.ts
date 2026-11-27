@@ -19,7 +19,7 @@ import { makePickerProofProductionProxyClient } from "./sshOwnerPickerProof.clie
 import { makePickerProofShellClient } from "./sshOwnerPickerProof.client.shell.ts";
 import { makePickerProofAgentActionClient } from "./sshOwnerPickerProof.client.agentAction.ts";
 import { makePickerProofPeerProductionClient } from "./sshOwnerPickerProof.client.peerProduction.ts";
-import { makeWaitingDispatch, OWNER_WIDE } from "./sshOwnerPickerProof.client.session.ownerWide.ts";
+import * as ownerWide from "./sshOwnerPickerProof.client.session.ownerWide.ts";
 import { makePickerProofPeerEnrollmentClient } from "./sshOwnerPickerProof.client.peerEnrollment.ts";
 import { makePickerProofAliasClient } from "./sshOwnerPickerProof.client.aliases.ts";
 import type { ProofAgentProxyOperation } from "./sshOwnerPickerProof.codec.agentProxy.ts";
@@ -195,9 +195,9 @@ export async function openPickerProofSession(
   };
   const gate = { closed: () => closed, active: () => active, waiting: () => proxyCloseWaiting };
   // U24 owner-wide peer verbs name no target and wait their turn (see the module).
-  const executeOwnerWide = makeWaitingDispatch(gate, async (operation) => {
+  const executeOwnerWide = ownerWide.makeWaitingDispatch(gate, async (operation) => {
     if (closed) throw new PickerProofOwnerError("ownerUnavailable");
-    return track(run(OWNER_WIDE, operation), operation.kind);
+    return track(run(ownerWide.ownerWideScope(), operation), operation.kind);
   });
 
   /**
@@ -236,7 +236,7 @@ export async function openPickerProofSession(
       }
     };
     // OpenCode lease polls wait their turn instead of refusing (see the module).
-    const runOpencode = makeWaitingDispatch(gate, runBound);
+    const runOpencode = ownerWide.makeWaitingDispatch(gate, runBound);
     const trust = async (operation: PickerProofOperation) => {
       const outcome = await runBound(operation);
       return outcome.kind === "trust" ? outcome.value : invalidProtocol();
@@ -367,6 +367,7 @@ export async function openPickerProofSession(
     ...makePickerProofShellClient(execute),
     ...makePickerProofPeerEnrollmentClient(execute),
     peerProduction: makePickerProofPeerProductionClient(executeOwnerWide),
+    shutdownOwner: ownerWide.makeOwnerShutdown(executeOwnerWide),
     async unlockSyntheticPosixPassword() {
       const outcome = await execute({ kind: "unlockSyntheticPosixPassword" });
       if (outcome.kind !== "proofSyntheticPosixPasswordUnlocked") return invalidProtocol();

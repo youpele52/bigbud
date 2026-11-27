@@ -301,6 +301,8 @@ Record A's artifact IDs. Gate: a schema-ceiling review.
 
 **Shipped (26 November 2026): Build A = `v0.4.1-beta.1`** (GitHub prerelease; run `45884270704`, attempt 1; commit `9ebafafadd39f5bf6d6d9444c8d0fbe041c432df`; `authenticodeMode: unsigned`; schema ceiling 187; agent key `release-2026`). The schema-ceiling review passed (A2). Artifact IDs are in the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#build-a-artifact-ids-v041-beta1-w4-26-november-2026).
 
+**Shipped (27 November 2026): Build A′ = `v0.4.1-beta.2`, the new rollback floor** (W6 decision option (i)). GitHub prerelease, not a draft, 65 assets; release run `45918945227` (success); tag at `release/build-a` commit `f1cc2eaf2f815a54777277729e814cc6914ede80` ("Made Build A's upgrade drain consent reachable"); CI run `45915500870` and dry run `45916890182` green. Backported from B: the drain UI-consent presence (`noteBackendDrainUiPoll`) and the drain error text. B-only fixes were not backported. E7 on the published bytes: all 6 manifest entries verify against `release-2026`. `authenticodeMode: unsigned`. A′ supersedes `v0.4.1-beta.1` for the A→B lifecycle. No marketing sync for beta.2. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#build-a-v041-beta2-rollback-floor-27-november-2026).
+
 ### W5 — Packaging for B (parallel)
 
 Stage and verify the owner in `release-desktop-build.yml`, `release.yml`, `release-remote-backend-graph.yml`, `apps/server/scripts/cli.ts` and `scripts/verify-packaged-ssh-owner.ts`. Wire N discovery via `sshOwnerExecutable.ts`.
@@ -344,13 +346,17 @@ Five bugs were found and fixed in B, each with tests:
 4. The UI consent was unreachable.
 5. A stale `owner.sock` after SIGTERM kept SSH unavailable.
 
-**Decision needed (bug 4 also ships in published A).** A's updater drain always answers `consent-required`, so A cannot auto-update to B. A manual install of B still works: with A's CLI or updater drain unusable, B boots fenced and the user runs the explicit "drain identified panes" action. Options:
+**Decision made: option (i).** Build A′ `v0.4.1-beta.2` is published with the consent fix and is the new rollback floor (see W4). The original options are kept for the record.
+
+**Decision needed (bug 4 also ships in published A), resolved by (i).** A's updater drain always answers `consent-required`, so A cannot auto-update to B. A manual install of B still works: with A's CLI or updater drain unusable, B boots fenced and the user runs the explicit "drain identified panes" action. Options:
 
 - (i) Publish a corrected Build A′ (`v0.4.1-beta.2`) as the new rollback floor before B. **Recommended.** It also lets the A-side live upgrade cell run as designed.
 - (ii) Accept manual install plus the explicit B-side drain for A users, and document it in the release notes.
 - (iii) Make B's first boot treat an A install with no live panes as drained. This is not recommended: it infers retirement, which §c forbids.
 
-**Still open:** the owner and masters survive a committed drain, and a reattached owner then fails `staleGeneration`. The backend does not exit naturally after a drain. B is not release-trusted (ad hoc, version `0.1.613`). No `cutover/` lineage traces or conforming checker inputs exist. The A-side live relay, terminal and monitor upgrade, the Electron GUI smoke and the Linux AppImage cells were not run, and the Windows cells are open. S4 is **not accepted**. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-pre-cutover-qualification-local-pass-27-november-2026-uncommitted).
+**Defects (a)–(c) fixed (27 November 2026, uncommitted).** (a) A new production verb `owner_shutdown` (Request 194, Reply 108 `OwnerShutdownReport`; `v1.owner_shutdown.proto`) is the drain's owner step: the owner closes every master and lease with confirmed teardown, clears its retirement intent and the attach record, removes its socket and exits (10 s hard-exit watchdog), and the drain response reports `owner: {masters, leases}`. Attach now verifies the owner's artifact identity (path plus bytes); another install path or build is refused typed (ErrorCode 82 `ownerArtifactMismatch`) and retires, and the backend starts its own owner. (b) The owner adopts the current generation for a reattached backend's first use of a known target, so a reattach no longer fails every operation with `staleGeneration`, and production messages no longer say "development". (c) W7 made the U25 installed-agent startup wait unconditional; its 60 s owner poll was detached and uncancellable and kept a drained backend alive. It is now scoped to its layer, abortable and unref'd, and `backendDrain.processExit.test.ts` passes. Live: the release owner closed a real master to the Debian guest's disposable sshd on drain and exited. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-defects-a-c-owner-shutdown-verb-27-november-2026-uncommitted).
+
+**Still open:** B is not release-trusted (ad hoc, version `0.1.613`). No `cutover/` lineage traces or conforming checker inputs exist. The A-side live relay, terminal and monitor upgrade, the Electron GUI smoke and the Linux AppImage cells were not run, and the Windows cells are open. S4 is **not accepted**. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-pre-cutover-qualification-local-pass-27-november-2026-uncommitted).
 
 ### W7 — S4 activation (one change set; needs W2, W3 and W6)
 

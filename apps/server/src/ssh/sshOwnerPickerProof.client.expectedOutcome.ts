@@ -70,6 +70,7 @@ export const expectedOutcome = {
   credentialUnlockOpen: "credentialUnlockLease",
   credentialUnlockCommit: "credentialState",
   credentialLock: "credentialState",
+  ownerShutdown: "ownerShutdown",
   runThreadShell: "shell",
   runProviderWorkspaceShell: "shell",
   runAcpCommand: "shell",

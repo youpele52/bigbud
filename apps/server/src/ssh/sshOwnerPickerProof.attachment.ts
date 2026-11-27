@@ -3,12 +3,8 @@ import { lstat, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 
 import { assertPrivateDirectory } from "../terminal-host/localTerminalHost.fs.ts";
-import {
-  encodeAttachHello,
-  encodeAttachProbe,
-  PickerProofOwnerError,
-  PROOF_TOKEN_BYTES,
-} from "./sshOwnerPickerProof.codec.ts";
+import { PickerProofOwnerError, PROOF_TOKEN_BYTES } from "./sshOwnerPickerProof.codec.ts";
+import { encodeAttachHello, encodeAttachProbe } from "./sshOwnerPickerProof.codec.attach.ts";
 import { connectPickerProofPipe, type PickerProofPipe } from "./sshOwnerPickerProof.pipe.ts";
 
 export interface PickerProofAttachment {
@@ -83,10 +79,16 @@ export async function exchangePickerProofAttachmentHello(
   capability: Uint8Array,
   profileBinding: Uint8Array,
   major: number,
+  expectedIdentity?: Uint8Array,
 ) {
   const clientNonce = randomBytes(PROOF_TOKEN_BYTES);
-  const challenge = await pipe.exchange(encodeAttachProbe(clientNonce));
+  const challenge = await pipe.exchange(encodeAttachProbe(clientNonce, expectedIdentity));
   if (challenge.kind !== "attachChallenge") throw new PickerProofOwnerError("protocolError");
+  // An owner that cannot report its artifact identity cannot be verified: never adopt it.
+  // A different identity still completes authentication, so the owner itself refuses
+  // typed (82) and retires, letting this backend start its own owner.
+  if (expectedIdentity !== undefined && challenge.ownerIdentity.length === 0)
+    throw new PickerProofOwnerError("ownerArtifactMismatch");
   const { serverNonce, proof } = challenge;
   const computeProof = (role: "server" | "client") =>
     createHmac("sha256", capability)

@@ -17,6 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../../protocol/ssh-owner/v1.agent_control.proto");
     println!("cargo:rerun-if-changed=../../protocol/ssh-owner/v1.system_status.proto");
     println!("cargo:rerun-if-changed=../../protocol/ssh-owner/v1.credential.proto");
+    println!("cargo:rerun-if-changed=../../protocol/ssh-owner/v1.owner_shutdown.proto");
     prost_build::Config::new()
         .boxed(".bigbud.ssh_owner.v1.Request.operation.git_tracked_push")
         .boxed(".bigbud.ssh_owner.v1.Request.operation.agent_control_open")

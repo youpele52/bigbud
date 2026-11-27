@@ -180,6 +180,7 @@ fn normalized_operand(operation: &Operation) -> (Verb, [u8; 32]) {
         | Operation::CredentialUnlockOpen(_)
         | Operation::CredentialUnlockCommit(_)
         | Operation::CredentialLock(_)
+        | Operation::OwnerShutdown(_)
         | Operation::TerminalInspect(_)
         | Operation::ListTerminalShells(_)
         | Operation::SampleSystemStatus(_)

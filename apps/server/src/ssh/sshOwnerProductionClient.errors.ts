@@ -33,7 +33,8 @@ export type SshOwnerClientFailure =
   | "hydration-pane-unbound"
   | "retirement-unverifiable"
   | "pane-unrecoverable"
-  | "owner-died";
+  | "owner-died"
+  | "artifact-mismatch";
 
 export class SshOwnerClientError extends Data.TaggedError("SshOwnerClientError")<{
   readonly code: "sshOwnerClientError";
@@ -67,6 +68,7 @@ const reasonByFailure: Record<SshOwnerClientFailure, SshOwnerUnavailableReason> 
   "retirement-unverifiable": "retirement-unverifiable",
   "pane-unrecoverable": "pane-unrecoverable",
   "owner-died": "owner-died",
+  "artifact-mismatch": "owner-incompatible",
 };
 
 /** Converts a client failure into the composition's typed unavailable result. */

@@ -29,6 +29,10 @@ pub(crate) struct PeerRelay {
 pub(crate) struct PeerRelays(Vec<PeerRelay>);
 
 impl PeerRelays {
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Confirmed teardown of every peer channel.
     pub(crate) fn revoke(&mut self) -> Result<(), ErrorCode> {
         self.revoke_where(|_| true)

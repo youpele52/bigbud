@@ -42,6 +42,8 @@ pub(in crate::owner) fn needs_storage(operation: &Operation) -> bool {
     !(is_agent_control(operation)
         || matches!(
             operation,
-            Operation::ProofEnsurePeerCoordinatorKey(_) | Operation::ListAliases(_)
+            Operation::ProofEnsurePeerCoordinatorKey(_)
+                | Operation::ListAliases(_)
+                | Operation::OwnerShutdown(_)
         ))
 }

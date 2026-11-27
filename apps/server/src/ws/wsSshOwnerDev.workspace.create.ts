@@ -132,7 +132,7 @@ export function createDevWorkspaceFile(
       });
     if (input.expectedSha256 !== undefined)
       return yield* fail("createOnly cannot be combined with expectedSha256.", "not-dispatched");
-    const limit = "The development SSH owner create limit is 48 KiB.";
+    const limit = "The SSH owner create limit is 48 KiB.";
     if (input.contents.length > MAX_WORKSPACE_WRITE_BYTES)
       return yield* fail(limit, "not-dispatched");
     const contents = new TextEncoder().encode(input.contents);

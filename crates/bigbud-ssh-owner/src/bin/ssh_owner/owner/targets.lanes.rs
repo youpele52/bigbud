@@ -87,6 +87,32 @@ impl Lanes {
         self.terminal_uncertain
     }
 
+    /// Live control masters and lease records this target holds, counted for the
+    /// drain's owner-shutdown report before [`Lanes::revoke`] tears them down.
+    pub(crate) fn shutdown_counts(&self) -> (usize, usize) {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        let masters = usize::from(
+            self.master
+                .as_ref()
+                .is_some_and(posix_picker::MasterPicker::has_live_master),
+        );
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let masters = 0;
+        let mut leases =
+            usize::from(self.terminal.is_some()) + usize::from(self.agent_proxy.is_some());
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            leases += usize::from(self.opencode.is_some())
+                + usize::from(self.git_upload.is_some())
+                + usize::from(self.git_receive.is_some())
+                + self.shell.len()
+                + self.backend.len()
+                + self.agent_control.len()
+                + self.providers.len();
+        }
+        (masters, leases)
+    }
+
     /// Confirmed teardown of every live lease this target owns. One failed reap
     /// cannot skip the others; the first error is returned after all attempts.
     pub(crate) fn revoke(&mut self) -> Result<(), ErrorCode> {

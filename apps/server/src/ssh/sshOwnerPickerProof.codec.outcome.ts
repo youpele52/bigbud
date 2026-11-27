@@ -3,7 +3,7 @@ import {
   type ProofOpencodeState,
 } from "./sshOwnerPickerProof.codec.opencode.ts";
 import { readGitLeaseOutcome, type GitLeaseOutcome } from "./sshOwnerPickerProof.codec.gitLease.ts";
-import { readCredentialOutcome } from "./sshOwnerPickerProof.codec.credential.ts";
+import { readCredentialOrShutdownOutcome } from "./sshOwnerPickerProof.codec.ownerShutdown.ts";
 import {
   readProviderLeaseOutcome,
   type ProviderLeaseOutcome,
@@ -150,7 +150,7 @@ export type Outcome =
   | { kind: "proofOpencode"; value: ProofOpencodeState }
   | GitLeaseOutcome
   | ProviderLeaseOutcome
-  | ReturnType<typeof readCredentialOutcome>
+  | ReturnType<typeof readCredentialOrShutdownOutcome>
   | BackendLeaseOutcome
   | { kind: "shell"; value: ShellLeaseState }
   | { kind: "proofThreadShell"; value: ProofShellResult }
@@ -374,9 +374,10 @@ export const readOutcome = (field: number, bytes: Uint8Array): Outcome => {
     case 51:
     case 52:
       return readProviderLeaseOutcome(field, bytes);
-    case 106: // In-app credential state and entry socket (v1.credential.proto).
+    case 106: // In-app credentials (106–107) and the owner shutdown report (108).
     case 107:
-      return readCredentialOutcome(field, bytes);
+    case 108:
+      return readCredentialOrShutdownOutcome(field, bytes);
     case 56:
       return { kind: "shell", value: readShellLease(bytes) };
     case 61:

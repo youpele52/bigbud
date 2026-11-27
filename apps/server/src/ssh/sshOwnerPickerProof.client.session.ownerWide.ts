@@ -7,10 +7,18 @@
  * @module sshOwnerPickerProof.client.session.ownerWide
  */
 import type { PickerProofOperation } from "./sshOwnerPickerProof.codec.ts";
+import type { Outcome } from "./sshOwnerPickerProof.codec.outcome.ts";
+import type { OwnerShutdownReport } from "./sshOwnerPickerProof.codec.ownerShutdown.ts";
+import { invalid } from "./sshOwnerPickerProof.codec.wire.ts";
 import { EMPTY, type TargetState } from "./sshOwnerPickerProof.client.session.exchange.ts";
 
-/** The empty target scope of an owner-wide request. */
-export const OWNER_WIDE: TargetState = { targetId: "", generation: EMPTY };
+/**
+ * A fresh owner-wide scope per request. The exchange records the generation a reply
+ * reports on its scope; an owner-wide reply names no target, so sharing one scope let
+ * an earlier reply's at-rest generation fail a later owner-wide request as a protocol
+ * violation.
+ */
+export const ownerWideScope = (): TargetState => ({ targetId: "", generation: EMPTY });
 
 export interface SessionGate {
   readonly closed: () => boolean;
@@ -35,3 +43,11 @@ export function makeWaitingDispatch<T>(
     }
   };
 }
+
+/** Drain-time owner shutdown (Request 194): accepts only the shutdown report. */
+export const makeOwnerShutdown =
+  (execute: (operation: PickerProofOperation) => Promise<Outcome>) =>
+  async (): Promise<OwnerShutdownReport> => {
+    const outcome = await execute({ kind: "ownerShutdown" });
+    return outcome.kind === "ownerShutdown" ? outcome.value : invalid();
+  };

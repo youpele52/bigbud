@@ -40,6 +40,10 @@ pub(crate) struct AgentControlLanes {
 }
 
 impl AgentControlLanes {
+    pub(crate) fn len(&self) -> usize {
+        self.leases.len() + self.proxies.len()
+    }
+
     /// Confirmed teardown of every running control lease of this target.
     pub(crate) fn revoke(&mut self) -> Result<(), ErrorCode> {
         let mut result = Ok(());

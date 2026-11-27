@@ -93,7 +93,11 @@ export interface PickerProofOwnerOptions
   };
 }
 
-export type PickerProofAttachOptions = PickerProofSessionOptions & PickerProofAttachment;
+export type PickerProofAttachOptions = PickerProofSessionOptions &
+  PickerProofAttachment & {
+    /** The 32-byte artifact identity this backend would launch; production always sends it. */
+    readonly expectedArtifactIdentity?: Uint8Array;
+  };
 
 export interface LaunchedPickerProofOwner
   extends PickerProofOwner, ClientRelaySshOwner, CodexSshOwner {

@@ -303,6 +303,7 @@ pub(crate) fn bootstrap<R: Read, W: Write>(
         #[cfg(target_os = "linux")]
         jump_picker,
         supervised_terminal: false,
+        shutdown_requested: false,
         agent_fixture,
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         agent_service: agent_service.map(std::sync::Arc::new),

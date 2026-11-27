@@ -40,6 +40,10 @@ pub(crate) struct BackendLanes {
 }
 
 impl BackendLanes {
+    pub(crate) fn len(&self) -> usize {
+        usize::from(self.deployment.is_some()) + self.relays.len()
+    }
+
     /// Confirmed teardown of every backend lease this target owns.
     pub(crate) fn revoke(&mut self) -> Result<(), ErrorCode> {
         let mut result = Ok(());

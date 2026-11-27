@@ -16,6 +16,23 @@ const OWNER_POLL_MS = 250;
 const MAX_TARGETS = 64;
 
 /**
+ * One poll interval. The timer is unref'd and cleared on abort, so waiting for an owner that
+ * never registers can never keep a shutting-down (or drained) backend process alive.
+ */
+function pollDelay(signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, OWNER_POLL_MS);
+    timer.unref?.();
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
+
+/**
  * U25 normal startup under production activation (decision (a)): the trusted installed binding
  * for each known target is the local owner store's bound runtime and expected epoch, never a
  * registry snapshot or project metadata. Each one is observed through one owner proxy lease
@@ -32,18 +49,21 @@ export async function composeProductionInstalledStartups(input: {
   /** Tests only: the observation and target filter; production uses the owner proxy. */
   readonly observe?: typeof observeOwnedInstalledSupervisor;
   readonly isRemoteTarget?: (target: string) => boolean;
+  /** Aborted when the boot scope closes (shutdown or drain): the wait and composition stop. */
+  readonly signal?: AbortSignal;
 }): Promise<ReadonlyMap<string, InstalledStartupComposition>> {
   const results = new Map<string, InstalledStartupComposition>();
   const deadline = Date.now() + (input.ownerWaitMs ?? OWNER_WAIT_MS);
   // An unregistered owner is not an observation failure: never record a sticky refusal for it.
   while (!input.selection.owner()) {
-    if (Date.now() > deadline) return results;
-    await new Promise((resolve) => setTimeout(resolve, OWNER_POLL_MS));
+    if (Date.now() > deadline || input.signal?.aborted) return results;
+    await pollDelay(input.signal);
   }
   const readRegistry = input.readRegistry ?? readRemoteAgentRegistryReadOnly;
   const proxyOwner = makeProductionRemoteAgentProxyOwner(input.selection);
   const targets = ((await input.owners.knownTargets?.()) ?? []).slice(0, MAX_TARGETS);
   for (const target of targets) {
+    if (input.signal?.aborted) return results;
     if (!(input.isRemoteTarget ?? isRemoteAgentExecutionTarget)(target)) continue;
     const binding = await input.owners.getBinding(target).catch(() => undefined);
     if (!binding) continue;

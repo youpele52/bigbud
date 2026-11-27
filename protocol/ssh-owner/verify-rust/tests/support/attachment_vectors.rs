@@ -25,6 +25,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
             "attach_probe",
             Payload::ProofAttachProbe(ProofAttachProbe {
                 client_nonce: (32..64).collect(),
+                ..ProofAttachProbe::default()
             }),
         ),
         (
@@ -32,6 +33,7 @@ pub(super) fn verify(values: &mut BTreeMap<&str, Vec<u8>>) {
             Payload::ProofAttachChallenge(ProofAttachChallenge {
                 server_nonce: (64..96).collect(),
                 proof: take(&mut proofs, "server"),
+                ..ProofAttachChallenge::default()
             }),
         ),
         (

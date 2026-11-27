@@ -30,6 +30,7 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "providerLeaseClose" ||
     operation.kind === "credentialUnlockCommit" ||
     operation.kind === "credentialLock" ||
+    operation.kind === "ownerShutdown" ||
     operation.kind === "runThreadShell" ||
     operation.kind === "runProviderWorkspaceShell" ||
     operation.kind === "runAcpCommand" ||
@@ -77,6 +78,8 @@ export function proofRequestPolicy(operation: PickerProofOperation) {
     operation.kind === "proofDeploymentHostProbe" ||
     // The credential master's handshake (10 s ready bound) runs before the reply.
     operation.kind === "credentialUnlockCommit" ||
+    // Owner shutdown reaps every lease and master (each bounded) before it replies.
+    operation.kind === "ownerShutdown" ||
     operation.kind === "proofDeploymentCompletion" ||
     operation.kind === "proofDeploymentAction" ||
     operation.kind === "proofRunThreadShell" ||

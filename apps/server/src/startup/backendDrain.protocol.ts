@@ -49,6 +49,8 @@ export type BackendDrainResponse =
         readonly stopped: number;
         readonly owners: number;
       }>;
+      /** The SSH owner's confirmed teardown before the lock release (cutover §d1). */
+      readonly owner?: { readonly masters: number; readonly leases: number };
     }
   | {
       readonly v: 1;

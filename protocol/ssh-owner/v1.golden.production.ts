@@ -1,5 +1,6 @@
 import { agentControlWireCases } from "./v1.golden.agentControl.ts";
 import { credentialWireCases } from "./v1.golden.credential.ts";
+import { ownerShutdownWireCases } from "./v1.golden.ownerShutdown.ts";
 import type { Message } from "./v1.golden.codec.ts";
 import { gitUploadWireCases } from "./v1.golden.gitUpload.ts";
 import { peerProductionWireCases } from "./v1.golden.peerProduction.ts";
@@ -21,5 +22,6 @@ export function productionLeaseWireCases(
     ...agentControlWireCases(request, reply),
     ...credentialWireCases(request, reply),
     ...systemStatusWireCases(request, reply),
+    ...ownerShutdownWireCases(request, reply),
   };
 }

@@ -31,6 +31,7 @@ pub(crate) mod provider_lease;
 mod session;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod shell_lease;
+pub(crate) mod shutdown;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) use picker_cancel::CancelInbox as SnapshotCancelInbox;
 #[cfg(any(target_os = "macos", target_os = "linux"))]

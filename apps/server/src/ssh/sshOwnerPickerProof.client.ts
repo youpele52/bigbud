@@ -378,7 +378,13 @@ export async function attachPickerProofOwner(
     pipe,
     session,
     () =>
-      exchangePickerProofAttachmentHello(pipe, capability, session.profileBinding, session.major),
+      exchangePickerProofAttachmentHello(
+        pipe,
+        capability,
+        session.profileBinding,
+        session.major,
+        options.expectedArtifactIdentity,
+      ),
     undefined,
     pipe.onLost,
   );

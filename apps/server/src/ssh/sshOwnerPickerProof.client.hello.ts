@@ -32,7 +32,11 @@ export interface ExpectedReconciliation {
 function refusedReconciliation(code: number): never {
   if (code === 13) throw new PickerProofOwnerError("storageUnavailable");
   const decoded = decodeOwnerError(code);
-  if (decoded === "ownerRetirementUnverified" || decoded === "paneUnrecoverable")
+  if (
+    decoded === "ownerRetirementUnverified" ||
+    decoded === "paneUnrecoverable" ||
+    decoded === "ownerArtifactMismatch"
+  )
     throw new PickerProofOwnerError(decoded);
   return invalidProtocol();
 }

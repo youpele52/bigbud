@@ -152,7 +152,15 @@ impl Registry {
             if self.digests.get(&descriptor.target_id) != Some(&descriptor.digest()) {
                 return Err(ErrorCode::TargetMismatch);
             }
-            if request.target_generation != entry.generation {
+            // An empty generation is a first use by this writer (a reattached
+            // backend never saw this epoch's generation) and adopts the current
+            // one, which the reply reports. Refusing it here, in the grant phase
+            // whose reply carries no generation, left a reattached backend unable
+            // to learn it: every request failed `StaleGeneration` (W6 defect b).
+            // A named, different generation is still stale.
+            if !request.target_generation.is_empty()
+                && request.target_generation != entry.generation
+            {
                 return Err(ErrorCode::StaleGeneration);
             }
             // Re-validate the alias descriptor and the owner-side trust inputs on
@@ -255,6 +263,14 @@ impl Registry {
     /// Confirmed teardown of every cached target's live leases. The target
     /// identity, generation and snapshot stay, so a later request re-resolves
     /// the same target instead of being told its generation is stale.
+    /// Sum of [`super::Lanes::shutdown_counts`] over every cached target.
+    pub(crate) fn shutdown_counts(&self) -> (usize, usize) {
+        self.entries
+            .values()
+            .map(|entry| entry.lanes.shutdown_counts())
+            .fold((0, 0), |(m, l), (dm, dl)| (m + dm, l + dl))
+    }
+
     pub(crate) fn revoke_cached_lanes(&mut self) -> Result<(), ErrorCode> {
         let mut result = Ok(());
         for entry in self.entries.values_mut() {
