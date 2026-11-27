@@ -42,8 +42,28 @@ export function subscribeBackendDrainConsent(
   return () => listeners.delete(listener);
 }
 
-export function hasBackendDrainUi(): boolean {
-  return listeners.size > 0;
+/**
+ * The web consent host polls `getBackendDrainConsent` once a second; a poll is
+ * its only signal that a UI can answer. Without this, nothing ever subscribed and
+ * every `ui` drain answered `consent-required` (found in W6 on the packaged A and B).
+ */
+export const BACKEND_DRAIN_UI_PRESENCE_MS = 5_000;
+let lastUiPollAt: number | undefined;
+
+export function noteBackendDrainUiPoll(now: number = Date.now()): void {
+  lastUiPollAt = now;
+}
+
+/** Test-only reset. */
+export function resetBackendDrainUiPresenceForTest(): void {
+  lastUiPollAt = undefined;
+}
+
+export function hasBackendDrainUi(now: number = Date.now()): boolean {
+  return (
+    listeners.size > 0 ||
+    (lastUiPollAt !== undefined && now - lastUiPollAt <= BACKEND_DRAIN_UI_PRESENCE_MS)
+  );
 }
 
 export function wasBackendDrainDecided(drainId: string): boolean {
@@ -62,7 +82,7 @@ const snapshot = (value: Pending): PendingBackendDrain => ({
 
 /**
  * Publishes the pane list and waits for exactly one decision. With no UI
- * subscriber this returns `consent-required` immediately.
+ * subscriber and no recent UI poll this returns `consent-required` immediately.
  */
 export const requestBackendDrainConsent = Effect.fn("requestBackendDrainConsent")(
   function* (input: {
@@ -70,7 +90,7 @@ export const requestBackendDrainConsent = Effect.fn("requestBackendDrainConsent"
     readonly timeoutMs: number;
     readonly drainId: string;
   }) {
-    if (listeners.size === 0) return { kind: "consent-required" } as { kind: "consent-required" };
+    if (!hasBackendDrainUi()) return { kind: "consent-required" } as { kind: "consent-required" };
     if (pending) return { kind: "busy" } as const;
     const decision = yield* Deferred.make<BackendDrainDecision>();
     const current: Pending = {

@@ -76,6 +76,13 @@ class BackendDrainLiveError extends Data.TaggedError("BackendDrainLiveError")<{
 
 const asError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)));
 
+/** Tagged drain errors carry their text in `detail`; never answer an empty message. */
+const drainFailureMessage = (cause: unknown) => {
+  const detail = (cause as { readonly detail?: unknown } | null)?.detail;
+  const message = typeof detail === "string" && detail.length > 0 ? detail : asError(cause).message;
+  return (message.length > 0 ? message : "The backend drain failed.").slice(0, 500);
+};
+
 const isStopReport = (value: unknown): value is BackendDrainStopReport =>
   typeof value === "object" && value !== null && "step" in value && "stopped" in value;
 
@@ -148,7 +155,7 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
       return {
         v: 1,
         ok: false,
-        error: { code: "failed", message: asError(cause).message.slice(0, 500) },
+        error: { code: "failed", message: drainFailureMessage(cause) },
       };
     } finally {
       running = false;

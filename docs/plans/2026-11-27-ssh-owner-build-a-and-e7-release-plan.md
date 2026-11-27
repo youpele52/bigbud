@@ -271,3 +271,22 @@ git switch feat/ssh-owner-production-activation
 ```
 
 Verify: `git diff --quiet v0.4.1-beta.1 origin/marketing && echo identical`, then watch the Pages deployment for `marketing` and check that the site's download links resolve for the beta.
+
+## 13. Build A′ (`v0.4.1-beta.2`): drain consent fix (27 November 2026)
+
+### Reason
+
+W6 found that Build A's (`v0.4.1-beta.1`) upgrade drain UI consent is unreachable. Nothing registers the UI as an in-process consent subscriber; the web consent dialog only polls `getBackendDrainConsent`. Every `consent: "ui"` drain therefore answered `consent-required`, and A's desktop updater refused every install. The user approved shipping a corrected Build A′.
+
+### Fix (backported from `9bbaae5cb4` on `feat/ssh-rust-only`, adapted to A)
+
+- A polling web UI counts as present for drain consent: `getBackendDrainConsent` records the poll (`noteBackendDrainUiPoll`), and a poll within `BACKEND_DRAIN_UI_PRESENCE_MS` (5 s) makes the UI present, so the consent dialog is reachable (`apps/server/src/startup/backendDrain.consent.ts`, `apps/server/src/ws/wsRpcHandlers.backendDrain.ts`; test `backendDrain.consent.uiPresence.test.ts`).
+- Drain failures carry their error text: a tagged failure answers its `detail` instead of an empty message (`apps/server/src/startup/backendDrain.live.ts`; test in `backendDrain.live.test.ts`).
+
+Not backported (Build B/owner-only): the marker profile-scope read, B's drain not rewriting A's marker (`commitOwnerBuildDrain`), and the owner's stale `owner.sock` cleanup. A stays legacy-executor-only with the inactive owner, and A's marker behaviour (written under scope `backend` by `commitLegacyRetirement`) is unchanged.
+
+### Version and rollback floor
+
+- Version: `v0.4.1-beta.2`, released from `release/build-a`. The `## v0.4.1 Preview` changelog section stays empty by the user's choice.
+- A′ replaces A as the rollback floor: `v0.4.1-beta.1` cannot complete a UI-consent upgrade drain, so every B rollback and every upgrade path must target `v0.4.1-beta.2` or later.
+- Outward steps (tag, workflow dispatch, push, marketing sync) follow section 12 with `v0.4.1-beta.2` substituted and each needs fresh explicit approval.

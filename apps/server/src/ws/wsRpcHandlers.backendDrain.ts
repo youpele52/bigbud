@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 
 import {
   decideBackendDrain,
+  noteBackendDrainUiPoll,
   pendingBackendDrain,
   wasBackendDrainDecided,
 } from "../startup/backendDrain.consent.ts";
@@ -48,9 +49,16 @@ const snapshot = (): BackendDrainConsentSnapshot | null => {
 /** Reconnect reads the current pending snapshot; no new drain is started. */
 export const makeWsRpcBackendDrainHandlers = () => ({
   [BACKEND_DRAIN_WS_METHODS.get]: () =>
-    observeRpcEffect(BACKEND_DRAIN_WS_METHODS.get, Effect.sync(snapshot), {
-      "rpc.aggregate": "server",
-    } as const),
+    observeRpcEffect(
+      BACKEND_DRAIN_WS_METHODS.get,
+      Effect.sync(() => {
+        noteBackendDrainUiPoll();
+        return snapshot();
+      }),
+      {
+        "rpc.aggregate": "server",
+      } as const,
+    ),
   [BACKEND_DRAIN_WS_METHODS.decide]: (input: DecideBackendDrainInput) =>
     observeRpcEffect(
       BACKEND_DRAIN_WS_METHODS.decide,

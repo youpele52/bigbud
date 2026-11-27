@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
 
@@ -168,5 +169,18 @@ describe("live backend drain handler", () => {
     await expect(handler(request())).resolves.toMatchObject({ ok: false });
     expect(events).not.toContain("commit");
     expect(events).not.toContain("release");
+  });
+
+  it("answers a tagged failure's detail instead of an empty message", async () => {
+    class DetailError extends Data.TaggedError("DetailError")<{ readonly detail: string }> {}
+    const { deps: live } = deps({
+      commit: () => Effect.fail(new DetailError({ detail: "marker conflict" })),
+    });
+    const handler = makeLiveBackendDrainHandler(live);
+    await expect(handler(request())).resolves.toEqual({
+      v: 1,
+      ok: false,
+      error: { code: "failed", message: "Writing the retirement marker failed." },
+    });
   });
 });
