@@ -12,6 +12,14 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
  * @module LegacyRetirement
  */
 
+/**
+ * The one profile scope the marker lives under. Build A (`v0.4.1-beta.1`) is
+ * published and writes its drain marker under exactly this literal, so B must
+ * read and write the legacy retirement facts here, never under the state
+ * directory (which keys the owner's own hydration rows).
+ */
+export const LEGACY_RETIREMENT_PROFILE_SCOPE = "backend";
+
 export type LegacyRetirementDecision = "save-and-close" | "drain-now";
 
 export interface LegacyRetirementInput {

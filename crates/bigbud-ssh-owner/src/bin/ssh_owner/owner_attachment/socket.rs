@@ -125,6 +125,13 @@ impl OwnedSocket {
         match fs::symlink_metadata(&path) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
+            // An owner ended by a signal (for example SIGTERM at logout) never runs
+            // `Drop`, so its socket stays behind and would refuse every later owner.
+            // Only this uid's socket inside the verified private directory, with no
+            // listener behind it, is stale; anything else still refuses.
+            Ok(metadata) if owned_socket(&metadata, uid) && stale_socket(&path) => {
+                fs::remove_file(&path)?;
+            }
             Ok(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::AlreadyExists,
@@ -163,6 +170,14 @@ fn owned_socket(metadata: &Metadata, uid: libc::uid_t) -> bool {
     metadata.file_type().is_socket() && metadata.uid() == uid
 }
 
+/// A socket path is stale only when connecting is refused: no process listens on it.
+fn stale_socket(path: &Path) -> bool {
+    matches!(
+        UnixStream::connect(path),
+        Err(error) if error.kind() == io::ErrorKind::ConnectionRefused
+    )
+}
+
 impl Drop for OwnedSocket {
     fn drop(&mut self) {
         let Some(parent) = self.path.parent() else {
@@ -180,3 +195,7 @@ impl Drop for OwnedSocket {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "socket_tests.rs"]
+mod tests;

@@ -13,7 +13,10 @@ import { makeProductionFixture } from "./sshOwnerProductionClient.fixture.ts";
  * retires the owner within a bound; a surviving owner (`desktop-packaged`) is unchanged
  * and outlives its launcher until it is reattached or reaped.
  */
-const owner = fileURLToPath(new URL("../../../../target/debug/bigbud-ssh-owner", import.meta.url));
+// BIGBUD_TEST_SSH_OWNER_BIN: run against a packaged owner (for example the B candidate's).
+const owner =
+  process.env.BIGBUD_TEST_SSH_OWNER_BIN ??
+  fileURLToPath(new URL("../../../../target/debug/bigbud-ssh-owner", import.meta.url));
 const launcher = fileURLToPath(
   new URL("./sshOwner.productionClient.launcherLifetime.launcher.ts", import.meta.url),
 );

@@ -4,7 +4,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { commitLegacyRetirement } from "../persistence/Layers/LegacyRetirement.ts";
+import {
+  checkpointLegacyRetirementWal,
+  LEGACY_RETIREMENT_PROFILE_SCOPE,
+} from "../persistence/Layers/LegacyRetirement.ts";
 import { TerminalManager } from "../terminal/Services/Manager.ts";
 import { OwnershipShutdown } from "./ownershipShutdown.ts";
 import { armBackendDrainExit } from "./backendDrain.exit.ts";
@@ -68,6 +71,13 @@ export interface LiveBackendDrainDeps {
 }
 
 const asError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)));
+
+/** Tagged drain errors carry their text in `detail`; never answer an empty message. */
+const drainFailureMessage = (cause: unknown) => {
+  const detail = (cause as { readonly detail?: unknown } | null)?.detail;
+  const message = typeof detail === "string" && detail.length > 0 ? detail : asError(cause).message;
+  return (message.length > 0 ? message : "The backend drain failed.").slice(0, 500);
+};
 
 const isStopReport = (value: unknown): value is BackendDrainStopReport =>
   typeof value === "object" && value !== null && "step" in value && "stopped" in value;
@@ -141,13 +151,23 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
       return {
         v: 1,
         ok: false,
-        error: { code: "failed", message: asError(cause).message.slice(0, 500) },
+        error: { code: "failed", message: drainFailureMessage(cause) },
       };
     } finally {
       running = false;
     }
   };
 }
+
+/**
+ * This build runs no legacy SSH, so its drain never writes or replaces the Build A
+ * marker: that record is the only retirement fact, and rewriting it under this
+ * build's artifact would conflict with A's marker (blocking every later upgrade and
+ * the offline rollback) or, on a fenced profile, lift the fence without the explicit
+ * drain. The drain still checkpoints WAL before the lock is released.
+ */
+export const commitOwnerBuildDrain = (sql: SqlClient.SqlClient) =>
+  checkpointLegacyRetirementWal(sql).pipe(Effect.mapError(asError));
 
 /** Composition layer: register under the held lock and unregister on teardown. */
 export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
@@ -157,7 +177,7 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
     const shutdown = yield* Effect.serviceOption(OwnershipShutdown);
     const provider = yield* Effect.serviceOption(ProviderService);
     const handler = makeLiveBackendDrainHandler({
-      profileScope: "backend",
+      profileScope: LEGACY_RETIREMENT_PROFILE_SCOPE,
       artifactId: `bigbud-server@${version}`,
       listPanes: () =>
         (manager.listDrainPanes?.() ?? Effect.succeed([])).pipe(
@@ -190,11 +210,7 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
       // This backend owns no TypeScript SSH masters: the Rust owner holds every master and
       // closes them on its own shutdown.
       closeOwnedMasters: Effect.succeed({ closed: 0, failed: 0 }),
-      commit: (input) =>
-        commitLegacyRetirement(sql, input).pipe(
-          Effect.map((result) => result),
-          Effect.mapError(asError),
-        ),
+      commit: () => commitOwnerBuildDrain(sql),
       drainFollowers: () => {
         const coordinator = getPeerCoordinator();
         // Local mode has no peer coordinator and therefore no followers.

@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { LEGACY_RETIREMENT_PROFILE_SCOPE } from "../persistence/Layers/LegacyRetirement.ts";
 import { BackendInstance } from "../startup/backendInstance.ts";
 import { ServerConfig, type ServerConfigShape } from "../startup/config.ts";
 import {
@@ -279,6 +280,7 @@ export const SshOwnerProductionBootLive = Layer.effectDiscard(
     yield* runSshOwnerProductionStartup({
       sql,
       profileScope: config.stateDir,
+      legacyProfileScope: LEGACY_RETIREMENT_PROFILE_SCOPE,
       artifactPath: configured.artifact.path,
       drainRequested: process.env[SSH_OWNER_DRAIN_IDENTIFIED_ENV] === "1",
       assertLockHeld: Effect.tryPromise({

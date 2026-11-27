@@ -60,7 +60,10 @@ export type SshOwnerIdentifiedPane = LegacyHostSshPane;
 
 export interface SshOwnerProductionStartupInput {
   readonly sql: SqlClient.SqlClient;
+  /** Keys the owner's hydration rows (the state directory). */
   readonly profileScope: string;
+  /** Keys the Build A marker; production passes `LEGACY_RETIREMENT_PROFILE_SCOPE`. */
+  readonly legacyProfileScope: string;
   readonly artifactPath: string;
   readonly assertLockHeld: Effect.Effect<void, Error>;
   readonly startOwner: Effect.Effect<SshOwnerProductionOwner, Error>;
@@ -101,7 +104,7 @@ const bootOnce = (input: SshOwnerProductionStartupInput) =>
     const outcome = yield* runSshOwnerBootSequence({
       acquireStateLock: input.assertLockHeld,
       readState: readSshOwnerStartupState(input.sql, {
-        profileScope: input.profileScope,
+        profileScope: input.legacyProfileScope,
         ownerPresent: input.ownerPresent ?? artifactPresent(input.artifactPath),
       }).pipe(Effect.tap((read) => Effect.sync(() => void (state = read)))),
       startOrAttachOwner: input.startOwner,
@@ -152,7 +155,7 @@ const drainFailure = (cause: unknown) =>
 
 function drainIdentified(input: SshOwnerProductionStartupInput) {
   return Effect.gen(function* () {
-    const existing = yield* readLegacyRetirement(input.sql, input.profileScope);
+    const existing = yield* readLegacyRetirement(input.sql, input.legacyProfileScope);
     if (existing && existing.record.pendingItems.length > 0)
       return yield* new SshOwnerExplicitDrainError({
         reason: "legacy-panes-pending",
@@ -168,7 +171,7 @@ function drainIdentified(input: SshOwnerProductionStartupInput) {
     const panes = yield* listPanes(input);
     yield* retirePanes(input, panes);
     const written = yield* commitLegacyRetirement(input.sql, {
-      profileScope: input.profileScope,
+      profileScope: input.legacyProfileScope,
       artifactId: SSH_OWNER_EXPLICIT_DRAIN_ARTIFACT_ID,
       decision: "drain-now",
       drainedLeases: panes.map((pane) => pane.identity),

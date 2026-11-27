@@ -9,12 +9,19 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 import { runMigrations } from "../persistence/Migrations.ts";
 import * as NodeSqliteClient from "../persistence/NodeSqliteClient.ts";
-import { readLegacyRetirement } from "../persistence/Layers/LegacyRetirement.ts";
+import {
+  commitLegacyRetirement,
+  readLegacyRetirement,
+} from "../persistence/Layers/LegacyRetirement.ts";
 import {
   readSshOwnerAdmission,
   resetSshOwnerProductionStateForTest,
 } from "./sshOwnerProductionComposition.ts";
-import { bootActivatedStartup, retireProfile } from "./sshOwner.productionStartup.fixture.ts";
+import {
+  bootActivatedStartup,
+  clearLegacyRetirement,
+  retireProfile,
+} from "./sshOwner.productionStartup.fixture.ts";
 import {
   drainSshOwnerIdentifiedPanes,
   readSshOwnerStartupGate,
@@ -71,6 +78,7 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
   it.effect("fences a never-drained machine, then opens after the explicit drain", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         const sql = yield* boot({ ownerPresent: true });
         assert.deepInclude(readSshOwnerAdmission(), { kind: "closed", step: "retirement-marker" });
         const fenced = readSshOwnerAdmission();
@@ -85,7 +93,8 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
         yield* drainSshOwnerIdentifiedPanes();
         assert.equal(readSshOwnerAdmission().kind, "open");
         assert.equal(flags.starts, 1);
-        const record = yield* readLegacyRetirement(sql, root);
+        const record = yield* readLegacyRetirement(sql, "backend");
+        assert.equal(yield* readLegacyRetirement(sql, root), undefined);
         assert.equal(record?.marker.artifactId, SSH_OWNER_EXPLICIT_DRAIN_ARTIFACT_ID);
         // A second drain is refused: nothing is fenced any more.
         const again = yield* Effect.flip(drainSshOwnerIdentifiedPanes());
@@ -97,6 +106,7 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
   it.effect("drains at startup only when explicitly requested", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         vi.stubEnv("BIGBUD_SSH_OWNER_DRAIN_IDENTIFIED", "1");
         yield* boot({ ownerPresent: true });
         assert.equal(readSshOwnerAdmission().kind, "open");
@@ -108,6 +118,7 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
   it.effect("starts the owner when the marker is present", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         yield* runMigrations({ toMigrationInclusive: 185 });
         yield* retire(yield* SqlClient.SqlClient);
         yield* boot({ ownerPresent: true });
@@ -117,9 +128,45 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
     ),
   );
 
+  // W6 regression: published Build A writes its marker under the literal "backend";
+  // B keyed the read by the state directory and fenced every real A to B upgrade.
+  const markBuildA = (sql: SqlClient.SqlClient, profileScope: string) =>
+    commitLegacyRetirement(sql, {
+      profileScope,
+      artifactId: "bigbud-server@0.4.1-beta.1",
+      decision: "drain-now",
+      drainedLeases: [],
+      pendingItems: [],
+    });
+
+  it.effect("admits the marker published Build A writes under its literal scope", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* clearLegacyRetirement;
+        yield* markBuildA(yield* SqlClient.SqlClient, "backend");
+        yield* boot({ ownerPresent: true });
+        assert.equal(readSshOwnerAdmission().kind, "open");
+        assert.equal(flags.starts, 1);
+      }),
+    ),
+  );
+
+  it.effect("ignores a marker keyed by the state directory", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* clearLegacyRetirement;
+        yield* markBuildA(yield* SqlClient.SqlClient, root);
+        yield* boot({ ownerPresent: true });
+        assert.equal(readSshOwnerAdmission().kind, "closed");
+        assert.equal(flags.starts, 0);
+      }),
+    ),
+  );
+
   it.effect("reports sshOwnerUnavailable when the owner is missing after a valid marker", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         yield* runMigrations({ toMigrationInclusive: 185 });
         yield* retire(yield* SqlClient.SqlClient);
         yield* boot({ ownerPresent: false });
@@ -134,6 +181,7 @@ it.layer(NodeSqliteClient.layerMemory())("activated production startup", (it) =>
   it.effect("keeps the fence when a previous drain left panes pending", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         yield* runMigrations({ toMigrationInclusive: 185 });
         yield* retire(yield* SqlClient.SqlClient, ["thread-1:pane-1"]);
         yield* boot({ ownerPresent: true });

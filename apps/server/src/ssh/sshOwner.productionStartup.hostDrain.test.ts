@@ -8,7 +8,10 @@ import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, vi } from "vitest";
 
 import * as NodeSqliteClient from "../persistence/NodeSqliteClient.ts";
-import { readLegacyRetirement } from "../persistence/Layers/LegacyRetirement.ts";
+import {
+  LEGACY_RETIREMENT_PROFILE_SCOPE,
+  readLegacyRetirement,
+} from "../persistence/Layers/LegacyRetirement.ts";
 import {
   registerLocalTerminalHostRetirementSource,
   resetLocalTerminalHostRetirementSourceForTest,
@@ -16,6 +19,7 @@ import {
 import { makeWsRpcSshOwnerAdmissionHandlers } from "../ws/wsRpcHandlers.sshOwnerAdmission.ts";
 import {
   bootActivatedStartup,
+  clearLegacyRetirement,
   fakeTerminalHost,
   hostPane,
 } from "./sshOwner.productionStartup.fixture.ts";
@@ -69,6 +73,7 @@ it.layer(NodeSqliteClient.layerMemory())("B-side drain through the X2 host and t
   it.effect("lists host SSH panes over RPC, retires exactly them, then writes the marker", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         const host = fakeTerminalHost({
           panes: [hostPane("ssh-1", "managed-ssh"), hostPane("local-1", "local")],
           retirementCapability: true,
@@ -87,7 +92,7 @@ it.layer(NodeSqliteClient.layerMemory())("B-side drain through the X2 host and t
         assert.deepEqual(after, { state: "open" });
         assert.deepEqual(host.retired, [["ssh-1"]]);
         assert.equal(flags.starts, 1);
-        const record = yield* readLegacyRetirement(sql, root);
+        const record = yield* readLegacyRetirement(sql, LEGACY_RETIREMENT_PROFILE_SCOPE);
         assert.deepEqual(record?.record.drainedLeases, ["host-1:ssh-1"]);
 
         const again = yield* Effect.flip(rpc[SSH_OWNER_ADMISSION_WS_METHODS.drain]());
@@ -99,6 +104,7 @@ it.layer(NodeSqliteClient.layerMemory())("B-side drain through the X2 host and t
   it.effect("requires host exit when the host lacks terminal.host-retirement", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         const host = fakeTerminalHost({
           panes: [hostPane("ssh-1", "managed-ssh")],
           retirementCapability: false,
@@ -110,7 +116,7 @@ it.layer(NodeSqliteClient.layerMemory())("B-side drain through the X2 host and t
         assert.equal(fenced.state === "fenced" && typeof fenced.listError, "string");
         const refused = yield* Effect.flip(rpc[SSH_OWNER_ADMISSION_WS_METHODS.drain]());
         assert.equal(refused.code, "host-exit-required");
-        assert.equal(yield* readLegacyRetirement(sql, root), undefined);
+        assert.equal(yield* readLegacyRetirement(sql, LEGACY_RETIREMENT_PROFILE_SCOPE), undefined);
         assert.equal(readSshOwnerAdmission().kind, "closed");
         assert.equal(flags.starts, 0);
         assert.equal(
@@ -125,6 +131,7 @@ it.layer(NodeSqliteClient.layerMemory())("B-side drain through the X2 host and t
   it.effect("drains with no attached host and reports open over RPC", () =>
     Effect.scoped(
       Effect.gen(function* () {
+        yield* clearLegacyRetirement;
         yield* bootActivatedStartup(root, { ownerPresent: true });
         // No attached host means no legacy SSH panes; the marker records none.
         yield* rpc[SSH_OWNER_ADMISSION_WS_METHODS.drain]();

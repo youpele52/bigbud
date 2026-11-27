@@ -30,7 +30,10 @@ vi.mock("./sshOwnerPickerProof.codec.decode.ts", async (original) => {
   };
 });
 
-const owner = fileURLToPath(new URL("../../../../target/debug/bigbud-ssh-owner", import.meta.url));
+// BIGBUD_TEST_SSH_OWNER_BIN: run against a packaged owner (for example the B candidate's).
+const owner =
+  process.env.BIGBUD_TEST_SSH_OWNER_BIN ??
+  fileURLToPath(new URL("../../../../target/debug/bigbud-ssh-owner", import.meta.url));
 const ownersUnder = (root: string) => {
   try {
     return execFileSync("pgrep", ["-f", root], { encoding: "utf8" }).trim();

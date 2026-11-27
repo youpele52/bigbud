@@ -327,6 +327,31 @@ Run every deferred ledger row on release-trusted inputs:
 
 Feed the `matrix/`, `rollback/`, `forward/` and `cutover/` checkers.
 
+**W6 status (27 November 2026, local pass, uncommitted).** These ran on this Mac and the Debian guest with isolated homes and a disposable sshd:
+
+- the same-DB pre-A→A→B→A→B lifecycle, with both newer-schema refusals
+- the consent drain on B: Cancel blocks, Drain proceeds
+- the legacy-entry relaunch on B, through the owner only
+- packaged-owner discovery and `verify-packaged-ssh-owner`
+- Linux port 22 in a private namespace, 3/3
+- crash and version fixtures on the packaged B owner
+
+Five bugs were found and fixed in B, each with tests:
+
+1. B read A's retirement marker under the wrong scope, so every A→B upgrade was fenced.
+2. B's own drain conflicted with A's marker.
+3. The drain error message was empty.
+4. The UI consent was unreachable.
+5. A stale `owner.sock` after SIGTERM kept SSH unavailable.
+
+**Decision needed (bug 4 also ships in published A).** A's updater drain always answers `consent-required`, so A cannot auto-update to B. A manual install of B still works: with A's CLI or updater drain unusable, B boots fenced and the user runs the explicit "drain identified panes" action. Options:
+
+- (i) Publish a corrected Build A′ (`v0.4.1-beta.2`) as the new rollback floor before B. **Recommended.** It also lets the A-side live upgrade cell run as designed.
+- (ii) Accept manual install plus the explicit B-side drain for A users, and document it in the release notes.
+- (iii) Make B's first boot treat an A install with no live panes as drained. This is not recommended: it infers retirement, which §c forbids.
+
+**Still open:** the owner and masters survive a committed drain, and a reattached owner then fails `staleGeneration`. The backend does not exit naturally after a drain. B is not release-trusted (ad hoc, version `0.1.613`). No `cutover/` lineage traces or conforming checker inputs exist. The A-side live relay, terminal and monitor upgrade, the Electron GUI smoke and the Linux AppImage cells were not run, and the Windows cells are open. S4 is **not accepted**. See the [ledger](2026-11-22-rust-ssh-ownership-s0-ledger.md#w6-pre-cutover-qualification-local-pass-27-november-2026-uncommitted).
+
 ### W7 — S4 activation (one change set; needs W2, W3 and W6)
 
 1. Promote the frozen production verbs (W1.1).

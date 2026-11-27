@@ -7,7 +7,10 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { runMigrations } from "../persistence/Migrations.ts";
-import { commitLegacyRetirement } from "../persistence/Layers/LegacyRetirement.ts";
+import {
+  commitLegacyRetirement,
+  LEGACY_RETIREMENT_PROFILE_SCOPE,
+} from "../persistence/Layers/LegacyRetirement.ts";
 import type { RemoteAgentRuntimeBinding } from "../remote-agent/remoteAgentConnectionPool.ts";
 import type { RemoteAgentFrame } from "../remote-agent/remoteAgentProtocol.ts";
 import type { TerminalHostPane } from "../remote-agent/remoteAgentProtocol.terminalHost.ts";
@@ -50,13 +53,22 @@ export const bootActivatedStartup = (root: string, options: { readonly ownerPres
     return sql;
   });
 
+/** The marker scope is fixed, so a shared in-memory DB must start each case clean. */
+export const clearLegacyRetirement = Effect.gen(function* () {
+  yield* runMigrations({ toMigrationInclusive: 185 });
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`DELETE FROM ssh_legacy_retired_marker`;
+  yield* sql`DELETE FROM ssh_legacy_retirement`;
+});
+
+/** Retires the profile exactly as published Build A's drain does (its fixed scope). */
 export const retireProfile = (
   sql: SqlClient.SqlClient,
-  root: string,
+  _root: string,
   pendingItems: ReadonlyArray<string> = [],
 ) =>
   commitLegacyRetirement(sql, {
-    profileScope: root,
+    profileScope: LEGACY_RETIREMENT_PROFILE_SCOPE,
     artifactId: "build-a",
     decision: "drain-now",
     drainedLeases: [],
