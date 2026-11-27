@@ -67,10 +67,14 @@ export function fixture(previousEpoch: string | null = "old-epoch") {
   const dbInstance = "fixture-db-instance";
   const bWriterImageSha256 = hash("5");
   const writerEpoch = "new-epoch";
-  const fence = "release-fence";
-  const snapshot = (seq: number, holders: string[], logicalSha256 = hash("6")) => ({
+  const snapshot = (
+    seq: number,
+    holders: string[],
+    lock: string | null,
+    logicalSha256 = hash("6"),
+  ) => ({
     seq,
-    fence,
+    lock,
     db: {
       domain: binding.identity.dbDomain,
       instance: dbInstance,
@@ -81,7 +85,7 @@ export function fixture(previousEpoch: string | null = "old-epoch") {
   });
   return {
     plan: {
-      kind: "forward-boundary-plan-v2",
+      kind: "forward-boundary-plan-v3",
       binding,
       profileInstance,
       dbInstance,
@@ -89,9 +93,10 @@ export function fixture(previousEpoch: string | null = "old-epoch") {
       aInventory,
       legacyEntries,
       bWriterImageSha256,
+      aMarkerArtifactSha256: hash("e"),
     },
     observations: {
-      kind: "forward-boundary-observations-v2",
+      kind: "forward-boundary-observations-v3",
       binding: structuredClone(binding),
       profileInstance,
       a: { artifact: { ...a }, executor: "legacy-ts", metadata: { ...metadata } },
@@ -100,33 +105,34 @@ export function fixture(previousEpoch: string | null = "old-epoch") {
         scope: "process-lifecycle-db-authority-and-legacy-relaunch",
         complete: true,
         lostEvents: 0,
-        fenceContinuous: true,
         otherAStarts: 0,
         otherBStarts: 0,
         legacyTransportStarts: 0,
         endSeq: 30,
       },
-      before: snapshot(1, ["a-backend"], hash("7")),
+      before: snapshot(1, ["a-backend"], "a-backend", hash("7")),
       retirements: aInventory.map(({ component, process }, index) => ({
         component,
         exit: { ...process },
         status: "verified-exit",
-        seq: index + 2,
+        seq: index + 3,
       })),
-      boundary: { snapshot: snapshot(5, []), writerEpoch: previousEpoch },
-      bStart: { seq: 6, process: { instance: "b-backend", imageSha256: bWriterImageSha256 } },
+      marker: { seq: 2, artifactSha256: hash("e"), sha256: hash("f") },
+      boundary: { snapshot: snapshot(6, [], null), writerEpoch: previousEpoch },
+      bStart: { seq: 7, process: { instance: "b-backend", imageSha256: bWriterImageSha256 } },
       takeover: {
-        snapshot: snapshot(7, ["b-backend"]),
+        snapshot: snapshot(8, ["b-backend"], "b-backend"),
         previousEpoch,
         writerEpoch,
         hydratedLogicalSha256: hash("6"),
         outcome: "committed-cas-and-hydration",
       },
       admission: {
-        seq: 8,
-        fence,
+        seq: 9,
+        lock: "b-backend",
         dbInstance,
         writerEpoch,
+        markerSha256: hash("f"),
         owner: { instance: "b-owner", imageSha256: ownerImage.sha256 },
       },
       relaunches: legacyEntries.map(({ id, callerImageSha256 }, index) => ({
@@ -140,8 +146,8 @@ export function fixture(previousEpoch: string | null = "old-epoch") {
         result: {
           attempt: `attempt-${id}`,
           seq: 11 + index * 3,
-          outcome: "refused-by-legacy-fence",
-          fence,
+          outcome: index % 2 ? "refused-by-state-dir-lock" : "refused-by-legacy-fence",
+          lock: "b-backend",
           dbInstance,
         },
       })),

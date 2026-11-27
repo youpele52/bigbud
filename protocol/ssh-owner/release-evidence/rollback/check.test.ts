@@ -1,97 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkRollbackBoundary } from "./check.ts";
+import { fixture, hash, type Fixture } from "./check.fixture.ts";
 
-// Synthetic normalized records only; no process or database is opened by these tests.
-const hash = (digit: string) => digit.repeat(64);
-
-function fixture() {
-  const a = { id: "a-dmg", build: "a-build", sha256: hash("a") };
-  const b = { id: "b-dmg", build: "b-build", sha256: hash("b") };
-  const metadata = {
-    schemaCeiling: 181,
-    schemaSha256: hash("1"),
-    migration: 181,
-    migrationSha256: hash("2"),
-  };
-  const owner = { id: "owner", build: "owner-build", sha256: hash("c") };
-  const binding = {
-    slot: "D.darwin.arm64.dmg",
-    cell: "fixture-cell",
-    disposition: "required",
-    identity: {
-      a,
-      b,
-      artifactVerification: "developer-id-notarized",
-      dbDomain: "fixture-domain",
-      schemaA: 181,
-      schemaB: 181,
-      migration: 181,
-      platform: {
-        os: "darwin",
-        arch: "arm64",
-        osBuild: "fixture-os",
-        abi: "macho-fixture",
-        runtimeBuild: "electron-fixture",
-        sshOrigin: "system",
-        sshVersion: "OpenSSH_9.9p1",
-        sshSha256: hash("d"),
-      },
-      owner: { image: owner, protocol: "v1" },
-      askpass: null,
-    },
-  };
-  const bInventory = [
-    { component: "backend", role: "launcher", imageSha256: hash("3") },
-    { component: "owner", role: "owner", imageSha256: owner.sha256 },
-    { component: "pty", role: "transport", imageSha256: hash("d") },
-  ];
-  const snapshot = (seq: number, holders: string[], logicalSha256 = hash("4")) => ({
-    seq,
-    fence: "fixture-fence",
-    db: {
-      domain: binding.identity.dbDomain,
-      instance: "fixture-db-instance",
-      metadata: { ...metadata },
-      logicalSha256,
-      holders,
-    },
-  });
-  const aImageSha256 = hash("5");
-  return {
-    plan: { kind: "rollback-boundary-plan-v1", binding, metadata, aImageSha256, bInventory },
-    observations: {
-      kind: "rollback-boundary-observations-v1",
-      binding: structuredClone(binding),
-      a: { artifact: { ...a }, executor: "legacy-ts", metadata: { ...metadata } },
-      b: { artifact: { ...b }, executor: "rust-owner", metadata: { ...metadata } },
-      capture: {
-        complete: true,
-        lostEvents: 0,
-        fenceContinuous: true,
-        otherBStarts: 0,
-        otherAStarts: 0,
-      },
-      before: snapshot(1, ["b-backend"], hash("6")),
-      drained: snapshot(5, ["b-backend"]),
-      storageRevokedAt: 6,
-      retirements: bInventory.map(({ component, imageSha256 }, index) => {
-        const process = { instance: `b-${component}`, imageSha256 };
-        return {
-          component,
-          before: process,
-          exit: { ...process },
-          status: "verified-exit",
-          seq: [8, 7, 3][index]!,
-        };
-      }),
-      boundary: snapshot(9, []),
-      aStart: { seq: 10, process: { instance: "a-backend", imageSha256: aImageSha256 } },
-      aOpen: snapshot(11, ["a-backend"]),
-    },
-  };
-}
-
-type Fixture = ReturnType<typeof fixture>;
 const check = ({ plan, observations }: Fixture) => checkRollbackBoundary(plan, observations);
 
 describe("offline rollback boundary observations", () => {
@@ -113,6 +23,8 @@ describe("offline rollback boundary observations", () => {
     expect(() => checkRollbackBoundary(f.plan, missingOpen)).toThrow(/Expected exactly/);
     f.observations.kind = "s4-matrix-claim-references-v1";
     expect(() => check(f)).toThrow(/not claim references/);
+    f.observations.kind = "rollback-boundary-observations-v1";
+    expect(() => check(f)).toThrow(/v2 rollback/);
   });
 
   it("rejects a valid binding from another profile, even with the same cell and DB tokens", () => {
@@ -250,11 +162,48 @@ describe("offline rollback boundary observations", () => {
       /zero holders/,
     ],
     [
-      "A opens before storage revocation",
+      "A opens before B's drain answered",
       (f) => {
-        f.observations.storageRevokedAt = 12;
+        f.observations.drain.seq = 12;
       },
       /out of order/,
+    ],
+    [
+      "an owner that kept its attach record",
+      (f) => {
+        f.observations.drain.owner.attachCleared = false;
+        f.observations.drain.record.owner!.attachCleared = false;
+      },
+      /attach record/,
+    ],
+    [
+      "a retirement record from another B artifact",
+      (f) => {
+        f.observations.drain.record.artifactSha256 = hash("9");
+      },
+      /retirement record/,
+    ],
+    [
+      "a record whose owner counts differ from the shutdown report",
+      (f) => {
+        f.observations.drain.record.owner!.masters = 0;
+      },
+      /retirement record/,
+    ],
+    [
+      "a record without the drained owner",
+      (f) => {
+        f.observations.drain.record.owner = null;
+        f.observations.drain.record.ownerEpoch = null;
+      },
+      /retirement record/,
+    ],
+    [
+      "a drain that rewrote A's legacy marker",
+      (f) => {
+        f.observations.drain.legacyMarkerSha256.drained = hash("9");
+      },
+      /legacy retirement marker/,
     ],
     [
       "A startup before the boundary",
@@ -285,11 +234,32 @@ describe("offline rollback boundary observations", () => {
       /first-open DB holder/,
     ],
     [
-      "changed release fence token",
+      "another process holding the lock at A's first open",
       (f) => {
-        f.observations.aOpen.fence = "other-fence";
+        f.observations.aOpen.lock = "other-process";
       },
-      /fence identity/,
+      /State-dir lock/,
+    ],
+    [
+      "a free lock before B's drain",
+      (f) => {
+        f.observations.before.lock = null;
+      },
+      /State-dir lock/,
+    ],
+    [
+      "a lock still held at the boundary",
+      (f) => {
+        f.observations.boundary.lock = "b-backend";
+      },
+      /State-dir lock/,
+    ],
+    [
+      "the lock passing to another B process after the drain",
+      (f) => {
+        f.observations.drained.lock = "b-owner";
+      },
+      /State-dir lock/,
     ],
     [
       "incomplete capture",
@@ -306,11 +276,11 @@ describe("offline rollback boundary observations", () => {
       /Uncertain capture/,
     ],
     [
-      "temporary loss of the fence",
+      "a drain that did not answer drained",
       (f) => {
-        f.observations.capture.fenceContinuous = false;
+        f.observations.drain.status = "cancelled";
       },
-      /Uncertain capture/,
+      /answered drain/,
     ],
     [
       "B attempted relaunch that started",

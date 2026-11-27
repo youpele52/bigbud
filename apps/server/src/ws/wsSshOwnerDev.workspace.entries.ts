@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { SshOwnerDevPickerError } from "../ssh/sshOwnerDevPicker.errors.ts";
+import { SshOwnerOperationError } from "../ssh/sshOwnerOperation.errors.ts";
 import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.client.ts";
 import { validRelativeOperand } from "../ssh/sshOwnerPickerProof.codec.workspace.ts";
 import { RemoteTargetDisconnectedError } from "../ssh/sshTargetDisconnects.ts";
@@ -74,7 +74,7 @@ function ownerFailure(
   cause: unknown,
 ): WorkspaceFileSystemError {
   const code =
-    cause instanceof PickerProofOwnerError || cause instanceof SshOwnerDevPickerError
+    cause instanceof PickerProofOwnerError || cause instanceof SshOwnerOperationError
       ? cause.code
       : undefined;
   const disposition =

@@ -1,4 +1,12 @@
 {
   "extends": "../tsconfig.json",
-  "files": ["input.ts", "check.ts", "check.test.ts", "verify.ts", "vitest.config.ts"]
+  "files": [
+    "input.ts",
+    "check.ts",
+    "check.fixture.ts",
+    "check.test.ts",
+    "check.lock.test.ts",
+    "verify.ts",
+    "vitest.config.ts"
+  ]
 }

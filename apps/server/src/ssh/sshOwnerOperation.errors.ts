@@ -52,7 +52,7 @@ const ownerMessages: Partial<Record<PickerProofOwnerErrorCode, string>> = {
 };
 
 /** Keep startup and subsequent owner failures distinct, without surfacing private startup operands. */
-export class SshOwnerDevPickerError extends Error {
+export class SshOwnerOperationError extends Error {
   constructor(
     readonly code:
       | "startupFailed"
@@ -67,12 +67,12 @@ export class SshOwnerDevPickerError extends Error {
     cause?: PickerProofOwnerError,
   ) {
     super(message, { cause });
-    this.name = "SshOwnerDevPickerError";
+    this.name = "SshOwnerOperationError";
   }
 }
 
 export const invalidChallenge = () =>
-  new SshOwnerDevPickerError(
+  new SshOwnerOperationError(
     "invalidChallenge",
     "SSH host trust approval expired or is invalid. Check the host key again.",
   );
@@ -103,26 +103,26 @@ export function ownerFailure(error: unknown) {
   if (error instanceof SshTargetAuthRequiredError) return error;
   if (error instanceof PickerProofOwnerError) {
     const message = ownerMessages[error.code] ?? "The SSH owner rejected this operation.";
-    return new SshOwnerDevPickerError(
+    return new SshOwnerOperationError(
       error.code,
       error.jumpFailure ? jumpFailureMessage(error.jumpFailure, error.code, message) : message,
       error,
     );
   }
-  return new SshOwnerDevPickerError("ownerFailure", "The SSH owner operation failed.");
+  return new SshOwnerOperationError("ownerFailure", "The SSH owner operation failed.");
 }
 
 export function startupFailure(error: unknown) {
   if (error instanceof PickerProofStartupConfigError) {
-    return new SshOwnerDevPickerError(error.code, error.message, error);
+    return new SshOwnerOperationError(error.code, error.message, error);
   }
   if (error instanceof PickerProofStartupRetirementError) {
-    return new SshOwnerDevPickerError(error.code, error.message, error);
+    return new SshOwnerOperationError(error.code, error.message, error);
   }
   const cause =
     error instanceof PickerProofOwnerError ? new PickerProofOwnerError(error.code) : undefined;
   if (cause?.code === "configUnsupported") return ownerFailure(cause);
-  return new SshOwnerDevPickerError(
+  return new SshOwnerOperationError(
     "startupFailed",
     cause === undefined
       ? "The SSH owner failed to start."
@@ -148,13 +148,13 @@ const folderCodes = {
   sessionQuota: "sshSessionQuota",
   transportLost: "sshTransportLost",
 } as const satisfies Partial<
-  Record<SshOwnerDevPickerError["code"], ServerListRemoteFoldersError["code"]>
+  Record<SshOwnerOperationError["code"], ServerListRemoteFoldersError["code"]>
 >;
 
-/** Preserve actionable error categories across the authenticated dev picker RPC boundary. */
+/** Preserve actionable error categories across the authenticated folder-picker RPC boundary. */
 export function folderLookupFailure(cause: unknown) {
   const code =
-    cause instanceof SshOwnerDevPickerError && Object.hasOwn(folderCodes, cause.code)
+    cause instanceof SshOwnerOperationError && Object.hasOwn(folderCodes, cause.code)
       ? folderCodes[cause.code as keyof typeof folderCodes]
       : undefined;
   return new ServerListRemoteFoldersError({

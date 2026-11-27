@@ -15,7 +15,6 @@ export function checkRoundTrip(matrixInput: unknown, evidenceInput: unknown) {
     "scope",
     "complete",
     "lostEvents",
-    "fenceContinuous",
     "otherAStarts",
     "otherBStarts",
   ]);
@@ -23,7 +22,6 @@ export function checkRoundTrip(matrixInput: unknown, evidenceInput: unknown) {
     capture.scope !== "single-forward-rollback-sequence" ||
     capture.complete !== true ||
     capture.lostEvents !== 0 ||
-    capture.fenceContinuous !== true ||
     capture.otherAStarts !== 0 ||
     capture.otherBStarts !== 0
   ) {
@@ -47,10 +45,12 @@ export function checkRoundTrip(matrixInput: unknown, evidenceInput: unknown) {
   if (
     token(r.profileInstance) !== handoff.profileInstance ||
     reversal.before.db.instance !== handoff.admission.dbInstance ||
-    reversal.before.fence !== handoff.admission.fence ||
+    reversal.before.lock !== handoff.admission.lock ||
     !isDeepStrictEqual(rollback.expected.metadata, forward.expected.metadata)
   ) {
-    throw new Error("Profile, DB instance, release fence, or schema/migration identity changed");
+    throw new Error(
+      "Profile, DB instance, state-dir lock holder, or schema/migration identity changed",
+    );
   }
   if (handoff.captureEnd >= reversal.before.seq) {
     throw new Error("Rollback must start after the forward capture ends in the shared sequence");

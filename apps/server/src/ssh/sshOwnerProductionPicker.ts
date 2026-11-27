@@ -9,7 +9,7 @@ import type {
   ServerTrustSshHostResult,
 } from "@bigbud/contracts/server/server.sshHostTrust";
 
-import { invalidChallenge, ownerFailure } from "./sshOwnerDevPicker.errors.ts";
+import { invalidChallenge, ownerFailure } from "./sshOwnerOperation.errors.ts";
 import type { PickerProofBoundTarget } from "./sshOwnerPickerProof.client.session.types.ts";
 import { PickerProofOwnerError } from "./sshOwnerPickerProof.codec.wire.ts";
 import {

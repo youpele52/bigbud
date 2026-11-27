@@ -9,12 +9,18 @@ import {
   LEGACY_RETIREMENT_PROFILE_SCOPE,
   readLegacyRetirement,
 } from "../persistence/Layers/LegacyRetirement.ts";
+import { readOwnerBuildRetirement } from "../persistence/Layers/OwnerBuildRetirement.ts";
 import { commitOwnerBuildDrain, makeLiveBackendDrainHandler } from "./backendDrain.live.ts";
 
 // W6 regressions found on the packaged B: its upgrade drain rewrote the legacy marker under
 // its own artifact, which conflicts with Build A's marker, and answered an empty message.
 
-const handlerFor = (commit: Parameters<typeof makeLiveBackendDrainHandler>[0]["commit"]) =>
+type Deps = Parameters<typeof makeLiveBackendDrainHandler>[0];
+
+const handlerFor = (
+  commit: Deps["commit"],
+  closeOwnedMasters: Deps["closeOwnedMasters"] = Effect.succeed({ closed: 0, failed: 0 }),
+) =>
   makeLiveBackendDrainHandler({
     profileScope: LEGACY_RETIREMENT_PROFILE_SCOPE,
     artifactId: "bigbud-server@0.5.0",
@@ -23,7 +29,7 @@ const handlerFor = (commit: Parameters<typeof makeLiveBackendDrainHandler>[0]["c
     stopMonitors: Effect.void,
     stopRelays: Effect.void,
     stopProviders: Effect.void,
-    closeOwnedMasters: Effect.succeed({ closed: 0, failed: 0 }),
+    closeOwnedMasters,
     commit,
     releaseLock: Effect.void,
   });
@@ -51,9 +57,37 @@ it.layer(NodeSqliteClient.layerMemory())("Build B upgrade drain", (it) => {
       });
       const before = yield* readLegacyRetirement(sql, "backend");
       const response = yield* Effect.promise(() =>
-        handlerFor(() => commitOwnerBuildDrain(sql))(request),
+        handlerFor((input) => commitOwnerBuildDrain(sql, input))(request),
       );
       assert.deepInclude(response, { ok: true, status: "drained" });
+      assert.deepEqual(yield* readLegacyRetirement(sql, "backend"), before);
+    }),
+  );
+
+  it.effect("commits B's own retirement record with the owner's shutdown report", () =>
+    Effect.gen(function* () {
+      yield* runMigrations({ toMigrationInclusive: 187 });
+      const sql = yield* SqlClient.SqlClient;
+      const before = yield* readLegacyRetirement(sql, "backend");
+      const owner = Effect.succeed({
+        closed: 1,
+        failed: 0,
+        leases: 2,
+        attachCleared: true,
+        ownerEpoch: "0a0b",
+      });
+      const response = yield* Effect.promise(() =>
+        handlerFor((input) => commitOwnerBuildDrain(sql, input), owner)(request),
+      );
+      assert.deepInclude(response, { ok: true, status: "drained" });
+      const record = yield* readOwnerBuildRetirement(sql, "backend");
+      assert.deepInclude(record, {
+        artifactId: "bigbud-server@0.5.0",
+        decision: "drain-now",
+        ownerEpoch: "0a0b",
+      });
+      assert.deepEqual(record?.drainedLeases, []);
+      assert.deepEqual(record?.owner, { masters: 1, leases: 2, attachCleared: true });
       assert.deepEqual(yield* readLegacyRetirement(sql, "backend"), before);
     }),
   );
@@ -65,7 +99,7 @@ it.layer(NodeSqliteClient.layerMemory())("Build B upgrade drain", (it) => {
       yield* sql`DELETE FROM ssh_legacy_retired_marker`;
       yield* sql`DELETE FROM ssh_legacy_retirement`;
       const response = yield* Effect.promise(() =>
-        handlerFor(() => commitOwnerBuildDrain(sql))(request),
+        handlerFor((input) => commitOwnerBuildDrain(sql, input))(request),
       );
       assert.deepInclude(response, { ok: true, status: "drained" });
       assert.equal(yield* readLegacyRetirement(sql, "backend"), undefined);

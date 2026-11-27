@@ -14,17 +14,31 @@ export interface OwnerDrainReport {
   readonly closed: number;
   readonly failed: number;
   readonly leases: number;
+  /** Present when a live owner answered the shutdown. */
+  readonly attachCleared?: boolean;
+  /** Hex epoch of the owner that shut down; present only with a live owner. */
+  readonly ownerEpoch?: string;
 }
+
+const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
 
 export const closeSshOwnerForDrain = (
   read: typeof readSshOwnerProductionOwner = readSshOwnerProductionOwner,
 ): Effect.Effect<OwnerDrainReport, Error> =>
   Effect.tryPromise({
     try: async () => {
-      const shutdown = read()?.handle.shutdownForDrain;
-      if (!shutdown) return { closed: 0, failed: 0, leases: 0 };
+      const handle = read()?.handle;
+      const shutdown = handle?.shutdownForDrain;
+      if (!handle || !shutdown) return { closed: 0, failed: 0, leases: 0 };
+      const epoch = handle.ownerEpoch;
       const report = await shutdown();
-      return { closed: report.mastersClosed, failed: 0, leases: report.leasesClosed };
+      return {
+        closed: report.mastersClosed,
+        failed: 0,
+        leases: report.leasesClosed,
+        attachCleared: report.attachCleared,
+        ...(epoch instanceof Uint8Array ? { ownerEpoch: hex(epoch) } : {}),
+      };
     },
     catch: (cause) =>
       cause instanceof Error ? cause : new Error("The SSH owner did not shut down for the drain."),

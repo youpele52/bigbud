@@ -41,9 +41,9 @@ describe("offline A/B round-trip evidence continuity", () => {
     f.evidence.scopeReview = "other-review";
     expect(() => check(f)).toThrow(/matrix scope review/);
     f.evidence.scopeReview = f.matrix.scopeReview;
-    f.evidence.capture.fenceContinuous = false;
+    f.evidence.capture.complete = false;
     expect(() => check(f)).toThrow(/one continuous round-trip capture/);
-    f.evidence.capture.fenceContinuous = true;
+    f.evidence.capture.complete = true;
     f.evidence.capture.otherBStarts = 1;
     expect(() => check(f)).toThrow(/unaccounted A\/B starts/);
   });
@@ -62,13 +62,6 @@ describe("offline A/B round-trip evidence continuity", () => {
         for (const { db } of rollbackSnapshots(f)) db.instance = "copied-db";
       },
       /Profile, DB instance/,
-    ],
-    [
-      "a separately acquired release fence",
-      (f) => {
-        for (const snapshot of rollbackSnapshots(f)) snapshot.fence = "different-fence";
-      },
-      /release fence/,
     ],
     [
       "different migration bytes under the same schema numbers",
@@ -108,13 +101,14 @@ describe("offline A/B round-trip evidence continuity", () => {
       /Process lifetimes/,
     ],
     [
-      "another B writer lifetime with the correct image",
+      "another B writer lifetime with the correct image holding the lock",
       ({ evidence }) => {
         const { before, drained, retirements } = evidence.rollback.observations;
         before.db.holders = drained.db.holders = ["replacement-writer"];
+        before.lock = drained.lock = "replacement-writer";
         retirements[0]!.before.instance = retirements[0]!.exit.instance = "replacement-writer";
       },
-      /Process lifetimes/,
+      /state-dir lock holder/,
     ],
     [
       "an already retired A lifetime reopening the DB",
@@ -122,6 +116,7 @@ describe("offline A/B round-trip evidence continuity", () => {
         const { aStart, aOpen } = evidence.rollback.observations;
         aStart.process.instance = evidence.forward.observations.retirements[0]!.exit.instance;
         aOpen.db.holders = [aStart.process.instance];
+        aOpen.lock = aStart.process.instance;
       },
       /Process lifetimes/,
     ],
@@ -135,7 +130,7 @@ describe("offline A/B round-trip evidence continuity", () => {
     expect(() => check(f)).toThrow(error);
   });
 
-  it("still requires forward v2 refusals and rollback DB consistency", () => {
+  it("still requires forward v3 refusals and rollback DB consistency", () => {
     const missingRefusal = fixture();
     missingRefusal.evidence.forward.observations.relaunches.pop();
     expect(() => check(missingRefusal)).toThrow(/Missing legacy relaunch observations/);

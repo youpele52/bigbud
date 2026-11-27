@@ -17,13 +17,14 @@ export function build(value: unknown, executor: "legacy-ts" | "rust-owner") {
   return { artifact: image(fields.artifact), metadata: metadata(fields.metadata) };
 }
 
+/** `lock` is the process lifetime holding `<stateDir>/backend.lock`, or `null` while free. */
 export function snapshot(value: unknown) {
-  const frame = object(value, ["seq", "fence", "db"]);
+  const frame = object(value, ["seq", "lock", "db"]);
   const db = object(frame.db, ["domain", "instance", "metadata", "logicalSha256", "holders"]);
   if (!Array.isArray(db.holders)) throw new Error("Expected a DB holder array");
   return {
     seq: positive(frame.seq),
-    fence: token(frame.fence),
+    lock: frame.lock === null ? null : token(frame.lock),
     db: {
       domain: token(db.domain),
       instance: token(db.instance),
@@ -37,4 +38,20 @@ export function snapshot(value: unknown) {
 export function identity(value: unknown) {
   const fields = object(value, ["instance", "imageSha256"]);
   return { instance: token(fields.instance), imageSha256: digest(fields.imageSha256) };
+}
+
+/** The owner's own drain shutdown report (reply 108), as answered and as recorded. */
+export function ownerShutdown(value: unknown) {
+  const fields = object(value, ["masters", "leases", "attachCleared"]);
+  for (const count of [fields.masters, fields.leases]) {
+    if (!Number.isSafeInteger(count) || (count as number) < 0)
+      throw new Error("Expected owner shutdown counts");
+  }
+  if (typeof fields.attachCleared !== "boolean")
+    throw new Error("Expected the owner's attach-record outcome");
+  return {
+    masters: fields.masters as number,
+    leases: fields.leases as number,
+    attachCleared: fields.attachCleared,
+  };
 }

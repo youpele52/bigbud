@@ -33,7 +33,24 @@ describe("drain owner step", () => {
       ),
     );
     expect(calls).toBe(1);
-    expect(closed).toEqual({ closed: 2, failed: 0, leases: 3 });
+    expect(closed).toEqual({ closed: 2, failed: 0, leases: 3, attachCleared: true });
+  });
+
+  it("reports the shut-down owner's epoch for the B retirement record", async () => {
+    const live = {
+      handle: {
+        state: () => "open",
+        ownerEpoch: new Uint8Array([0x0a, 0xff]),
+        shutdownForDrain: async () => ({ mastersClosed: 1, leasesClosed: 0, attachCleared: true }),
+      },
+    } as unknown as SshOwnerProductionRegistration;
+    expect(await Effect.runPromise(closeSshOwnerForDrain(() => live))).toEqual({
+      closed: 1,
+      failed: 0,
+      leases: 0,
+      attachCleared: true,
+      ownerEpoch: "0aff",
+    });
   });
 
   it("has nothing to close without a live owner", async () => {

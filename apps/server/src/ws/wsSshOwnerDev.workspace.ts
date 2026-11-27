@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { SshOwnerDevPickerError } from "../ssh/sshOwnerDevPicker.errors.ts";
+import { SshOwnerOperationError } from "../ssh/sshOwnerOperation.errors.ts";
 import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.client.ts";
 import type { PickerProofWorkspaceClient } from "../ssh/sshOwnerPickerProof.client.workspace.ts";
 import { MAX_WORKSPACE_STAGED_WRITE_BYTES } from "../ssh/sshOwnerPickerProof.codec.workspace.mutation.ts";
@@ -292,7 +292,7 @@ export const withWsSshOwnerWorkspace = Effect.fn("withWsSshOwnerWorkspace")(func
                   }),
                 catch: (cause) => {
                   const code =
-                    cause instanceof SshOwnerDevPickerError ||
+                    cause instanceof SshOwnerOperationError ||
                     cause instanceof PickerProofOwnerError
                       ? cause.code
                       : undefined;

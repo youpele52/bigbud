@@ -30,6 +30,25 @@ function checkMetadata(expected: Plan, run: Observations) {
   }
 }
 
+// B's storage revocation happens inside its drain: the owner shuts down and clears its
+// attach record, then B commits its own retirement record before releasing the lock.
+function checkDrain(expected: Plan, run: Observations) {
+  const { drain } = run;
+  if (!drain.owner.attachCleared) {
+    throw new Error("B's owner did not clear its attach record during the drain");
+  }
+  if (
+    drain.record.artifactSha256 !== expected.bRecordArtifactSha256 ||
+    drain.record.ownerEpoch === null ||
+    !same(drain.record.owner, drain.owner)
+  ) {
+    throw new Error("B's retirement record does not match B's artifact and owner shutdown");
+  }
+  if (drain.legacyMarkerSha256.before !== drain.legacyMarkerSha256.drained) {
+    throw new Error("B's drain changed the legacy retirement marker");
+  }
+}
+
 function checkProcesses(expected: Plan, run: Observations) {
   const inventory = new Map(expected.bInventory.map((entry) => [entry.component, entry]));
   const owners = expected.bInventory.filter((entry) => entry.role === "owner");
@@ -43,23 +62,20 @@ function checkProcesses(expected: Plan, run: Observations) {
   }
   const instances = new Set<string>();
   const holderIds = new Set(run.before.db.holders);
-  const { before, drained, storageRevokedAt, boundary, aStart, aOpen } = run;
+  const { before, drain, drained, boundary, aStart, aOpen } = run;
   const drainedHolders = new Set(drained.db.holders);
   if (
     !(
-      before.seq < drained.seq &&
-      drained.seq < storageRevokedAt &&
-      storageRevokedAt < boundary.seq &&
+      before.seq < drain.seq &&
+      drain.seq < drained.seq &&
+      drained.seq < boundary.seq &&
       boundary.seq < aStart.seq &&
       aStart.seq < aOpen.seq
     )
   ) {
-    throw new Error("Drain, storage revocation, offline boundary, and A startup are out of order");
+    throw new Error("Drain, committed record, offline boundary, and A startup are out of order");
   }
-  if ([drained, boundary, aOpen].some(({ fence }) => fence !== before.fence)) {
-    throw new Error("Release fence identity changed across rollback");
-  }
-  const occupiedSequences = new Set([drained.seq, storageRevokedAt]);
+  const occupiedSequences = new Set([drain.seq, drained.seq]);
   for (const retirement of run.retirements) {
     const entry = inventory.get(retirement.component);
     if (
@@ -97,6 +113,30 @@ function checkProcesses(expected: Plan, run: Observations) {
   if (!same(aOpen.db.holders, [a.instance])) {
     throw new Error("A first-open DB holder is not exactly the verified A process");
   }
+  checkLock(expected, run, instances);
+}
+
+// The fence is B's state-dir lock, then B's committed record, then A's lock: the lock
+// may be free only after B's drain answered, and only B's launcher or A may hold it.
+function checkLock(expected: Plan, run: Observations, instances: ReadonlySet<string>) {
+  const { before, drain, drained, boundary, aOpen } = run;
+  const holder = before.lock;
+  const launchers = new Set(
+    expected.bInventory.filter(({ role }) => role === "launcher").map(({ component }) => component),
+  );
+  const lockRetirement = run.retirements.find(({ before: process }) => process.instance === holder);
+  if (
+    holder === null ||
+    !lockRetirement ||
+    !launchers.has(lockRetirement.component) ||
+    lockRetirement.seq <= drain.seq ||
+    (drained.lock !== null && (drained.lock !== holder || lockRetirement.seq <= drained.seq)) ||
+    boundary.lock !== null ||
+    aOpen.lock !== run.aStart.process.instance ||
+    instances.has(aOpen.lock)
+  ) {
+    throw new Error("State-dir lock was not held by B's launcher until its drain, then by A");
+  }
 }
 
 export function validateRollbackBoundary(planInput: unknown, observationsInput: unknown) {
@@ -104,6 +144,7 @@ export function validateRollbackBoundary(planInput: unknown, observationsInput: 
   const run = observations(observationsInput);
   if (!same(expected.cell, run.cell)) throw new Error("Mismatched rollback matrix cell binding");
   checkMetadata(expected, run);
+  checkDrain(expected, run);
   checkProcesses(expected, run);
   return { expected, run };
 }

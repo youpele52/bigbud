@@ -19,8 +19,9 @@ export function plan(value: unknown) {
     "aInventory",
     "legacyEntries",
     "bWriterImageSha256",
+    "aMarkerArtifactSha256",
   ]);
-  if (p.kind !== "forward-boundary-plan-v2") throw new Error("Expected a v2 forward boundary plan");
+  if (p.kind !== "forward-boundary-plan-v3") throw new Error("Expected a v3 forward boundary plan");
   return {
     cell: requiredCell(p.binding),
     profileInstance: token(p.profileInstance),
@@ -48,6 +49,7 @@ export function plan(value: unknown) {
       };
     }),
     bWriterImageSha256: digest(p.bWriterImageSha256),
+    aMarkerArtifactSha256: digest(p.aMarkerArtifactSha256),
   };
 }
 
@@ -61,19 +63,19 @@ export function observations(value: unknown) {
     "capture",
     "before",
     "retirements",
+    "marker",
     "boundary",
     "bStart",
     "takeover",
     "admission",
     "relaunches",
   ]);
-  if (r.kind !== "forward-boundary-observations-v2")
-    throw new Error("Expected v2 forward observations, not claim references");
+  if (r.kind !== "forward-boundary-observations-v3")
+    throw new Error("Expected v3 forward observations, not claim references");
   const c = object(r.capture, [
     "scope",
     "complete",
     "lostEvents",
-    "fenceContinuous",
     "otherAStarts",
     "otherBStarts",
     "legacyTransportStarts",
@@ -83,13 +85,13 @@ export function observations(value: unknown) {
     c.scope !== "process-lifecycle-db-authority-and-legacy-relaunch" ||
     c.complete !== true ||
     c.lostEvents !== 0 ||
-    c.fenceContinuous !== true ||
     c.otherAStarts !== 0 ||
     c.otherBStarts !== 0 ||
     c.legacyTransportStarts !== 0
   ) {
-    throw new Error("Uncertain capture, release fence, or overlapping managed launches");
+    throw new Error("Uncertain capture or overlapping managed launches");
   }
+  const marker = object(r.marker, ["seq", "artifactSha256", "sha256"]);
   const boundary = object(r.boundary, ["snapshot", "writerEpoch"]);
   const start = object(r.bStart, ["seq", "process"]);
   const takeover = object(r.takeover, [
@@ -101,7 +103,14 @@ export function observations(value: unknown) {
   ]);
   if (takeover.outcome !== "committed-cas-and-hydration")
     throw new Error("Expected committed writer epoch CAS and hydration");
-  const admission = object(r.admission, ["seq", "fence", "dbInstance", "writerEpoch", "owner"]);
+  const admission = object(r.admission, [
+    "seq",
+    "lock",
+    "dbInstance",
+    "writerEpoch",
+    "markerSha256",
+    "owner",
+  ]);
   return {
     cell: requiredCell(r.binding),
     profileInstance: token(r.profileInstance),
@@ -118,6 +127,11 @@ export function observations(value: unknown) {
         seq: positive(entry.seq),
       };
     }),
+    marker: {
+      seq: positive(marker.seq),
+      artifactSha256: digest(marker.artifactSha256),
+      sha256: digest(marker.sha256),
+    },
     boundary: {
       snapshot: snapshot(boundary.snapshot),
       writerEpoch: boundary.writerEpoch === null ? null : token(boundary.writerEpoch),
@@ -131,17 +145,21 @@ export function observations(value: unknown) {
     },
     admission: {
       seq: positive(admission.seq),
-      fence: token(admission.fence),
+      lock: token(admission.lock),
       dbInstance: token(admission.dbInstance),
       writerEpoch: token(admission.writerEpoch),
+      markerSha256: digest(admission.markerSha256),
       owner: identity(admission.owner),
     },
     relaunches: array(r.relaunches).map((item) => {
       const pair = object(item, ["request", "result"]);
       const request = object(pair.request, ["attempt", "entry", "seq", "caller", "dbInstance"]);
-      const result = object(pair.result, ["attempt", "seq", "outcome", "fence", "dbInstance"]);
-      if (result.outcome !== "refused-by-legacy-fence") {
-        throw new Error("Expected an observed legacy fence refusal");
+      const result = object(pair.result, ["attempt", "seq", "outcome", "lock", "dbInstance"]);
+      if (
+        result.outcome !== "refused-by-legacy-fence" &&
+        result.outcome !== "refused-by-state-dir-lock"
+      ) {
+        throw new Error("Expected an observed legacy fence or state-dir lock refusal");
       }
       return {
         request: {
@@ -154,7 +172,8 @@ export function observations(value: unknown) {
         result: {
           attempt: token(result.attempt),
           seq: positive(result.seq),
-          fence: token(result.fence),
+          outcome: result.outcome,
+          lock: token(result.lock),
           dbInstance: token(result.dbInstance),
         },
       };

@@ -67,7 +67,7 @@ describe("offline forward boundary observations", () => {
     const { request, result } = first!;
     expect(() => verify({ ref: "claim-legacy-retirement" })).toThrow(/Expected exactly/);
     expect(() => verify({ request, result: { ...result, outcome: "timed-out" } })).toThrow(
-      /observed legacy fence refusal/,
+      /observed legacy fence or state-dir lock refusal/,
     );
     expect(() =>
       verify({ request, result: { ...result, attempt: second!.result.attempt } }),
@@ -93,7 +93,7 @@ describe("offline forward boundary observations", () => {
         result,
       }),
     ).toThrow(/mismatched legacy attempt/);
-    expect(() => verify({ request, result: { ...result, fence: "other-fence" } })).toThrow(
+    expect(() => verify({ request, result: { ...result, lock: "other-lock" } })).toThrow(
       /not bound/,
     );
     expect(() => verify({ request: { ...request, dbInstance: "other-db" }, result })).toThrow(
@@ -104,7 +104,7 @@ describe("offline forward boundary observations", () => {
     );
   });
 
-  it("requires distinct ordered events inside the continuously fenced capture, with no legacy spawn", () => {
+  it("requires distinct ordered events inside the complete capture, with no legacy spawn", () => {
     const { plan, observations } = fixture();
     const [pair, second] = observations.relaunches;
     const { request, result } = pair!;
@@ -342,13 +342,6 @@ describe("offline forward boundary observations", () => {
       /matrix owner image/,
     ],
     [
-      "replacement release fence",
-      (f) => {
-        f.observations.boundary.snapshot.fence = "other-fence";
-      },
-      /Release fence changed/,
-    ],
-    [
       "snapshot-only capture",
       (f) => {
         f.observations.capture.scope = "snapshot-only";
@@ -366,13 +359,6 @@ describe("offline forward boundary observations", () => {
       "recorder event loss",
       (f) => {
         f.observations.capture.lostEvents = 1;
-      },
-      /Uncertain capture/,
-    ],
-    [
-      "temporary fence loss",
-      (f) => {
-        f.observations.capture.fenceContinuous = false;
       },
       /Uncertain capture/,
     ],

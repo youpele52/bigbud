@@ -4,14 +4,12 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import {
-  checkpointLegacyRetirementWal,
-  LEGACY_RETIREMENT_PROFILE_SCOPE,
-} from "../persistence/Layers/LegacyRetirement.ts";
+import { LEGACY_RETIREMENT_PROFILE_SCOPE } from "../persistence/Layers/LegacyRetirement.ts";
+import { commitOwnerBuildRetirement } from "../persistence/Layers/OwnerBuildRetirement.ts";
 import { TerminalManager } from "../terminal/Services/Manager.ts";
 import { OwnershipShutdown } from "./ownershipShutdown.ts";
 import { armBackendDrainExit } from "./backendDrain.exit.ts";
-import { closeSshOwnerForDrain } from "./backendDrain.owner.ts";
+import { closeSshOwnerForDrain, type OwnerDrainReport } from "./backendDrain.owner.ts";
 import { registerBackendDrainHandler, type BackendDrainHandler } from "./backendDrain.handler.ts";
 import { requestBackendDrainConsent, type BackendDrainDecision } from "./backendDrain.consent.ts";
 import {
@@ -56,15 +54,17 @@ export interface LiveBackendDrainDeps {
   readonly stopProviders: Effect.Effect<unknown, Error>;
   /** The SSH owner's masters (and leases, when reported) closed before the lock release. */
   readonly closeOwnedMasters: Effect.Effect<
-    { readonly closed: number; readonly failed: number; readonly leases?: number },
+    Omit<OwnerDrainReport, "leases"> & { readonly leases?: number },
     Error
   >;
+  /** `owner` is the owner step's own report; absent when the drain closed no owner. */
   readonly commit: (input: {
     readonly profileScope: string;
     readonly artifactId: string;
     readonly decision: LegacyDrainChoice;
     readonly drainedLeases: ReadonlyArray<string>;
     readonly pendingItems: ReadonlyArray<string>;
+    readonly owner?: OwnerDrainReport | undefined;
   }) => Effect.Effect<"committed" | "already-retired" | "conflict" | void, Error>;
   readonly releaseLock: Effect.Effect<void, Error>;
   /** Drains coordinator followers through the real peer coordinator; 0 when none. */
@@ -102,6 +102,7 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
     running = true;
     const stops: BackendDrainStopReport[] = [];
     let owner: { masters: number; leases: number } | undefined;
+    let ownerReport: OwnerDrainReport | undefined;
     const reported = (stop: Effect.Effect<unknown, Error>) =>
       stop.pipe(
         Effect.tap((result) => Effect.sync(() => isStopReport(result) && stops.push(result))),
@@ -143,10 +144,11 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
             Effect.tap((closed) =>
               Effect.sync(() => {
                 owner = { masters: closed.closed, leases: closed.leases ?? 0 };
+                ownerReport = { ...closed, leases: closed.leases ?? 0 };
               }),
             ),
           ),
-          commit: deps.commit,
+          commit: (input) => deps.commit({ ...input, owner: ownerReport }),
           releaseLock: deps.releaseLock,
           timeoutMs: 60_000,
         }),
@@ -170,13 +172,31 @@ export function makeLiveBackendDrainHandler(deps: LiveBackendDrainDeps): Backend
 
 /**
  * This build runs no legacy SSH, so its drain never writes or replaces the Build A
- * marker: that record is the only retirement fact, and rewriting it under this
- * build's artifact would conflict with A's marker (blocking every later upgrade and
- * the offline rollback) or, on a fenced profile, lift the fence without the explicit
- * drain. The drain still checkpoints WAL before the lock is released.
+ * marker: rewriting it under this build's artifact would conflict with A's marker
+ * (blocking every later upgrade and the offline rollback) or, on a fenced profile,
+ * lift the fence without the explicit drain. It commits its own B retirement record
+ * (cutover §d step 1: drained leases, the owner's shutdown counts, artifact and
+ * epoch) in one transaction, then checkpoints WAL before the lock is released.
  */
-export const commitOwnerBuildDrain = (sql: SqlClient.SqlClient) =>
-  checkpointLegacyRetirementWal(sql).pipe(Effect.mapError(asError));
+export const commitOwnerBuildDrain = (
+  sql: SqlClient.SqlClient,
+  input: Parameters<LiveBackendDrainDeps["commit"]>[0],
+) =>
+  commitOwnerBuildRetirement(sql, {
+    profileScope: input.profileScope,
+    artifactId: input.artifactId,
+    decision: input.decision,
+    drainedLeases: input.drainedLeases,
+    ownerEpoch: input.owner?.ownerEpoch ?? "",
+    owner:
+      input.owner?.attachCleared === undefined
+        ? undefined
+        : {
+            masters: input.owner.closed,
+            leases: input.owner.leases,
+            attachCleared: input.owner.attachCleared,
+          },
+  }).pipe(Effect.mapError(asError));
 
 /** Composition layer: register under the held lock and unregister on teardown. */
 export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
@@ -218,7 +238,7 @@ export const SshLegacyDrainHandlerLive = Layer.effectDiscard(
       stopProviders: runBackendDrainStopStep("providers"),
       // The Rust owner holds every master and lease: it closes them all and exits.
       closeOwnedMasters: closeSshOwnerForDrain(),
-      commit: () => commitOwnerBuildDrain(sql),
+      commit: (input) => commitOwnerBuildDrain(sql, input),
       drainFollowers: () => {
         const coordinator = getPeerCoordinator();
         // Local mode has no peer coordinator and therefore no followers.

@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: { include: ["protocol/ssh-owner/release-evidence/forward/check.test.ts"] },
+  test: { include: ["protocol/ssh-owner/release-evidence/forward/check*.test.ts"] },
 });

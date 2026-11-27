@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 
-import { SshOwnerDevPickerError } from "../ssh/sshOwnerDevPicker.errors.ts";
+import { SshOwnerOperationError } from "../ssh/sshOwnerOperation.errors.ts";
 import { PickerProofOwnerError } from "../ssh/sshOwnerPickerProof.client.ts";
 import {
   isWorkspaceWriteContents,
@@ -141,7 +141,7 @@ export function createDevWorkspaceFile(
       try: () => create.apply({ relativePath, contents }),
       catch: (cause) => {
         const code =
-          cause instanceof PickerProofOwnerError || cause instanceof SshOwnerDevPickerError
+          cause instanceof PickerProofOwnerError || cause instanceof SshOwnerOperationError
             ? cause.code
             : undefined;
         const disposition =

@@ -19,15 +19,23 @@ function checkStorage(expected: Plan, run: Observations) {
   ) {
     throw new Error("A/B artifact or forward schema/migration metadata mismatch");
   }
-  for (const { fence, db } of [before, boundary.snapshot, takeover.snapshot]) {
-    if (fence !== before.fence) throw new Error("Release fence changed across forward handoff");
+  for (const { db } of [before, boundary.snapshot, takeover.snapshot]) {
     if (db.domain !== identity.dbDomain || db.instance !== expected.dbInstance) {
       throw new Error("DB domain or instance changed across forward handoff");
     }
     if (!same(db.metadata, metadata)) throw new Error("Observed DB schema/migration mismatch");
   }
-  if (admission.fence !== before.fence || admission.dbInstance !== expected.dbInstance) {
-    throw new Error("B admission is not bound to the release fence and database");
+  if (admission.dbInstance !== expected.dbInstance) {
+    throw new Error("B admission is not bound to the database");
+  }
+  // A's drain commits its marker before releasing the lock; B admits only on that marker.
+  const { marker } = run;
+  if (
+    marker.artifactSha256 !== expected.aMarkerArtifactSha256 ||
+    admission.markerSha256 !== marker.sha256 ||
+    !(before.seq < marker.seq && marker.seq < boundary.snapshot.seq)
+  ) {
+    throw new Error("B admission is not bound to A's committed retirement marker");
   }
   const committed = boundary.snapshot.db.logicalSha256;
   if (
@@ -81,6 +89,7 @@ function checkProcesses(expected: Plan, run: Observations) {
       !same(entry.process, exit) ||
       sequences.has(seq) ||
       seq <= before.seq ||
+      seq === run.marker.seq ||
       seq >= boundary.snapshot.seq
     ) {
       throw new Error("Unexpected, duplicate, mismatched, or late A process exit");
@@ -118,6 +127,22 @@ function checkProcesses(expected: Plan, run: Observations) {
       "B admission owner does not match the matrix owner image or reuses a process instance",
     );
   }
+  // The fence is A's state-dir lock, A's committed marker, then B's lock: the lock is free
+  // only between A's exit and B's start, and only A's launcher or the B writer holds it.
+  const lockHolder = expected.aInventory.find(
+    ({ role, process }) => role === "launcher" && process.instance === before.lock,
+  );
+  const lockExit = run.retirements.find(({ exit }) => exit.instance === before.lock);
+  if (
+    !lockHolder ||
+    !lockExit ||
+    lockExit.seq <= run.marker.seq ||
+    boundary.snapshot.lock !== null ||
+    takeover.snapshot.lock !== writer.instance ||
+    admission.lock !== writer.instance
+  ) {
+    throw new Error("State-dir lock was not held by A's launcher, then by the B writer");
+  }
 }
 
 function checkRelaunches(expected: Plan, run: Observations) {
@@ -149,9 +174,9 @@ function checkRelaunches(expected: Plan, run: Observations) {
     if (
       request.dbInstance !== expected.dbInstance ||
       result.dbInstance !== request.dbInstance ||
-      result.fence !== run.admission.fence
+      result.lock !== run.admission.lock
     ) {
-      throw new Error(`${request.entry}: legacy refusal is not bound to the release fence and DB`);
+      throw new Error(`${request.entry}: legacy refusal is not bound to B's held lock and DB`);
     }
     if (
       request.seq <= run.admission.seq ||

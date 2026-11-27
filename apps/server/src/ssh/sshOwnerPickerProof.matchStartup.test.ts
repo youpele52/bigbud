@@ -4,7 +4,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 
-import { startupFailure } from "./sshOwnerDevPicker.errors.ts";
+import { startupFailure } from "./sshOwnerOperation.errors.ts";
 import { startPickerProofOwner } from "./sshOwnerPickerProof.client.ts";
 import {
   pickerProofOptedIn,
